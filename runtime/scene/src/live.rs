@@ -77,6 +77,8 @@ pub fn cam_keyed(k: &str) -> bool {
     ["lens_", "mb_", "up_", "view_"].iter().any(|p| k.starts_with(p))
         || ["_qx", "_qy", "_qz", "_qw"].iter().any(|q| k.ends_with(q))
         || matches!(k, "x" | "y" | "z" | "look_x" | "look_y" | "look_z" | "fov" | "focus" | "ortho" | "ambient" | "skybox_k" | "env_srcs" | "env_i" | "env_k" | "env_rot" | "sky_k" | "aberration" | "dof_aperture" | "paint_bands" | "paint_grain" | "paint_rag" | "paint_seed")
+        // the paint look's worlds: each cut's centre, radius and style move frame by frame (raea-runtime-look paint_cut_rows)
+        || k.starts_with("paint_cut")
 }
 
 impl LiveScene {

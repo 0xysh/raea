@@ -42,6 +42,9 @@ export interface PaintExtensionProps {
   color?: string;
   /** how far toward `color` the patches go (0.6) */
   amount?: number;
+  /** under a <Look cuts>: the world this mesh is in. 0 (the default): outside every cut. 1 to 4: inside that cut and
+   *  no later one. -1: everywhere. Given alone it leaves the breakup off */
+  world?: number;
 }
 
 export function PaintExtension(_: PaintExtensionProps): ReactNode {

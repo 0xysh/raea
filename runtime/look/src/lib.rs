@@ -8,6 +8,8 @@ use raea_core_scene::*;
 use serde_json::{Map, Value};
 
 mod camera;
+mod cuts;
+pub use cuts::*;
 pub use camera::*;
 mod instances;
 mod post;
@@ -205,16 +207,17 @@ pub fn is_paint(l: &Map<String, Value>) -> bool {
 pub fn paint_fixed(row: &mut BTreeMap<String, V>, first: &Map<String, Value>) {
     row.insert("paint_rag_scale".into(), V::N(n(first, "ragScale", 24.0)));
     // ambient occlusion and ground bounce as a band, the water's foam, the shadows' torn edge (paint.rs)
-    for (k, col) in [("aoHeight", "paint_ao_height"), ("ground", "paint_ground"), ("ssao", "paint_ssao"), ("water", "paint_water"), ("foam", "paint_foam"), ("edge", "paint_edge"), ("edgeScale", "paint_edge_scale"), ("wash", "paint_wash"), ("washSize", "paint_wash_size"), ("stroke", "paint_stroke"), ("strokeScale", "paint_stroke_scale"), ("saturate", "paint_saturate"), ("foliage", "paint_foliage"), ("foliageHeight", "paint_foliage_height"), ("calmFrom", "paint_calm_from"), ("calmTo", "paint_calm_to"), ("calmAmount", "paint_calm_amount"), ("texel", "paint_texel"), ("texelJitter", "paint_texel_jitter"), ("cloudShadows", "paint_cloud_shadows"), ("cloudShadowSize", "paint_cloud_shadow_size"), ("wind", "paint_wind"), ("windX", "paint_wind_x"), ("windZ", "paint_wind_z"), ("hazeDensity", "paint_haze_density"), ("hazeHeight", "paint_haze_height"), ("hazeStart", "paint_haze_start"), ("hazeMost", "paint_haze_most")] {
+    for (k, col) in [("aoHeight", "paint_ao_height"), ("ground", "paint_ground"), ("ssao", "paint_ssao"), ("water", "paint_water"), ("foam", "paint_foam"), ("edge", "paint_edge"), ("edgeScale", "paint_edge_scale"), ("wash", "paint_wash"), ("washSize", "paint_wash_size"), ("stroke", "paint_stroke"), ("strokeScale", "paint_stroke_scale"), ("saturate", "paint_saturate"), ("foliage", "paint_foliage"), ("foliageHeight", "paint_foliage_height"), ("calmFrom", "paint_calm_from"), ("calmTo", "paint_calm_to"), ("calmAmount", "paint_calm_amount"), ("texel", "paint_texel"), ("texelJitter", "paint_texel_jitter"), ("cloudShadows", "paint_cloud_shadows"), ("cloudShadowSize", "paint_cloud_shadow_size"), ("soft", "paint_soft"), ("cutRag", "paint_cut_rag"), ("cutRim", "paint_cut_rim_width"), ("rimAmount", "paint_rim_amount"), ("rimPower", "paint_rim_power"), ("terminatorAmount", "paint_term_amount"), ("wind", "paint_wind"), ("windX", "paint_wind_x"), ("windZ", "paint_wind_z"), ("hazeDensity", "paint_haze_density"), ("hazeHeight", "paint_haze_height"), ("hazeStart", "paint_haze_start"), ("hazeMost", "paint_haze_most")] {
         if let Some(v) = num(first, k) {
             row.insert(col.into(), V::N(v));
         }
     }
-    for (k, col) in [("shadow", "paint_shadow"), ("mid", "paint_mid"), ("ao", "paint_ao"), ("foamColor", "paint_foam_color"), ("calm", "paint_calm"), ("haze", "paint_haze"), ("hazeSun", "paint_haze_sun")] {
+    for (k, col) in [("shadow", "paint_shadow"), ("mid", "paint_mid"), ("ao", "paint_ao"), ("foamColor", "paint_foam_color"), ("calm", "paint_calm"), ("haze", "paint_haze"), ("hazeSun", "paint_haze_sun"), ("cutRimColor", "paint_cut_rim"), ("rim", "paint_rim"), ("terminator", "paint_term")] {
         if let Some(h) = hex(first.get(k)) {
             row.insert(col.into(), V::S(h));
         }
     }
+    cut_colours(row, first);
     // the sky: one colour, or [top, bottom]
     match first.get("sky") {
         Some(Value::Array(a)) => {
@@ -301,6 +304,7 @@ pub fn frame_looks(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String
     let lines: Vec<Option<&Map<String, Value>>> = all.iter().map(|its| its.iter().find(|i| i.kind == "outline").map(|i| &*i.props)).collect();
     if let Some(first) = looks.iter().flatten().find(|l| is_paint(l)) {
         paint_keyed_rows(&looks, p, row, first);
+        paint_cut_rows(&looks, p, row, first);
     }
     let mut kinds: Vec<BTreeMap<String, V>> = Vec::new();
     let idx: Vec<f64> = looks
@@ -338,17 +342,6 @@ pub fn frame_looks(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String
     row.insert("frame_look_i".into(), V::N(idx[0]));
     if !idx.iter().all(|i| *i == idx[0]) {
         p.keys.insert(("cam".to_string(), "frame_look_i".to_string()), idx.iter().enumerate().map(|(f, v)| (f as i64, *v, "step".to_string())).collect());
-    }
-}
-
-/// a material's `paint` (under a paint look): its breakup, patches of noise in their own colour (raea-render's paint.rs)
-pub fn paint_columns(row: &mut BTreeMap<String, V>, props: &Map<String, Value>) {
-    let Some(g) = props.get("paint").and_then(Value::as_object) else { return };
-    row.insert("paint_breakup".into(), V::N(n(g, "breakup", 0.5)));
-    row.insert("paint_breakup_scale".into(), V::N(n(g, "scale", 1.0)));
-    if let Some(h) = hex(g.get("color")) {
-        row.insert("paint_patch".into(), V::S(h));
-        row.insert("paint_patch_amount".into(), V::N(n(g, "amount", 0.6)));
     }
 }
 

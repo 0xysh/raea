@@ -276,11 +276,13 @@ function maps(p: StandardMaterialProps): { maps: Record<string, string | null>; 
 
 function standard(p: StandardMaterialProps, ext: Extended) {
   const color = baseOf(p.base_color).color;
-  if (p.unlit && (ext.grid || ext.paint || ext.wear || ext.procedural || ext.shader)) throw new TypeError("ExtendedMaterial: an unlit StandardMaterial takes no GridExtension, PaintExtension, WearExtension or ShaderExtension");
+  // (a PaintExtension that only names the mesh's world is fine on an unlit one: the cut is the paint shader's, lit or not)
+  const worldOnly = ext.paint !== undefined && Object.keys(ext.paint).every((k) => k === "world" || k === "children");
+  if (p.unlit && (ext.grid || (ext.paint && !worldOnly) || ext.wear || ext.procedural || ext.shader)) throw new TypeError("ExtendedMaterial: an unlit StandardMaterial takes no GridExtension, PaintExtension, WearExtension or ShaderExtension");
   if (ext.shader && (ext.grid || ext.paint || ext.wear || ext.procedural)) throw new TypeError("ExtendedMaterial: a ShaderExtension goes alone over its StandardMaterial (no other extension with it)");
   const m = maps(p);
   if (p.unlit && p.animate) throw new TypeError("StandardMaterial: an unlit material takes no animate yet");
-  if (p.unlit) return <MeshBasicMaterial color={color} {...(m.maps.map ? { map: m.maps.map } : {})} {...(m.samplers?.map ? { sampler: m.samplers.map } : {})} {...draw(p)} />;
+  if (p.unlit) return <MeshBasicMaterial color={color} {...(m.maps.map ? { map: m.maps.map } : {})} {...(m.samplers?.map ? { sampler: m.samplers.map } : {})} {...draw(p)} {...(p.fog_enabled !== undefined ? { fog: p.fog_enabled } : {})} {...(ext.paint ? { paint: ext.paint } : {})} />;
   // inside a Model only the fields given re-cover its material; on a Mesh3d the rest are Bevy's defaults
   const own = useContext(InModel);
   const anim = animateOf("StandardMaterial", p.animate, STANDARD_ANIMATE, STANDARD_FIELDS);
