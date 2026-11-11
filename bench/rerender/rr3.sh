@@ -20,7 +20,8 @@ OUT=${1:-${TMPDIR:-/tmp}/raea-rr3}
 CHECKS=${2:-equal join page}
 Q=${QUALITY:-high}
 FILM=$ROOT/bench/rerender/film.tsx
-export RAEA_SIGN=0 RAEA_MARK=0 RAEA_EXPORT_CACHE=0 RAEA_SEGMENTS_TRACE=1 RAEA_AUDIO_MUTE=1
+# segments on (RAEA_SEGMENTS=1, while RR3 is opt-in); the one-run render turns them off with RAEA_SEGMENTS=0
+export RAEA_SIGN=0 RAEA_MARK=0 RAEA_EXPORT_CACHE=0 RAEA_SEGMENTS=1 RAEA_SEGMENTS_TRACE=1 RAEA_AUDIO_MUTE=1
 mkdir -p "$OUT"
 fail=0
 
