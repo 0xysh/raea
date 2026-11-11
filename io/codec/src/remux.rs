@@ -22,7 +22,38 @@ pub fn avcc_to_annexb(sample: &[u8], prefix: Option<&[u8]>) -> Vec<u8> {
     out
 }
 
-fn avcc_params(avcc: &[u8]) -> Vec<u8> {
+/// An hvcC's parameter sets (VPS, SPS, PPS and any other arrays it holds) as Annex B, to go before a keyframe.
+pub fn hvcc_params(hvcc: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut i = 23;
+    for _ in 0..hvcc.get(22).copied().unwrap_or(0) {
+        let Some(c) = hvcc.get(i + 1..i + 3) else { break };
+        i += 3;
+        for _ in 0..u16::from_be_bytes([c[0], c[1]]) {
+            let Some(n) = hvcc.get(i..i + 2).map(|l| u16::from_be_bytes([l[0], l[1]]) as usize) else { return out };
+            let Some(nal) = hvcc.get(i + 2..i + 2 + n) else { return out };
+            out.extend_from_slice(&[0, 0, 0, 1]);
+            out.extend_from_slice(nal);
+            i += 2 + n;
+        }
+    }
+    out
+}
+
+/// An .m4a's AAC as a muxer takes it (Backend::sound): each packet an ADTS frame with its time, its channels and its
+/// encoder's priming.
+pub fn aac_track(m4a: &Path) -> R<crate::SoundTrack> {
+    let ab = std::fs::read(m4a).map_err(|e| format!("{}: {e}", m4a.display()))?;
+    let am = re_mp4::Mp4::read_bytes(&ab).map_err(|e| format!("{}: {e}", m4a.display()))?;
+    let (_, at) = am.tracks().iter().find(|(_, t)| t.kind == Some(re_mp4::TrackKind::Audio)).ok_or("no audio")?;
+    let rate = at.timescale as u32;
+    let mut packets: Vec<(f64, Vec<u8>)> = at.samples.iter().map(|s| (s.composition_timestamp as f64 / s.timescale as f64, adts(&ab[s.byte_range()], rate, 1))).collect();
+    packets.sort_by(|a, b| a.0.total_cmp(&b.0));
+    Ok(crate::SoundTrack { aac: true, rate, channels: aac_channels(&am, at), priming: aac_priming(&ab), packets })
+}
+
+/// An avcC's SPS and PPS as Annex B, to go before a keyframe.
+pub fn avcc_params(avcc: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     let mut i = 5;
     let nsps = (avcc[i] & 0x1f) as usize;

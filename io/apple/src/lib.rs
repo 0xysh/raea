@@ -67,6 +67,14 @@ impl Backend for Apple {
     fn encoder_10bit(&self, out: &Path, o: &EncodeOpts) -> R<Box<dyn VideoEncoder>> {
         objc2::rc::autoreleasepool(|_| VtEncoder::new(out, o, true).map(|e| Box::new(e) as Box<dyn VideoEncoder>))
     }
+    /// AAC through AudioToolbox, as VtEncoder lays it under its video
+    fn sound(&self, a: &Audio) -> R<raea_io_codec::SoundTrack> {
+        let p = std::env::temp_dir().join(format!("raea-sound-{}-{:?}.m4a", std::process::id(), std::thread::current().id()));
+        objc2::rc::autoreleasepool(|_| write_aac(&p, a))?;
+        let t = raea_io_codec::remux::aac_track(&p);
+        let _ = std::fs::remove_file(&p);
+        t
+    }
 }
 
 // A decoder moves to another thread whole and is used by one thread at a time (open_video_send): AVURLAsset and

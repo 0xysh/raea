@@ -150,6 +150,7 @@ members = [
     "runtime/view",
     "runtime/world",
     "runtime/encode",
+    "runtime/segments",
     "runtime/plugins",
     "runtime/input",
     "tools/perceive",

@@ -89,9 +89,9 @@ pub fn render_fed(
         let opts = ro.encode_opts(w, h, prog.fps, true, false, ten);
         let (t, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
         tx = Some(t);
-        let out = out.to_path_buf();
+        let (out, cuts) = (out.to_path_buf(), ro.cuts_of(prog));
         enc_thread = Some(std::thread::spawn(move || -> Result<(raea_io_media::EncodeStats, f64), String> {
-            let mut enc = direct_encoder(&codec, &out, &opts, ten)?;
+            let mut enc = direct_encoder(&codec, &out, &opts, ten, cuts.as_ref())?;
             for px in rx {
                 push_direct(&mut enc, &px, w, h, ten)?;
             }
@@ -190,9 +190,9 @@ pub fn render_with(prog: &Program, rows: &[Tup], dir: &Path, out: &Path, ro: &Re
             let opts = ro.encode_opts(w, h, prog.fps, true, false, ten);
             let (t, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
             tx = Some(t);
-            let out = out.to_path_buf();
+            let (out, cuts) = (out.to_path_buf(), ro.cuts_of(&prog));
             enc_thread = Some(std::thread::spawn(move || -> Result<raea_io_media::EncodeStats, String> {
-                let mut enc = direct_encoder(&codec, &out, &opts, ten)?;
+                let mut enc = direct_encoder(&codec, &out, &opts, ten, cuts.as_ref())?;
                 for px in rx {
                     push_direct(&mut enc, &px, w, h, ten)?;
                 }
@@ -261,9 +261,9 @@ pub fn render_with(prog: &Program, rows: &[Tup], dir: &Path, out: &Path, ro: &Re
             let opts = ro.encode_opts(w, h, prog.fps, true, engine::has_3d(&rows), ten);
             let (t, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
             tx = Some(t);
-            let out = out.to_path_buf();
+            let (out, cuts) = (out.to_path_buf(), ro.cuts_of(&prog));
             enc_thread = Some(std::thread::spawn(move || -> Result<(raea_io_media::EncodeStats, f64), String> {
-                let mut enc = direct_encoder(&codec, &out, &opts, ten)?;
+                let mut enc = direct_encoder(&codec, &out, &opts, ten, cuts.as_ref())?;
                 for px in rx {
                     push_direct(&mut enc, &px, w, h, ten)?;
                 }
@@ -332,7 +332,7 @@ pub fn render_with(prog: &Program, rows: &[Tup], dir: &Path, out: &Path, ro: &Re
         if ro.wants_10bit() {
             eprintln!("warning: 10-bit export: this render goes through the engine (3D, --ssim or RAEA_READBACK/RAEA_COMPOSITE), which makes 8-bit NV12; encoding 8-bit H.264");
         }
-        let mut enc = raea_io_media::backend(&codec).and_then(|b| b.encoder(&out, &opts))?;
+        let mut enc = direct_encoder(&codec, &out, &opts, false, ro.cuts_of(&prog).as_ref())?;
         engine::mem_mark("render: encoder made");
         let mut encode_s = 0.0;
         let t_all = std::time::Instant::now();

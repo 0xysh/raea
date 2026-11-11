@@ -269,8 +269,9 @@ impl Engine {
         let f = self.app.world().resource::<Clock>().0;
         let moved = self.app.world_mut().remove_resource::<raea_sys_frame::shots::Moved>().is_some();
         let cut = moved || self.app.world().get_resource::<raea_sys_frame::shots::Shots>().is_some_and(|s| s.starts(f));
-        #[cfg(feature = "raytracing")]
         if cut {
+            self.app.world_mut().insert_resource(raea_sys_frame::shots::Cut(f));
+            #[cfg(feature = "raytracing")]
             raea_render_raytrace::cut(self.app.world_mut());
         }
         if !self.prestep || f <= 0 || (plugins::active(self.app.world()) && !cut) {

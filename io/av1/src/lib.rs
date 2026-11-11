@@ -366,4 +366,8 @@ impl Backend for Av1 {
             pushed: 0,
         }))
     }
+    /// Opus at 48 kHz, as the encoder lays it under its video
+    fn sound(&self, a: &Audio) -> R<raea_io_codec::SoundTrack> {
+        Ok(raea_io_codec::SoundTrack { aac: false, rate: 48000, channels: a.channels.len().clamp(1, 2) as u16, priming: 0, packets: raea_io_soft::opus_packets(a)? })
+    }
 }

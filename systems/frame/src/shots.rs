@@ -12,6 +12,18 @@ pub struct Shots(pub Vec<i64>);
 #[derive(bevy::prelude::Resource)]
 pub struct Moved;
 
+/// The frame an engine last drew as a cut (Engine::pre_step), whichever said so: a render splits its video there
+/// (raea-runtime-segments).
+#[derive(bevy::prelude::Resource)]
+pub struct Cut(pub i64);
+
+impl Cut {
+    /// Whether `world`'s engine drew frame `f` as a cut.
+    pub fn at(world: &bevy::prelude::World, f: i64) -> bool {
+        world.get_resource::<Cut>().is_some_and(|c| c.0 == f)
+    }
+}
+
 impl Shots {
     pub fn of(prog: &raea_core_program::ir::Program) -> Shots {
         let keys = prog.keys.get(&("cam".to_string(), "shot".to_string()));

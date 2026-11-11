@@ -205,6 +205,22 @@ pub trait Backend {
     fn encoder_10bit(&self, _out: &Path, _opts: &EncodeOpts) -> R<Box<dyn VideoEncoder>> {
         Err(format!("the {} backend has no 10-bit encoder", self.name()))
     }
+    /// `a` encoded as this backend's encoders lay sound under their video (VideoEncoder::finish), for a video put
+    /// together from parts encoded apart (raea-runtime-segments' join).
+    fn sound(&self, _a: &Audio) -> R<SoundTrack> {
+        Err(format!("the {} backend lays no sound under a joined video", self.name()))
+    }
+}
+
+/// A sound encoded for a muxer, as a backend lays it under its video: AAC (each packet an ADTS frame, after `priming`
+/// samples of the encoder's own silence) or Opus, each packet with its time in seconds.
+#[derive(Debug, Clone, Default)]
+pub struct SoundTrack {
+    pub aac: bool,
+    pub rate: u32,
+    pub channels: u16,
+    pub priming: u32,
+    pub packets: Vec<(f64, Vec<u8>)>,
 }
 
 

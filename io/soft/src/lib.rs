@@ -208,6 +208,10 @@ impl Backend for Soft {
     fn encoder(&self, out: &Path, o: &EncodeOpts) -> R<Box<dyn VideoEncoder>> {
         h264_encoder(out, o, None)
     }
+    /// Opus at 48 kHz, as mux_h264 lays it under its video
+    fn sound(&self, a: &Audio) -> R<raea_io_codec::SoundTrack> {
+        Ok(raea_io_codec::SoundTrack { aac: false, rate: 48000, channels: a.channels.len().clamp(1, 2) as u16, priming: 0, packets: opus_packets(a)? })
+    }
 }
 
 /// An H.264 MP4 (no B-frames) as a decoder.

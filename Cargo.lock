@@ -15209,6 +15209,7 @@ dependencies = [
  "raea-io-net",
  "raea-page",
  "raea-render",
+ "raea-runtime-segments",
  "raea-runtime-view",
  "raea-sys-frame",
  "raea-sys-k",
@@ -15488,6 +15489,16 @@ dependencies = [
  "raea-sys-sampler",
  "raea-sys-shader",
  "serde_json",
+]
+
+[[package]]
+name = "raea-runtime-segments"
+version = "0.1.0"
+dependencies = [
+ "muxide",
+ "raea-io-codec",
+ "raea-io-media",
+ "re_mp4",
 ]
 
 [[package]]

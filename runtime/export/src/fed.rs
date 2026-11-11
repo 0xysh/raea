@@ -211,11 +211,12 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
     // RAEA_REACT_AHEAD=0: each frame asked for in its turn, as before; and with the Engine's reads, whose frame f - 1
     // is stepped before f is asked for (engine_before)
     let ahead = std::env::var("RAEA_REACT_AHEAD").as_deref() != Ok("0") && !raea_runtime_react::shared::engine_reads();
+    let cuts = raea_runtime_encode::Cuts::default();
     let r = raea_runtime_encode::render_fed(
         &pic,
         work,
         out,
-        &render_opts(),
+        &raea_runtime_encode::RenderOpts { cuts: cuts.clone(), ..render_opts() },
         |f| {
             if f == 0 {
                 raea_runtime_react::startup_mark("the fed render's first frame");
@@ -253,6 +254,8 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
             }
             // a page draw past Vello's bump buffers, painted again at Vello's own sizes before the frame is encoded (#23)
             fr = raea_gpu_device::check::fed_checked(f, fr, raea_sys_page::wait_drawn, raea_sys_page::redraw_full, || { cx.manifest.as_mut().map(|m| m.pop()); bevy_fed(app.world_mut(), bevy, cx, &page, fps) })?;
+            // a shot starts here (an outermost Sequence, a camera cut): the video's next segment does too (RR3)
+            cuts.find(f, raea_runtime_page::shot_starts(app.world_mut()), cx.scene3d.as_ref().is_some_and(|e| raea_sys_frame::shots::Cut::at(e.world(), f)));
             // a video's 3D made live keeps each frame's scene for the clipping check
             if LIVE_CLIPS.load(std::sync::atomic::Ordering::Relaxed) { fr.scene = scene_of(app.world_mut()); }
             if cx.scene3d.is_none() && cx.live3d.is_none() && !cx.scene.is_empty() && BEVY_3D_PROBE.load(std::sync::atomic::Ordering::Relaxed) {
