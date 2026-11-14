@@ -274,6 +274,21 @@ impl DocumentMutator<'_> {
         }
     }
 
+    /// raea (RAEA_FINE_RESTYLE): each ancestor of a changed element matched again, itself only. The snapshot's
+    /// invalidation doesn't reach an ancestor whose `:has()` reads the element (basecoat's
+    /// `label:has(input:checked)` stayed unchecked under the trial, ui-parity p18-dom/lib-basecoat); the parent's whole
+    /// subtree restyled in its place, every clip on a timeline track for one clip's move.
+    fn restyle_ancestors_self(&mut self, node_id: NodeId) {
+        let mut up = self.doc.nodes[node_id].parent;
+        while let Some(id) = up {
+            let Some(node) = self.doc.nodes.get_mut(id) else { break };
+            if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {
+                data.hint |= RestyleHint::RESTYLE_SELF;
+            }
+            up = node.parent;
+        }
+    }
+
     pub fn set_attribute(&mut self, node_id: NodeId, name: QualName, value: &str) {
         let node_is_in_document = self.doc.nodes[node_id].flags.is_in_document();
         if node_is_in_document {
@@ -282,6 +297,7 @@ impl DocumentMutator<'_> {
             let fine = fine_restyle();
             if fine {
                 self.doc.snapshot_changed_attr(node_id, &name);
+                self.restyle_ancestors_self(node_id);
             }
             let node = &mut self.doc.nodes[node_id];
             if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {
@@ -422,6 +438,7 @@ impl DocumentMutator<'_> {
             let fine = fine_restyle();
             if fine {
                 self.doc.snapshot_changed_attr(node_id, &name);
+                self.restyle_ancestors_self(node_id);
             }
             let node = &mut self.doc.nodes[node_id];
 
