@@ -238,6 +238,11 @@ fn twins<R: OpIds, const BOXES: bool>(
         error!("raea-page: a system wrote {property} on {twin}, which is the page's; the page's value stays (docs/blitz-bevy.feature B3 H9)");
         conflicts.write(PageConflict { twin, property: property.into(), owner: Owner::Page });
     };
+    // RAEA_TWIN_SYNC_LIGHT=1 (a trial, off by default): an event's sync spawns and despawns twins and sets their
+    // hierarchy, but leaves a kept twin's box as it is. Layout hasn't run since the frame's own pass took every box, and
+    // that pass takes them again after this frame's layout; taking each element's rect on every pointer move was most of
+    // a 400-clip timeline drag's twin work (docs/timeline.feature TL13a)
+    let keep_boxes = !BOXES && std::env::var_os("RAEA_TWIN_SYNC_LIGHT").is_some_and(|v| v == "1");
     let index = &mut *index;
     // pages gone: their twins with them
     index.pages.retain(|page, t| {
@@ -278,7 +283,7 @@ fn twins<R: OpIds, const BOXES: bool>(
                         }
                         el.set_if_neq(el_now);
                         // an event's sync leaves the box to the frame's own pass, which takes it after layout
-                        let at = if BOXES || !light_sync() { rect() } else { *b };
+                        let at = if keep_boxes { *b } else { rect() };
                         b.set_if_neq(at);
                         kept = Some(at);
                     }
@@ -456,15 +461,6 @@ pub fn sync_twins<R: OpIds>(world: &mut World) {
     if let Err(e) = world.run_system_cached(twins::<R, false>) {
         warn!("raea-page: twins: {e}");
     }
-}
-
-/// RAEA_TWIN_SYNC_LIGHT=1 (a trial, off by default): an event's sync spawns and despawns twins and sets their
-/// hierarchy, but leaves a kept twin's box as it is. Layout hasn't run since the frame's own pass took every box, and
-/// that pass takes them again after this frame's layout; taking each element's rect on every pointer move was most of
-/// a 400-clip timeline drag's twin work (docs/timeline.feature TL13a).
-fn light_sync() -> bool {
-    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| std::env::var_os("RAEA_TWIN_SYNC_LIGHT").is_some_and(|v| v == "1"));
-    *ON
 }
 
 pub fn deliver<R: OpIds>(world: &mut World, page: Entity, fired: Vec<Fired>) {
