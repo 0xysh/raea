@@ -100,29 +100,17 @@ pub fn root() -> PathBuf {
     }
 }
 
-/// Where workspaces go with no raea.root set: ~/Studio where workspaces are already (the root before 11-10), else
-/// ~/Documents/raea, or ~/raea when iCloud keeps the Documents folder (a workspace's git history and footage don't
-/// belong in a synced folder). The feed's host says the same (raea-feed host/workspace.ts defaultRoot).
+/// Where a workspace someone names goes with no raea.root set: ~/Documents/raea, or ~/raea when iCloud keeps the
+/// Documents folder (a workspace's git history and footage don't belong in a synced folder). Nothing is made there
+/// until the person or an agent sets a workspace up (`raea workspace init NAME`); ~/Studio, the root on raea's own Mac
+/// before 11-10, is no one else's (Shane 11-14: "no internal no studio"). The feed's host says the same (raea-feed
+/// host/workspace.ts defaultRoot).
 pub fn default_root(home: &Path) -> PathBuf {
-    let studio = home.join("Studio");
-    if holds_workspace(&studio) {
-        studio
-    } else if home.join("Library/Mobile Documents/com~apple~CloudDocs/Documents").is_dir() {
+    if home.join("Library/Mobile Documents/com~apple~CloudDocs/Documents").is_dir() {
         home.join("raea")
     } else {
         home.join("Documents/raea")
     }
-}
-
-/// Whether a folder in `dir` is a workspace (it has .raea/workspace).
-fn holds_workspace(dir: &Path) -> bool {
-    let Ok(entries) = std::fs::read_dir(dir) else { return false };
-    for e in entries.flatten() {
-        if e.path().join(".raea/workspace").exists() {
-            return true;
-        }
-    }
-    false
 }
 
 /// The include in a repo's own config that makes `git config` read a committed file. Idempotent; the path is relative

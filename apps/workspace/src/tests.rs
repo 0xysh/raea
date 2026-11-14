@@ -129,12 +129,10 @@ fn doctor_finds_old_briefs_and_old_skills() {
 fn the_root_with_none_set() {
     let home = scratch("home-root");
     assert_eq!(default_root(&home), home.join("Documents/raea"));
-    // an empty ~/Studio isn't one; one with a workspace stays the root
-    std::fs::create_dir_all(home.join("Studio/notes")).unwrap();
-    assert_eq!(default_root(&home), home.join("Documents/raea"));
+    // never ~/Studio, even with a workspace in it (Shane 11-14: "no internal no studio"; raea.root says otherwise)
     std::fs::create_dir_all(home.join("Studio/acme/.raea")).unwrap();
     std::fs::write(home.join("Studio/acme/.raea/workspace"), "").unwrap();
-    assert_eq!(default_root(&home), home.join("Studio"));
+    assert_eq!(default_root(&home), home.join("Documents/raea"));
     // iCloud keeping Documents: ~/raea
     let synced = scratch("home-icloud");
     std::fs::create_dir_all(synced.join("Library/Mobile Documents/com~apple~CloudDocs/Documents")).unwrap();
