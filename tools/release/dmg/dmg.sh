@@ -70,8 +70,12 @@ ln -s /Applications "$mnt/Applications"
 mkdir "$mnt/.background"
 cp "$here/background.tiff" "$mnt/.background/background.tiff"
 
-echo "layout: $(osascript "$here/layout.applescript" "$vol" background.tiff "$win_w" "$win_h" "$name" \
-  "${app_at[0]}" "${app_at[1]}" "${apps_at[0]}" "${apps_at[1]}" "$icon_px" "$text_px")"
+# its own line, so a failed layout stops the build: inside an echo's $(...), set -e never sees it fail, and the image
+# would ship with no picture and Finder's default places
+layout=$(osascript "$here/layout.applescript" "$vol" background.tiff "$win_w" "$win_h" "$name" \
+  "${app_at[0]}" "${app_at[1]}" "${apps_at[0]}" "${apps_at[1]}" "$icon_px" "$text_px") ||
+  die "Finder couldn't lay out the window (is this a logged-in session, and may this terminal control Finder?)"
+echo "layout: $layout"
 [ -f "$mnt/.DS_Store" ] || die "Finder wrote no .DS_Store: is this a logged-in session, and may this terminal control Finder?"
 
 # the volume's icon after the layout: Finder (macOS 27) deletes a .VolumeIcon.icns, and clears the custom-icon flag,
