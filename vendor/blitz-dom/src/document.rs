@@ -2563,6 +2563,22 @@ impl BaseDocument {
     /// on its containing block chain, projections included, as transformed_bounds takes its border box; None when
     /// there's no transform on it (the render manifest's ink: the span of a line's letters on a turned card)
     pub fn transformed_rect(&self, node_id: NodeId, rect: [f64; 4]) -> Option<BoundingRect> {
+        // raea: most chains carry no transform and no projection, and then the walk below multiplies a matrix at every
+        // step only to answer None. Asked first without the math (a page's every element's rect is taken each frame:
+        // the twins' boxes and the JS's layout snapshot; with 400 timeline clips this was the frame's busiest leaf)
+        let mut c = Some(node_id);
+        let mut any = false;
+        while let Some(id) = c {
+            let Some(node) = self.nodes.get(id) else { break };
+            if self.projections.contains_key(&id) || node.transform().is_some() {
+                any = true;
+                break;
+            }
+            c = node.containing_block();
+        }
+        if !any {
+            return None;
+        }
         // a 3x3 on column vectors (x, y, w), row-major, in CSS px
         type H = [f64; 9];
         fn mul(a: &H, b: &H) -> H {
