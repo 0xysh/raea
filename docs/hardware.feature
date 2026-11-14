@@ -22,7 +22,12 @@ Feature: Hardware: controls that feel like instruments, heard on raea's own mixe
     - The page's host calls (raea-runtime-js HostCalls; the stage's in engine/page/stage calls.rs), reached from a page
       as `__raea_engine.call(name, args)`.
 
-  Status, 11-14: spec written; HW0 to HW4 being built.
+  Status, 11-14: HW0 to HW4 built (engine lane `hardware`; the app's raea-feed branch `hardware`, src/hardware). HW0b
+  measured: 200 presses 15 ms apart through Live::fire, 0 late, 200 in the tap (systems/mix tests/fire.rs, ignored as
+  it opens a device); in raea's window, 40 presses on the kit's sheet fired 40 on the page's mixer, 0 late (raea-feed
+  blitz/kit.sh, headless and muted). HW1b: the loudest voice, the primary key, peaks at -22 dB (raea-feed
+  bench/kit-voices.sh). HW2b: the sheet (#/kit, ui-parity screen 27-kit) drawn by raea's window matches Chrome's by eye;
+  the ui-parity run is still to do. HW5 open.
 
   Background:
     Given the engine's part is systems/mix (the mixer) and engine/page/sound (the page's call), the SDK's is
