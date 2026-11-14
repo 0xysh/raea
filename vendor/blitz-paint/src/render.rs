@@ -1844,16 +1844,19 @@ impl ElementCx<'_, '_> {
 
             // Render text
             let mut draw_text_context = self.context.draw_text_context.borrow_mut();
+            // raea: where the box's content ends for an ellipsis or a clamp, in the unrounded layout the text was laid out
+            // in. The rounded box can be up to a pixel narrower than the text it shrink-wraps (each edge rounds on its
+            // own), which cut a word that fits ("Frog" to "Fr…" in a grid of picker cells)
+            let content_end = self.node.unrounded_layout().content_box_width() * text_layout.layout.scale();
             // raea: text-overflow: ellipsis on a box that clips its overflow (Blitz drew the text cut off)
             draw_text_context.ellipsis = self.node.primary_styles().and_then(|s| {
                 let clips = !matches!(s.get_box().clone_overflow_x(), Overflow::Visible);
                 let end = s.get_text().text_overflow.second.clone();
-                (clips && matches!(end, style::values::specified::text::TextOverflowSide::Ellipsis))
-                    .then(|| layout.content_box_width() * text_layout.layout.scale())
+                (clips && matches!(end, style::values::specified::text::TextOverflowSide::Ellipsis)).then_some(content_end)
             });
             // raea: -webkit-line-clamp: its lines only, the last ending in an ellipsis (blitz-dom ends the box there)
             let keep = self.node.primary_styles().and_then(|s| blitz_dom::util::clamped_lines(&s)).filter(|&n| text_layout.layout.len() > n);
-            draw_text_context.clamp = keep.map(|n| (n - 1, layout.content_box_width() * text_layout.layout.scale()));
+            draw_text_context.clamp = keep.map(|n| (n - 1, content_end));
             crate::text::stroke_text(
                 scene,
                 text_layout.layout.lines().take(keep.unwrap_or(usize::MAX)),
