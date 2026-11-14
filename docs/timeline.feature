@@ -316,8 +316,14 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                size, 1.7 s scaled
     not built  TL13a's drag at the window's rate with 400 clips (measured below: Chrome keeps it, raea's window
                draws 35 frames a second, bound by the page host's frame after a step: Stylo's restyle, which Blitz
-               widens to the changed element's parent's whole subtree (RAEA_FINE_RESTYLE, a trial, not yet
-               measured), paint, and every element's rect taken each frame; drawing only the clips in view would
+               widens to the changed element's parent's whole subtree, paint, and every element's rect taken each
+               frame. RAEA_FINE_RESTYLE=1 (a trial in vendor/blitz-dom mutator.rs, off by default) measured 11-14 in
+               a headless window, three rounds alternating: the drag 37, 47 and 49 fps (median frame 25.0, 19.2,
+               18.9 ms) against 31, 34 and 38 off (34.6, 30.4, 27.9 ms), the window's still rate 51-57; not yet
+               the window's rate, and not the default until ui-parity passes with it on (its build waits on disk:
+               1 GB free). In one drag profiled with it on (the run timed out under the profiler, so a weak
+               read), the page host's busiest frames were the rect walk (get_client_bounding_rect,
+               transformed_rect); drawing only the clips in view would
                draw none fewer, since at its opening fit all 12 tracks and all 400 clips are on screen at once).
                TL13a's stage clause is met (an edit on the scene's stage by 88 ms, median, TL13b). The
                skills guide's note on an item's `timeline` field waits for PR #19 to merge
