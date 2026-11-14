@@ -26,8 +26,10 @@ Feature: Hardware: controls that feel like instruments, heard on raea's own mixe
   measured: 200 presses 15 ms apart through Live::fire, 0 late, 200 in the tap (systems/mix tests/fire.rs, ignored as
   it opens a device); in raea's window, 40 presses on the kit's sheet fired 40 on the page's mixer, 0 late (raea-feed
   blitz/kit.sh, headless and muted). HW1b: the loudest voice, the primary key, peaks at -22 dB (raea-feed
-  bench/kit-voices.sh). HW2b: the sheet (#/kit, ui-parity screen 27-kit) drawn by raea's window matches Chrome's by eye;
-  the ui-parity run is still to do. HW5 open.
+  bench/kit-voices.sh). HW2b: the sheet (#/kit, ui-parity screen 27-kit) drawn by raea's window matches Chrome's by eye,
+  and the switches' thumbs measure centred, 2 px all round, in both (Shane 11-14: "slightly off center": a thumb has no
+  skirt, and its groove is shaded evenly, as a well's lit lip read a pixel low); the ui-parity run is still to do (it
+  reads the app while it still shows its loading shapes). Shane 11-14: into 0.1.4. HW5 open.
 
   Background:
     Given the engine's part is systems/mix (the mixer) and engine/page/sound (the page's call), the SDK's is
