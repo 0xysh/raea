@@ -280,6 +280,9 @@ impl DocumentMutator<'_> {
             self.doc.snapshot_node(node_id);
 
             let fine = fine_restyle();
+            if fine {
+                self.doc.snapshot_changed_attr(node_id, &name);
+            }
             let node = &mut self.doc.nodes[node_id];
             if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {
                 if !fine {
@@ -417,6 +420,9 @@ impl DocumentMutator<'_> {
             self.doc.snapshot_node(node_id);
 
             let fine = fine_restyle();
+            if fine {
+                self.doc.snapshot_changed_attr(node_id, &name);
+            }
             let node = &mut self.doc.nodes[node_id];
 
             if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {

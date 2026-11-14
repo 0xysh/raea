@@ -1665,6 +1665,23 @@ impl BaseDocument {
         }
     }
 
+    /// raea: `name`, about to be set or cleared on `node_id`, among its snapshot's changed attributes. The snapshot
+    /// lists the attributes the element had when it was taken, so an attribute being added (`data-state` appearing)
+    /// or a second one changed before the flush was missing, and an invalidation that reads only what the snapshot
+    /// says changed (RAEA_FINE_RESTYLE) never restyled `[data-state=open]`'s elements (ui-parity's radix, basecoat and
+    /// select-keys cases).
+    pub(crate) fn snapshot_changed_attr(&mut self, node_id: NodeId, name: &crate::QualName) {
+        let Some(node) = self.nodes.get(node_id) else { return };
+        let id = TNode::opaque(&node);
+        if let Some(s) = self.snapshots.get_mut(&id) {
+            let name = GenericAtomIdent(name.local.clone());
+            if !s.changed_attrs.contains(&name) {
+                s.changed_attrs.push(name);
+            }
+            s.other_attributes_changed = true;
+        }
+    }
+
     /// Returns whether any style rule depends on any of the given [`ElementState`] bits.
     /// If not, changing those bits cannot affect styling and snapshotting can be skipped.
     pub fn style_depends_on_state(&self, state: ElementState) -> bool {
