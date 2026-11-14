@@ -60,7 +60,7 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
       temperature, tint, fade, vignette, grain. Audio: volume, fades, noise reduction, voice changer. Text: font,
       style, effects, bubbles, animation, and its words read aloud.
       Here 11-14: Basic (TL3h, TL5) with stabilise (TL7k, a film's footage and a composition's <Video>), auto cutout
-      of a person or the subject (TL7l, a film's footage, on a Mac) and a custom one brushed on the picture (TL7m), Retouch (TL7n: smooth, brighten, slim face and bigger eyes, a film's footage or a file from Media, on a Mac), Mask, chroma key and Blend (TL7f) with the key's colour picked from
+      of a person or the subject (TL7l, a film's footage, on a Mac) and a custom one brushed on the picture (TL7m), Retouch (TL7n: smooth, brighten, slim face and bigger eyes, a film's footage, a file from Media or a composition's <Video>, on a Mac), Mask, chroma key and Blend (TL7f) with the key's colour picked from
       the picture (TL7h) and the mask's handles dragged there (TL7i), Animation (TL7d, TL7e), Speed (TL6), Audio's
       volume and fades (TL8a) and its noise reduction and voice changer (TL8d, a film's sounds and a composition's
       <Audio>), Text's words, styles and captions (TL7c) and its words read aloud (TL7j), Adjust as effect clips
@@ -231,7 +231,16 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                hides the film's picture only once the copy has the frame under the playhead (a copy loading shows
                the film as shot); a clip coming on within a second has its copy loaded ahead; a file from Media plays
                the copy, which carries its sound, instead of its file. On a 720 x 1280 talking-head clip 90 frames
-               in 10.9 s, a face found on every one; asked again, the kept copy in 24 ms),
+               in 10.9 s, a face found on every one; asked again, the kept copy in 24 ms; in a composition, its
+               <Video>'s whole file retouched into its media folder's retouch/ (its steadied copy when it is held
+               steady: the retouch over the steadying, and Stabilise refused while Retouch is on, since what is under
+               it would change), which the <Video> plays, saying what it was made from and by how much
+               (data-retouch-of, data-retouch-smooth, -brighten, -slim and -eyes), off its src as it was; a real 3 s
+               face clip in 4.3 s, a face on all 90 frames, and raea's render of the edited composition is the copy's
+               own frame, 0 apart, where the file's is 1.4 (4.9 over the face). Copies, moves and mattes are read and
+               made at the rate the frames' times sit on (the probe's frame_rate) where it is within 1% of the
+               average: that clip's 30/1 probed 29.97 on average, and a copy made at that drew its frame 44 at the
+               composition's 45; each is named by that rate too, so a copy made at the old one isn't read again),
                TL11a for easings, speed curves, transitions, effects, text styles, tools (presets put
                on the picked clips) and snap grids as data (a clip let go 6 px past a plugin grid's mark lands on
                it, under a browser test with the plugin installed; each e2e run now starts with no plugins
@@ -264,7 +273,8 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                split, delete written into the scene's own file, which the stage opens again (TL14c). A sound's
                clips: span, place in the file, level (TL14b). An <Audio>'s sound from its copy with its noise
                reduced or its voice changed: its src the copy, and data-voice-of, data-denoise and data-voice (TL8d).
-               A <Video>'s footage from its steadied copy: its src the copy, and data-steady-of and data-steady (TL7k)
+               A <Video>'s footage from its steadied copy: its src the copy, and data-steady-of and data-steady (TL7k);
+               from its retouched copy, over the steadied one when both: data-retouch-of and the amounts (TL7n)
     plays      TL10a for a film's own frames: cuts, moves, trims, speeds, freezes and reversed footage at once, the
                player's buffer on the ruler. TL10f: a timed 3D scene's frames are drawn ahead by the host a few
                seconds at a time at draft quality and kept by range, each range under what it is drawn from (the

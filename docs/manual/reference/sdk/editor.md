@@ -1031,8 +1031,9 @@ the lane it sits on (nested ones below their parent, overlapping ones apart), an
 | `volume` | `number` | its media's level, 1 as recorded |
 | `muted` | `boolean` | a <Video> whose own sound was taken out (muted): its sound is an <Audio> of its own |
 | `file` | `string` | its media's file, a path in the composition's media folder (where its src is staticFile("…")) |
-| `heard` | `{ of: string; denoise?: boolean; voice?: string }` | that file is a copy of `of` with its noise reduced or its voice changed |
-| `steady` | `{ of: string; level: string }` | that file is a copy of `of` held steady at `level` |
+| `heard` | `{ of: string; denoise?: boolean; voice?: string }` | what it plays is a copy of `of` with its noise reduced or its voice changed (an <Audio>'s) |
+| `steady` | `{ of: string; level: string }` | what it plays is a copy of `of` held steady at `level` (a <Video>'s) |
+| `retouch` | `{ of: string; smooth?: number; brighten?: number; slim?: number; eyes?: number }` | what it plays is a copy of `of` with its faces retouched, each amount 0 to 1 (a <Video>'s): `of` is its file, or its steadied copy when it is held steady too (the retouch over the steadying) |
 
 ### `Showing`
 

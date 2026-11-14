@@ -156,6 +156,26 @@ describe("TL0c: a timeline is read from a composition", () => {
     expect(seqEdits(t, { op: "set", id: "seq-4", set: { props: { voice: "deep", voiced: "voice/x.wav" } } })).toHaveProperty("why")
   })
 
+  test("footage retouched is its <Video> playing a retouched copy, made over its steadied one when it is held steady (TL7n)", () => {
+    const take = { i: 4, name: "Video", label: "take.mp4", from: 90, to: 180, lane: 0, media: "video" as const, startFrom: 30, file: "take.mp4" }
+    const t = fromSequences([...rows, take], 30)
+    const on = (path: string) => ({ op: "set" as const, id: "seq-4", set: { props: { retouchSmooth: 0.4, retouchBrighten: 0, retouchSlim: 0, retouchEyes: 0.25, retouched: path, retouchFrom: 0, retouchTo: 0 } } })
+    const off = { op: "set" as const, id: "seq-4", set: { props: { retouchSmooth: 0, retouchBrighten: 0, retouchSlim: 0, retouchEyes: 0, retouched: "", retouchFrom: 0, retouchTo: 0 } } }
+    // (amounts of 0 aren't sent)
+    expect(seqEdits(t, on("retouch/take-0123456789.mp4"))).toEqual([{ op: "retouch", i: 4, file: "retouch/take-0123456789.mp4", of: "take.mp4", smooth: 0.4, eyes: 0.25 }])
+    const back = fromSequences([...rows, { ...take, file: "retouch/take-0123456789.mp4", retouch: { of: "take.mp4", smooth: 0.4, eyes: 0.25 } }], 30)
+    expect(find(back, "seq-4")!.clip.props).toEqual({ file: "take.mp4", retouched: "retouch/take-0123456789.mp4", retouchSmooth: 0.4, retouchBrighten: 0, retouchSlim: 0, retouchEyes: 0.25 })
+    expect(seqEdits(back, off)).toEqual([{ op: "retouch", i: 4, file: "take.mp4" }])
+    // held steady too: the retouch is made from the steadied copy and comes off to it; the clip's own file is still take.mp4
+    const both = fromSequences([...rows, { ...take, file: "retouch/s-fedcba9876.mp4", steady: { of: "take.mp4", level: "most" }, retouch: { of: "steady/take-most-0123456789.mp4", smooth: 0.5 } }], 30)
+    expect(find(both, "seq-4")!.clip.props).toMatchObject({ file: "take.mp4", stabilise: "most", steadied: "steady/take-most-0123456789.mp4", retouched: "retouch/s-fedcba9876.mp4", retouchSmooth: 0.5 })
+    expect(seqEdits(both, off)).toEqual([{ op: "retouch", i: 4, file: "steady/take-most-0123456789.mp4" }])
+    const held = fromSequences([...rows, { ...take, file: "steady/take-most-0123456789.mp4", steady: { of: "take.mp4", level: "most" } }], 30)
+    expect(seqEdits(held, on("retouch/s-fedcba9876.mp4"))).toEqual([{ op: "retouch", i: 4, file: "retouch/s-fedcba9876.mp4", of: "steady/take-most-0123456789.mp4", smooth: 0.4, eyes: 0.25 }])
+    // a sound isn't retouched
+    expect(seqEdits(fromSequences([...rows, { ...take, name: "Audio", media: "audio" as const }], 30), on("retouch/x.mp4"))).toHaveProperty("why")
+  })
+
   test("a file of the project's is a new sequence holding it; on the magnet's main track the clips after it move on and it goes in beside the one before it (TL3j)", () => {
     const t = fromSequences(rows, 30)
     const add = (kind: string, track: string, start: number, length: number, asset = "/p/media/beach.mp4") => seqEdits(t, { op: "add", kind: track, clip: { id: "m", kind, name: "beach.mp4", start, length, ...(kind !== "image" && { in: 0, source: length }), props: { asset } } })

@@ -8,6 +8,7 @@ import { EFFECTS, type EffectPart, type TextStyle, textStyleError } from "./regi
 import { COMBO_KINDS, TRANSITION_KINDS } from "@raea/video/edges"
 import { CUTOUT_PROPS, cutoutError, cutoutOf, cutoutProps, KEY_PROPS, MASK_PROPS, type Blend, type ChromaKey, type Mask } from "./cutout"
 import { ADJUST_KINDS, ADJUST_PROP_LIST, ADJUST_PROPS, adjustError, adjustOf, type Adjust } from "./adjust"
+import { type Copied, copyEdits, type CopyEdit, copyProps } from "./copies"
 
 /** A text clip's style, kept in its props as JSON: read back when it is well formed. */
 export function textStyleOf(v: unknown): TextStyle | undefined {
@@ -34,7 +35,7 @@ export function effectParts(v: unknown): EffectPart[] | undefined {
 
 /** A <Sequence> as the host lists it: its place among the file's elements, its span in the composition's frames,
  *  the lane it sits on (nested ones below their parent, overlapping ones apart), and why it can't be rewritten. */
-export interface SeqRow {
+export interface SeqRow extends Copied {
   /** its place among the file's <Sequence> elements, in source order: what an edit names it by */
   i: number
   /** its name prop, or what the host calls it when it has none */
@@ -80,10 +81,6 @@ export interface SeqRow {
   muted?: boolean
   /** its media's file, a path in the composition's media folder (where its src is staticFile("…")) */
   file?: string
-  /** that file is a copy of `of` with its noise reduced or its voice changed (TL8d) */
-  heard?: { of: string; denoise?: boolean; voice?: string }
-  /** that file is a copy of `of` held steady at `level` (TL7k) */
-  steady?: { of: string; level: string }
 }
 /** A sequence's still placement: its <Nudge>'s props (sdk/video nudge.tsx). `crop` is left, top, right, bottom. */
 export interface SeqLook {
@@ -140,10 +137,8 @@ export type SeqEdit =
   | { op: "edge"; i: number; side: "in" | "out" | "combo"; kind: string; frames: number }
   /** a <Video>'s or an <Audio>'s own level (TL8a) */
   | { op: "level"; i: number; volume: number }
-  /** an <Audio> played from `file`, a copy of `of` with its noise reduced or its voice changed; no `of`, `file` as it is (TL8d) */
-  | { op: "heard"; i: number; file: string; of?: string; denoise?: boolean; voice?: string }
-  /** a <Video> played from `file`, a copy of `of` held steady at `level`; no `of`, `file` as it is (TL7k) */
-  | { op: "steady"; i: number; file: string; of?: string; level?: string }
+  /** a <Video> or an <Audio> played from a copy of its file made on the host (copies.ts: TL8d, TL7k, TL7n) */
+  | CopyEdit
   /** a <Video>'s own sound taken out (TL4c): the <Video> muted, and an <Audio> of the same file, from the same place
    *  at the same pace and level, in a new sequence from `at` for `frames` after the composition's last */
   | { op: "extract"; i: number; at: number; frames: number }
@@ -218,7 +213,7 @@ export function fromSequences(rows: SeqRow[], fps: number): Timeline {
   const mediaTracks = (kind: "video" | "audio"): Track[] => {
     const out: Track[] = []
     for (const r of media.filter((m) => m.media === kind).sort((a, b) => a.from - b.from)) {
-      const c: Clip = { id: seqId(r.i), kind, name: r.label ?? r.name, start: r.from, length: Math.max(1, r.to - r.from), in: r.startFrom ?? 0, ...(r.speed && r.speed !== 1 && { speed: r.speed }), ...(r.volume !== undefined && { volume: r.volume }), ...(r.muted && kind === "video" && { muted: true }), ...(r.locked && { locked: r.locked }), ...(r.file && { props: { file: r.heard?.of ?? r.steady?.of ?? r.file, ...(r.heard && { voiced: r.file, denoise: !!r.heard.denoise, voice: r.heard.voice ?? "" }), ...(r.steady && { stabilise: r.steady.level, steadied: r.file }) } }) }
+      const c: Clip = { id: seqId(r.i), kind, name: r.label ?? r.name, start: r.from, length: Math.max(1, r.to - r.from), in: r.startFrom ?? 0, ...(r.speed && r.speed !== 1 && { speed: r.speed }), ...(r.volume !== undefined && { volume: r.volume }), ...(r.muted && kind === "video" && { muted: true }), ...(r.locked && { locked: r.locked }), ...(r.file && { props: copyProps(r.file, r) }) }
       const home = out.find((k) => k.clips.every((o) => end(o) <= c.start || o.start >= end(c)))
       if (home) home.clips.push(c)
       else out.push({ id: `${kind === "audio" ? "sound" : "footage"}-${out.length + 1}`, kind: kind === "audio" ? "sound" : "overlay", name: kind === "audio" ? "Sound" : "Footage", clips: [c] })
@@ -279,11 +274,9 @@ export function seqEdits(t: Timeline, op: Op): SeqEdit[] | { why: string } {
   }
   if (ids.some(isMedia)) {
     if (op.op === "set" && Object.keys(op.set).filter((k) => op.set[k as keyof typeof op.set] !== undefined).join() === "volume") return ids.flatMap((id) => { const i = seqOf(id); return i === undefined ? [] : [{ op: "level", i, volume: Math.round(Math.max(0, op.set.volume!) * 1000) / 1000 } as SeqEdit] })
-    // a copy made on the host, a sound's (TL8d) or footage held steady (TL7k): its element plays it, and says what it was made from and how
-    const p = op.op === "set" && Object.keys(op.set).join() === "props" ? op.set.props : undefined, has = (kind: string, keys: string[]) => p && Object.keys(p).every((k) => keys.includes(k)) && ids.every((id) => find(t, id)?.clip.kind === kind && typeof find(t, id)?.clip.props?.file === "string")
-    const each = (f: (i: number, of: string) => SeqEdit) => ids.map((id) => f(seqOf(id)!, find(t, id)!.clip.props!.file as string))
-    if (p && has("audio", ["denoise", "voice", "voiced"])) return each((i, of) => (p.voiced ? { op: "heard", i, file: String(p.voiced), of, ...(p.denoise === true && { denoise: true }), ...(p.voice && { voice: String(p.voice) }) } : { op: "heard", i, file: of }))
-    if (p && has("video", ["stabilise", "steadied", "stabiliseZoom"])) return each((i, of) => (p.steadied ? { op: "steady", i, file: String(p.steadied), of, level: String(p.stabilise ?? "") } : { op: "steady", i, file: of }))
+    // a copy made on the host (a sound's voice, footage held steady or retouched): its element plays it (copies.ts)
+    const copied = copyEdits(t, op, ids, seqOf)
+    if (copied) return copied
     return { why: "footage and sound play where their sequence does: move, trim or speed the sequence; here only its level and a sound's voice are its own" }
   }
   const each = (ids: string[], f: (r: { i: number; clip: Clip }) => SeqEdit): SeqEdit[] | { why: string } => {
