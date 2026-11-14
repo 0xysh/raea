@@ -247,3 +247,15 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         facing that light or sideways, as the hemisphere light is), and its constant band is scaled as three's
         irradiance is (0.886, where 0.282 made it a third as bright)
       And in-approx: SSIM 0.9848 (Phong's F0 is held at Bevy's highest, 0.16, so its orange highlight glints less)
+
+    Scenario: R3F15. What an R3F scene throws is the composition's error (#131)
+      Given an <R3F> whose scene throws: rendering a component, in an effect, in a ref
+      Then the frame throws it out of the <R3F> drawing it (src/input/session.ts: the scene under raea's own error
+        boundary), so the render is refused naming it, exactly as a throw outside R3F is: "REFUSED the composition threw
+        at frame 0: Error: ...", exit 1
+      And never as R3F's own root reported it (reportError, else a stack without its message), the scene drawing nothing
+        and the render ending with 0 errors
+      And three's PMREMGenerator makes no GPU cube map in raea (src/input/pmrem.ts): fromEquirectangular of a panorama
+        raea loads is that panorama, lighting the scene as scene.environment does; fromScene (RoomEnvironment) and
+        fromCubemap are left out with a warning naming them, the scene drawn without them
+      And test/errors.test.tsx holds it

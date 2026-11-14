@@ -13,9 +13,11 @@ import { Held, useWake } from "./hold";
 import { stepTo, type Config } from "./session";
 import { convert } from "./scene";
 import { standInImages } from "./texture";
+import { standInPMREM } from "./pmrem";
 import { elementsOf } from "../parts";
 
 standInImages();
+standInPMREM();
 
 export interface R3FProps extends Config {
   children?: ReactNode;

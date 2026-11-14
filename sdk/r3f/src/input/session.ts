@@ -5,7 +5,7 @@
 // a frame's scene is the same whichever frame came before it: a render equals its play (raea's first rule).
 import * as THREE from "three";
 import { advance, createRoot, extend, flushSync, type ReconcilerRoot, type RenderProps, type RootState } from "@react-three/fiber";
-import type { ReactNode } from "react";
+import { Component, createElement, type ReactNode } from "react";
 import { renderInto } from "./targets";
 
 extend(THREE as unknown as Parameters<typeof extend>[0]);
@@ -92,6 +92,21 @@ const seedOf = (key: string) => [...key].reduce((h, c) => Math.imul(h ^ c.charCo
 
 const sessions = new Map<string, Session>();
 
+/** The scene under an error boundary of raea's: what it throws (rendering, in an effect, in a ref) is handed to `on`,
+ *  and it draws nothing after. A promise thrown (a load suspending) isn't an error and passes by it, as before. */
+class Caught extends Component<{ on: (error: unknown) => void; children?: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    this.props.on(error);
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 export type Config = Omit<RenderProps<HTMLCanvasElement>, "gl" | "frameloop" | "size" | "events" | "dpr">;
 
 function start(key: string, width: number, height: number, config: Config, json: string): Session {
@@ -115,8 +130,16 @@ export function stepTo(key: string, frame: number, fps: number, width: number, h
   const live = s;
   const render = (i: number) => {
     let store: ReturnType<typeof live.root.render> | undefined;
-    seeded(live, () => flushSync(() => { store = live.root.render(scene(i)); }));
+    let failed: { error: unknown } | undefined;
+    seeded(live, () => flushSync(() => { store = live.root.render(createElement(Caught, { on: (error: unknown) => void (failed ??= { error }) }, scene(i))); }));
     if (store) live.state = store.getState();
+    // thrown out of the <R3F> that's drawing it, so the composition throws as it would outside R3F: the render is
+    // refused, naming the error. R3F's own root only reports it (reportError, else console.error: a stack without its
+    // message) and draws nothing, and the render ended with 0 errors (#131). The root starts again next time
+    if (failed) {
+      end(key);
+      throw failed.error;
+    }
   };
   // the same frame drawn again (a live replay): its children may have changed, its clock hasn't. When parts of it
   // mounted only now (a model, a font: what suspended while the frames were stepped, loaded since), their useFrame
