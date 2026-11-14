@@ -307,6 +307,13 @@ jobs:
       - name: Use the compile cache
         if: env.RAEA_PROMOTED_FROM == '' && env.AWS_ACCESS_KEY_ID != ''
         run: bash .workflow/tools/release/compile-cache.sh
+      # openh264-sys2 is built here every time, never taken whole from the cache volume's target/: a build of it whose
+      # assembly didn't make it into the rlib (0.1.3-rc4's Chocolatey nasm) stays fresh to cargo on a restored target/,
+      # and every link after it fails on the same 135 SIMD routines (v0.1.4-rc1, 11-14: only raea-cli compiled, then
+      # WaverageChromaFilter8_sse2 and the rest unresolved). Its C++ comes back from sccache; the assembly is seconds
+      - name: openh264 built here, not restored
+        if: env.RAEA_PROMOTED_FROM == ''
+        run: rm -rf target/dist/build/openh264-sys2-* target/dist/deps/libopenh264_sys2-* target/dist/.fingerprint/openh264-sys2-*
       - name: Build
         if: env.RAEA_PROMOTED_FROM == ''
         run: |
