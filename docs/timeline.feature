@@ -282,7 +282,8 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                draws 35 frames a second, bound by the page host's frame after a step: Stylo's restyle, which Blitz
                widens to the changed element's parent's whole subtree (RAEA_FINE_RESTYLE, a trial, not yet
                measured), paint, and every element's rect taken each frame; drawing only the clips in view would
-               draw none fewer, since at its opening fit all 12 tracks and all 400 clips are on screen at once). The
+               draw none fewer, since at its opening fit all 12 tracks and all 400 clips are on screen at once).
+               TL13a's stage clause is met (an edit on the scene's stage by 88 ms, median, TL13b). The
                skills guide's note on an item's `timeline` field waits for PR #19 to merge
 
   Background:
@@ -791,8 +792,20 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
       # on top of the snapshot Stylo already diffs, so a clip's left restyled every clip on its track;
       # RAEA_FINE_RESTYLE=1 leaves it to the snapshot's invalidation (vendor/blitz-dom, off by default), waiting on
       # a release build of raea-page-host, which the disk had no room for, to be measured and run against ui-parity.
-      # Not yet: that, layout_out and paint skipping what didn't change, and the picture following an edit within
-      # 100 ms on the stage.
+      # The picture following an edit, 11-14 (raea-feed b7e1514, blitz/scene-timeline.sh: the feed's sample room with
+      # its crate in a sequence, the playhead in the crate's span, the crate's sequence carried off it and back, in a
+      # headless 960x620 window). Before, the stage showed an edit only when the file written with it opened again,
+      # about 1,050 ms after the release. Now the edit goes to the stage as props as it is let go (__raeaSequences:
+      # each named sequence's start and length, which a Sequence takes over its own until that file has opened),
+      # and a paused stage seeks its frame again so it draws them. Captures run back to back through each edit; the
+      # first with the change came back within, over 16 edits:
+      #   81 to 113 ms, median 88 (each counts the capture's own read back, about 78 ms, so the change is sooner)
+      # and 15 of the 16 within 100 ms. The playhead kept its frame through every reopening (one pixel, 678, in all
+      # 16), where it used to jump back to frame 0 and then to its frame; a clip cut where the composition ends kept
+      # the length its code says when carried back (54 frames before, 60 now). Left to the engine: a paused stage
+      # doesn't draw props set on it until something steps it (Live::set_props; the app seeks to work around it),
+      # and the file opened again holds the stage's thread about a second, a hitch when it is playing.
+      # Not yet: RAEA_FINE_RESTYLE measured, and layout_out and paint skipping what didn't change.
 
   Rule: TL14. Watch, Listen and Scene are one timeline
     Scenario: TL14a. Watch
