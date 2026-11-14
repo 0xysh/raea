@@ -326,8 +326,15 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                skipping itself there. Measured 11-14 in a headless window, three rounds alternating: the drag 38-41
                fps without, 48-50 with, against the window's still rate of 52-55, so about 90% of it; a pick
                42-62 ms and a split 46-63 ms. A sync of the twins that keeps their boxes on each pointer move
-               (RAEA_TWIN_SYNC_LIGHT=1, a trial, off) gained nothing. Under another session's load the drag held
-               the same share of the still rate with the :has() fix as without (0.66-0.72 each, four rounds).
+               (RAEA_TWIN_SYNC_LIGHT=1, a trial, off) gained nothing, again in four interleaved rounds with the fine
+               restyle (drag over still 0.62-0.67 with it, 0.65-0.67 without). Under another session's load the
+               drag held the same share of the still rate with the :has() fix as without (0.66-0.72 each, four
+               rounds). Where a drag's frame goes now (a macOS sample of the page host's main thread with the fine
+               restyle, 365 samples): the page's JavaScript for the pointer event 18%, paint 18%, the snapshot of
+               every element's box for the page's JS 11%, the twins' boxes taken again before each event 7% and
+               each frame 5%, Stylo's restyle 2.5% (28% before). The drag adds about 2 ms to a still frame of 18-19
+               ms, so what is left is mostly the still frame: every element's box taken twice a frame and the page
+               painted whole, with nothing changed; an incremental snapshot and paint would be the next step.
                Drawing only the clips in view would draw none fewer: at its opening fit all 12 tracks and all 400
                clips are on screen at once.
                TL13a's stage clause is met (an edit on the scene's stage by 88 ms, median, TL13b). The
