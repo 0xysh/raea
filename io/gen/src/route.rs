@@ -108,7 +108,7 @@ impl Default for Keys {
 }
 
 impl Keys {
-    /// what this host has, from the environment and ~/.raea/env
+    /// what this host has, from the environment and raea's env file
     pub fn here() -> Keys {
         let has = |k: &str| crate::setting(k).is_some_and(|v| !v.trim().is_empty());
         Keys { made: has("MADE_API_KEY"), fal: has("FAL_KEY"), openrouter: has("OPENROUTER_API_KEY") }

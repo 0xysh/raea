@@ -63,6 +63,7 @@ members = [
     "io/gen",
     "io/gen-comfy",
     "io/gen-core",
+    "io/gen-fit",
     "io/home",
     "io/soft",
     "io/av1",

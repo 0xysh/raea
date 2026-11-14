@@ -10,7 +10,7 @@ use raea_core_facts::{Finding, finding};
 use raea_core_meshcheck::{Glb, Want, check, fix};
 use serde_json::{Value as J, json};
 
-use crate::flow::Flow;
+use raea_io_gen_core::flow::Flow;
 
 pub const USAGE: &str = "raea gen check MODEL.glb [--h METRES] [--dims W,D,H] [--turn DEG] [--faces N | --seen METRES] [--parts a,b] [--rig] [--solid] [-o FIXED.glb] [--json]   (a model measured: size, pivot, facing, triangles, loose pieces, holes, textures, and the Blender script each fault needs; -o writes it fitted)";
 
