@@ -1034,6 +1034,7 @@ the lane it sits on (nested ones below their parent, overlapping ones apart), an
 | `heard` | `{ of: string; denoise?: boolean; voice?: string }` | what it plays is a copy of `of` with its noise reduced or its voice changed (an <Audio>'s) |
 | `steady` | `{ of: string; level: string }` | what it plays is a copy of `of` held steady at `level` (a <Video>'s) |
 | `retouch` | `{ of: string; smooth?: number; brighten?: number; slim?: number; eyes?: number }` | what it plays is a copy of `of` with its faces retouched, each amount 0 to 1 (a <Video>'s): `of` is its file, or its steadied copy when it is held steady too (the retouch over the steadying) |
+| `cutout` | `CutoutMatte & { kind: string; at?: number; strokes?: string }` | it wears a cutout's mattes (a <Video>'s): the folder in the media folder, the file's rate, one each `every` frames, how many; what they are of (person, subject or brushed) and, brushed, the second brushed at and the strokes' JSON |
 
 ### `Showing`
 

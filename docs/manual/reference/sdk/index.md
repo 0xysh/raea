@@ -55,7 +55,7 @@ Footage, pictures, sound, words and colour, and the timeline they are edited on.
 
 | Import | What it's for | Exports |
 | --- | --- | --- |
-| [`raea/video`](video.md) | Footage and time-shifted sequences: Video, Sequence, Series, Loop and Freeze. | 5 components, 7 types |
+| [`raea/video`](video.md) | Footage and time-shifted sequences: Video, Sequence, Series, Loop and Freeze. | 5 components, 8 types |
 | [`raea/audio`](audio.md) | Sound: Audio, the master Mix, speech, sound in 3D space, and a song's energy map. | 6 components, 1 hook, 7 functions, 1 value, 25 types |
 | [`raea/text`](text.md) | Text in the 3D world, fonts, and time anchored to the words said. | 3 components, 1 hook, 3 functions, 6 types |
 | [`raea/image`](image.md) | Pictures on the page and in the world, and texture atlases packed from them. | 3 components, 1 class, 5 types |

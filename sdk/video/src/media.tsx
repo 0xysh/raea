@@ -57,6 +57,33 @@ export interface VideoProps extends MediaProps {
   framing?: "face";
   /** ours: multiplies the framing's scale (1.15 is the usual) */
   punchIn?: number;
+  /** ours: its cutout (docs/timeline.feature TL7l, CapCut's Auto cutout): the mattes made of its file, which it wears as
+   *  its mask, so what is cut out shows what is under it */
+  matte?: VideoMatte;
+}
+
+/** A clip's mattes: PNGs whose alpha is what is kept, m00001.png on, in one folder of the media folder. */
+export interface VideoMatte {
+  /** the folder, as staticFile gives it: staticFile("matte/take-person") */
+  src: string;
+  /** the file's frame rate: m00001.png is its frame 0 */
+  fps: number;
+  /** one matte each `every` frames of the file, held until the next (1, every frame, when left out) */
+  every?: number;
+  /** how many mattes there are: past the last, the last is worn */
+  count: number;
+}
+
+/** The matte `m` has for `seconds` of the file, worn where the picture is (`fit` and `place` as its objectFit and
+ *  objectPosition), so each pixel of the matte is over the pixel of the frame it was made from. */
+export function matteStyle(m: VideoMatte, seconds: number, fit: CSSProperties["objectFit"], place: CSSProperties["objectPosition"]): CSSProperties {
+  const every = m.every ?? 1;
+  if (typeof m.src !== "string" || !m.src || !(m.fps > 0) || !(every >= 1) || !(m.count >= 1)) {
+    throw new RangeError(`Video matte: give its folder (src), the file's fps, and count (at least 1), every 1 or more: got ${JSON.stringify(m)}`);
+  }
+  const i = Math.max(0, Math.min(m.count - 1, Math.floor((Math.max(0, seconds) * m.fps) / every + 1e-6)));
+  const size = fit === "contain" || fit === "cover" ? fit : fit === "none" || fit === "scale-down" ? "auto" : "100% 100%";
+  return { maskImage: `url(${m.src.replace(/\/$/, "")}/m${String(i + 1).padStart(5, "0")}.png)`, maskSize: size, maskPosition: String(place ?? "50% 50%"), maskRepeat: "no-repeat" };
 }
 
 export type AudioProps = Omit<MediaProps, "style" | "className" | "src"> & {
@@ -227,7 +254,10 @@ export function Video(props: VideoProps) {
   // a framed Video's position is the engine's (its face track, punchIn): the centred default is left out, so only an
   // objectPosition the author gives wins over framing
   const framed = props.framing !== undefined || props.punchIn !== undefined;
-  const style: CSSProperties = { objectFit: "cover", ...(framed ? {} : { objectPosition: "50% 50%" }), ...props.style };
+  // (the engine places a framed take on its face, where a matte can't follow it)
+  if (props.matte && framed) throw new RangeError(`Video ${props.src}: a matte is worn over the picture as it is placed, so it can't go with framing or punchIn`);
+  const placed: CSSProperties = { objectFit: "cover", ...(framed ? {} : { objectPosition: "50% 50%" }), ...props.style };
+  const style = props.matte ? { ...placed, ...matteStyle(props.matte, Number(attrs["data-source-time"]), placed.objectFit, placed.objectPosition) } : placed;
   return (
     <video
       {...attrs}

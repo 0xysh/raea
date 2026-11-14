@@ -283,6 +283,7 @@ A video clip in step with the frame; `data-source-time` is the source time (seco
 | --- | --- | --- |
 | `framing` | `"face"` | ours: frame the take on the largest face |
 | `punchIn` | `number` | ours: multiplies the framing's scale (1.15 is the usual) |
+| `matte` | `VideoMatte` | ours: its cutout: the mattes made of its file, which it wears as its mask, so what is cut out shows what is under it |
 
 Also takes the props of [`MediaProps`](video.md#mediaprops).
 

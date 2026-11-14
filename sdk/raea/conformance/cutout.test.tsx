@@ -2,6 +2,7 @@
 // <Nudge> from sdk/video cutout.ts.
 import { describe, expect, test } from "bun:test";
 import { BLEND_KINDS, chromaError, chromaId, chromaMatrix, maskError, maskPlain, maskStyle, maskSvg } from "@raea/video/cutout";
+import { Video } from "@raea/video/media";
 import { Nudge } from "@raea/video/nudge";
 import { renderFrame } from "../src/test";
 
@@ -129,5 +130,43 @@ describe("<Nudge> draws them on the part it places", () => {
     expect(() => renderFrame(<Nudge blend={"glow" as never}><div /></Nudge>, opts)).toThrow(/blend is one of normal, darken, screen/);
     expect(() => renderFrame(<Nudge chroma={{ color: "#777777" }}><div /></Nudge>, opts)).toThrow(/is grey/);
     expect(() => renderFrame(<Nudge mask={{ kind: "circle", round: 4 }}><div /></Nudge>, opts)).toThrow(/round is from 0 to 1/);
+  });
+});
+
+describe("a <Video> wears its cutout's mattes (TL7l in a composition)", () => {
+  const seq = (html: string) => /mask-image:url\(([^)]*)\)/.exec(html)?.[1];
+  const at = (frame: number, more: object = {}) =>
+    renderFrame(<Video src="/media/clips/take.mp4" startFrom={30} matte={{ src: "/media/matte/take-person", fps: 30, count: 90 }} {...more} />, { ...opts, durationInFrames: 120, frame });
+
+  test("the matte its source frame was made from, as its mask over the picture as it is placed", () => {
+    // from its frame 30 on: the composition's frame 10 shows the file's frame 40
+    expect(seq(at(10))).toBe("/media/matte/take-person/m00041.png");
+    expect(at(10)).toContain("mask-size:cover");
+    expect(at(10)).toContain("mask-position:50% 50%");
+    expect(seq(at(0, { playbackRate: 2 }))).toBe("/media/matte/take-person/m00031.png");
+    expect(seq(at(5, { playbackRate: 2 }))).toBe("/media/matte/take-person/m00041.png");
+    // contained, or stretched to the box, the matte is too
+    expect(at(10, { style: { objectFit: "contain" } })).toContain("mask-size:contain");
+    expect(at(10, { style: { objectFit: "fill" } })).toContain("mask-size:100% 100%");
+  });
+
+  test("one matte each few frames is held until the next; past the last, the last", () => {
+    const sparse = { matte: { src: "/media/matte/take-person/", fps: 30, every: 4, count: 23 } };
+    expect(seq(at(10, sparse))).toBe("/media/matte/take-person/m00011.png");
+    expect(seq(at(13, sparse))).toBe("/media/matte/take-person/m00011.png");
+    expect(seq(at(14, sparse))).toBe("/media/matte/take-person/m00012.png");
+    expect(seq(at(110, sparse))).toBe("/media/matte/take-person/m00023.png");
+  });
+
+  test("a file at another rate than the composition's: the matte of the file's own frame", () => {
+    // a 24 fps file in a 30 fps composition: the composition's frame 30 from the start is the file's 1 s, its frame 24
+    expect(seq(renderFrame(<Video src="/media/clips/take.mp4" matte={{ src: "/media/matte/t", fps: 24, count: 72 }} />, { ...opts, durationInFrames: 120, frame: 30 }))).toBe("/media/matte/t/m00025.png");
+  });
+
+  test("none without a matte; what it can't wear is said", () => {
+    expect(seq(renderFrame(<Video src="/media/clips/take.mp4" />, opts))).toBeUndefined();
+    expect(() => at(0, { framing: "face" })).toThrow(/can't go with framing/);
+    expect(() => at(0, { matte: { src: "/media/matte/t", fps: 0, count: 3 } })).toThrow(/fps/);
+    expect(() => at(0, { matte: { src: "/media/matte/t", fps: 30, count: 0 } })).toThrow(/count/);
   });
 });

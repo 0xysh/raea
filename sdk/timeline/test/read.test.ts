@@ -176,6 +176,24 @@ describe("TL0c: a timeline is read from a composition", () => {
     expect(seqEdits(fromSequences([...rows, { ...take, name: "Audio", media: "audio" as const }], 30), on("retouch/x.mp4"))).toHaveProperty("why")
   })
 
+  test("footage cut out is its <Video> wearing the mattes made of what it plays, brushed with its strokes (TL7l, TL7m)", () => {
+    const take = { i: 4, name: "Video", label: "take.mp4", from: 90, to: 180, lane: 0, media: "video" as const, startFrom: 30, file: "take.mp4" }
+    const t = fromSequences([...rows, take], 30)
+    const made = { op: "set" as const, id: "seq-4", set: { props: { matte: "person", matted: "matte/take-person-0123456789/index.json", matteFps: 30, matteEvery: 1, matteCount: 240 } } }
+    expect(seqEdits(t, made)).toEqual([{ op: "cutout", i: 4, kind: "person", matte: { dir: "matte/take-person-0123456789", fps: 30, every: 1, count: 240 } }])
+    const back = fromSequences([...rows, { ...take, cutout: { dir: "matte/take-person-0123456789", fps: 30, every: 1, count: 240, kind: "person" } }], 30)
+    expect(find(back, "seq-4")!.clip.props).toEqual({ file: "take.mp4", matte: "person", matted: "matte/take-person-0123456789/index.json", matteFps: 30, matteEvery: 1, matteCount: 240 })
+    expect(seqEdits(back, { op: "set", id: "seq-4", set: { props: { matte: "", matted: "" } } })).toEqual([{ op: "cutout", i: 4 }])
+    // brushed: the second and the strokes go with it, and come back
+    const strokes = JSON.stringify([{ size: 0.05, points: [[0.5, 0.5]] }])
+    const brush = { op: "set" as const, id: "seq-4", set: { props: { matte: "brushed", matted: "matte/take-brushed-abcdefabcd/index.json", matteFps: 30, matteEvery: 3, matteCount: 80, brushAt: 1.5, brushStrokes: strokes } } }
+    expect(seqEdits(t, brush)).toEqual([{ op: "cutout", i: 4, kind: "brushed", matte: { dir: "matte/take-brushed-abcdefabcd", fps: 30, every: 3, count: 80 }, at: 1.5, strokes }])
+    const brushedBack = fromSequences([...rows, { ...take, cutout: { dir: "matte/take-brushed-abcdefabcd", fps: 30, every: 3, count: 80, kind: "brushed", at: 1.5, strokes } }], 30)
+    expect(find(brushedBack, "seq-4")!.clip.props).toMatchObject({ matte: "brushed", brushAt: 1.5, brushStrokes: strokes })
+    // a sound isn't cut out
+    expect(seqEdits(fromSequences([...rows, { ...take, name: "Audio", media: "audio" as const }], 30), made)).toHaveProperty("why")
+  })
+
   test("a file of the project's is a new sequence holding it; on the magnet's main track the clips after it move on and it goes in beside the one before it (TL3j)", () => {
     const t = fromSequences(rows, 30)
     const add = (kind: string, track: string, start: number, length: number, asset = "/p/media/beach.mp4") => seqEdits(t, { op: "add", kind: track, clip: { id: "m", kind, name: "beach.mp4", start, length, ...(kind !== "image" && { in: 0, source: length }), props: { asset } } })

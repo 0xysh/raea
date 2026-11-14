@@ -60,7 +60,7 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
       temperature, tint, fade, vignette, grain. Audio: volume, fades, noise reduction, voice changer. Text: font,
       style, effects, bubbles, animation, and its words read aloud.
       Here 11-14: Basic (TL3h, TL5) with stabilise (TL7k, a film's footage and a composition's <Video>), auto cutout
-      of a person or the subject (TL7l, a film's footage, on a Mac) and a custom one brushed on the picture (TL7m), Retouch (TL7n: smooth, brighten, slim face and bigger eyes, a film's footage, a file from Media or a composition's <Video>, on a Mac), Mask, chroma key and Blend (TL7f) with the key's colour picked from
+      of a person or the subject (TL7l, a film's footage or a composition's <Video>, on a Mac) and a custom one brushed on the picture (TL7m), Retouch (TL7n: smooth, brighten, slim face and bigger eyes, a film's footage, a file from Media or a composition's <Video>, on a Mac), Mask, chroma key and Blend (TL7f) with the key's colour picked from
       the picture (TL7h) and the mask's handles dragged there (TL7i), Animation (TL7d, TL7e), Speed (TL6), Audio's
       volume and fades (TL8a) and its noise reduction and voice changer (TL8d, a film's sounds and a composition's
       <Audio>), Text's words, styles and captions (TL7c) and its words read aloud (TL7j), Adjust as effect clips
@@ -213,7 +213,17 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                before for up to 3 frames; overlaps read as CIAreaAverage means undone from sRGB, a 25% square read
                0.2502; on two subjects side by side a stroke on either kept only it, both kept both, an erase took
                one out, a stroke on the sky said nothing is under it; a real clip 90 frames in 11.9 s, the cat
-               followed through all of them; the strokes kept in the clip's props as JSON, there to brush again),
+               followed through all of them; the strokes kept in the clip's props as JSON, there to brush again; in a
+               composition, the whole of what its <Video> plays (its file, or its retouched or steadied copy) matted
+               into its media folder's matte/, and the <Video> wears them by raea's new Video matte prop (matte={{ src:
+               staticFile(folder), fps, every, count }}: the matte its source time is on, as its mask-image, sized as
+               its objectFit sizes the picture), saying what they are of (data-matte; brushed, data-brush-at and
+               data-brush-strokes), off its props as they were; while it wears them, Stabilise and Retouch are refused,
+               since what it plays would change under them. A composition's strokes are on its frame, which is the
+               <Video>'s picture only when the <Video> fills it. A real 3 s face clip's person matted in 9.1 s, and
+               raea's render of the edited composition keeps on each frame what that frame's matte keeps (overlap 0.92
+               at least, 0.972 on average; its own matte over the one 15 frames away on 88 of 90 frames), where the
+               uncut composition's overlap is 0.53),
                TL7n (footage retouched, CapCut's Retouch: four sliders, smooth, brighten, slim face and bigger eyes, set
                then applied; the host reads each frame of the part the clip shows (`raea media still`, as wide as the
                picture up to 1280 px), finds its faces and their landmarks with Vision's face landmarks (up to 4 a
@@ -274,7 +284,9 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                clips: span, place in the file, level (TL14b). An <Audio>'s sound from its copy with its noise
                reduced or its voice changed: its src the copy, and data-voice-of, data-denoise and data-voice (TL8d).
                A <Video>'s footage from its steadied copy: its src the copy, and data-steady-of and data-steady (TL7k);
-               from its retouched copy, over the steadied one when both: data-retouch-of and the amounts (TL7n)
+               from its retouched copy, over the steadied one when both: data-retouch-of and the amounts (TL7n). A
+               <Video> cut out: its matte prop and data-matte, brushed with data-brush-at and data-brush-strokes (TL7l,
+               TL7m)
     plays      TL10a for a film's own frames: cuts, moves, trims, speeds, freezes and reversed footage at once, the
                player's buffer on the ruler. TL10f: a timed 3D scene's frames are drawn ahead by the host a few
                seconds at a time at draft quality and kept by range, each range under what it is drawn from (the
