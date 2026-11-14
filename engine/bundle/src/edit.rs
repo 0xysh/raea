@@ -43,6 +43,26 @@ impl EditResolve {
         let imp = named.canonicalize().map(raea_io_home::plain).unwrap_or_else(|_| named.to_path_buf());
         imp.starts_with(&self.0.work) && !imp.components().any(|c| c.as_os_str() == "node_modules")
     }
+
+    /// A package's import of the SDK by its names ("raea", "raea/<module>", "@raea/<package>"): the work folder's copy
+    /// of that module, where the edit's own imports of it were pointed (runtime/bundle's rewrite_into: sdk/raea/src's
+    /// files at motion/, a package's at <package>/ beside it), so a package and the composition share one SDK and its
+    /// hooks read the Clock the engine drives. A package isn't rewritten, so its import resolved nothing from its own
+    /// folder and Rolldown left `raea` an outside global: "Can't find variable: raea" before the first frame (#151)
+    fn sdk_copy(&self, spec: &str) -> Option<PathBuf> {
+        if !(spec == "raea" || spec.starts_with("raea/") || spec.starts_with("@raea/")) {
+            return None;
+        }
+        // sdk/react/js's grandparent
+        let sdk = self.0.js.ancestors().nth(2)?;
+        let f = raea_io_home::sdk::resolve(sdk, spec)?;
+        let mut parts = f.strip_prefix(sdk).ok()?.components();
+        let pkg = parts.next()?.as_os_str().to_string_lossy().into_owned();
+        // its src/
+        parts.next()?;
+        let copy = self.0.work.join(if pkg == "raea" { "motion" } else { pkg.as_str() }).join(parts.as_path());
+        copy.is_file().then_some(copy)
+    }
 }
 
 #[cfg(test)]
@@ -126,6 +146,12 @@ impl Plugin for EditResolve {
                 if f.is_file() {
                     return Ok(Some(HookResolveIdOutput::from_id(f.to_string_lossy().as_ref())));
                 }
+            }
+        }
+        // a package importing the SDK: the copy the edit's own sources use (the edit's own were pointed at it already)
+        if !self.from_edit(imp) {
+            if let Some(f) = self.sdk_copy(spec) {
+                return Ok(Some(HookResolveIdOutput::from_id(f.to_string_lossy().as_ref())));
             }
         }
         let bare = spec.starts_with('@') || spec.starts_with(|c: char| c.is_ascii_lowercase());

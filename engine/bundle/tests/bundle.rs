@@ -212,3 +212,44 @@ fn bundles_a_composition_with_the_persons_plugins() {
     assert!(b.js.contains("EDIT_BOTH") && !b.js.contains("PLUGIN_BOTH"), "the edit's own copy first");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// A package that imports the SDK ("raea", "raea/<module>") gets the work folder's copy of it, the one the edit's own
+/// sources were pointed at, so the package's hooks read the same Clock (#151: a package in the project's node_modules
+/// importing `raea` was refused, "Can't find variable: raea", while the same file imported by a relative path drew).
+#[test]
+fn a_package_importing_the_sdk_gets_the_work_folders_copy() {
+    let d = std::env::temp_dir().join(format!("raea-bundle-pkg-sdk-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let w = |p: &str, s: &str| {
+        let f = d.join(p);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(f, s).unwrap();
+    };
+    // raea's home: the SDK's sources and their names, the engine's node_modules under sdk/react/js
+    w("home/sdk/tsconfig.base.json", r#"{ "compilerOptions": { "paths": { "raea": ["./raea/src/prelude.ts"], "raea/clock": ["./app/src/clock.tsx"], "raea/*": ["./raea/src/*"], "@raea/app": ["./app/src/index.ts"], "@raea/app/*": ["./app/src/*"] } } }"#);
+    w("home/sdk/raea/src/prelude.ts", "export const prelude = 'SDK_ORIGINAL_PRELUDE';\n");
+    w("home/sdk/raea/src/easing.ts", "export const easing = 'SDK_ORIGINAL_EASING';\n");
+    w("home/sdk/app/src/clock.tsx", "export const clock = 'SDK_ORIGINAL_CLOCK';\n");
+    w("home/sdk/react/js/node_modules/react/package.json", r#"{ "name": "react", "main": "index.js" }"#);
+    w("home/sdk/react/js/node_modules/react/index.js", "export const version = 'ENGINE_REACT';\n");
+    // the work folder raea makes: the SDK copied (motion/ and app/), the edit's source copied with its imports pointed
+    w("work/motion/prelude.ts", "export const prelude = 'WORK_PRELUDE';\n");
+    w("work/motion/easing.ts", "export const easing = 'WORK_EASING';\n");
+    w("work/app/clock.tsx", "export const clock = 'WORK_CLOCK';\n");
+    w("work/src/edit.tsx", "import { prelude } from '../motion/prelude';\nimport { bar } from 'vk-parts';\n(globalThis as any).out = [prelude, bar];\n");
+    w("work/entry.ts", "import './src/edit.tsx';\n");
+    // the edit's own package, importing the SDK by its names
+    w("edit/node_modules/vk-parts/package.json", r#"{ "name": "vk-parts", "version": "0.0.1", "main": "index.tsx", "peerDependencies": { "raea": "*" } }"#);
+    w("edit/node_modules/vk-parts/index.tsx", "import { prelude } from 'raea';\nimport { clock } from 'raea/clock';\nimport { easing } from 'raea/easing';\nexport const bar = [prelude, clock, easing].join(' ');\n");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(d.join("home/sdk/react/js/node_modules"), d.join("work/node_modules")).unwrap();
+    let edit = raea_bundle::edit::Edit { dir: d.join("edit"), js: d.join("home/sdk/react/js"), work: d.join("work") };
+    let b = raea_bundle::bundle_with(&d.join("work/entry.ts"), raea_bundle::Options { edit: Some(edit), ..Default::default() }).expect("bundles");
+    for want in ["WORK_PRELUDE", "WORK_CLOCK", "WORK_EASING"] {
+        assert!(b.js.contains(want), "{want}: the package's SDK import is the work folder's copy: {}", b.js);
+    }
+    assert!(!b.js.contains("SDK_ORIGINAL"), "one SDK, the copy, not its sources: {}", b.js);
+    // one copy of each module for the edit and the package alike
+    assert_eq!(b.js.matches("WORK_PRELUDE").count(), 1, "{}", b.js);
+    let _ = std::fs::remove_dir_all(&d);
+}

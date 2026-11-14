@@ -201,3 +201,11 @@ Feature: raea's plugin ecosystem: extending the engine and the app, made, shared
       And may an extension restyle the app itself (a theme), or only draw inside its own frames?
       And packages install per person, in every project (Shane 11-09: answered)
       And will packages ever be sold through raea, or stay free with raea taking no part?
+
+    Scenario: EC13. A package that imports raea shares the composition's SDK (#151)
+      Given a package in the project's node_modules (or the person's plugins) that imports "raea", "raea/<module>" or
+        "@raea/<package>", its entry .tsx or plain ESM .js
+      Then the import is the SDK copy the composition's own files import (engine/bundle edit.rs sdk_copy): one SDK, so
+        its hooks read the Clock the engine drives, exactly as the same file imported by a relative path does
+      And never an outside global the bundle leaves unresolved ("Can't find variable: raea" before the first frame)
+      And engine/bundle/tests/bundle.rs a_package_importing_the_sdk_gets_the_work_folders_copy holds it
