@@ -279,7 +279,11 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                the composition's media folder (cloned into media/added/ first when it is elsewhere in the
                project), in at the nearest cut with the main track moving on and the composition growing (TL3j); each
                written into the working version the moment it is made, its draft played over the picture (TL9a,
-               TL10d), finished and posted on Send with the agent told (TL9b). A scene's sequences: move, trim,
+               TL10d), finished and posted on Send with the agent told (TL9b: followed to the wire, a cutout's
+               Send finishes the version on the host and then posts the item's own session, Cutter on Kimi in
+               p-tutorial, a prompt holding the cutout's words, and nothing before Send; with the composition's
+               tell skipped no prompt goes out. Live on Claude over ACP, nothing mocked between page and agent,
+               the agent's first act was a search for "the v2 composition and matte"). A scene's sequences: move, trim,
                split, delete written into the scene's own file, which the stage opens again (TL14c). A sound's
                clips: span, place in the file, level (TL14b). An <Audio>'s sound from its copy with its noise
                reduced or its voice changed: its src the copy, and data-voice-of, data-denoise and data-voice (TL8d).
