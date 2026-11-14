@@ -13,5 +13,7 @@ pub mod agent_mcp;
 pub mod agent_hooks;
 /// Grok Bot as a `raea skills install` target: its copy staged on this Mac, and the links that finish it in Grok Bot
 pub mod agent_grokbot;
+/// where each agent reads a person's skills
+pub mod agent_skills;
 /// `raea setup blender` and `raea blender run`
 pub mod blender;

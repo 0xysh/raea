@@ -64,7 +64,7 @@ pub fn context(project: Option<&str>) -> R<String> {
     let dir = brief_path.parent().unwrap_or(Path::new(".")).to_path_buf();
     let taste_dir = raea_app_direction::check::taste_dir();
     // a cheap doctor (file reads and git config): CONTEXT_STALE when this project or the agent's skill is from another raea
-    let stale = raea_app_workspace::doctor::findings(&dir, &skill::agents(), &skill::version());
+    let stale = raea_app_workspace::doctor::findings(&dir, &tools::agent_skills::agents(), &skill::version());
     let stale = match stale.first() {
         Some(f) => format!("CONTEXT_STALE  raea doctor finds {} thing(s), first: {} (raea doctor --fix)\n\n", stale.len(), f.says),
         None => String::new(),
@@ -82,7 +82,7 @@ pub fn next(args: &[String]) -> R<String> {
     let brief_path = brief_at(args.first().map(String::as_str).unwrap_or("."))?;
     let l = spec::load_brief_ts(&brief_path)?;
     let dir = brief_path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let stale = raea_app_workspace::doctor::findings(&dir, &skill::agents(), &skill::version()).len();
+    let stale = raea_app_workspace::doctor::findings(&dir, &tools::agent_skills::agents(), &skill::version()).len();
     Ok(raea_app_workspace::next::text(&dir, &raea_app_workspace::next::Brief { needs: l.missing, modes: l.modes }, stale))
 }
 

@@ -6,32 +6,10 @@ use super::*;
 
 pub const USAGE: &str = "raea skill [NAME] [--reference cli|feed|files|sdk] | raea skills install --agent claude|codex|kimi|gemini|grokbot [--pin MOVE]... [--no-mcp] [--no-hooks]   (the agent skill this raea ships, for its version, which raea --version prints: an agent whose copy names another version reads this; install puts raea's skills where that agent reads skills, adds the blender MCP server unless --no-mcp, makes each --pin MOVE a /MOVE of its own, and adds raea's hooks to that agent unless --no-hooks (raea hook AGENT: media opened in the Mac's viewer goes to raea show, and the quick check after a composition is saved); a skill folder that's a link is left as it is; grokbot, the Grok Bot app, keeps its skills on its own computer, so its copy is staged on this Mac (RAEA_GROKBOT_HOME moves it) with the grokbot:// links that finish it in Grok Bot, and gets no hooks or MCP server)";
 
-/// Where each agent reads a person's skills, one folder per skill holding SKILL.md. Checked by hand on 11-05:
-/// claude: ~/.claude/skills (Claude Code's docs); codex: ~/.agents/skills (developers.openai.com/codex/skills, the user
-/// scope; older builds read ~/.codex/skills); kimi: $KIMI_CODE_HOME/skills, else ~/.kimi-code/skills (kimi 2.3.3's own
-/// binary; it also reads ~/.agents/skills and ~/.claude/skills); gemini: ~/.gemini/skills (geminicli.com/docs/cli/skills).
-/// grokbot (11-14): Grok Bot reads no folder here (apps/tools agent_grokbot.rs), so its copy is staged in raea's own.
-fn target(agent: &str) -> R<PathBuf> {
-    let home = tools::agent_mcp::user_home()?;
-    Ok(match agent {
-        "claude" => home.join(".claude/skills"),
-        "codex" => home.join(".agents/skills"),
-        "kimi" => std::env::var_os("KIMI_CODE_HOME").filter(|v| !v.is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".kimi-code")).join("skills"),
-        "gemini" => home.join(".gemini/skills"),
-        "grokbot" => tools::agent_grokbot::skills_dir()?,
-        a => return Err(format!("no agent {a:?}: claude, codex, kimi, gemini or grokbot")),
-    })
-}
-
-/// Each agent and the folder it reads skills from, for `raea doctor` (an agent with no folder is skipped).
-pub fn agents() -> Vec<(&'static str, PathBuf)> {
-    ["claude", "codex", "kimi", "gemini", "grokbot"].into_iter().filter_map(|a| target(a).ok().map(|t| (a, t))).collect()
-}
-
 /// `raea doctor [--fix] [DIR]` (SK10): what doesn't match this raea, an agent's skill reinstalled by --fix.
 pub fn doctor(args: &[String]) -> R<String> {
     let again = |agent: &str| install(&["install".into(), "--agent".into(), agent.into(), "--no-mcp".into()]);
-    raea_app_workspace::doctor::doctor(args, &agents(), &version(), &again)
+    raea_app_workspace::doctor::doctor(args, &tools::agent_skills::agents(), &version(), &again)
 }
 
 /// This raea's version: the release's (share/raea/VERSION), or the crate's for a build from a checkout.
@@ -111,11 +89,7 @@ pub fn install(args: &[String]) -> R<String> {
         return Err(format!("usage: {USAGE}"));
     }
     let agent = args.iter().position(|a| a == "--agent").and_then(|i| args.get(i + 1)).ok_or("which agent: --agent claude|codex|kimi|gemini|grokbot")?;
-    install_into(agent, &target(agent)?, args)
-}
-
-/// `skills install` for one agent into its skills folder `to`.
-fn install_into(agent: &str, to: &Path, args: &[String]) -> R<String> {
+    let to = tools::agent_skills::folder(agent)?;
     let (from, v) = (shipped()?, version());
     let mut out = String::new();
     for name in installed_names()? {
@@ -136,18 +110,11 @@ fn install_into(agent: &str, to: &Path, args: &[String]) -> R<String> {
     for (i, a) in args.iter().enumerate() {
         if a == "--pin" {
             let m = args.get(i + 1).ok_or("--pin takes a move: quieter, bolder, layout, adapt...")?;
-            out += &tools::agent_mcp::pin(to, m, &v)?;
+            out += &tools::agent_mcp::pin(&to, m, &v)?;
         }
     }
-    // Grok Bot (SK13): its copy says where raea runs, and the links finish it there; it has no hooks, and an MCP
-    // server's command would run on its own computer, not this Mac. A linked folder is the person's: left as it is.
-    if agent == "grokbot" {
-        let md = to.join("raea/SKILL.md");
-        if !to.join("raea").is_symlink() && let Ok(text) = std::fs::read_to_string(&md) {
-            std::fs::write(&md, tools::agent_grokbot::with_preface(&text, to)).map_err(|e| format!("{}: {e}", md.display()))?;
-        }
-        return Ok(format!("{out}{}", tools::agent_grokbot::finish(to)));
-    }
+    // Grok Bot (SK13): no hooks or MCP server; its copy gets a preface and the links that finish it (agent_grokbot.rs)
+    if agent == "grokbot" { return tools::agent_grokbot::stage(&to, out); }
     // every agent's hooks (A5d, SK10), in its own config: --no-hooks leaves it alone
     if !args.iter().any(|a| a == "--no-hooks") { out += &tools::agent_hooks::install(agent)?; }
     // the MCP servers raea offers (SK11): blender, for a running Blender; --no-mcp leaves the agent's servers alone
@@ -177,33 +144,7 @@ mod tests {
         assert!(skill(&["raea-bevy".into()]).unwrap_err().contains("3d.md") && installed_names().unwrap() == ["raea"]);
         assert!(skill(&["../x".into()]).is_err());
         assert!(skill(&["--reference".into(), "../../x".into()]).is_err());
-    }
-
-    #[test]
-    fn install_targets_each_agents_folder() {
-        assert!(target("claude").unwrap().ends_with(".claude/skills"));
-        assert!(target("codex").unwrap().ends_with(".agents/skills"));
-        assert!(target("gemini").unwrap().ends_with(".gemini/skills"));
-        assert_eq!(target("grokbot").unwrap(), tools::agent_grokbot::skills_dir().unwrap());
-        assert!(target("cursor").is_err());
-        assert!(agents().iter().any(|(a, _)| *a == "grokbot"));
-    }
-
-    #[test]
-    fn grokbot_gets_a_staged_copy_with_its_preface_and_no_hooks_or_mcp() {
-        let d = std::env::temp_dir().join(format!("raea-grokbot-skills-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        let args: Vec<String> = ["install", "--agent", "grokbot", "--pin", "quieter"].map(String::from).to_vec();
-        let out = install_into("grokbot", &d, &args).unwrap();
-        let md = std::fs::read_to_string(d.join("raea/SKILL.md")).unwrap();
-        assert!(md.starts_with("---\nname: raea\n") && md.contains(&format!("\nversion: {}\n---\n\n> **On Grok Bot.**", version())), "{}", &md[..400.min(md.len())]);
-        assert!(md.len() < 256_000, "Grok Bot's Add new skill takes a file of at most 256 KB");
-        assert!(d.join("raea/reference/cli.md").is_file() && d.join("quieter/SKILL.md").is_file());
-        assert!(out.contains("grokbot://app/v1/settings?id=local-execution") && out.contains("grokbot://app/v1/prompt?text="), "{out}");
-        assert!(!out.contains("hooks `raea hook") && !out.contains("MCP server blender added"), "{out}");
-        // again: the copy is replaced, and its preface is there once
-        install_into("grokbot", &d, &args).unwrap();
-        assert_eq!(std::fs::read_to_string(d.join("raea/SKILL.md")).unwrap().matches("> **On Grok Bot.**").count(), 1);
-        let _ = std::fs::remove_dir_all(&d);
+        // Grok Bot's Add new skill takes a file of at most 256 KB: the shipped SKILL.md with its preface fits
+        assert!(tools::agent_grokbot::with_preface(&core, Path::new("/h")).len() < tools::agent_grokbot::MAX_SKILL);
     }
 }
