@@ -6,7 +6,9 @@
 //! it, bevy_ui's kinds. --root: where the page's own-origin fetches are read from (RAEA_PAGE_ROOT). --size: the
 //! window, default 1440x900. RAEA_PAGE_BRP_PORT (default: a free one), RAEA_PAGE_MCP_PORT (default 7477; 0: none),
 //! RAEA_PAGE_PICK=0: the page's pointers and keys dispatched by the host (page::input) instead of through raea-page's
-//! picking route, the default. The page's `<img data-raea-stage>` plays a composition live (raea-page-stage).
+//! picking route, the default. RAEA_FINE_RESTYLE=0: an attribute change restyles its element's parent's whole subtree
+//! (Blitz's own way; the host's default is the fine restyle, docs/timeline.feature TL13a). The page's
+//! `<img data-raea-stage>` plays a composition live (raea-page-stage).
 //! --chrome inset: the page under a transparent title bar, its title area moving the window (raea-page-window).
 //! --window (built with the `window` feature): on screen, a window of its own that closes the app (raea's desktop app;
 //! RAEA_PAGE_HOST sends the page's /host/* to the feed's host: raea-page-net).
@@ -63,6 +65,14 @@ fn main() {
         eprintln!("raea-page-host: {e}");
         std::process::exit(2);
     });
+    // a page's attribute set or cleared restyles what Stylo's invalidation finds, and each ancestor itself, not the
+    // element's parent's whole subtree (vendor/blitz-dom mutator.rs): ui-parity's 271 cases come out the same case by
+    // case, and a 400-clip timeline drag in raea feed's window went from 38-41 to 48-50 frames a second
+    // (docs/timeline.feature TL13a). RAEA_FINE_RESTYLE=0 restyles the parent's whole subtree, as before. Set here,
+    // before any thread starts, as --root's RAEA_PAGE_ROOT is.
+    if std::env::var_os("RAEA_FINE_RESTYLE").is_none() {
+        unsafe { std::env::set_var("RAEA_FINE_RESTYLE", "1") }
+    }
     // headless (the benches, raea app check): the system's clipboard, files, dialogs and browser stay untouched (T2d)
     if !a.window {
         raea_io_os::set_headless();

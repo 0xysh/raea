@@ -43,10 +43,11 @@ enum SpecialOp {
     UnloadCustomWidget(NodeId),
 }
 
-/// raea (RAEA_FINE_RESTYLE=1, a trial, off by default): an attribute set or cleared restyles only what its snapshot's
-/// invalidation finds (the selectors that read it, siblings' and ancestors' included) and, for `style`, the element's
-/// own declarations (RESTYLE_STYLE_ATTRIBUTE, below), as Servo does, instead of the element's and its parent's whole
-/// subtrees. A clip dragged along a timeline track restyled every clip on the track each step (raea feed's TL13a).
+/// raea (RAEA_FINE_RESTYLE=1; off unless set, and raea-page-host sets it unless it's set already): an attribute set or
+/// cleared restyles only what its snapshot's invalidation finds (the selectors that read it, siblings' and ancestors'
+/// included), each ancestor itself (for `:has()`), and, for `style`, the element's own declarations
+/// (RESTYLE_STYLE_ATTRIBUTE, below), as Servo does, instead of the element's and its parent's whole subtrees. A clip
+/// dragged along a timeline track restyled every clip on the track each step (raea feed's TL13a).
 fn fine_restyle() -> bool {
     static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| std::env::var_os("RAEA_FINE_RESTYLE").is_some_and(|v| v == "1"));
     *ON

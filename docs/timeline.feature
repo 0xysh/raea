@@ -314,17 +314,22 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                drawn smaller than they ship and laid out as they ship (raea's <Composition edit={{ scale }}>, the
                long side at 960 px; docs/lightspeed.feature PF4): a ray-traced 1080p shot's draft 2.75 s at full
                size, 1.7 s scaled
-    not built  TL13a's drag at the window's rate with 400 clips (measured below: Chrome keeps it, raea's window
-               draws 35 frames a second, bound by the page host's frame after a step: Stylo's restyle, which Blitz
-               widens to the changed element's parent's whole subtree, paint, and every element's rect taken each
-               frame. RAEA_FINE_RESTYLE=1 (a trial in vendor/blitz-dom mutator.rs, off by default) measured 11-14 in
-               a headless window, three rounds alternating: the drag 37, 47 and 49 fps (median frame 25.0, 19.2,
-               18.9 ms) against 31, 34 and 38 off (34.6, 30.4, 27.9 ms), the window's still rate 51-57; not yet
-               the window's rate, and not the default until ui-parity passes with it on (its build waits on disk:
-               1 GB free). In one drag profiled with it on (the run timed out under the profiler, so a weak
-               read), the page host's busiest frames were the rect walk (get_client_bounding_rect,
-               transformed_rect); drawing only the clips in view would
-               draw none fewer, since at its opening fit all 12 tracks and all 400 clips are on screen at once).
+    not built  TL13a's drag at the window's rate with 400 clips, though close (measured below: Chrome keeps it;
+               raea's window drew 35 frames a second, bound by the page host's frame after a step: Stylo's restyle,
+               which Blitz widened to the changed element's parent's whole subtree, paint, and every element's rect
+               taken each frame). raea-page-host now restyles finely by default (vendor/blitz-dom mutator.rs: what
+               the snapshot's invalidation finds, the changed attribute named in the snapshot even when it was
+               added, and each ancestor itself for `:has()`; RAEA_FINE_RESTYLE=0 for Blitz's own way), and a rect
+               with no transform above it is answered without matrix math. ui-parity with it: 269/271, the same
+               two cases failing as without (p15-media canvas-text, img-downscale); before the snapshot and :has()
+               fixes it was 266. The app's timeline suite in a headless window with it: 53 of 54 pass, TL10d
+               skipping itself there. Measured 11-14 in a headless window, three rounds alternating: the drag 38-41
+               fps without, 48-50 with, against the window's still rate of 52-55, so about 90% of it; a pick
+               42-62 ms and a split 46-63 ms. A sync of the twins that keeps their boxes on each pointer move
+               (RAEA_TWIN_SYNC_LIGHT=1, a trial, off) gained nothing. Under another session's load the drag held
+               the same share of the still rate with the :has() fix as without (0.66-0.72 each, four rounds).
+               Drawing only the clips in view would draw none fewer: at its opening fit all 12 tracks and all 400
+               clips are on screen at once.
                TL13a's stage clause is met (an edit on the scene's stage by 88 ms, median, TL13b). The
                skills guide's note on an item's `timeline` field waits for PR #19 to merge
 
