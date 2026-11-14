@@ -279,9 +279,10 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                long side at 960 px; docs/lightspeed.feature PF4): a ray-traced 1080p shot's draft 2.75 s at full
                size, 1.7 s scaled
     not built  TL13a's drag at the window's rate with 400 clips (measured below: Chrome keeps it, raea's window
-               draws 35 to 37 frames a second, and what is left is the window's own frame after a change; drawing
-               only the clips in view would draw none fewer, since at its opening fit all 12 tracks and all 400
-               clips are on screen at once). The
+               draws 35 frames a second, bound by the page host's frame after a step: Stylo's restyle, which Blitz
+               widens to the changed element's parent's whole subtree (RAEA_FINE_RESTYLE, a trial, not yet
+               measured), paint, and every element's rect taken each frame; drawing only the clips in view would
+               draw none fewer, since at its opening fit all 12 tracks and all 400 clips are on screen at once). The
                skills guide's note on an item's `timeline` field waits for PR #19 to merge
 
   Background:
@@ -776,7 +777,22 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
       # a second (a frame's median 24 to 26 ms), with nothing moving 80. What is left is the window's: a frame
       # after any change to the page costs about twice a still one with 400 clips on screen (a clip placed by a
       # transform instead of its left edge made no difference), so the rest is the engine's layout, not the app's.
-      # Not yet: that, and the picture following an edit within 100 ms on the stage.
+      # 11-14, told apart further (PERF_LISTENERS times the window's host calls and splits a pointermove at the
+      # handler and React's commit; a copy of sdk/ui timed inside built the bundle; PERF_SAMPLE takes a macOS sample
+      # of raea-page-host): of a move's 10 ms in the page, 9.5 went to finding its target, every element hit-tested
+      # in JavaScript, since the clip held no capture. A clip carried over its neighbour is shown on a track with
+      # room for the step, its element made again there, and the capture went with the old one (in Chrome too: a
+      # release over an empty stretch of track never lifted the drag). The clip's new element takes it back now: a
+      # move costs the page 2.3 ms (React's commit 1.8), every move makes a step (67 of 68, against 31 of 62), and
+      # the drag still draws 33 to 35 frames a second, with nothing moving 71 to 77. The host's main thread through
+      # the drag: Stylo's restyle 28%, paint 15%, the page's JavaScript 14%, layout_out 11% (each element's rect
+      # with its ancestors' transforms, every frame, to send the snapshot when it changed), waiting on the render
+      # world 11%. Blitz's set_attribute adds restyle_subtree() to the element and its parent (an upstream TODO)
+      # on top of the snapshot Stylo already diffs, so a clip's left restyled every clip on its track;
+      # RAEA_FINE_RESTYLE=1 leaves it to the snapshot's invalidation (vendor/blitz-dom, off by default), waiting on
+      # a release build of raea-page-host, which the disk had no room for, to be measured and run against ui-parity.
+      # Not yet: that, layout_out and paint skipping what didn't change, and the picture following an edit within
+      # 100 ms on the stage.
 
   Rule: TL14. Watch, Listen and Scene are one timeline
     Scenario: TL14a. Watch
