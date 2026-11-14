@@ -122,9 +122,26 @@ function useStableTime(frame: number, origin: number, width: number, height: num
   return (r.current = { frame, origin, width, height, duration });
 }
 
+/** Sequences retimed as the piece plays, by their `name`: a timeline's edit on the stage before the file it wrote is
+ *  opened again (docs/timeline.feature TL13a). Their `from` and `durationInFrames` here stand over the written ones. */
+const retimed = new Map<string, { from: number; durationInFrames: number }>();
+
+/** The sequences retimed now, by name (none: all as written). What the stage's props carry as `__raeaSequences`. */
+export function retime(by: unknown): void {
+  retimed.clear();
+  if (!by || typeof by !== "object") return;
+  for (const [name, t] of Object.entries(by as Record<string, { from?: unknown; durationInFrames?: unknown }>)) {
+    const from = Number(t?.from), durationInFrames = Number(t?.durationInFrames);
+    if (Number.isFinite(from) && Number.isInteger(durationInFrames) && durationInFrames >= 0) retimed.set(name, { from, durationInFrames });
+  }
+}
+
 /** Shifts time by `from` and shows its children only for `durationInFrames` frames. */
 export function Sequence(props: SequenceProps) {
-  const { from = 0, durationInFrames = Infinity, name, layout = "absolute-fill", width, height, style, className } = props;
+  // (looked up only while something is retimed: a game renders hundreds of sound cues a frame)
+  const over = retimed.size && props.name !== undefined ? retimed.get(props.name) : undefined;
+  const { from = 0, durationInFrames = Infinity } = over ?? props;
+  const { name, layout = "absolute-fill", width, height, style, className } = props;
   checkFinite("Sequence", "from", from);
   checkDuration("Sequence", durationInFrames);
   const parent = useLocalTime("Sequence");

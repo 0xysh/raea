@@ -12,6 +12,7 @@ import { domSvgText } from "./dom-svgtext";
 import { domObservers } from "./dom-observers";
 import { domTree } from "./dom-tree";
 import { boxOf, type Box } from "./page-layout";
+import { retime } from "@raea/video/timeline";
 
 /** The web's DOMRect, as getBoundingClientRect answers it. */
 export class DOMRect {
@@ -63,7 +64,12 @@ const inline = (b: Box) => b.inline;
 
 /** A ref's DOM, from the entry, given bevy-react's exports: LR3's geometry, LR4's tree and LR5's style on its BevyElement and
  * BevyTextNode, and LR7's document and window (raea's patch; a bridge without it has none, and refs stay plain handles). */
-export function domReads(bevy: { BevyElement?: { prototype: object }; BevyTextNode?: { prototype: object }; containerNode?: unknown }): void {
+export function domReads(bevy: { BevyElement?: { prototype: object }; BevyTextNode?: { prototype: object }; containerNode?: unknown; addEventListener?: (name: string, cb: (v: unknown) => void) => unknown }): void {
+  // (the one call the entry makes with the bridge's exports, so here too:) the stage's props as they're set, their
+  // sequences retimed by name (`__raeaSequences`: a timeline's edit shown before its file is opened again, TL13a).
+  // Lite's entry hands the nodes instead: its runtime leaves the bridge's listener on globalThis (lite parts/root.ts)
+  const listen = bevy.addEventListener ?? (globalThis as { __raeaListen?: typeof bevy.addEventListener }).__raeaListen;
+  listen?.("raea-props", (v) => retime((v as { __raeaSequences?: unknown } | null)?.__raeaSequences));
   geometry(bevy.BevyElement);
   domTree(bevy.BevyElement, bevy.BevyTextNode);
   domStyle(bevy.BevyElement);
