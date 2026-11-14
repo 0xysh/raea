@@ -315,7 +315,7 @@ impl Node {
         let mut out = Vec::new();
         for name in INHERITED {
             if let Some(v) = value(&st, name).filter(|v| value(&parent, name).as_ref() != Some(v)) {
-                out.push(format!("{name}:{v}"));
+                out.push(format!("{name}:{}", svg_paint_rgba(v)));
             }
         }
         // not inherited: where it isn't the initial value
@@ -579,6 +579,18 @@ fn from_first_declaration(mut style: &str) -> &str {
     }
 }
 
+/// raea: a computed paint value as usvg reads it: a colour in its own computed syntax (oklch(), oklab(), lab(), lch(),
+/// color()) as sRGB `rgba()`, since usvg drew it black (a class's `stroke-ink-4` or `fill-[var(--ink-4)]` on the app's
+/// oklch tokens); anything else (none, currentcolor, rgb(), a url()) as it is.
+#[cfg(feature = "svg")]
+fn svg_paint_rgba(v: String) -> String {
+    const OWN: [&str; 5] = ["oklch(", "oklab(", "lab(", "lch(", "color("];
+    if !OWN.iter().any(|f| v.starts_with(f)) {
+        return v;
+    }
+    css_color_rgba(&v).unwrap_or(v)
+}
+
 /// raea: a CSS colour (any syntax stylo parses) as sRGB `rgba()`, the form usvg reads; None when `value` isn't one.
 fn css_color_rgba(value: &str) -> Option<String> {
     use style::parser::{Parse, ParserContext};
@@ -602,4 +614,18 @@ fn css_color_rgba(value: &str) -> Option<String> {
     let [r, g, b, a] = *color.into_srgb_legacy().raw_components();
     let c = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     Some(format!("rgba({}, {}, {}, {})", c(r), c(g), c(b), a.clamp(0.0, 1.0)))
+}
+
+#[cfg(all(test, feature = "svg"))]
+mod svg_paint_tests {
+    /// raea: the app's ink (oklch(0.96 0 0)) set by a class reaches usvg as a light grey, not black; what usvg reads
+    /// already is left as it is
+    #[test]
+    fn computed_colours_usvg_cannot_read_become_rgba() {
+        assert_eq!(super::svg_paint_rgba("oklch(0.96 0 0)".into()), "rgba(242, 242, 242, 1)");
+        assert_eq!(super::svg_paint_rgba("lab(50 0 0)".into()), "rgba(119, 119, 119, 1)");
+        for kept in ["none", "currentcolor", "rgb(255, 0, 0)", "url(\"#g\") none", "1.5px"] {
+            assert_eq!(super::svg_paint_rgba(kept.into()), kept);
+        }
+    }
 }
