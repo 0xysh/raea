@@ -14,8 +14,8 @@ the same calls.
 Anyone on **Pro** or **Team** can, a person on their own included: there's no separate developer plan and no
 per-call price. The API reaches what lives in raea's cloud, so it comes with the plans that have cloud storage.
 
-On **Free**, libraries stay on your Mac, and so does their search. Search them from the app, or from a terminal or an
-agent on the same Mac with [`raea library`](../reference/cli/library.md), which needs no key. Asking for an agent key
+On **Free**, libraries stay on your computer, and so does their search. Search them from the app, or from a terminal or an
+agent on the same computer with [`raea library`](../reference/cli/library.md), which needs no key. Asking for an agent key
 on Free answers `402 agent_keys_paid`.
 
 ## Make an agent key
@@ -92,7 +92,7 @@ Each hit is a moment: the file's `sha256`, the segment's `t0` and `t1` in second
 your words as keywords too: `"by": "meaning"`. Without one, it searches by keywords alone: `"by": "words"`. The vector
 is EmbeddingGemma 2's (`onnx-community/embeddinggemma-2-ONNX`, 768 numbers) for the text
 `task: search result | query: ` followed by your words. raea never runs a model in its cloud for you: the app embeds
-your words on your Mac, which is what `raea library search` and the app's Search do, and raea.io's Storage page
+your words on your computer, which is what `raea library search` and the app's Search do, and raea.io's Storage page
 borrows one of your computers that's online.
 
 ## Get a file

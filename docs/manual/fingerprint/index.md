@@ -1,14 +1,14 @@
 ---
 title: "Fingerprint: teach raea your eye"
-summary: "What raea learns about good work from your notes, marks and approvals, on your Mac: the axes it judges, the Fingerprint page, and what it can't judge yet."
+summary: "What raea learns about good work from your notes, marks and approvals, on your own computer: the axes it judges, the Fingerprint page, and what it can't judge yet."
 order: 0
 sources: ["docs/fingerprint.feature", "docs/fingerprint.md", "apps/fingerprint/src", "systems/fingerprint/src", "systems/fingerprint-use/src", "apps/app/src/fingerprint"]
 ---
 
-A fingerprint is your sense of good work, as raea has learned it on your Mac. It's a list of axes, the things you
+A fingerprint is your sense of good work, as raea has learned it on your own computer. It's a list of axes, the things you
 notice: blur, a black frame, hiss, clipping, a glow over everything, a frozen picture, and taste axes such as fake,
 barren or unreadable text. Each axis has a small model trained over the **Edit Embedding Zoo**: the encoders that run
-on your Mac (SigLIP 2 for pictures, CLAP for sound, YAMNet for sound events, EmbeddingGemma 2 for scripts and other
+on your computer (SigLIP 2 for pictures, CLAP for sound, YAMNet for sound events, EmbeddingGemma 2 for scripts and other
 text, Depth Anything 3 for depth), so nothing leaves the machine unless you share it. The zoo is the same for everyone
 and never changes; what you train over it is yours.
 
