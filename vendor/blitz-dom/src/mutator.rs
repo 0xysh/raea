@@ -43,6 +43,15 @@ enum SpecialOp {
     UnloadCustomWidget(NodeId),
 }
 
+/// raea (RAEA_FINE_RESTYLE=1, a trial, off by default): an attribute set or cleared restyles only what its snapshot's
+/// invalidation finds (the selectors that read it, siblings' and ancestors' included) and, for `style`, the element's
+/// own declarations (RESTYLE_STYLE_ATTRIBUTE, below), as Servo does, instead of the element's and its parent's whole
+/// subtrees. A clip dragged along a timeline track restyled every clip on the track each step (raea feed's TL13a).
+fn fine_restyle() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| std::env::var_os("RAEA_FINE_RESTYLE").is_some_and(|v| v == "1"));
+    *ON
+}
+
 pub struct DocumentMutator<'doc> {
     /// Document is public as an escape hatch, but users of this API should ideally avoid using it
     /// and prefer exposing additional functionality in DocumentMutator.
@@ -270,16 +279,19 @@ impl DocumentMutator<'_> {
         if node_is_in_document {
             self.doc.snapshot_node(node_id);
 
+            let fine = fine_restyle();
             let node = &mut self.doc.nodes[node_id];
             if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {
-                data.hint |= RestyleHint::restyle_subtree();
+                if !fine {
+                    data.hint |= RestyleHint::restyle_subtree();
+                }
                 data.damage.insert(ALL_DAMAGE);
             }
             node.mark_damaged();
 
             // TODO: make this fine grained / conditional based on ElementSelectorFlags
             let parent = node.parent;
-            if let Some(parent_id) = parent {
+            if let Some(parent_id) = parent.filter(|_| !fine) {
                 let parent = &mut self.doc.nodes[parent_id];
                 if let Some(mut data) = parent
                     .try_stylo_element_data_mut()
@@ -404,10 +416,13 @@ impl DocumentMutator<'_> {
         if node_is_in_document {
             self.doc.snapshot_node(node_id);
 
+            let fine = fine_restyle();
             let node = &mut self.doc.nodes[node_id];
 
             if let Some(mut data) = node.try_stylo_element_data_mut().and_then(|s| s.get_mut()) {
-                data.hint |= RestyleHint::restyle_subtree();
+                if !fine {
+                    data.hint |= RestyleHint::restyle_subtree();
+                }
                 data.damage.insert(ALL_DAMAGE);
             }
             node.mark_damaged();
