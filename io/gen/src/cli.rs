@@ -58,6 +58,7 @@ fn runner<'a>(args: &[String], base: &Path, local: Option<&'a dyn Local>) -> Run
     r.policy.exact = args.iter().any(|a| a == "--exact");
     r.policy.comfy_on_replicate = args.iter().any(|a| a == "--comfy-on-replicate") || crate::setting("RAEA_COMFY_ON") .as_deref() == Some("replicate");
     r.policy.tripo = !args.iter().any(|a| a == "--no-tripo") && crate::tripo::available();
+    r.policy.keys = crate::route::Keys::here();
     if let Some(l) = local.filter(|_| !args.iter().any(|a| a == "--no-local")) {
         r.policy.local = l.names();
         r.local = Some(l);
