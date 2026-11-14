@@ -21,12 +21,11 @@ pub const OFFSET_NONE: i64 = -2;
 
 /// A number as the snapshot writes it: to 0.01 px, an integer without its point.
 fn num(n: &mut String, v: f64) {
+    use std::fmt::Write;
+    // written in place: a page's every element's numbers are written each frame (about 50,000 with 400 timeline clips,
+    // TL13a), and format! made a String of each
     let x = (v * 100.0).round() / 100.0;
-    if x == x.trunc() {
-        n.push_str(&format!("{},", x as i64));
-    } else {
-        n.push_str(&format!("{x},"));
-    }
+    let _ = if x == x.trunc() { write!(n, "{},", x as i64) } else { write!(n, "{x},") };
 }
 
 /// Per element, in page px: its id, then x, y, w, h (its bounding client rect: transformed, an inline element's line
