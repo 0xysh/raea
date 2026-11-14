@@ -1030,6 +1030,8 @@ the lane it sits on (nested ones below their parent, overlapping ones apart), an
 | `startFrom` | `number` | its media's first frame used, in frames of its file |
 | `volume` | `number` | its media's level, 1 as recorded |
 | `muted` | `boolean` | a <Video> whose own sound was taken out (muted): its sound is an <Audio> of its own |
+| `file` | `string` | its media's file, a path in the composition's media folder (where its src is staticFile("…")) |
+| `heard` | `{ of: string; denoise?: boolean; voice?: string }` | that file is a copy of `of` with its noise reduced or its voice changed |
 
 ### `Showing`
 

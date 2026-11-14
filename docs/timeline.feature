@@ -62,8 +62,8 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
       Here 11-14: Basic (TL3h, TL5) with stabilise (TL7k, a film's footage; a composition's not yet), auto cutout
       of a person or the subject (TL7l, a film's footage, on a Mac) and a custom one brushed on the picture (TL7m), Retouch (TL7n: smooth, brighten, slim face and bigger eyes, a film's footage or a file from Media, on a Mac), Mask, chroma key and Blend (TL7f) with the key's colour picked from
       the picture (TL7h) and the mask's handles dragged there (TL7i), Animation (TL7d, TL7e), Speed (TL6), Audio's
-      volume and fades (TL8a) and its noise reduction and voice changer (TL8d, a film's sounds; a composition's
-      not yet), Text's words, styles and captions (TL7c) and its words read aloud (TL7j), Adjust as effect clips
+      volume and fades (TL8a) and its noise reduction and voice changer (TL8d, a film's sounds and a composition's
+      <Audio>), Text's words, styles and captions (TL7c) and its words read aloud (TL7j), Adjust as effect clips
       over a span (TL7b, raea's ten) and as the clip's own twelve sliders (TL7g, on the film and on a file from Media
       over it), every number of these keyed (TL5a).
 
@@ -182,7 +182,11 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                tenth, a phase vocoder for pitch, biquads for the bands, a delay line for the echo; on made sounds hiss
                down 16 dB with the tone within 0.04 dB, 3 minutes in 2.3 s; on a real voice the chipmunk moves its
                spectral centroid x1.46 and deep x0.77, each setting 25-73 ms for 1.2 s, kept under media/voice and
-               read again in under 1 ms), TL7k (footage held steady: host/shake.ts in TypeScript on 320 px
+               read again in under 1 ms; each voice's copy as loud as its source short of clipping, where on a line
+               with pauses they had moved it -12.5 dB (robot) to +8.6 dB (megaphone); in a composition, an <Audio>'s
+               copy made from its own file and kept in its media folder's voice/, the <Audio> playing it and saying
+               what it was made from and how (data-voice-of, data-denoise, data-voice), both off its src as it was;
+               raea renders it, a scratch composition's line at 105 Hz voiced, 140 its own), TL7k (footage held steady: host/shake.ts in TypeScript on 320 px
                grey frames from `raea media still`, eight at a time; the window over a block read again where
                the first reading put the move, since a fixed window reads big moves short; the path smoothed by
                a Gaussian-weighted line, so a pan stays a pan to the clip's ends; on a shaky clip made from a real
@@ -254,7 +258,8 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                written into the working version the moment it is made, its draft played over the picture (TL9a,
                TL10d), finished and posted on Send with the agent told (TL9b). A scene's sequences: move, trim,
                split, delete written into the scene's own file, which the stage opens again (TL14c). A sound's
-               clips: span, place in the file, level (TL14b)
+               clips: span, place in the file, level (TL14b). An <Audio>'s sound from its copy with its noise
+               reduced or its voice changed: its src the copy, and data-voice-of, data-denoise and data-voice (TL8d)
     plays      TL10a for a film's own frames: cuts, moves, trims, speeds, freezes and reversed footage at once, the
                player's buffer on the ruler. TL10f: a timed 3D scene's frames are drawn ahead by the host a few
                seconds at a time at draft quality and kept by range, each range under what it is drawn from (the

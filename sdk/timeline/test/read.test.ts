@@ -104,7 +104,7 @@ describe("TL0c: a timeline is read from a composition", () => {
     expect(t.tracks[2].clips[0]).toMatchObject({ kind: "video", in: 30, start: 90, length: 90 })
     expect(t.tracks[3].clips[0]).toMatchObject({ kind: "audio", volume: 0.5 })
     expect(seqEdits(t, { op: "set", id: "seq-6", set: { volume: 0.8 } })).toEqual([{ op: "level", i: 6, volume: 0.8 }])
-    expect(seqEdits(t, { op: "move", ids: ["seq-6"], by: 10 })).toEqual({ why: "footage and sound play where their sequence does: move, trim or speed the sequence; here only the level is its own" })
+    expect(seqEdits(t, { op: "move", ids: ["seq-6"], by: 10 })).toEqual({ why: "footage and sound play where their sequence does: move, trim or speed the sequence; here only its level and a sound's voice are its own" })
     // the sequences themselves are as before
     expect(seqEdits(t, { op: "move", ids: ["seq-1"], by: 10 })).toEqual([{ op: "move", i: 1, from: 25, to: 70 }])
   })
@@ -122,6 +122,24 @@ describe("TL0c: a timeline is read from a composition", () => {
     expect(find(back, "seq-7")!.track.kind).toBe("sound")
     // a muted <Audio> isn't footage whose sound was taken out
     expect(fromSequences([{ ...media[media.length - 1], muted: true }], 30).tracks[0].clips[0].muted).toBeUndefined()
+  })
+
+  test("a sound's noise reduced or its voice changed is its <Audio> playing a copy, which says what it was made from (TL8d)", () => {
+    const sound = { i: 6, name: "Audio", label: "line.wav", from: 0, to: 180, lane: 0, media: "audio" as const, file: "line.wav" }
+    const t = fromSequences([...rows, sound], 30)
+    expect(find(t, "seq-6")!.clip.props).toEqual({ file: "line.wav" })
+    // the copy made: the <Audio> plays it and says it was made from line.wav, and how
+    const made = { op: "set" as const, id: "seq-6", set: { props: { denoise: true, voice: "deep", voiced: "voice/line-clean-deep-0123456789.wav" } } }
+    expect(seqEdits(t, made)).toEqual([{ op: "heard", i: 6, file: "voice/line-clean-deep-0123456789.wav", of: "line.wav", denoise: true, voice: "deep" }])
+    // read back from that code: the clip's own file is still line.wav, and it plays the copy
+    const back = fromSequences([...rows, { ...sound, file: "voice/line-clean-deep-0123456789.wav", heard: { of: "line.wav", denoise: true, voice: "deep" } }], 30)
+    expect(find(back, "seq-6")!.clip.props).toEqual({ file: "line.wav", voiced: "voice/line-clean-deep-0123456789.wav", denoise: true, voice: "deep" })
+    // both off: its own file again, as it is
+    expect(seqEdits(back, { op: "set", id: "seq-6", set: { props: { denoise: false, voice: "", voiced: "" } } })).toEqual([{ op: "heard", i: 6, file: "line.wav" }])
+    // footage, or a sound whose src isn't a file of the media folder, has no copy to play
+    const footage = fromSequences([...rows, { ...sound, name: "Video", media: "video" as const }], 30)
+    expect(seqEdits(footage, made)).toHaveProperty("why")
+    expect(seqEdits(fromSequences([...rows, { ...sound, file: undefined }], 30), made)).toHaveProperty("why")
   })
 
   test("a file of the project's is a new sequence holding it; on the magnet's main track the clips after it move on and it goes in beside the one before it (TL3j)", () => {
