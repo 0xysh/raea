@@ -53,6 +53,7 @@ members = [
     "engine/rune/js",
     "engine/rune/layer",
     "engine/rune/slots",
+    "engine/page/sound",
     "engine/page/stage",
     "engine/page/window",
     "io/trace",

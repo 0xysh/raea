@@ -151,6 +151,11 @@ impl Score {
         out
     }
 
+    /// The notes heard so far forgotten: a fired sound's keys are never asked for again (Live::fire).
+    pub fn forget_notes(&mut self) {
+        self.heard_notes.clear();
+    }
+
     /// Every voice stops (fading out) at frame `f`: the end of a render, a pause, a seek.
     pub fn stop_all(&mut self, f: i64) -> Vec<(i64, Ev)> {
         let t = self.t(f);

@@ -14677,6 +14677,7 @@ dependencies = [
  "raea-io-net-calls",
  "raea-io-os",
  "raea-page",
+ "raea-page-sound",
  "raea-page-stage",
  "raea-page-window",
  "raea-rune-slots",
@@ -14691,6 +14692,16 @@ dependencies = [
  "serde_json",
  "stylo",
  "tiny_http",
+]
+
+[[package]]
+name = "raea-page-sound"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-runtime-js",
+ "raea-sys-mix",
+ "serde_json",
 ]
 
 [[package]]

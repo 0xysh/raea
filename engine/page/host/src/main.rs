@@ -115,6 +115,8 @@ fn main() {
     app.add_plugins(HostPlugin { size: a.size, double_click: Duration::from_millis(500), picking })
         .add_plugins(brp::plugins(brp::port(), |r| r))
         .add_plugins(stage::StagePlugin)
+        // a page's interaction sounds, fired on a mixer of its own (docs/hardware.feature HW0)
+        .add_plugins(raea_page_sound::PageSoundPlugin)
         // the clipboard, links, notifications, the dock badge, raea:// links and the chrome (raea-page-window)
         .add_plugins(raea_page_window::DesktopPlugin { chrome: a.chrome, live: a.window });
     raea_page_host::page_plugins(&mut app, picking);

@@ -24,6 +24,9 @@ use crate::score::Score;
 use crate::score::ToneOut;
 use crate::{RATE, Sound, ToneCue};
 
+/// a page's sounds, fired now off any timeline (docs/hardware.feature HW0)
+mod fire;
+
 /// past this a frame puts the timeline back in place; over DEADBAND its start moves by at most SLEW a frame
 const DRIFT: f64 = 0.040;
 const DEADBAND: f64 = 0.002;
