@@ -59,7 +59,7 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
       constant and curve. Adjust: brightness, contrast, saturation, exposure, sharpen, highlights, shadows,
       temperature, tint, fade, vignette, grain. Audio: volume, fades, noise reduction, voice changer. Text: font,
       style, effects, bubbles, animation, and its words read aloud.
-      Here 11-14: Basic (TL3h, TL5) with stabilise (TL7k, a film's footage; a composition's not yet), auto cutout
+      Here 11-14: Basic (TL3h, TL5) with stabilise (TL7k, a film's footage and a composition's <Video>), auto cutout
       of a person or the subject (TL7l, a film's footage, on a Mac) and a custom one brushed on the picture (TL7m), Retouch (TL7n: smooth, brighten, slim face and bigger eyes, a film's footage or a file from Media, on a Mac), Mask, chroma key and Blend (TL7f) with the key's colour picked from
       the picture (TL7h) and the mask's handles dragged there (TL7i), Animation (TL7d, TL7e), Speed (TL6), Audio's
       volume and fades (TL8a) and its noise reduction and voice changer (TL8d, a film's sounds and a composition's
@@ -192,7 +192,11 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                a Gaussian-weighted line, so a pan stays a pan to the clip's ends; on a shaky clip made from a real
                frame along a known path, the shake 21 px down to 0.23 and its turn 0.54 deg to 0.03, a 1 Hz sway
                12 px kept to 5.4 at Minimal cut and held to 2.9 at Most stable, zoom 1.05 to 1.06, 34 ms a frame
-               read and the kept file read again in 28 ms), TL7l (footage cut out, CapCut's Auto cutout: Apple's
+               read and the kept file read again in 28 ms; in a composition, its <Video>'s whole file read, the moves kept in its
+               media folder's steady/ and a steadied copy rendered by raea beside them (a composition playing the file
+               with each frame's move as the player wears it), which the <Video> plays, saying what it was made from
+               (data-steady-of, data-steady), off its src as it was; a 2 s clip shaken along a known path steadied in
+               3.4 s, its frame-to-frame shake 7.49 px to 2.12 at 320 px, a copy with no moves its file's every frame), TL7l (footage cut out, CapCut's Auto cutout: Apple's
                Vision on the host through osascript's JavaScript, its person segmentation (macOS 12) or its
                subject mask (macOS 14), each frame of the part the clip shows as a 512 px matte PNG under
                media/matte, 120 frames a run, its index written last; the player wears the frame's matte as the
@@ -259,7 +263,8 @@ Feature: The timeline SDK (0.1.5): CapCut's timeline, on the composition, in the
                TL10d), finished and posted on Send with the agent told (TL9b). A scene's sequences: move, trim,
                split, delete written into the scene's own file, which the stage opens again (TL14c). A sound's
                clips: span, place in the file, level (TL14b). An <Audio>'s sound from its copy with its noise
-               reduced or its voice changed: its src the copy, and data-voice-of, data-denoise and data-voice (TL8d)
+               reduced or its voice changed: its src the copy, and data-voice-of, data-denoise and data-voice (TL8d).
+               A <Video>'s footage from its steadied copy: its src the copy, and data-steady-of and data-steady (TL7k)
     plays      TL10a for a film's own frames: cuts, moves, trims, speeds, freezes and reversed footage at once, the
                player's buffer on the ruler. TL10f: a timed 3D scene's frames are drawn ahead by the host a few
                seconds at a time at draft quality and kept by range, each range under what it is drawn from (the

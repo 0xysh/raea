@@ -142,6 +142,20 @@ describe("TL0c: a timeline is read from a composition", () => {
     expect(seqEdits(fromSequences([...rows, { ...sound, file: undefined }], 30), made)).toHaveProperty("why")
   })
 
+  test("footage held steady is its <Video> playing a steadied copy, which says what it was made from (TL7k)", () => {
+    const take = { i: 4, name: "Video", label: "take.mp4", from: 90, to: 180, lane: 0, media: "video" as const, startFrom: 30, file: "take.mp4" }
+    const t = fromSequences([...rows, take], 30)
+    const made = { op: "set" as const, id: "seq-4", set: { props: { stabilise: "most", steadied: "steady/take-most-0123456789.mp4", stabiliseZoom: 1.08 } } }
+    expect(seqEdits(t, made)).toEqual([{ op: "steady", i: 4, file: "steady/take-most-0123456789.mp4", of: "take.mp4", level: "most" }])
+    const back = fromSequences([...rows, { ...take, file: "steady/take-most-0123456789.mp4", steady: { of: "take.mp4", level: "most" } }], 30)
+    expect(find(back, "seq-4")!.clip.props).toEqual({ file: "take.mp4", stabilise: "most", steadied: "steady/take-most-0123456789.mp4" })
+    expect(seqEdits(back, { op: "set", id: "seq-4", set: { props: { stabilise: "", steadied: "", stabiliseZoom: 1 } } })).toEqual([{ op: "steady", i: 4, file: "take.mp4" }])
+    // a sound isn't held steady, nor a voice put on footage
+    const sound = fromSequences([...rows, { ...take, name: "Audio", media: "audio" as const }], 30)
+    expect(seqEdits(sound, made)).toHaveProperty("why")
+    expect(seqEdits(t, { op: "set", id: "seq-4", set: { props: { voice: "deep", voiced: "voice/x.wav" } } })).toHaveProperty("why")
+  })
+
   test("a file of the project's is a new sequence holding it; on the magnet's main track the clips after it move on and it goes in beside the one before it (TL3j)", () => {
     const t = fromSequences(rows, 30)
     const add = (kind: string, track: string, start: number, length: number, asset = "/p/media/beach.mp4") => seqEdits(t, { op: "add", kind: track, clip: { id: "m", kind, name: "beach.mp4", start, length, ...(kind !== "image" && { in: 0, source: length }), props: { asset } } })

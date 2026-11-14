@@ -1032,6 +1032,7 @@ the lane it sits on (nested ones below their parent, overlapping ones apart), an
 | `muted` | `boolean` | a <Video> whose own sound was taken out (muted): its sound is an <Audio> of its own |
 | `file` | `string` | its media's file, a path in the composition's media folder (where its src is staticFile("…")) |
 | `heard` | `{ of: string; denoise?: boolean; voice?: string }` | that file is a copy of `of` with its noise reduced or its voice changed |
+| `steady` | `{ of: string; level: string }` | that file is a copy of `of` held steady at `level` |
 
 ### `Showing`
 
