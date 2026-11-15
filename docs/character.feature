@@ -326,7 +326,12 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # raccoon's being 0.14) and the tail's tip (0.27 against 0.18). The views' agreement stayed under the
       # keep line (0.42 and 0.53), the far hind paw the weak one in all four clips. So far: a prompt sets
       # carriage, not the order of the legs; clips give timing and smoothness; CH31's split (clips for motion,
-      # the solver for contact and carriage) stands. To come: the generated raccoon's skin and refitted joints
+      # the solver for contact and carriage) stands. The solver's own order was wrong too, found the same day: it
+      # read each leg's offset with the wrong sign, so a fore foot came down 0.26 of a stride BEFORE its hind.
+      # Fixed in the creature solver (private sdk/body, d89244e, with a footfall test that fails on the old sign),
+      # a fore foot lands 0.10 after its hind and the hinds 0.50 apart, as a raccoon's do; the same change keeps
+      # every planted foot inside its leg's reach (setting off after standing had left one 59 mm short on the
+      # raccoon, 81 on a dragon). So on the order of the legs the solver now beats anymove's clips. To come: the generated raccoon's skin and refitted joints
       # in place of the built one, and why the fore paws carry no agreement score.
       Then the raccoon has a walk from anymove, and the numbers say whether it beats the solver's walk
 
