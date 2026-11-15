@@ -184,6 +184,20 @@ Feature: Creatures: a four-legged body in the character SDK
       # from the rest pose). Rough: the membrane is one flat colour and does not follow the finger bones; no flight.
       Then a winged creature folds its wings as it walks, opens and beats them as it runs, and no web point is unbound
 
+    Scenario: CR18. Mouths and eyelids
+      # 11-15, in the project's build, the same on all three creatures. The mouth: the drawn mouth is paint on a closed
+      # head, so a turning jaw only stretched the lips. The head is cut along the lips' line (a plane through the
+      # muzzle's front a third of the way up it, rising a little toward the corners), what is under the cut follows the
+      # jaw, what is over it the head, and a dark inside (a roof on the head, a floor on the jaw, meeting at the hinge)
+      # fills what opens. The skin still holds in 13 of 13 moves. No teeth or tongue.
+      # The lids: each is a small cap of its own, resting under the brow, that turns about an axis lying along the head
+      # (the rig's lid_axis; a turn about the head's side-to-side axis does nothing for an eye that faces sideways) and
+      # takes the colour of the skin round the eye. Where the eye is comes from its pixel in the drawing (eye_px and
+      # nose_px in the spec, cast from the mannequin's camera); a strongly coloured eye is then found by its colour.
+      # Rough: the lid lands on the eye for the toy raccoon and about an eye's width off for the raccoon and the
+      # dragon (the model is not laid exactly where the mannequin stood), so placement is not solved.
+      Then a creature's jaw opens a mouth with an inside, and its lids shut over its eyes
+
     Scenario: CR13. In the engine
       # As docs/hands.feature moved the hands to Rust (raea-sys-body), a creature's solver belongs beside it once
       # the TypeScript has settled, with <Creature> in raea/character drawing a rig from a rigging.
