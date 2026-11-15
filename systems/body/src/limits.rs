@@ -135,6 +135,26 @@ const LIMITS: [Row; 13] = [
     ),
 ];
 
+/// The same for a SOMA body, read from SOMA's rest pose (its bind: arms about 50 degrees under level, elbows nearly
+/// straight): re-measured over the capture library moved to SOMA (8,848 frames; the body SDK's table). SOMA's rest
+/// elbow says little of how it folds, so the way the hand goes as it folds is the captures' own.
+#[rustfmt::skip]
+const SOMA_LIMITS: [Row; 13] = [
+    ("spine_01", [-25.0, 55.0], [-20.0, 20.0], [-15.0, 15.0], Some(AHEAD), OUT),
+    ("spine_02", [-30.0, 100.0], [-30.0, 30.0], [-20.0, 20.0], Some(AHEAD), OUT),
+    ("spine_03", [-65.0, 50.0], [-30.0, 30.0], [-20.0, 20.0], Some(AHEAD), OUT),
+    ("neck_01", [-60.0, 55.0], [-40.0, 40.0], [-45.0, 45.0], Some(AHEAD), OUT),
+    ("head", [-45.0, 45.0], [-30.0, 30.0], [-45.0, 45.0], Some(AHEAD), OUT),
+    ("clavicle", [-45.0, 35.0], [-20.0, 75.0], [-40.0, 15.0], Some(AHEAD), UP),
+    ("upperarm", [-80.0, 150.0], [-70.0, 140.0], [-105.0, 80.0], Some(AHEAD), UP),
+    ("lowerarm", [-30.0, 115.0], [-25.0, 12.0], [-100.0, 70.0], Some(Vec3::new(-0.316, 0.287, 0.902)), UP),
+    ("hand", [-75.0, 60.0], [-50.0, 45.0], [-15.0, 25.0], Some(Vec3::NEG_Y), OUT),
+    ("thigh", [-50.0, 125.0], [-30.0, 65.0], [-60.0, 30.0], Some(AHEAD), OUT),
+    ("calf", [-17.0, 150.0], [-20.0, 8.0], [-15.0, 15.0], Some(Vec3::NEG_Z), OUT),
+    ("foot", [-42.0, 55.0], [-52.0, 25.0], [-25.0, 35.0], Some(UP), OUT),
+    ("ball", [-35.0, 88.0], [-55.0, 25.0], [-42.0, 40.0], Some(UP), OUT),
+];
+
 /// a joint's axes at rest: its bone, the axes a turn about which is its flexion and its side bend, and the hand its
 /// twist is read by (+1 on the left and the midline)
 struct Axes {
@@ -150,7 +170,8 @@ fn axes(skel: &Skeleton, i: usize) -> Option<Axes> {
     let named = crate::rig::role_name(&j.name);
     let right = named.ends_with("_r");
     let role = named.trim_end_matches("_l").trim_end_matches("_r");
-    let row = LIMITS.iter().find(|r| r.0 == role)?;
+    // (a SOMA joint's name is not its role)
+    let row = if named == j.name { &LIMITS } else { &SOMA_LIMITS }.iter().find(|r| r.0 == role)?;
     let mirror = |v: Vec3| if right { Vec3::new(-v.x, v.y, v.z) } else { v };
     let dir = |k: usize| (skel.joints[k].tail - skel.joints[k].head).normalize();
     let bone = dir(i);
