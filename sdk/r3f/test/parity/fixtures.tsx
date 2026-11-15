@@ -50,6 +50,34 @@ const instanced = (() => {
   return m;
 })();
 
+// R3F20: 2,000 copies moved and recoloured every frame (a wave over a grid), lit by a sun
+function Wave({ n }: { n: number }) {
+  const ref = useRef<THREE.InstancedMesh>(null!);
+  const o = useMemo(() => new THREE.Object3D(), []);
+  const c = useMemo(() => new THREE.Color(), []);
+  const side = Math.ceil(Math.sqrt(n));
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    for (let i = 0; i < n; i++) {
+      const x = (i % side) - side / 2, z = Math.floor(i / side) - side / 2;
+      const y = Math.sin(x * 0.3 + t * 2) * Math.cos(z * 0.3) * 0.4;
+      o.position.set(x * 0.12, y, z * 0.12);
+      o.rotation.set(0, x * 0.1 + t, 0);
+      o.updateMatrix();
+      ref.current.setMatrixAt(i, o.matrix);
+      ref.current.setColorAt(i, c.setHSL((x / side + z / side * 0.5 + t * 0.1) % 1, 0.7, 0.45 + y * 0.4));
+    }
+    ref.current.instanceMatrix.needsUpdate = true;
+    ref.current.instanceColor!.needsUpdate = true;
+  });
+  return (
+    <instancedMesh ref={ref} args={[undefined as never, undefined as never, n]}>
+      <boxGeometry args={[0.08, 0.08, 0.08]} />
+      <meshStandardMaterial color="#ffffff" roughness={0.5} />
+    </instancedMesh>
+  );
+}
+
 export interface InputCase {
   canvas: Record<string, unknown>;
   scene: () => ReactNode;
@@ -87,6 +115,18 @@ const probe = (() => {
 const clipPlane = new THREE.Plane(new THREE.Vector3(-0.3, -1, 0.2).normalize(), 0.95);
 
 export const INPUTS: Record<string, InputCase> = {
+  instanced: {
+    canvas: { camera: { position: [0, 3.2, 4.2], fov: 45 } },
+    frame: 12,
+    scene: () => (
+      <>
+        <color attach="background" args={["#0a0a12"]} />
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[3, 6, 2]} intensity={2} />
+        <Wave n={2000} />
+      </>
+    ),
+  },
   basic: {
     canvas: { camera: { position: [3, 2.5, 4], fov: 45 }, shadows: true },
     frame: 24,
