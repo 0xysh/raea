@@ -4,6 +4,7 @@
 //! and get the same frame.
 //!
 //! - `hand`: hold points found on the thing, the wrist that lays a palm on one, fingers curled onto the surface.
+//! - `grip`: how a hand lies on its hold, decided at the grab and kept; a thing in one hand turning with the forearm.
 //! - `trunk`: the body bent and squatted for a low thing with its feet planted, the head turned to the thing, hands
 //!   and head kept out of the scene's solids, and where to stand to take a thing.
 //! - `interact`: which thing a body takes: the nearest in reach that its eyes see.
@@ -11,6 +12,7 @@
 //! - `json`: takes, fitted poses and hand shapes asked for as JSON: the engine's native calls character.take,
 //!   character.fit and character.hand (raea/character's take, fitPose and handShape).
 
+pub mod grip;
 pub mod hand;
 pub mod interact;
 pub mod json;

@@ -61,7 +61,8 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab | src/hand.rs         | 200   | holds, the wrist that lays a palm on one, the fingers' curl      |
         | raea-sys-grab | src/trunk.rs        | 130   | stoop, look, clearances, where to stand                          |
         | raea-sys-grab | src/interact.rs     | 40    | which thing is taken                                             |
-        | raea-sys-grab | src/take.rs         | 280   | the take's timeline                                              |
+        | raea-sys-grab | src/take.rs         | 460   | the take's timeline, each hand's part, the frame's solve          |
+        | raea-sys-grab | src/grip.rs         | 110   | the hand's lie at its grab, the swivel, an arm past its ranges   |
         | raea-sys-grab | src/json.rs         | 190   | character.take, character.fit, character.hand                    |
         | raea-sys-grab | tests/grab.rs       | 470   | the hands' measures, on the stand-in body                        |
         | raea-sys-grab | tests/body.rs       | 150   | limits, the body out of solids, the hand prior                   |
