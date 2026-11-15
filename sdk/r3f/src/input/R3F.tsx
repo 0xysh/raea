@@ -6,10 +6,12 @@
 // frame, never the wall clock.
 import { useContext, useId, type ReactNode } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "raea";
-import { ClockContext, LocalTimeContext } from "@raea/app/clock";
+import { ClockContext, LocalTimeContext, type FrameInput } from "@raea/app/clock";
+import { wireKeys } from "@raea/app/games";
 import type * as THREE from "three";
 import { FiberOf, useBridge } from "./bridge";
 import { Held, useWake } from "./hold";
+import { inCanvas, viewBox } from "./pointer";
 import { stepTo, type Config } from "./session";
 import { convert } from "./scene";
 import { standInImages } from "./texture";
@@ -54,7 +56,16 @@ function Inner({ fiber, children, name, width: boxW, height: boxH, ...config }: 
       </ClockContext>,
     );
   };
-  const s = stepTo(name ?? id, frame, fps, width, height, config, at);
+  // the input at local frame i, from raea's input timeline (by composition frame): sent to R3F's canvas as the pointer
+  // events of a live play, or of a render given an input log, in the box the page laid out for it (pointer.ts)
+  let box: number[] | null | undefined;
+  const input = clock && ((i: number) => {
+    const e = clock.input[clock.frame - frame + i];
+    if (!e) return undefined;
+    if (box === undefined) box = viewBox();
+    return inCanvas(wireKeys({ ...e, keys: Array.isArray(e.keys) ? [...e.keys] : [] } as FrameInput), [width, height], box);
+  });
+  const s = stepTo(name ?? id, frame, fps, width, height, config, at, input ?? undefined);
   const { scene, camera, gl } = s.state as unknown as { scene: THREE.Scene; camera: THREE.Camera; gl: THREE.WebGLRenderer };
   // R3F's clock: what a node material's `time` reads (useFrame's own steps, 1/fps a frame)
   const r3fClock = (s.state as unknown as { clock: { elapsedTime: number } }).clock;
