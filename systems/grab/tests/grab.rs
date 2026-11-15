@@ -2,6 +2,7 @@
 
 use glam::{Quat, Vec3};
 use raea_sys_grab::hand::hand_rest;
+use raea_sys_grab::rig::Posed;
 use raea_sys_grab::*;
 
 /// a seeded random in [0, 1) (mulberry32, as sdk/body's tests use)
@@ -376,4 +377,77 @@ fn a_take_asked_for_as_json_is_the_same_frame() {
         }
     }
     assert!(take_json(&serde_json::json!({"joints": joints, "t": 0, "start": 0, "base": [], "thing": {"at": [0, 0, 0]}})).is_err());
+}
+
+#[test]
+fn a_pose_is_recovered_from_where_its_joints_were_seen() {
+    let s = mannequin();
+    let mut r = rng(11);
+    let mut worst = 0.0f32;
+    for _ in 0..20 {
+        // a pose of the body: every joint turned up to 50 degrees, the body moved
+        let mut seen = s.rest();
+        seen.root += Vec3::new(r() - 0.5, r() * 0.2, r() - 0.5);
+        for turn in seen.turns.iter_mut() {
+            *turn = Quat::from_axis_angle(Vec3::new(r() - 0.5, r() - 0.5, r() - 0.5).normalize(), r() * 0.87);
+        }
+        let marks = marks_of(&s, &seen);
+        let (pose, miss) = fit(&s, &s.rest(), &marks, 10);
+        worst = worst.max(miss);
+        // every joint is where it was seen
+        let (a, b) = (s.fk(&pose), s.fk(&seen));
+        for i in 0..s.joints.len() {
+            assert!((a.pos[i] - b.pos[i]).length() < 4e-3, "{} is {} m off", s.joints[i].name, (a.pos[i] - b.pos[i]).length());
+        }
+    }
+    assert!(worst < 2e-3, "root-mean-square miss {worst} m");
+    // marks that are where the pose already has them change nothing
+    let rest = s.rest();
+    let (same, miss) = fit(&s, &rest, &marks_of(&s, &rest), 3);
+    assert!(miss < 1e-5);
+    for (a, b) in same.turns.iter().zip(&rest.turns) {
+        assert!(a.dot(*b).abs() > 0.999999);
+    }
+}
+
+#[test]
+fn the_nearest_thing_in_sight_is_the_one_taken() {
+    let (from, eye) = (Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.7, 0.0));
+    let ball = |x: f32, z: f32| Thing::new(Solid::Ball { r: 0.1 }, Vec3::new(x, 1.0, z));
+    let things = [ball(0.0, 1.5), ball(0.3, 0.6), ball(0.0, 5.0)];
+    assert_eq!(pick(&things, from, eye, 2.0, &[]), Some(1));
+    // a wall between the body and the nearer one: the farther is taken; and nothing past the radius
+    let wall = Thing::new(Solid::Box { half: Vec3::new(0.2, 1.5, 0.02) }, Vec3::new(0.35, 1.0, 0.35));
+    assert_eq!(pick(&things, from, eye, 2.0, &[wall]), Some(0));
+    assert_eq!(pick(&things[2..], from, eye, 2.0, &[]), None);
+}
+
+#[test]
+fn the_head_turns_to_the_thing_and_a_wrist_stops_at_its_limit() {
+    let s = mannequin();
+    let head = s.joint("head").unwrap();
+    let at = Vec3::new(0.6, 1.0, 0.5);
+    let turned = look(&s, &s.rest(), at, 1.0);
+    let (w0, w) = (s.fk(&s.rest()), s.fk(&turned));
+    let toward = |w: &Posed| (w.rot[head] * Vec3::Z).dot((at - w.pos[head]).normalize());
+    assert!(toward(&w) > toward(&w0) + 0.3, "the head faces the thing more: {} from {}", toward(&w), toward(&w0));
+    assert!(w.rot[head].angle_between(w0.rot[head]).to_degrees() < 78.0);
+    assert_eq!(look(&s, &s.rest(), at, 0.0), s.rest());
+    // through a take no wrist is bent past 70 degrees, and one held there is said
+    let thing = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(0.0, 1.05, 0.42));
+    let take = Take::new(thing, find_holds(&thing, s.rest().root, HoldOptions::default()), 0.0);
+    let mut t = 0.0;
+    while t < 2.0 {
+        let f = perform(&s, &|_| s.rest(), &take, t);
+        for side in Side::BOTH {
+            let bend = f.pose.turns[s.arm(side).unwrap()[2]].angle_between(Quat::IDENTITY).to_degrees();
+            assert!(bend < 70.5, "t {t}: a wrist bent {bend} degrees");
+        }
+        t += 1.0 / 30.0;
+    }
+    // SOMA's twist joints: a forearm's follow its hand by rising shares; an upper arm's undo the shoulder's twist
+    let fore = twist_joints(Vec3::X, 0.0, 1.0, false);
+    assert!((fore[3].to_axis_angle().1 - 0.95).abs() < 1e-4 && (fore[0].to_axis_angle().1 - 0.05).abs() < 1e-4);
+    let upper = twist_joints(Vec3::X, 1.0, 0.0, true);
+    assert!(upper[0].angle_between(Quat::from_rotation_x(-0.95)) < 1e-3);
 }

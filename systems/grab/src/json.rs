@@ -6,13 +6,14 @@ use glam::{Quat, Vec3};
 use serde_json::{Value, json};
 
 use crate::body::stand_for;
+use crate::fit::{Mark, fit};
 use crate::hand::{Grip, HoldOptions, find_holds};
 use crate::rig::{Pose, Side, Skeleton};
 use crate::shape::{Solid, Thing};
 use crate::take::{Release, Take, perform};
 
 pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
-pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number; stand: { at: [number, number, number]; yaw: number } }";
+pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number; limited: boolean; stand: { at: [number, number, number]; yaw: number } }";
 
 fn num(v: &Value, what: &str) -> Result<f32, String> {
     v.as_f64().map(|n| n as f32).ok_or_else(|| format!("character.take: {what} isn't a number"))
@@ -107,6 +108,34 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
         "hands": if matches!(grip, Grip::One(_)) { 1 } else { 2 },
         "miss": f.miss,
         "moved": f.moved,
+        "limited": f.limited,
         "stand": { "at": stand.to_array(), "yaw": facing },
     }))
+}
+
+pub const FIT_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; marks: { joint: string; offset?: [number, number, number]; at: [number, number, number]; weight?: number }[]; from?: { root: [number, number, number]; turns: [number, number, number, number][] }; passes?: number }";
+pub const FIT_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; miss: number }";
+
+/// `character.fit`: a pose fitted to points of the body seen somewhere (fit.rs).
+pub fn fit_json(v: &Value) -> Result<Value, String> {
+    let skel = Skeleton::from_value(v)?;
+    let mut from = skel.rest();
+    if !v["from"].is_null() {
+        from.root = vec3(&v["from"]["root"], "from.root")?;
+        for (slot, turn) in from.turns.iter_mut().zip(v["from"]["turns"].as_array().into_iter().flatten()) {
+            *slot = quat(turn, "from's turn")?;
+        }
+    }
+    let mut marks = Vec::new();
+    for m in v["marks"].as_array().ok_or("character.fit: no marks")? {
+        let name = m["joint"].as_str().ok_or("character.fit: a mark names no joint")?;
+        let joint = skel.joint(name).ok_or_else(|| format!("character.fit: the body has no joint {name}"))?;
+        let offset = if m["offset"].is_null() { Vec3::ZERO } else { vec3(&m["offset"], "a mark's offset")? };
+        let weight = if m["weight"].is_null() { 1.0 } else { num(&m["weight"], "a mark's weight")? };
+        marks.push(Mark { joint, offset, at: vec3(&m["at"], "a mark's at")?, weight });
+    }
+    let passes = v["passes"].as_u64().unwrap_or(8) as usize;
+    let (pose, miss) = fit(&skel, &from, &marks, passes);
+    let turns: Vec<[f32; 4]> = pose.turns.iter().map(|q| q.to_array()).collect();
+    Ok(json!({ "pose": { "root": pose.root.to_array(), "turns": turns }, "miss": miss }))
 }

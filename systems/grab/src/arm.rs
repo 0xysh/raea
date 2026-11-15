@@ -166,5 +166,13 @@ pub fn twist_about(q: Quat, axis: Vec3) -> Quat {
 }
 
 /// How SOMA-X spreads a segment's twist over four twist joints along it, nearest the start joint first
-/// (SOMA_procedural_transforms.json, forearm rows): for a rig that has them. raea's game_engine rig has none.
+/// (SOMA_procedural_transforms.json): for a rig that has twist joints. raea's game_engine rig has none.
 pub const TWIST_SHARES: [f32; 4] = [0.05, 1.0 / 3.0, 2.0 / 3.0, 0.95];
+
+/// A segment's four twist joints' turns about its bone `axis`, as SOMA-X's procedural rig evaluates them: `start` is
+/// the twist (radians) of the joint the segment hangs from, `end` the twist of the joint at its far end. A forearm
+/// or shin follows its end joint by rising shares. An upper arm or thigh (`upper`) undoes its own joint's twist
+/// near the shoulder or hip, so the skin there doesn't wring, and follows the next joint toward the elbow or knee.
+pub fn twist_joints(axis: Vec3, start: f32, end: f32, upper: bool) -> [Quat; 4] {
+    TWIST_SHARES.map(|share| Quat::from_axis_angle(axis, if upper { -(1.0 - share) * start + share * end } else { share * end }))
+}

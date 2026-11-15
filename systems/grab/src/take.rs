@@ -9,7 +9,7 @@
 use glam::{Quat, Vec3};
 
 use crate::arm::{ArmOptions, forearm_twist, reach};
-use crate::body::{clear, stoop};
+use crate::body::{clear, look, stoop};
 use crate::hand::{Grip, Touch, curl, facing, hand_rest, wrist_for};
 use crate::rig::{Pose, Posed, Skeleton};
 use crate::shape::Thing;
@@ -58,6 +58,8 @@ pub struct Frame {
     /// the most any joint was turned from the body's own motion, degrees
     pub moved: f32,
     pub touch: [Option<Touch>; 2],
+    /// a wrist was held at the most it bends, so its palm isn't square on its hold
+    pub limited: bool,
 }
 
 const GRAVITY: f32 = 9.81;
@@ -65,6 +67,8 @@ const GRAVITY: f32 = 9.81;
 const AWAY: f32 = 0.4;
 /// how long the fingers take to shut, ending at the grab, seconds
 const SHUT: f32 = 0.25;
+/// the most a wrist bends, radians
+const WRIST: f32 = 1.22;
 
 fn smooth(u: f32) -> f32 {
     let u = u.clamp(0.0, 1.0);
@@ -147,7 +151,7 @@ impl Take {
 pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32) -> Frame {
     let own = base(t);
     let (thing, phase) = take.thing_at(skel, base, t);
-    let mut frame = Frame { pose: own.clone(), thing, phase, miss: 0.0, moved: 0.0, touch: [None, None] };
+    let mut frame = Frame { pose: own.clone(), thing, phase, miss: 0.0, moved: 0.0, touch: [None, None], limited: false };
     // how much the hands are the take's and not the body's own: none before, all from the start, none again once away
     let gone = take.let_go();
     let away = gone.map_or(0.0, |g| smooth(span(t, g, g + AWAY)));
@@ -163,7 +167,18 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     let face = yaw(&w0) * Vec3::Z;
     // in: how far along the reach; the hands are fully on the thing from the grab until they let go
     let into = smooth(span(t, take.start, take.grab));
-    let holds: Vec<_> = take.grip.holds().filter_map(|h| Some((h, wrist_for(skel, &held, &h, facing(&held, w0.pos[0]).lerp(face, 0.5).normalize_or(face))?))).collect();
+    // the fingers point the level way the arm comes: from the shoulder to the hold, with some of the body's facing, so the
+    // wrist is asked for as little bend as the hold allows
+    let holds: Vec<_> = take
+        .grip
+        .holds()
+        .filter_map(|h| {
+            let shoulder = w0.pos[skel.arm(h.side)?[0]];
+            let from = held.world(h.at) - shoulder;
+            let along = Vec3::new(from.x, 0.0, from.z).normalize_or(face).lerp(facing(&held, w0.pos[0]), 0.4).normalize_or(face);
+            Some((h, wrist_for(skel, &held, &h, along)?))
+        })
+        .collect();
     // a thing lower than the arms reach: the body bends and squats for it, as far as the hands have got
     let low = holds.iter().map(|h| h.1.0.y).fold(f32::MAX, f32::min);
     let mut pose = stoop(skel, &own, &w0, face, low, into * (1.0 - away));
@@ -180,6 +195,12 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let pole = yaw(&w0) * Vec3::new(0.7 * hold.side.sign(), -1.0, -0.4);
         let Some(solved) = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(pole), end: Some(end), soft: 0.02 }) else { continue };
         pose = forearm_twist(skel, &solved.pose, hold.side, 0.7);
+        // a wrist bends about 70 degrees and no further
+        let bend = pose.turns[arm[2]].angle_between(Quat::IDENTITY);
+        if bend > WRIST {
+            pose.turns[arm[2]] = Quat::IDENTITY.slerp(pose.turns[arm[2]], WRIST / bend);
+            frame.limited = true;
+        }
         if t >= take.grab && away <= 0.0 {
             frame.miss = frame.miss.max((skel.fk(&pose).pos[arm[2]] - at).length());
         }
@@ -189,6 +210,9 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
             frame.touch[hold.side as usize] = curl(skel, &mut pose.turns, (at, turn), hold.side, &held, close);
         }
     }
+    // the eyes go to the thing as the hands do, and mostly leave it once it is carried
+    let watching = into * (1.0 - away) * (1.0 - 0.7 * smooth(span(t, take.grab, take.carried)));
+    pose = look(skel, &pose, held.at, watching);
     if away > 0.0 {
         // the last of the way back is a blend of the joints, so the arm ends exactly as the body has it
         let w = 1.0 - smooth(span(away, 0.5, 1.0));

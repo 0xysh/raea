@@ -143,14 +143,14 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
     @done
     Scenario: HG7a. A low thing is taken by bending, the feet planted; and the body is told where to stand
       # 11-14, built: body.rs `stoop` and `stand_for`. For hands that must go lower than 0.7 of an arm below the
-      # shoulders, the hips come down (to 0.5 m) and the trunk bends at the hips and along the spine (to 57
-      # degrees), by as much as the hands have got along their reach, so the body rises again as the thing is
+      # shoulders, the hips come down and the trunk bends at the hips and along the spine, by as much as the hands have got along their reach, so the body rises again as the thing is
       # lifted. Leg IK keeps both ankles where they stood within 5 mm and the feet's turn. A box on the floor is
       # held within 2 cm; the hips come down over 30 cm and are back up with the box carried. `stand_for` gives
       # the place a forearm's length off the thing's near face, facing it; standing there both hands reach.
       # character.take answers it as `stand`. Seen on turbo: a box lifted from the floor onto a table. Not right
-      # yet: the squat folds the head down to the knees, and the body itself keeps out of nothing (the head went
-      # into the table that stood 38 cm in front).
+      # yet: the body itself keeps out of nothing (the head went into the table that stood 38 cm in front). The
+      # squat was retuned after the first render folded the head to the knees: the hips take three quarters of it
+      # (to 0.55 m), the trunk bends to 49 degrees, and the head looks at the thing.
       Given a thing lower than the arms reach, or out of reach
       Then the body bends and squats for a low one with its feet where they stand
       And for a far one the take says where to stand and which way to face
@@ -160,6 +160,28 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # 11-14: a two-handed thing rides 10 cm under the chest joint, 20 cm plus half its size in front, so the
       # elbows bend and the lift shows (it was carried at arm's length, hardly lifted).
       Then a carried box is held against the belly with the elbows bent
+
+    @done
+    Scenario: HG5a. The rest of both sources, in Rust
+      # 11-14, built. From Ik-Object-Holding: its Interactor is interact.rs `pick` (the nearest thing in a radius
+      # that the eyes see past the scene's solids; the original takes the first collider found), and its head aim
+      # is body.rs `look` (neck two fifths, head the rest, 55 degrees at most), on through a take: the eyes go to
+      # the thing as the hands do. With HG2 and HG4 that is every script of the original that isn't Unity input or
+      # animator glue. From SOMA-X: fit.rs `fit` is the analytical pass of its pose inversion on marks instead
+      # of mesh vertices (joints refitted parents first, each aligned to what it carries; the root on its own
+      # marks), and arm.rs `twist_joints` is its procedural twist-joint evaluator (shares 0.05, 1/3, 2/3, 0.95;
+      # an upper segment undoing its own joint's twist). 20 random poses, every joint turned up to 50 degrees,
+      # are recovered from joint heads and bone ends with every joint within 4 mm. raea/character's
+      # `fitPose(skel, marks)` is the native call character.fit; on turbo a second body posed only from the
+      # first one's joint positions stands as the first does through a take (fingers aside: positions alone
+      # don't give a bone's twist). A wrist stops at 70 degrees and the frame says so (`limited`); the fingers
+      # point the level way the arm comes, so it is rarely asked for more.
+      # Not converted, and why: SOMA's body and hand layers, identity models and correctives are a different
+      # mesh and a 78-joint rig driven by PyTorch and Warp, and raea's body is MakeHuman's; its hand
+      # articulation prior (SOMAHand.npz, 32 components over SOMA's 24 finger joints, bind-relative) needs
+      # SOMA's finger frames mapped onto game_engine's 15 finger joints before a score means anything (HG8);
+      # its Lie-algebra and autograd refinements fit mesh vertices through skinning, which marks don't need.
+      Then a body can choose what to take, look at it, and be posed from positions seen
 
   Rule: Next, in order
 

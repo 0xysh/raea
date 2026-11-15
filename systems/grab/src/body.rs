@@ -1,4 +1,5 @@
-//! What the rest of the body does for the hands. `stoop`: for a thing lower than the arms reach, the hips come down
+//! What the rest of the body does for the hands. `look`: the head turned to what the hands are after (the original's
+//! head aim), the neck and head sharing it, capped. `stoop`: for a thing lower than the arms reach, the hips come down
 //! and the trunk bends forward at the hips and along the spine, with both feet kept where they stand by leg IK, so a
 //! thing on the floor is taken by bending and squatting. `clear`: a hand's place moved the least that keeps it out of
 //! the scene's solids (a table's top). `stand_for`: where the body should stand to take a thing, for whatever walks
@@ -24,8 +25,8 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
     if short <= 0.0 || amount <= 0.0 {
         return own.clone();
     }
-    // the hips take over half of it by coming down, the trunk the rest by bending
-    let (drop, pitch) = ((short * 0.6).min(0.5) * amount, (short * 1.1).min(1.0) * amount);
+    // the hips take most of it by coming down (a squat), the trunk the rest by bending
+    let (drop, pitch) = ((short * 0.75).min(0.55) * amount, (short * 0.8).min(0.85) * amount);
     let left = Vec3::Y.cross(face);
     let mut pose = own.clone();
     // the hips go back a little as the trunk goes forward, as a body keeps its balance
@@ -77,4 +78,20 @@ pub fn stand_for(thing: &Thing, from: Vec3) -> (Vec3, f32) {
     let edge = thing.cast(thing.at + to * far, -to, far).map_or(thing.solid.bound(), |h| (h.at - thing.at).dot(to));
     let at = thing.at + to * (edge + 0.3);
     (Vec3::new(at.x, from.y, at.z), (-to.x).atan2(-to.z))
+}
+
+/// The head turned toward a place by `weight` (0 to 1): the neck takes two fifths of the turn and the head the rest,
+/// no more than 55 degrees in all, so eyes go to what the hands are after.
+pub fn look(skel: &Skeleton, pose: &Pose, at: Vec3, weight: f32) -> Pose {
+    let (Some(neck), Some(head)) = (skel.joint("neck_01"), skel.joint("head")) else { return pose.clone() };
+    let mut out = pose.clone();
+    for (joint, share) in [(neck, 0.4), (head, 1.0)] {
+        let w = skel.fk(&out);
+        let Some(to) = (at - w.pos[head]).try_normalize() else { break };
+        let turn = Quat::from_rotation_arc(w.rot[head] * Vec3::Z, to);
+        let (axis, angle) = turn.to_axis_angle();
+        let angle = angle.min(55f32.to_radians()) * share * weight.clamp(0.0, 1.0);
+        out.turns[joint] = skel.local_for(&w, joint, Quat::from_axis_angle(axis, angle) * w.rot[joint]);
+    }
+    out
 }

@@ -58,6 +58,8 @@ export interface Taken {
   miss: number;
   /** the most any joint was turned from the body's own motion, degrees */
   moved: number;
+  /** a wrist was held at the most it bends (70 degrees), so its palm isn't square on its hold */
+  limited: boolean;
   /** where the body would stand to take the thing, and the turn about the vertical that faces it: walk it there first
    * when the thing is out of reach */
   stand: { at: Vec3; yaw: number };
@@ -74,4 +76,22 @@ export function take(skel: Skeleton, base: (t: number) => Pose, spec: TakeSpec, 
   });
   const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
   return native("character.take", { ...spec, joints, t, base: poses });
+}
+
+/** A point of the body seen somewhere: on a joint (by name), `offset` from its head in the rest pose's axes (none: the
+ * joint itself), seen at `at`. */
+export interface Mark {
+  joint: string;
+  offset?: Vec3;
+  at: Vec3;
+  weight?: number;
+}
+
+/** A pose fitted to where points of the body were seen, so motion that arrives as positions (a capture, a tracker,
+ * another rig's joints) plays on this body; `miss` is the marks' root-mean-square distance from where they were seen,
+ * metres. It starts from `from` (the rest pose), and a turn the marks say nothing about stays as `from` has it. */
+export function fitPose(skel: Skeleton, marks: Mark[], from?: Pose, passes?: number): { pose: Pose; miss: number } {
+  const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
+  const start = from && { root: from.root, turns: skel.joints.map((_, i) => from.turns[i] ?? ([0, 0, 0, 1] as Quat)) };
+  return native("character.fit", { joints, marks, from: start, passes });
 }

@@ -8,20 +8,26 @@
 //! - `hand`: hold points found on the thing, the wrist that lays a palm on one, fingers curled onto the surface.
 //! - `body`: the body bent and squatted for a low thing with its feet planted, hands kept out of the scene's solids,
 //!   and where to stand to take a thing.
+//! - `fit`: a pose fitted to points seen (SOMA-X's analytical pose inversion), for motion that arrives as positions.
+//! - `interact`: which thing a body takes: the nearest in reach that its eyes see.
 //! - `take`: reach, grab, lift, carry, put down or throw, as one timeline.
 //! - `json`: a take asked for as JSON, the engine's native call `character.take` (raea/character's `take`).
 
 pub mod arm;
 pub mod body;
+pub mod fit;
 pub mod hand;
+pub mod interact;
 pub mod json;
 pub mod rig;
 pub mod shape;
 pub mod take;
 
-pub use arm::{ArmOptions, IkReport, forearm_twist, reach, two_bone};
-pub use json::{TAKE_ANSWER, TAKE_ARGS, take_json};
-pub use body::{clear, stand_for, stoop};
+pub use arm::{ArmOptions, IkReport, forearm_twist, reach, twist_joints, two_bone};
+pub use json::{FIT_ANSWER, FIT_ARGS, TAKE_ANSWER, TAKE_ARGS, fit_json, take_json};
+pub use body::{clear, look, stand_for, stoop};
+pub use fit::{Mark, fit, marks_of};
+pub use interact::pick;
 pub use hand::{Grip, Hold, HoldOptions, Touch, curl, find_holds, wrist_for};
 pub use rig::{Pose, Posed, Side, Skeleton, mannequin};
 pub use shape::{Solid, Thing};
