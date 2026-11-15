@@ -367,6 +367,19 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And a garment drawn alone on the bare mannequin can be worn under or over others by re-measuring its
         stand-off against what is under it
 
+    @done
+    Scenario: CH44a. A skirt hangs from the waist and moves through a walk
+      # 11-15, first cut (sdk/body/tools/skirt.ts). The skirt is made for the body by measure: a tube of 56 by
+      # 22 particles from an ellipse round the waist's skin samples down to a hem, wider as it falls, its top
+      # two rings pinned to the hips and each ring below free to stray further. The cloth follower already
+      # built carries it through the matched walk with the legs as capsules sized from the body's own skin
+      # samples, and it is drawn as a mesh sequence over the walking body. Measured: edges stretched 19 per
+      # cent at the 99th percentile, a particle strayed 39 cm at most. Wrong still: it rides up and shortens by
+      # the end of the walk, the seat pushes through the back (the legs are kept out, the pelvis is not), and
+      # it sits on the hips, not the waist. Not yet: grown from a garment's edge or drawn from a picture's
+      # outline (it is a plain tube), a hood or a coat's tails, and its colour from a garment file.
+      Then cloth hangs free of the body and moves with it
+
     Scenario: CH44. Cloth that hangs free
       Then a skirt, a coat's tails, a hood, a scarf are meshes of their own, grown from the garment's edge on the
         body down to the outline the views show, weighted from the body at the edge and free below it
