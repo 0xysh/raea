@@ -214,19 +214,36 @@ pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
 pub const TRUNK: [(&str, &str); 6] = [("pelvis", "Hips"), ("spine_01", "Spine1"), ("spine_02", "Spine2"), ("spine_03", "Chest"), ("neck_01", "Neck1"), ("head", "Head")];
 pub const LIMB: [(&str, &str); 8] = [("clavicle", "Shoulder"), ("upperarm", "Arm"), ("lowerarm", "ForeArm"), ("hand", "Hand"), ("thigh", "Leg"), ("calf", "Shin"), ("foot", "Foot"), ("ball", "ToeBase")];
 
-/// SOMA's name for a joint named by its role: the trunk by name, limbs and fingers by side. A finger's 01, 02, 03
-/// are SOMA's 2, 3, 4 (its 1 is the bone in the palm); the thumb's are 1, 2, 3. The other way is soma.rs `raea_joint`.
+/// A joint's name on the other rig: a role (the game_engine rig's name: "thigh_l", "index_02_r") to SOMA's name
+/// (`to_soma`), or SOMA's to the role. The trunk by name, limbs and fingers by side. A finger's 01, 02, 03 are SOMA's
+/// 2, 3, 4 (its 1 is the bone in the palm, which a role has none for); the thumb's are 1, 2, 3.
+pub fn rename(name: &str, to_soma: bool) -> Option<String> {
+    let pick = |t: &[(&'static str, &'static str)], key: &str| t.iter().find(|p| (if to_soma { p.0 } else { p.1 }) == key).map(|p| if to_soma { p.1 } else { p.0 });
+    if let Some(n) = pick(&TRUNK, name) {
+        return Some(n.to_string());
+    }
+    let cut = |l: &str, r: &str| if to_soma { name.strip_suffix(l).map(|b| (b, true)).or_else(|| name.strip_suffix(r).map(|b| (b, false))) } else { name.strip_prefix(l).map(|b| (b, true)).or_else(|| name.strip_prefix(r).map(|b| (b, false))) };
+    let (base, left) = if to_soma { cut("_l", "_r")? } else { cut("Left", "Right")? };
+    let sided = |n: &str| if to_soma { format!("{}{n}", if left { "Left" } else { "Right" }) } else { format!("{n}_{}", if left { "l" } else { "r" }) };
+    if let Some(n) = pick(&LIMB, base) {
+        return Some(sided(n));
+    }
+    let fingers = ["thumb", "index", "middle", "ring", "pinky"];
+    if to_soma {
+        let (finger, k) = base.split_once("_0")?;
+        let k = k.parse::<usize>().ok()? + usize::from(finger != "thumb");
+        return fingers.contains(&finger).then(|| sided(&format!("Hand{}{}{k}", finger[..1].to_uppercase(), &finger[1..])));
+    }
+    let finger = base.strip_prefix("Hand")?;
+    let (finger, n) = finger.split_at(finger.len().checked_sub(1)?);
+    let (finger, n) = (finger.to_lowercase(), n.parse::<usize>().ok()?);
+    let k = if finger == "thumb" { n } else { n.checked_sub(1)? };
+    (fingers.contains(&finger.as_str()) && (1..=3).contains(&k)).then(|| sided(&format!("{finger}_0{k}")))
+}
+
+/// SOMA's name for a joint named by its role
 pub fn soma_name(role: &str) -> Option<String> {
-    if let Some(t) = TRUNK.iter().find(|t| t.0 == role) {
-        return Some(t.1.to_string());
-    }
-    let (base, side) = role.strip_suffix("_l").map(|b| (b, "Left")).or_else(|| role.strip_suffix("_r").map(|b| (b, "Right")))?;
-    if let Some(l) = LIMB.iter().find(|l| l.0 == base) {
-        return Some(format!("{side}{}", l.1));
-    }
-    let (finger, k) = base.split_once("_0")?;
-    let (k, thumb) = (k.parse::<usize>().ok()?, finger == "thumb");
-    ["thumb", "index", "middle", "ring", "pinky"].contains(&finger).then(|| format!("{side}Hand{}{}{}", finger[..1].to_uppercase(), &finger[1..], if thumb { k } else { k + 1 }))
+    rename(role, true)
 }
 
 /// a joint's role (as `Skeleton::joint` takes one) from its name on either rig
