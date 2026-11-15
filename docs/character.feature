@@ -184,9 +184,18 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # as a GLB. By anymove's own measure, how well the paws' heights agree between the two views, the clips
       # score 0.23 and 0.56: under 0.5 is a reroll, 0.8 is a keep, so none of 2 passes and one is worth a look
       # (anymove reports about 7 clips for a usable move). Cost so far about 2.10 dollars: 0.52 for the clips,
-      # the rest cloud time estimated from minutes. To come: the raccoon session's measures of the better clip
-      # against the traced reference (carriage, the share of a stride a foot stands, the order of the feet),
-      # foot slide and pops; more seeds; then the generated raccoon's skin in place of the built one.
+      # the rest cloud time estimated from minutes. Measured against the raccoon traced from real footage (the
+      # raccoon session's check, nine measures): the first two clips were smooth with good foot timing but
+      # were a generic four-legged walk, the head and tail level with the back and the legs in diagonal pairs.
+      # Two more clips, the prompt naming a low head, an arched back, a hanging tail and a pacing walk (0.77
+      # dollars more with their captures): the carriage came into a raccoon's range (top of the head 0.74 of
+      # the back's height, nose 0.32, withers 0.82) and the better clip has 7 of 9 measures in range; still
+      # off in all four are the order of the legs (a fore foot 0.36 of a stride after its side's hind, a
+      # raccoon's being 0.14) and the tail's tip (0.27 against 0.18). The views' agreement stayed under the
+      # keep line (0.42 and 0.53), the far hind paw the weak one in all four clips. So far: a prompt sets
+      # carriage, not the order of the legs; clips give timing and smoothness; CH31's split (clips for motion,
+      # the solver for contact and carriage) stands. To come: the generated raccoon's skin and refitted joints
+      # in place of the built one, and why the fore paws carry no agreement score.
       Then the raccoon has a walk from anymove, and the numbers say whether it beats the solver's walk
 
   Rule: Clothes, after the motion system is settled
