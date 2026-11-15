@@ -538,3 +538,40 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
     Scenario: CH46. Checked like motion is
       Then a dressed body is run through the library's captures and measured: skin showing through cloth, cloth
         through cloth, and edges stretched past a limit, per garment
+
+    @done
+    Scenario: CH47a. Garments from sewing patterns, cut to SOMA's measurements and draped by a cloth of our own
+      # 11-15, after the user saw `raea clothes make` on the body ("on the body it looks terrible"; "the 4 panels
+      # are not consistent at all") and asked whether clothes are thought of wrong. They were: a garment painted
+      # onto a shell of the skin can't show a cut, a hem or a fold, and four pictures drawn apart never agree.
+      # Clothes are flat pieces cut to a pattern and sewn, their shape from the cut, gravity and the body.
+      # GarmentCode (ETH Zurich, pygarment, MIT) writes patterns as programs of modular components (bodices,
+      # sleeves, collars with a hood, a turtle neck or a lapel, cuffs, waistbands, trousers, seven skirts)
+      # joined by seams, sized from 26 body measurements. Its simulator is NOT used: it is a fork of an old
+      # NVIDIA Warp under a non-commercial licence (mainline Warp is Apache-2.0 since 1.6.2), and its sample
+      # SMPL bodies are research-only; SOMA replaces them. Blender's own cloth with sewing springs failed four
+      # ways (crumpled, slid off the shoulders). What worked, in the test project's scratch tools: SOMA measured
+      # in GarmentCode's terms (bust 81, waist 73, hips 93 cm: slimmer than its average body); a design is
+      # settings by path (sleeve.length=0.95 collar.component.style=Hood2Panels), which is what a sentence has
+      # to become; the cut written as flat pieces, their place round the body and the seams as vertex pairs;
+      # then a position-based cloth (every edge held to its length in the flat cut, each seam's pairs pulled to
+      # one point, the cloth pushed out of the skin by the nearest point, gravity let in once the seams close)
+      # on the CPU. A T-shirt (6,042 vertices) closes its seams by frame 30 (0.5 mm at the middle) and hangs
+      # from the shoulders with 20 per cent stretch at the 95th percentile, in 2 minutes; trousers (15,368) in
+      # 4.4, a hoodie with its hood and cuffs over them (12,541) in 3.4, no cloth inside the skin in any. Each is
+      # weighted from SOMA's skin by nearest face and worn as a Character part through the matched walk, with
+      # the skin wholly under it left out of the body (sheet3d compositions/soma_patterns.tsx). The flat cut is
+      # each garment's UVs, so a fabric is one tiling picture with no seams between views. Faults: the hood is
+      # drafted up and holds the hoodie high (above the waist); wide trouser legs, skinned from the nearest skin
+      # and not simulated as they walk, stretch a sheet between the legs at a full stride (CH44's follower is
+      # the fix); GarmentCode places pieces for its own body, so SOMA needs them lifted 7 cm while they are
+      # sewn; no open-front shirt or pocket component exists yet.
+      Then a garment is a pattern cut to the body and draped, and it walks with the body
+
+    Scenario: CH47. Clothes are sewing patterns (proposed: the user decides)
+      # Proposed 11-15 from CH47a. It would replace CH40-CH42's picture measuring as the way a garment's shape
+      # is made; the image model would draw only fabric (one tiling swatch) and prints placed on a piece.
+      Then a garment is a pattern program's settings, cut to the body's measurements, draped once per body
+        shape at build, and kept as a skinned mesh with its flat cut as its UVs
+      And words become settings (a language model picks components and values), never pictures of the body
+      And layers drape in order, each over the one beneath, and creatures get their own pattern blocks
