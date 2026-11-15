@@ -16212,6 +16212,7 @@ dependencies = [
  "bevy",
  "image",
  "naga",
+ "raea-sys-frame",
  "raea-sys-material",
  "raea-sys-sampler",
  "raea-sys-shader",

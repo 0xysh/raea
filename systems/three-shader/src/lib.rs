@@ -369,8 +369,9 @@ pub fn fit_mesh(mesh: &mut Mesh, buffer: Option<&str>, own: &[String]) -> Result
 }
 
 /// Each three shader follows the scene camera's tone mapping, whichever it is this frame: a `display` one's colour is
-/// taken back through it, a `linear` one's mapped by it where the camera maps in its materials' shaders.
-fn follow_tonemapping(cams: Query<(&Camera, Option<&bevy::core_pipeline::tonemapping::Tonemapping>), With<Camera3d>>, luts: Option<Res<bevy::core_pipeline::tonemapping::TonemappingLuts>>, mut mats: ResMut<Assets<ThreeShader>>) {
+/// taken back through it, a `linear` one's mapped by it where the camera maps in its materials' shaders. A camera
+/// drawing into an image (R3F23a) isn't the scene camera, though it draws first.
+fn follow_tonemapping(cams: Query<(&Camera, Option<&bevy::core_pipeline::tonemapping::Tonemapping>), (With<Camera3d>, Without<raea_sys_frame::camera::IntoImage>)>, luts: Option<Res<bevy::core_pipeline::tonemapping::TonemappingLuts>>, mut mats: ResMut<Assets<ThreeShader>>) {
     use bevy::core_pipeline::tonemapping::Tonemapping as T;
     let tm = cams.iter().filter(|(c, _)| c.is_active).min_by_key(|(c, _)| c.order).and_then(|(_, t)| t.copied()).unwrap_or(T::None);
     let (method, lut) = match tm {

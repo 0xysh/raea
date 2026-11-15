@@ -205,8 +205,8 @@ pub fn sync_meshes(
 /// once, and a row that moves (or moves back) writes every frame it changes. An entity with no entry always writes,
 /// so a render seeking straight to frame N places its camera.
 #[allow(clippy::type_complexity)]
-pub fn sync_camera(frame: Res<FrameRows>, edit: Option<Res<Edit>>, mut placed: Local<bevy::platform::collections::HashMap<Entity, (Vec3, Vec3, Option<Quat>)>>, mut q: Query<(Entity, &mut Transform, Option<&mut Projection>, Option<&mut AmbientLight>, Option<&mut bevy::post_process::dof::DepthOfField>, Option<&mut super::lens::Lens>, Option<&mut bevy::post_process::effect_stack::ChromaticAberration>, Option<&mut Camera>), (With<Camera3d>, Without<super::BareEntity>)>) {
-    for (e, mut t, proj, amb, dof, lens, ab, cam) in &mut q {
+pub fn sync_camera(frame: Res<FrameRows>, edit: Option<Res<Edit>>, mut placed: Local<bevy::platform::collections::HashMap<Entity, (Vec3, Vec3, Option<Quat>)>>, mut shown: Local<bevy::platform::collections::HashMap<Entity, bool>>, mut q: Query<(Entity, &mut Transform, Option<&mut Projection>, Option<&mut AmbientLight>, Option<&mut bevy::post_process::dof::DepthOfField>, Option<&mut super::lens::Lens>, Option<&mut bevy::post_process::effect_stack::ChromaticAberration>, Option<&mut Camera>), (With<Camera3d>, Without<super::BareEntity>)>) {
+    for (e, mut t, proj, amb, dof, lens, ab, mut cam) in &mut q {
         let Some(v) = frame.vals(e) else { continue };
         let v = &v;
         let pos = Vec3::new(num(v, "x", 0.0), num(v, "y", 2.0), num(v, "z", 9.0));
@@ -284,6 +284,14 @@ pub fn sync_camera(frame: Res<FrameRows>, edit: Option<Res<Edit>>, mut placed: L
         if let (Some(b), Some(mut a)) = (v.get("ambient"), amb) {
             if a.brightness != b.num() as f32 {
                 a.brightness = b.num() as f32;
+            }
+        }
+        // a camera into an image drawn only on its frames (`on`, keyed: raea-runtime-look's rendercam.rs), written when
+        // the row changes it, so a load's views::off (#48) keeps it off until views::on as it does the rest
+        if let (Some(on), Some(c)) = (v.get("on").map(|o| o.num() > 0.5), cam.as_mut()) {
+            let was = shown.insert(e, on);
+            if was.map_or(!on, |w| w != on) && c.is_active != on {
+                c.is_active = on;
             }
         }
         // a clear keyed frame by frame (bg_r..bg_a, sRGB: a holder's background that changes, runtime/export program.rs)

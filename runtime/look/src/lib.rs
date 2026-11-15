@@ -14,6 +14,8 @@ mod post;
 pub use post::*;
 mod parts;
 pub use parts::*;
+mod rendercam;
+pub use rendercam::*;
 pub use instances::*;
 mod active;
 pub use active::*;

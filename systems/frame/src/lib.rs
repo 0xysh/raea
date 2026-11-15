@@ -29,6 +29,9 @@ pub mod store;
 // the frame loop's own state (Stages, the frame tag, the overlay and output resources)
 mod state;
 pub use state::*;
+/// a named image a camera draws into ("render:NAME:WxH"), as every source naming it gets it (R3F23a)
+pub mod render_image;
+pub use render_image::RenderKind;
 /// a row's per-frame tables (a frame's look, the camera's post-processing), laid onto it frame by frame
 pub mod tables;
 /// the frames where another camera becomes the piece's (a cut between cameras, RR2)

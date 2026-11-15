@@ -52,6 +52,8 @@ pub fn base_ident(it: &Item) -> &str {
         "mesh" => it.shape.as_deref().unwrap_or_default(),
         "model" | "panel" | "plate" | "splat" | "meshseq" => it.props.get("src").and_then(Value::as_str).unwrap_or(""),
         "text" => it.props.get("text").and_then(Value::as_str).unwrap_or(""),
+        // a camera drawing into an image (R3F23a): by the image, so two passes into one image a frame are #0 and #1
+        "rendercam" => it.props.get("target").and_then(Value::as_str).unwrap_or(""),
         _ => "",
     }
 }

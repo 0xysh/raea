@@ -81,6 +81,17 @@ pub(crate) fn spawn_camera(world: &mut World, e: Entity, vals: &BTreeMap<String,
     Ok(())
 }
 
+/// A camera row drawing into an image (a "rendercam", `into` "render:NAME:WxH[:float]": docs/r3f.feature R3F23a): the
+/// camera spawn_camera makes, on that image (raea-sys-frame's into_image), which a material's map naming it reads.
+pub(crate) fn render_camera(world: &mut World, e: Entity, vals: &BTreeMap<String, V>, inserted: &[Tup], dir: &Path) -> Result<(), String> {
+    let Some(V::S(into)) = vals.get("into") else { return Err("a camera into an image needs `into` (\"render:NAME:WxH\")".into()) };
+    let image = RenderImages::image(world, into, None)?;
+    let size = RenderImages::name(into).and_then(|n| world.resource::<RenderImages>().0.get(n)).map_or((512, 512), |i| i.1);
+    spawn_camera(world, e, vals, inserted, dir, size, RenderTarget::Image(image.into()), true)?;
+    raea_sys_frame::camera::into_image(world, e, into);
+    Ok(())
+}
+
 /// A live scene's rows applied to a World (Engine::set_rows, or a plain App's: docs/sdk.feature S6a): each row's values
 /// merged into its latest ones, a row not seen before spawned as a load spawns it, and the component and resource rows
 /// set through the registry. True when a glTF model was spawned, which the caller loads before the frame that shows it.
@@ -118,6 +129,7 @@ pub fn apply_rows(world: &mut World, dir: &Path, rows: &[Tup]) -> Result<bool, S
                 let e = store::spawn(world, t);
                 // a camera first seen here is a plain App's (SceneTarget); an Engine's comes with its load
                 match world.get_resource::<SceneTarget>().map(|s| (s.target.clone(), s.size)) {
+                    _ if t.kind == "rendercam" => render_camera(world, e, &t.vals, rows, dir)?,
                     Some((target, size)) if t.kind == "camera" => spawn_camera(world, e, &t.vals, rows, dir, size, target, true)?,
                     _ => spawn_3d(world, e, t, &media, dir)?,
                 }

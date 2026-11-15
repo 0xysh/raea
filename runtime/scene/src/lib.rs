@@ -141,6 +141,9 @@ fn walk(n: &Node3, parent: Mat4, out: &mut Vec<Item>) {
         "Plate" => out.push(item("plate", Mat4::IDENTITY, None)),
         "PerspectiveCamera" | "DirectionalLight" | "PointLight" | "SpotLight" | "RectAreaLight" => {
             let kind = match &*n.kind {
+                // a camera drawing into an image (`target` "render:NAME:WxH", R3F23a) is a pass before the screen's,
+                // outside the screen's cameras (their order, which is active, a cut): rendercam.rs
+                "PerspectiveCamera" if n.props.get("target").is_some_and(Value::is_string) => "rendercam",
                 "PerspectiveCamera" => "camera",
                 "DirectionalLight" => "directional",
                 "PointLight" => "point",
@@ -282,6 +285,7 @@ struct Tracks {
     meshseqs: Vec<Track>,
     entities: Vec<Track>,
     texts: Vec<Track>,
+    rendercams: Vec<Track>,
 }
 
 impl Tracks {
@@ -302,6 +306,7 @@ impl Tracks {
             meshseqs: tracks_of(all, &["meshseq"]),
             entities: tracks_of(all, &["entity"]),
             texts: tracks_of(all, &["text"]),
+            rendercams: tracks_of(all, &["rendercam"]),
         }
     }
 }
@@ -331,4 +336,6 @@ fn rows_into_of(all: &[Vec<Item>], tr: &Tracks, p: &mut Program) {
     raea_runtime_scene2d::shapes(&tr.shapes2d, p);
     // baked simulations (<MeshSequence>, <Goo>): meshseq.rs
     meshseq::rows(&tr.meshseqs, p);
+    // cameras drawing into images (R3F23a): raea-runtime-look's rendercam.rs
+    render_cameras(all, &tr.rendercams, p);
 }

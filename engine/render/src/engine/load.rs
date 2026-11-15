@@ -42,7 +42,7 @@ impl Engine {
         let has_3d = has_3d(inserted) || raea_sys_sprite::has_2d(inserted);
         // cameras first, so UI can target them; otherwise insertion order
         let mut order: Vec<(&Tup, Entity)> = inserted.iter().zip(ents.iter().copied()).collect();
-        order.sort_by_key(|(t, _)| t.kind != "camera");
+        order.sort_by_key(|(t, _)| !matches!(t.kind.as_str(), "camera" | "rendercam"));
         for (t, e) in order {
             let vals = &t.vals;
             match t.kind.as_str() {
@@ -50,6 +50,8 @@ impl Engine {
                     spawn_camera(world, e, vals, inserted, &self.dir, (prog.width, prog.height), RenderTarget::Image(self.target.clone().into()), has_3d)?;
                     camera.get_or_insert(e); // (the first camera: a second draws over it, two_passes)
                 }
+                // a camera into an image, a pass before the screen's (R3F23a)
+                "rendercam" => render_camera(world, e, vals, inserted, &self.dir)?,
                 k if is_3d_spawn(k) => {
                     spawn_3d(world, e, t, inserted, &self.dir)?;
                 }

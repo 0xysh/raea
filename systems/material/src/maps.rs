@@ -201,17 +201,23 @@ pub fn material(world: &mut World, t: &Tup, inserted: &[Tup], dir: &Path) -> Res
     };
     let sam = |prop: &str| own.get(prop).or(all.as_ref());
     // a UiTexture's image (raea-screen:name@WxH) in any map: the screen image its UI is drawn into, as it is drawn
-    // (a panel that glows: its UI as the emissive map, so it shows under Solari, which draws no unlit surface)
+    // (a panel that glows: its UI as the emissive map, so it shows under Solari, which draws no unlit surface); a
+    // camera's image ("render:NAME:WxH", R3F23a) as that camera draws it
     let named = world.get_resource::<NamedImages>().map(|n| n.0);
-    let screen = |world: &mut World, s: &str| named.and_then(|named| named(world, s));
+    let screen = |world: &mut World, s: &str| -> Result<Option<Handle<Image>>, String> {
+        if s.starts_with("render:") {
+            return RenderImages::image(world, s, None).map(Some).map_err(|e| format!("mesh {}: {e}", t.id));
+        }
+        Ok(named.and_then(|named| named(world, s)))
+    };
     if let Some(s) = src("map") {
-        m.base_color_texture = Some(match screen(world, &s) {
+        m.base_color_texture = Some(match screen(world, &s)? {
             Some(h) => h,
             None => cached_map(world, s.clone(), MapKind::Colour, repeat, sam("map"), || map_picture(t, inserted, dir, "map", &s))?,
         });
     }
     if let Some(s) = src("normal_map") {
-        m.normal_map_texture = Some(match screen(world, &s) {
+        m.normal_map_texture = Some(match screen(world, &s)? {
             Some(h) => h,
             None => cached_map(world, s.clone(), MapKind::Data, repeat, sam("normalMap"), || map_picture(t, inserted, dir, "normalMap", &s))?,
         });
@@ -227,7 +233,7 @@ pub fn material(world: &mut World, t: &Tup, inserted: &[Tup], dir: &Path) -> Res
         return Err(format!("{}: clearcoat_normal_texture {s}: this raea is built without Bevy's clearcoat textures (raea-sys-material's multi-layer feature, off by default: docs/control.feature FC0a)", t.id));
     }
     if let Some(s) = src("mr_map") {
-        m.metallic_roughness_texture = Some(match screen(world, &s) {
+        m.metallic_roughness_texture = Some(match screen(world, &s)? {
             Some(h) => h,
             None => cached_map(world, s.clone(), MapKind::Data, repeat, sam("metallicRoughnessMap"), || map_picture(t, inserted, dir, "metallicRoughnessMap", &s))?,
         });
@@ -248,13 +254,13 @@ pub fn material(world: &mut World, t: &Tup, inserted: &[Tup], dir: &Path) -> Res
         })?);
     }
     if let Some(s) = src("ao_map") {
-        m.occlusion_texture = Some(match screen(world, &s) {
+        m.occlusion_texture = Some(match screen(world, &s)? {
             Some(h) => h,
             None => cached_map(world, s.clone(), MapKind::Data, repeat, sam("aoMap"), || map_picture(t, inserted, dir, "aoMap", &s))?,
         });
     }
     if let Some(s) = src("emissive_map") {
-        m.emissive_texture = Some(match screen(world, &s) {
+        m.emissive_texture = Some(match screen(world, &s)? {
             Some(h) => h,
             None => cached_map(world, s.clone(), MapKind::Colour, repeat, sam("emissiveMap"), || map_picture(t, inserted, dir, "emissiveMap", &s))?,
         });
@@ -464,5 +470,19 @@ mod screen_map_tests {
         vals.insert("emissive_map".to_string(), V::S("raea-screen:other@8x4".into()));
         let t = Tup { kind: "mesh".into(), id: "panel".into(), vals };
         assert!(material(&mut world, &t, &[], Path::new(".")).is_err());
+    }
+
+    /// A camera's image ("render:NAME:WxH", docs/r3f.feature R3F23a) is the texture of a map that names it: the image
+    /// that camera draws into, whichever of them names it first.
+    #[test]
+    fn a_render_image_is_the_texture_of_a_map() {
+        let mut world = World::new();
+        world.init_resource::<Assets<Image>>();
+        let mut vals = BTreeMap::new();
+        vals.insert("map".to_string(), V::S("render:fbo:64x32".into()));
+        let t = Tup { kind: "mesh".into(), id: "plane".into(), vals };
+        let m = material(&mut world, &t, &[], Path::new(".")).unwrap();
+        let drawn = RenderImages::image(&mut world, "render:fbo:64x32", None).unwrap();
+        assert_eq!(m.base_color_texture, Some(drawn));
     }
 }

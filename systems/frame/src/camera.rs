@@ -44,3 +44,20 @@ pub struct Group {
 pub fn remove<B: Bundle>(world: &mut World, e: Entity) {
     world.entity_mut(e).remove::<B>();
 }
+
+/// A camera drawing into a render image ("render:NAME:WxH", docs/r3f.feature R3F23a): a pass before the screen's, which
+/// what follows the screen camera (a three shader's tone mapping) passes over.
+#[derive(Component, Clone, Copy, Default)]
+pub struct IntoImage;
+
+/// A camera on a render image (`into`), as three draws into a render target: no multisampling (a target has none
+/// unless it asks), no dither, and Hdr for a float image (":float") so its values stay as drawn, unclamped and signed.
+/// Its tone curve is its row's (`tonemap` "none" unless it names one: raea-runtime-look's rendercam.rs).
+pub fn into_image(world: &mut World, e: Entity, into: &str) {
+    let float = matches!(RenderImages::spec(into), Ok((_, _, RenderKind::Float)));
+    let mut c = world.entity_mut(e);
+    c.insert((IntoImage, Msaa::Off, bevy::core_pipeline::tonemapping::DebandDither::Disabled));
+    if float {
+        c.insert(bevy::camera::Hdr);
+    }
+}

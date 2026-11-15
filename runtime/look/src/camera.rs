@@ -50,77 +50,96 @@ fn one(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, k: usi
     let cams: Vec<Option<Item>> = all.iter().map(|its| its.iter().filter(|i| i.kind == "camera").nth(k).cloned()).collect();
     if cams.iter().any(Option::is_some) {
         let its = filled(&cams);
-        let pos: Vec<[f64; 3]> = its.iter().map(|c| vec3(&c.props, "position", [0.0, 0.0, 5.0])).collect();
-        let look: Vec<[f64; 3]> = its.iter().map(|c| vec3(&c.props, "lookAt", [0.0, 0.0, 0.0])).collect();
-        for (k, name) in ["x", "y", "z"].iter().enumerate() {
-            column(p, row, id, name, &pos.iter().map(|v| v[k]).collect::<Vec<_>>());
-        }
-        for (k, name) in ["look_x", "look_y", "look_z"].iter().enumerate() {
-            column(p, row, id, name, &look.iter().map(|v| v[k]).collect::<Vec<_>>());
-        }
-        column(p, row, id, "fov", &its.iter().map(|c| n(&c.props, "fov", 50.0)).collect::<Vec<_>>());
-        // an orthographic camera (<OrthographicCamera height>): the view's height in metres, keyed; 0 is perspective
-        if its.iter().any(|c| c.props.contains_key("ortho")) {
-            column(p, row, id, "ortho", &its.iter().map(|c| n(&c.props, "ortho", 0.0)).collect::<Vec<_>>());
-        }
-        // which way is up (`up`; +Y by default): a camera that rolls, as a solved one does (raea-render's up_x/y/z, Matchmove)
-        keyed_vec(p, row, id, &its, "up", &["up_x", "up_y", "up_z"], &[0.0, 1.0, 0.0]);
-        // a Camera3d's Transform rotation (`rotation`, a quaternion on every frame), exact, which the engine places it by over
-        // its look-at point
-        if its.iter().all(|c| c.props.get("rotation").and_then(Value::as_array).is_some_and(|q| q.len() == 4)) {
-            quat_columns(p, row, id, "rot", &its.iter().map(Some).collect::<Vec<_>>());
-        }
-        // a window on a larger view (`view`: its full size and this frame's offset, in frame pixels): a crop of
-        // footage keeps its lens's centre (raea-render's camera view_*, Matchmove's 9:16 from 16:9)
-        if its.iter().any(|c| c.props.get("view").is_some_and(Value::is_object)) {
-            let view = |c: &Item, k: &str| c.props.get("view").and_then(|v| v.get(k)).and_then(Value::as_f64).unwrap_or(0.0);
-            for (k, col) in [("width", "view_w"), ("height", "view_h"), ("x", "view_x"), ("y", "view_y")] {
-                column(p, row, id, col, &its.iter().map(|c| view(c, k)).collect::<Vec<_>>());
-            }
-        }
-        if all.iter().flatten().any(|i| i.kind == "dof") {
-            column(p, row, id, "focus", &its.iter().map(focus_of).collect::<Vec<_>>());
-        }
         // which of the scene's cameras is the piece's, where that's not the first: a cut where it changes (active.rs)
         if k == 0 {
             shot_column(p, row, id, &its);
         }
-        let first = &its[0].props;
-        if let Some(o) = num(first, "order") {
-            row.insert("order".into(), V::N(o));
-        }
-        if let Some(c) = first.get("clear").and_then(Value::as_str) {
-            row.insert("clear".into(), V::S(c.into()));
-        }
-        if let Some(b) = first.get("bg").and_then(Value::as_str) {
-            row.insert("bg".into(), V::S(b.into()));
-        }
-        // its viewport (Bevy's Viewport: physical px from the target's top left)
-        let vp = |k: &str, i: usize| first.get("viewport").and_then(|v| v.get(k)).and_then(|v| v.get(i)).and_then(Value::as_f64);
-        for (col, k, i) in [("vp_x", "physical_position", 0), ("vp_y", "physical_position", 1), ("vp_w", "physical_size", 0), ("vp_h", "physical_size", 1)] {
-            if let Some(x) = vp(k, i) {
-                row.insert(col.into(), V::N(x));
-            }
-        }
-        for (k, col) in [("near", "near"), ("far", "far")] {
-            if let Some(v) = num(first, k) {
-                row.insert(col.into(), V::N(v));
-            }
-        }
-        layers_column(row, first);
-        // Bevy's own components on the camera (<BevyComponent> inside it)
-        components(p, id, &its);
+        placed(all, p, row, id, &its);
     } else {
         for (name, v) in [("x", 0.0), ("y", 0.0), ("z", 5.0), ("look_x", 0.0), ("look_y", 0.0), ("look_z", 0.0), ("fov", 50.0)] {
             row.insert(name.into(), V::N(v));
         }
     }
+    lit(all, p, row, id);
+}
+
+/// A camera's place, lens and frame, from its items frame by frame (`its`, filled): where it is and looks, its field
+/// of view or orthographic height, up, rotation, view window and focus, keyed; its order, clear, colour, viewport, near
+/// and far, layers and Bevy components as its first frame has them. A screen camera's (one) and an image's (rendercam.rs).
+pub fn placed(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, id: &str, its: &[Item]) {
+    let pos: Vec<[f64; 3]> = its.iter().map(|c| vec3(&c.props, "position", [0.0, 0.0, 5.0])).collect();
+    let look: Vec<[f64; 3]> = its.iter().map(|c| vec3(&c.props, "lookAt", [0.0, 0.0, 0.0])).collect();
+    for (k, name) in ["x", "y", "z"].iter().enumerate() {
+        column(p, row, id, name, &pos.iter().map(|v| v[k]).collect::<Vec<_>>());
+    }
+    for (k, name) in ["look_x", "look_y", "look_z"].iter().enumerate() {
+        column(p, row, id, name, &look.iter().map(|v| v[k]).collect::<Vec<_>>());
+    }
+    column(p, row, id, "fov", &its.iter().map(|c| n(&c.props, "fov", 50.0)).collect::<Vec<_>>());
+    // an orthographic camera (<OrthographicCamera height>): the view's height in metres, keyed; 0 is perspective
+    if its.iter().any(|c| c.props.contains_key("ortho")) {
+        column(p, row, id, "ortho", &its.iter().map(|c| n(&c.props, "ortho", 0.0)).collect::<Vec<_>>());
+    }
+    // which way is up (`up`; +Y by default): a camera that rolls, as a solved one does (raea-render's up_x/y/z, Matchmove)
+    keyed_vec(p, row, id, &its, "up", &["up_x", "up_y", "up_z"], &[0.0, 1.0, 0.0]);
+    // a Camera3d's Transform rotation (`rotation`, a quaternion on every frame), exact, which the engine places it by over
+    // its look-at point
+    if its.iter().all(|c| c.props.get("rotation").and_then(Value::as_array).is_some_and(|q| q.len() == 4)) {
+        quat_columns(p, row, id, "rot", &its.iter().map(Some).collect::<Vec<_>>());
+    }
+    // a window on a larger view (`view`: its full size and this frame's offset, in frame pixels): a crop of
+    // footage keeps its lens's centre (raea-render's camera view_*, Matchmove's 9:16 from 16:9)
+    if its.iter().any(|c| c.props.get("view").is_some_and(Value::is_object)) {
+        let view = |c: &Item, k: &str| c.props.get("view").and_then(|v| v.get(k)).and_then(Value::as_f64).unwrap_or(0.0);
+        for (k, col) in [("width", "view_w"), ("height", "view_h"), ("x", "view_x"), ("y", "view_y")] {
+            column(p, row, id, col, &its.iter().map(|c| view(c, k)).collect::<Vec<_>>());
+        }
+    }
+    if all.iter().flatten().any(|i| i.kind == "dof") {
+        column(p, row, id, "focus", &its.iter().map(focus_of).collect::<Vec<_>>());
+    }
+    let first = &its[0].props;
+    if let Some(o) = num(first, "order") {
+        row.insert("order".into(), V::N(o));
+    }
+    if let Some(c) = first.get("clear").and_then(Value::as_str) {
+        row.insert("clear".into(), V::S(c.into()));
+    }
+    if let Some(b) = first.get("bg").and_then(Value::as_str) {
+        row.insert("bg".into(), V::S(b.into()));
+    }
+    // its viewport (Bevy's Viewport: physical px from the target's top left)
+    let vp = |k: &str, i: usize| first.get("viewport").and_then(|v| v.get(k)).and_then(|v| v.get(i)).and_then(Value::as_f64);
+    for (col, k, i) in [("vp_x", "physical_position", 0), ("vp_y", "physical_position", 1), ("vp_w", "physical_size", 0), ("vp_h", "physical_size", 1)] {
+        if let Some(x) = vp(k, i) {
+            row.insert(col.into(), V::N(x));
+        }
+    }
+    for (k, col) in [("near", "near"), ("far", "far")] {
+        if let Some(v) = num(first, k) {
+            row.insert(col.into(), V::N(v));
+        }
+    }
+    layers_column(row, first);
+    // Bevy's own components on the camera (<BevyComponent> inside it)
+    components(p, id, its);
+}
+
+/// The rest of a screen camera's row: the scene's ambient light, environment, sky, post-processing, composition
+/// passes, lens and motion blur, frame by frame.
+fn lit(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, id: &str) {
     // ambient: every AmbientLight's intensity summed, per frame; its colour the first one's. Any AmbientLight sends the
     // column, so one of brightness 0 turns the ambient off as Bevy's does (with none, the camera keeps Bevy's default 80)
-    let amb: Vec<f64> = all.iter().map(|its| its.iter().filter(|i| i.kind == "ambient").map(|i| light_power("ambient", &i.props)).sum::<f64>()).collect();
-    if all.iter().flatten().any(|i| i.kind == "ambient") {
+    // (those on the camera's layers: an image's pass lights its own scene with its own, rendercam.rs)
+    let layers: Vec<u64> = match row.get("layers") {
+        Some(V::S(l)) => l.split(',').filter_map(|x| x.trim().parse().ok()).collect(),
+        _ => vec![0],
+    };
+    let amb: Vec<f64> = all.iter().map(|its| ambient_on(its, &layers)).collect();
+    let lit_by = |i: &&Item| i.kind == "ambient" && sees(&layers, i);
+    if all.iter().flatten().any(|i| lit_by(&i)) {
         column(p, row, id, "ambient", &amb);
-        if let Some(c) = all.iter().flatten().find(|i| i.kind == "ambient").and_then(|i| hex(i.props.get("color"))) {
+        if let Some(c) = all.iter().flatten().find(lit_by).and_then(|i| hex(i.props.get("color"))) {
             if c != "#ffffff" {
                 row.insert("ambient_color".into(), V::S(c));
             }

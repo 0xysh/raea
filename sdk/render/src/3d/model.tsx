@@ -30,7 +30,8 @@ export function OrthographicCamera({ height = 10, children, ...rest }: Orthograp
   if (rest.lookAt !== undefined) checkVec("OrthographicCamera", "lookAt", rest.lookAt);
   if (rest.up !== undefined) checkVec("OrthographicCamera", "up", rest.up);
   if (!(height > 0 && Number.isFinite(height))) throw new RangeError(`OrthographicCamera: height is the view's height in metres, above 0, got ${height}`);
-  useCamera3d({ position: rest.position, lookAt: rest.lookAt, height, up: rest.up }, rest.active !== false);
+  // a camera into an image (`target`, R3F23a) isn't the one the pointer picks through
+  useCamera3d({ position: rest.position, lookAt: rest.lookAt, height, up: rest.up }, rest.active !== false && rest.target === undefined);
   return node3d("PerspectiveCamera", { ...rest, ortho: height }, children);
 }
 
