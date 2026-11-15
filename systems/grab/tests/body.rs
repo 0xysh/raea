@@ -1,6 +1,7 @@
 //! The measures docs/hands.feature names for the body round the hands: joint limits, and keeping out of solids.
 
 use glam::{Quat, Vec3};
+use raea_sys_body::*;
 use raea_sys_grab::*;
 
 #[test]
@@ -82,8 +83,7 @@ fn the_head_and_chest_stay_out_of_a_table_when_the_body_bends() {
 
 #[test]
 fn the_hand_prior_shapes_and_reads_hands() {
-    use raea_sys_grab::hand::hand_rest;
-    use raea_sys_grab::prior::{coefficients, oddness, shape};
+    use raea_sys_body::prior::{coefficients, oddness, shape};
     let s = mannequin();
     for side in Side::BOTH {
         let rest = hand_rest(&s, side).unwrap();

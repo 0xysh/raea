@@ -144,6 +144,28 @@ impl Skeleton {
     }
 }
 
+/// A hand's frame at rest, in the body's axes: along (wrist to the middle knuckle), the way the palm faces, and where
+/// the palm's skin is from the wrist.
+#[derive(Clone, Copy, Debug)]
+pub struct HandRest {
+    pub along: Vec3,
+    pub palm: Vec3,
+    pub mid: Vec3,
+}
+
+pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
+    let hand = skel.arm(s)?[2];
+    let knuckle = |f: &str| Some(skel.joints[skel.finger(f, s)?[0]].head);
+    let h = skel.joints[hand].head;
+    let reach = knuckle("middle")? - h;
+    let along = reach.normalize();
+    let line = knuckle("index")? - knuckle("pinky")?;
+    let across = (line - along * line.dot(along)).normalize();
+    let palm = if s == Side::L { along.cross(across) } else { across.cross(along) };
+    // the palm's middle: a little over half way to the knuckles, out to the skin
+    Some(HandRest { along, palm, mid: reach * 0.55 + palm * 0.012 })
+}
+
 /// A stand-in body of the rig's joints at an adult's proportions (1.81 m), so the solvers run with no character on
 /// disk: tests, examples, and a scene that hasn't loaded its body yet. A real character brings its own skeleton.json.
 pub fn mannequin() -> Skeleton {

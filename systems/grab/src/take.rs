@@ -8,12 +8,13 @@
 
 use glam::{Quat, Vec3};
 
-use crate::arm::{ArmOptions, forearm_twist, reach};
-use crate::body::{clear, look, roomy, stoop};
-use crate::limits::clamp_turn;
-use crate::prior::shape;
-use crate::hand::{Grip, Touch, curl, facing, hand_rest, wrist_for};
-use crate::rig::{Pose, Posed, Skeleton};
+use raea_sys_body::arm::{ArmOptions, forearm_twist, reach};
+use crate::trunk::{clear, look, roomy, stoop};
+use raea_sys_body::limits::clamp_turn;
+use raea_sys_body::prior::shape;
+use crate::hand::{Grip, Touch, curl, facing, wrist_for};
+use raea_sys_body::rig::hand_rest;
+use raea_sys_body::rig::{Pose, Posed, Skeleton};
 use crate::shape::Thing;
 
 #[derive(Clone, Copy, Debug)]

@@ -6,6 +6,7 @@
 use std::fmt::Write;
 
 use glam::{Quat, Vec3};
+use raea_sys_body::*;
 use raea_sys_grab::*;
 
 /// a point of the body's frame on the page: turned about the vertical by `yaw`, y up

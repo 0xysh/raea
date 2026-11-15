@@ -46,9 +46,30 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
 
   Rule: Built
 
+    Scenario: HG0. Where it lives
+      # Two crates, split when the first passed 2,000 lines: raea-sys-body is the character's body in Rust (what
+      # sdk/body is in TypeScript), raea-sys-grab is what the hands do with things.
+      Then the plan:
+        | crate         | file                | lines | job                                                              |
+        | raea-sys-body | src/rig.rs          | 240   | the rig, poses, forward kinematics, a hand's frame, a stand-in body |
+        | raea-sys-body | src/arm.rs          | 200   | two-bone IK, the reach that leans, the forearm's twist, twist joints |
+        | raea-sys-body | src/limits.rs       | 260   | joint ranges as anatomical angles, a turn brought inside, violations |
+        | raea-sys-body | src/fit.rs          | 120   | a pose fitted to points seen                                     |
+        | raea-sys-body | src/prior.rs        | 150   | the hand prior: shapes, coefficients, oddness                    |
+        | raea-sys-grab | src/shape.rs        | 120   | solids as signed distances: casts, normals, clearance            |
+        | raea-sys-grab | src/hand.rs         | 200   | holds, the wrist that lays a palm on one, the fingers' curl      |
+        | raea-sys-grab | src/trunk.rs        | 130   | stoop, look, clearances, where to stand                          |
+        | raea-sys-grab | src/interact.rs     | 40    | which thing is taken                                             |
+        | raea-sys-grab | src/take.rs         | 280   | the take's timeline                                              |
+        | raea-sys-grab | src/json.rs         | 190   | character.take, character.fit, character.hand                    |
+        | raea-sys-grab | tests/grab.rs       | 470   | the hands' measures, on the stand-in body                        |
+        | raea-sys-grab | tests/body.rs       | 150   | limits, the body out of solids, the hand prior                   |
+        | raea-sys-grab | examples/strip.rs   | 90    | a take drawn as an SVG filmstrip                                 |
+        | sdk           | sdk/character/src/take.ts | 120 | take(), fitPose(), handShape(): the calls made, typed          |
+
     @done
     Scenario: HG1. An arm reaches a target, and says what it cost
-      # 11-14, built: systems/grab arm.rs. On the stand-in body, 600 random targets inside the arm's reach are hit
+      # 11-14, built: raea-sys-body arm.rs. On the stand-in body, 600 random targets inside the arm's reach are hit
       # within 0.1 mm; a target 20 cm past the arm is missed by 20 cm and flagged; a wrist already on its target
       # turns nothing; the pole puts the elbow on its side of the line within a degree; a reach 12 cm past the arm
       # lands within 5 mm by leaning the clavicle, chest and spine, each under its cap, and names them.
@@ -58,10 +79,6 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         where the elbow points
       And past the arm's length the trunk leans, by capped shares, and the report names every joint turned
       And a wrist's twist is shared with the forearm, the hand staying where it was
-      And the plan:
-        | crate         | file        | lines | job                                                                  |
-        | raea-sys-grab | src/rig.rs  | 210   | the rig, poses, forward kinematics, a stand-in body                  |
-        | raea-sys-grab | src/arm.rs  | 180   | two-bone IK, the reach that leans, the forearm's twist               |
 
     @done
     Scenario: HG2. Hold points are found on the thing itself
@@ -74,10 +91,6 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         from that side meets its surface, each with the way the surface faces
       And a narrower thing gets one hand's hold
       And the holds are kept in the thing's own frame, so they ride with it
-      And the plan:
-        | crate         | file         | lines | job                                                             |
-        | raea-sys-grab | src/shape.rs | 120   | solids as signed distances: casts, normals, clearance           |
-        | raea-sys-grab | src/hand.rs  | 220   | holds, the wrist that lays a palm on one, the fingers' curl     |
 
     @done
     Scenario: HG3. Fingers wrap what they hold
@@ -104,11 +117,6 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       And the thing is drawn to a carry place off the chest and rides there, turned only with the body's facing
       And a put sets it down at a place, a throw lets it go with a velocity and it falls to the floor
       And every frame says how far a wrist missed and how far the body was turned from its own motion
-      And the plan:
-        | crate         | file              | lines | job                                             |
-        | raea-sys-grab | src/take.rs       | 210   | the take's timeline                             |
-        | raea-sys-grab | tests/grab.rs     | 290   | the measures above, on the stand-in body        |
-        | raea-sys-grab | examples/strip.rs | 90    | a take drawn as an SVG filmstrip                |
 
     @done
     Scenario: HG5. A character in a scene takes a thing
@@ -124,14 +132,10 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       Then the engine works out each frame's pose and the thing's place, in a render and in live play alike
       And TypeScript reaches it as one native call (core/calls), typed, with the report per frame
       And the body's own motion is whatever the character was playing
-      And the plan:
-        | crate            | file                      | lines | job                                             |
-        | raea-sys-grab    | src/json.rs               | 120   | a frame of a take asked for as JSON             |
-        | sdk              | sdk/character/src/take.ts | 80    | take(): the call made, typed                    |
 
     @done
     Scenario: HG6a. Hands stay out of the scene's solids
-      # 11-14, built: body.rs `clear`, a take's `avoid` list. A wrist's place is moved the least that keeps the
+      # 11-14, built: trunk.rs `clear`, a take's `avoid` list. A wrist's place is moved the least that keeps the
       # wrist, the palm and the fingers' reach 2 cm clear of every solid named; the wrist's path arcs up 6 cm and
       # leaves a hold backing off its surface. With a table under a cup, no point of the hand is in the table at
       # any frame of the take, and keeping clear costs the hold under 6 mm. Seen on turbo: the hand comes over the
@@ -141,7 +145,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
 
     @done
     Scenario: HG7a. A low thing is taken by bending, the feet planted; and the body is told where to stand
-      # 11-14, built: body.rs `stoop` and `stand_for`. For hands that must go lower than 0.7 of an arm below the
+      # 11-14, built: trunk.rs `stoop` and `stand_for`. For hands that must go lower than 0.7 of an arm below the
       # shoulders, the hips come down and the trunk bends at the hips and along the spine, by as much as the hands have got along their reach, so the body rises again as the thing is
       # lifted. Leg IK keeps both ankles where they stood within 5 mm and the feet's turn. A box on the floor is
       # held within 2 cm; the hips come down over 30 cm and are back up with the box carried. `stand_for` gives
@@ -164,7 +168,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
     Scenario: HG5a. The rest of both sources, in Rust
       # 11-14, built. From Ik-Object-Holding: its Interactor is interact.rs `pick` (the nearest thing in a radius
       # that the eyes see past the scene's solids; the original takes the first collider found), and its head aim
-      # is body.rs `look` (neck two fifths, head the rest, 55 degrees at most), on through a take: the eyes go to
+      # is trunk.rs `look` (neck two fifths, head the rest, 55 degrees at most), on through a take: the eyes go to
       # the thing as the hands do. With HG2 and HG4 that is every script of the original that isn't Unity input or
       # animator glue. From SOMA-X: fit.rs `fit` is the analytical pass of its pose inversion on marks instead
       # of mesh vertices (joints refitted parents first, each aligned to what it carries; the root on its own
@@ -187,7 +191,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # 11-14, built. limits.rs is sdk/body's axes.ts and limits.ts in Rust: each joint's turn read as flex, side
       # and twist from the rest pose, the same ranges (13 roles, the right side mirrored), a turn brought inside
       # them, a pose's violations. Through a take every joint of both arms is inside its range and a frame that
-      # had to hold one says so (`limited`). body.rs `roomy`: when the solved pose puts the head's top, the neck
+      # had to hold one says so (`limited`). trunk.rs `roomy`: when the solved pose puts the head's top, the neck
       # or the chest within 9 cm of a solid in a take's `avoid`, the take is solved again with less bend and
       # lean and more squat (to 0.82 m of hips), a sixth at a time. With a table 38 cm in front and a box on the
       # floor between, none of the three is in the table at any frame and the hold is kept within 5 cm; with no
@@ -198,7 +202,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
 
     @done
     Scenario: HG5b. SOMA-X's hand prior on raea's fingers
-      # 11-14, built. prior.rs and data/soma_hand_prior.bin (12 KB; data/README.md has its source and licence):
+      # 11-14, built. raea-sys-body prior.rs and data/soma_hand_prior.bin (12 KB; data/README.md has its source and licence):
       # the left hand's 32-component model of real hand poses, cut to the fifteen finger joints raea has (the
       # metacarpals and fingertip ends left out; 99% of the first component is on the kept joints). SOMA's
       # turns are from its flat bind hand in the wrist's axes (fingers along +x, palm +z); each raea finger bone

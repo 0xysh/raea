@@ -6,7 +6,7 @@
 
 use glam::{Mat3, Quat, Vec3};
 
-use crate::rig::{Side, Skeleton};
+use raea_sys_body::rig::{Side, Skeleton, hand_rest};
 use crate::shape::Thing;
 
 /// where one hand holds a thing, in the thing's own frame
@@ -72,28 +72,6 @@ pub fn find_holds(thing: &Thing, holder: Vec3, o: HoldOptions) -> Grip {
     if (l.at - r.at).length() <= o.span { Grip::One(if o.hand == Side::L { l } else { r }) } else { Grip::Two(l, r) }
 }
 
-/// A hand's frame at rest, in the body's axes: along (wrist to the middle knuckle), the way the palm faces, and where
-/// the palm's skin is from the wrist.
-#[derive(Clone, Copy, Debug)]
-pub struct HandRest {
-    pub along: Vec3,
-    pub palm: Vec3,
-    pub mid: Vec3,
-}
-
-pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
-    let hand = skel.arm(s)?[2];
-    let knuckle = |f: &str| Some(skel.joints[skel.finger(f, s)?[0]].head);
-    let h = skel.joints[hand].head;
-    let reach = knuckle("middle")? - h;
-    let along = reach.normalize();
-    let line = knuckle("index")? - knuckle("pinky")?;
-    let across = (line - along * line.dot(along)).normalize();
-    let palm = if s == Side::L { along.cross(across) } else { across.cross(along) };
-    // the palm's middle: a little over half way to the knuckles, out to the skin
-    Some(HandRest { along, palm, mid: reach * 0.55 + palm * 0.012 })
-}
-
 /// The wrist's place and the hand's turn that lay the palm on a hold: the palm against the surface, the fingers
 /// pointing the way the holder faces, as near as the surface lets them.
 pub fn wrist_for(skel: &Skeleton, thing: &Thing, hold: &Hold, facing: Vec3) -> Option<(Vec3, Quat)> {
@@ -130,7 +108,7 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
     let hand = skel.arm(s)?[2];
     let rest = hand_rest(skel, s)?;
     let mut touch = Touch::default();
-    for (n, name) in crate::rig::FINGERS.iter().enumerate() {
+    for (n, name) in raea_sys_body::rig::FINGERS.iter().enumerate() {
         let js = skel.finger(name, s)?;
         let (thumb, thick) = (n == 0, if n == 0 { 0.010 } else { 0.008 });
         // the axis each joint bends about, at rest: the one that carries its bone toward the palm's side (the thumb's,

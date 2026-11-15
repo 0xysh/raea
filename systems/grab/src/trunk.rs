@@ -7,9 +7,9 @@
 
 use glam::{Quat, Vec3};
 
-use crate::arm::{ArmOptions, two_bone};
-use crate::hand::HandRest;
-use crate::rig::{Pose, Posed, Side, Skeleton};
+use raea_sys_body::arm::{ArmOptions, two_bone};
+use raea_sys_body::rig::HandRest;
+use raea_sys_body::rig::{Pose, Posed, Side, Skeleton};
 use crate::shape::Thing;
 
 /// how far below the shoulders, in arm lengths, the hands go before the body bends for them

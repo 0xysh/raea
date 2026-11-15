@@ -9,8 +9,7 @@ use std::sync::OnceLock;
 
 use glam::{Mat3, Quat, Vec3};
 
-use crate::hand::hand_rest;
-use crate::rig::{FINGERS, Pose, Side, Skeleton};
+use crate::rig::{FINGERS, Pose, Side, Skeleton, hand_rest};
 
 const JOINTS: usize = 15;
 const DIMS: usize = JOINTS * 3;

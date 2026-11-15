@@ -5,11 +5,11 @@
 use glam::{Quat, Vec3};
 use serde_json::{Value, json};
 
-use crate::body::stand_for;
-use crate::fit::{Mark, fit};
-use crate::prior::{coefficients, oddness, shape};
+use crate::trunk::stand_for;
+use raea_sys_body::fit::{Mark, fit};
+use raea_sys_body::prior::{coefficients, oddness, shape};
 use crate::hand::{Grip, HoldOptions, find_holds};
-use crate::rig::{Pose, Side, Skeleton};
+use raea_sys_body::rig::{Pose, Side, Skeleton};
 use crate::shape::{Solid, Thing};
 use crate::take::{Release, Take, perform};
 

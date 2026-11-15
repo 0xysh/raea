@@ -1,8 +1,8 @@
 //! The measures docs/hands.feature names, on the stand-in body.
 
 use glam::{Quat, Vec3};
-use raea_sys_grab::hand::hand_rest;
-use raea_sys_grab::rig::Posed;
+use raea_sys_body::rig::Posed;
+use raea_sys_body::*;
 use raea_sys_grab::*;
 
 /// a seeded random in [0, 1) (mulberry32, as sdk/body's tests use)
