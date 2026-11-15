@@ -137,11 +137,12 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
             let toward = if thumb { (skel.joints[hand].head + rest.mid + rest.palm * 0.05 - j.head).normalize() } else { rest.palm };
             bone.cross(toward).normalize_or(Vec3::X)
         };
-        let base = [turns[js[0]], turns[js[1]], turns[js[2]]];
+        let own = [turns[js[0]], turns[js[1]], turns[js[2]]];
+        let mut base = own;
         // each bone's own skin, where the body has samples of it (from the bone's head, at rest)
         let skin = js.map(|j| skel.skin_of(j).map(|x| x.at - skel.joints[j].head).collect::<Vec<Vec3>>());
         // the least clearance of bone k's skin with the finger bent by `bend` (radians a joint)
-        let clear = |bend: [f32; 3], k: usize| {
+        let clear = |base: &[Quat; 3], bend: [f32; 3], k: usize| {
             let (mut pp, mut pr) = wrist;
             let mut least = f32::MAX;
             for i in 0..=k {
@@ -164,10 +165,25 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
         // each joint starts opened and bends until its bone meets the surface (the last step halved down to the
         // contact), so the finger wraps whatever is there; the joints after it wait opened, out of the way
         let open = OPEN[thumb as usize].map(f32::to_radians);
+        // a thumb that is in the thing even opened is spread out from the palm (turned about the hand's length, the
+        // less of the two ways, up to 60 degrees) until it is clear: round a cup, not through it
+        if thumb {
+            let worst = |b: &[Quat; 3]| (0..3).map(|k| clear(b, open, k)).fold(f32::MAX, f32::min);
+            if worst(&base) < 0.0 {
+                let spread = |by: f32| {
+                    let mut b = own;
+                    b[0] = (own[0] * Quat::from_axis_angle(rest.along, by.to_radians())).normalize();
+                    b
+                };
+                if let Some(by) = (1..=12).flat_map(|a| [a as f32 * 5.0, a as f32 * -5.0]).find(|by| worst(&spread(*by)) >= 0.0) {
+                    base = spread(by);
+                }
+            }
+        }
         let mut bend = open;
         for k in 0..3 {
             let most = BEND[thumb as usize][k].to_radians();
-            let start = clear(bend, k);
+            let start = clear(&base, bend, k);
             if start < 0.0 {
                 // in the thing even opened: nothing a curl can fix; said, not hidden
                 touch.inside = touch.inside.max(-start);
@@ -181,7 +197,7 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
             while lo < most {
                 let hi = (lo + step).min(most);
                 bend[k] = hi;
-                let gap = clear(bend, k);
+                let gap = clear(&base, bend, k);
                 if gap < 0.0 {
                     hit = Some(hi);
                     break;
@@ -196,7 +212,7 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
                     for _ in 0..8 {
                         let mid = (lo + hi) / 2.0;
                         bend[k] = mid;
-                        if clear(bend, k) < 0.0 { hi = mid } else { lo = mid }
+                        if clear(&base, bend, k) < 0.0 { hi = mid } else { lo = mid }
                     }
                     bend[k] = lo;
                     touch.on[n] = true;
@@ -210,7 +226,9 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
             }
         }
         for k in 0..3 {
-            turns[js[k]] = (base[k] * Quat::from_axis_angle(axis(k), bend[k] * close.clamp(0.0, 1.0))).normalize();
+            // (from the pose's own turn, so a spread thumb eases out as the hand shuts)
+            let shut = (base[k] * Quat::from_axis_angle(axis(k), bend[k])).normalize();
+            turns[js[k]] = own[k].slerp(shut, close.clamp(0.0, 1.0));
         }
     }
     Some(touch)

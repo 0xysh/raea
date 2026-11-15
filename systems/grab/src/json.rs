@@ -2,33 +2,18 @@
 //! makes each frame. The body's own motion comes as its poses at the times the take reads it (the frame's, the
 //! grab's, the release's); the answer is the pose to draw and where the thing is.
 
-use glam::{Quat, Vec3};
+use glam::Quat;
+use raea_sys_body::json::{num, quat, vec3};
 use serde_json::{Value, json};
 
 use crate::trunk::stand_for;
-use raea_sys_body::fit::{Mark, fit};
-use raea_sys_body::prior::{coefficients, oddness, shape};
 use crate::hand::{Grip, Hold, HoldOptions, find_holds};
 use raea_sys_body::rig::{Pose, Side, Skeleton};
 use raea_sys_body::shape::{Solid, Thing};
 use crate::take::{Key, Release, Take, perform};
 
 pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; holds?: { side: \"L\" | \"R\"; at: [number, number, number]; normal: [number, number, number]; along?: [number, number, number]; shape?: number[] }[]; path?: { t: number; carry: [number, number, number]; tilt?: [number, number, number, number] }[]; weight?: number; pass?: number; slide?: { t: number; at: [number, number, number]; turn?: [number, number, number, number] }[]; leave?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
-pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number; limited: boolean; stand: { at: [number, number, number]; yaw: number } }";
-
-fn num(v: &Value, what: &str) -> Result<f32, String> {
-    v.as_f64().map(|n| n as f32).ok_or_else(|| format!("character.take: {what} isn't a number"))
-}
-
-fn vec3(v: &Value, what: &str) -> Result<Vec3, String> {
-    let a = v.as_array().filter(|a| a.len() == 3).ok_or_else(|| format!("character.take: {what} isn't [x, y, z]"))?;
-    Ok(Vec3::new(num(&a[0], what)?, num(&a[1], what)?, num(&a[2], what)?))
-}
-
-fn quat(v: &Value, what: &str) -> Result<Quat, String> {
-    let a = v.as_array().filter(|a| a.len() == 4).ok_or_else(|| format!("character.take: {what} isn't [x, y, z, w]"))?;
-    Ok(Quat::from_xyzw(num(&a[0], what)?, num(&a[1], what)?, num(&a[2], what)?, num(&a[3], what)?).normalize())
-}
+pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number; limited: boolean; stand: { at: [number, number, number]; yaw: number }; reach: { ok: boolean; move: number } }";
 
 fn solid(v: &Value) -> Result<Solid, String> {
     if !v["ball"].is_null() {
@@ -138,6 +123,8 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
     let f = perform(&skel, &own, &take, num(&v["t"], "t")?);
     // where the body would stand to take it, for a scene that walks it there first
     let (stand, facing) = stand_for(&thing, own(start).root);
+    // whether the body can take it from where it stands when it starts to reach: at the grab, every wrist on its hold
+    let in_reach = perform(&skel, &own, &take, take.grab).miss < 0.02;
     let turns: Vec<[f32; 4]> = f.pose.turns.iter().map(|q| q.to_array()).collect();
     Ok(json!({
         "pose": { "root": f.pose.root.to_array(), "turns": turns },
@@ -148,57 +135,6 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
         "moved": f.moved,
         "limited": f.limited,
         "stand": { "at": stand.to_array(), "yaw": facing },
+        "reach": { "ok": in_reach, "move": if in_reach { 0.0 } else { (stand - own(start).root).length() } },
     }))
-}
-
-pub const FIT_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; marks: { joint: string; offset?: [number, number, number]; at: [number, number, number]; weight?: number }[]; from?: { root: [number, number, number]; turns: [number, number, number, number][] }; passes?: number }";
-pub const FIT_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; miss: number }";
-
-/// `character.fit`: a pose fitted to points of the body seen somewhere (fit.rs).
-pub fn fit_json(v: &Value) -> Result<Value, String> {
-    let skel = Skeleton::from_value(v)?;
-    let mut from = skel.rest();
-    if !v["from"].is_null() {
-        from.root = vec3(&v["from"]["root"], "from.root")?;
-        for (slot, turn) in from.turns.iter_mut().zip(v["from"]["turns"].as_array().into_iter().flatten()) {
-            *slot = quat(turn, "from's turn")?;
-        }
-    }
-    let mut marks = Vec::new();
-    for m in v["marks"].as_array().ok_or("character.fit: no marks")? {
-        let name = m["joint"].as_str().ok_or("character.fit: a mark names no joint")?;
-        let joint = skel.joint(name).ok_or_else(|| format!("character.fit: the body has no joint {name}"))?;
-        let offset = if m["offset"].is_null() { Vec3::ZERO } else { vec3(&m["offset"], "a mark's offset")? };
-        let weight = if m["weight"].is_null() { 1.0 } else { num(&m["weight"], "a mark's weight")? };
-        marks.push(Mark { joint, offset, at: vec3(&m["at"], "a mark's at")?, weight });
-    }
-    let passes = v["passes"].as_u64().unwrap_or(8) as usize;
-    let (pose, miss) = fit(&skel, &from, &marks, passes);
-    let turns: Vec<[f32; 4]> = pose.turns.iter().map(|q| q.to_array()).collect();
-    Ok(json!({ "pose": { "root": pose.root.to_array(), "turns": turns }, "miss": miss }))
-}
-
-pub const HAND_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; side: \"L\" | \"R\"; z?: number[]; pose?: { root: [number, number, number]; turns: [number, number, number, number][] } }";
-pub const HAND_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; z: number[]; odd: number }";
-
-/// `character.hand`: a hand shaped by the hand prior's coefficients (prior.rs) on a pose, and that hand read back:
-/// its coefficients and how odd it is.
-pub fn hand_json(v: &Value) -> Result<Value, String> {
-    let skel = Skeleton::from_value(v)?;
-    let side = if v["side"] == "L" { Side::L } else { Side::R };
-    let mut pose = skel.rest();
-    if !v["pose"].is_null() {
-        pose.root = vec3(&v["pose"]["root"], "pose.root")?;
-        for (slot, turn) in pose.turns.iter_mut().zip(v["pose"]["turns"].as_array().into_iter().flatten()) {
-            *slot = quat(turn, "the pose's turn")?;
-        }
-    }
-    if let Some(z) = v["z"].as_array() {
-        let z = z.iter().map(|n| num(n, "a number of z")).collect::<Result<Vec<f32>, String>>()?;
-        shape(&skel, &mut pose.turns, side, &z).ok_or("character.hand: the body has no hand on that side")?;
-    }
-    let (z, _) = coefficients(&skel, &pose, side).ok_or("character.hand: the body has no hand on that side")?;
-    let odd = oddness(&skel, &pose, side).unwrap_or(0.0);
-    let turns: Vec<[f32; 4]> = pose.turns.iter().map(|q| q.to_array()).collect();
-    Ok(json!({ "pose": { "root": pose.root.to_array(), "turns": turns }, "z": z, "odd": odd }))
 }

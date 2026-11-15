@@ -80,6 +80,9 @@ export interface Taken {
   /** where the body would stand to take the thing, and the turn about the vertical that faces it: walk it there first
    * when the thing is out of reach */
   stand: { at: Vec3; yaw: number };
+  /** whether the body can take the thing from where it stands when it starts to reach, and if not how far it has to
+   * move (to `stand`), metres */
+  reach: { ok: boolean; move: number };
 }
 
 /** The body and the thing at `t` seconds of a take. */

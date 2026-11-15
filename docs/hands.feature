@@ -63,7 +63,8 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab | src/interact.rs     | 40    | which thing is taken                                             |
         | raea-sys-grab | src/take.rs         | 460   | the take's timeline, each hand's part, the frame's solve          |
         | raea-sys-grab | src/grip.rs         | 110   | the hand's lie at its grab, the swivel, an arm past its ranges   |
-        | raea-sys-grab | src/json.rs         | 190   | character.take, character.fit, character.hand                    |
+        | raea-sys-grab | src/json.rs         | 150   | character.take                                                   |
+        | raea-sys-body | src/json.rs         | 90    | character.fit, character.hand, the readers the calls share       |
         | raea-sys-grab | tests/grab.rs       | 470   | the hands' measures, on the stand-in body                        |
         | raea-sys-grab | tests/body.rs       | 150   | limits, the body out of solids, the hand prior                   |
         | raea-sys-grab | tests/use.rs        | 230   | passing, sliding, wind-up, a turned body, keeping out of solids  |
@@ -342,6 +343,15 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # floor take (hold 83 mm off as the box is pushed clear of the squatting body, fingers 25 mm in it, thighs
       # 18 mm in it); the mug (fingers 25 mm in it, a thumb that starts inside it); fingers 9 to 11 mm in the
       # table as a hand leaves; body-joint jumps of 360 to 700; `limited` on about 100 frames a take.
+      # Fourth run, after: a limb's middle joint flexing about its own axis (the first bone turned in its socket),
+      # which ended the false limits (0 frames in three takes, 31 to 76 in the others); the body following the
+      # hands down; the knees opening for a low thing between the feet; a thumb that is in the thing spread out
+      # from the palm until it is clear; a leaving hand kept on its cleared path for longer. Skin in the table 0
+      # mm in four takes (9 in the floor take); finger jumps 67 to 242. character.take now answers `reach`:
+      # whether the body can take the thing from where it stands, and how far it must move if not. Still wrong:
+      # the floor take (hold 69 mm off, fingers 26 mm in the box, thighs 11 mm); the mug (fingers 26 mm in it);
+      # body-joint jumps of 360 to 640. Shown on turbo in the Character SDK project (compositions/take_turbo.tsx),
+      # rendered before this run.
       Given the six takes of tools/hands-audit on a clean body with real fingers
       Then no skin is in the thing beyond a pad's give (2 mm), none in the scene or the body
       And every finger meant to hold has its pad on the thing, by a grip chosen for the thing's size and shape

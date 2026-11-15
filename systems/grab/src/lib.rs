@@ -21,6 +21,7 @@ pub mod trunk;
 
 pub use hand::{Grip, Hold, HoldOptions, Touch, curl, find_holds, wrist_for};
 pub use interact::pick;
-pub use json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, TAKE_ANSWER, TAKE_ARGS, fit_json, hand_json, take_json};
+pub use json::{TAKE_ANSWER, TAKE_ARGS, take_json};
+pub use raea_sys_body::json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, fit_json, hand_json};
 pub use take::{Frame, Key, Phase, Release, Take, perform};
 pub use trunk::{clear, hand_points, look, own_solids, roomy, spread_for, stand_for, stoop, torso};

@@ -98,7 +98,7 @@ pub struct Frame {
 
 const GRAVITY: f32 = 9.81;
 /// how long the hands take to go back to the body's own motion after letting go, seconds
-const AWAY: f32 = 0.5;
+const AWAY: f32 = 0.6;
 /// how long the fingers take to shut, ending at the grab, seconds
 const SHUT: f32 = 0.25;
 /// how long a throw's wind-up is, ending at the release, seconds
@@ -466,7 +466,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     let of_arm = |name: &str, side: &str| name.ends_with(side) && !["thigh", "calf", "foot", "ball"].iter().any(|leg| name.starts_with(leg));
     let sides: Vec<String> = holds.iter().map(|h| format!("_{}", h.0.hold.side.sx())).collect();
     for (&(part, _, away, ..), side) in holds.iter().zip(&sides) {
-        let w = smooth(span(t, part.start, part.start + 0.15)) * (1.0 - smooth(span(away, 0.25, 1.0)));
+        let w = smooth(span(t, part.start, part.start + 0.15)) * (1.0 - smooth(span(away, 0.45, 1.0)));
         most = most.max(w);
         for (i, joint) in skel.joints.iter().enumerate() {
             if of_arm(&joint.name, side) {
