@@ -395,6 +395,29 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         target's texture as, before the cameras that read it, in the order the app drew them
       And a fullscreen quad drawn into a target (a GPGPU pass, a blur) is that quad's shader run into the image
       And in-fbo, in-pingpong (a GPUComputationRenderer wave) and in-reflector: SSIM at least 0.92 against three.js
+      # The plan (r3f-gpu, 11-15). The engine already draws more than one camera (the camera rows cam, cam1, ...: each
+      # with its order, clear and layers, runtime/look camera.rs, raea-sys-frame camera_pass) and names images cameras
+      # draw into ("render:NAME:WxH", runtime/plugins fields.rs, RenderImages), which a three shader's texture reads.
+      # What's missing is a camera row drawing into one of them, and a standard material's map reading one.
+      #   R3F23a. Engine: a camera row's `target` ("render:NAME:WxH", or ":float" after it for an Rgba16Float image a
+      #     GPGPU pass needs) puts the camera on that image (RenderTarget::Image), cleared to its own `bg` (rgba) or not
+      #     (`clear` none), not tone-mapped (three writes a target linear), drawing only its `layers`; `order` puts it
+      #     before the cameras that read it. A mesh row's maps read "render:NAME" as that image (maps.rs through
+      #     RenderImages). raea/3d's cameras take `target` and `layers`.
+      #   R3F23b. sdk/r3f: session.ts's `render` while a target is set records a pass {target, scene, camera, clear}
+      #     in draw order (gl.__raea.passes, emptied as each frame steps; agreed with lane r3f, 11-15). targets.ts
+      #     keeps the CPU passes it does (<ContactShadows>' depth and blur); every other pass becomes its scene's parts
+      #     (scene.ts's walk) on a layer of its own, and its camera as a camera part with target
+      #     "render:<target uuid>:WxH" (":float" for a Float or HalfFloat target), order before the scene's camera by
+      #     draw order, clear the pass scene's background or the renderer's clear colour. A texture whose source is a
+      #     target (srcOf, a material's map, a ShaderMaterial's sampler uniform) is "render:<target uuid>".
+      #   R3F23c. Ping-pong and feedback: two targets swapped frame by frame are two cameras each drawn on its frames
+      #     (`active` false on the others) and a texture that names the frame's; the images last from frame to frame.
+      #     A render that starts past frame 0 (a still) steps the passes from frame 0 as R3F22 steps computes (shared
+      #     with lane r3f-tsl).
+      #   R3F23d. in-fbo (the audit's fbo probe: a torus knot drawn into a useFBO shown on a plane), in-pingpong
+      #     (GPUComputationRenderer's wave), in-reflector (<MeshReflectorMaterial>: its mirrored camera's pass, its
+      #     blur, and its material's projective read; the read is an onBeforeCompile patch, so it lands with R3F24).
 
     Scenario: R3F24. onBeforeCompile patches
       Given a material patched by onBeforeCompile (drei's MeshWobbleMaterial and MeshDistortMaterial, a patched
