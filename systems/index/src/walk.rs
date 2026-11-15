@@ -37,10 +37,25 @@ fn skipped(name: &str, depth: usize) -> bool {
     SKIP.contains(&name) && (name != "Library" || depth <= 1)
 }
 
-/// Every picture and video under `root`, `on` called with each batch of `every` as they're found
-pub fn walk(root: &Path, every: usize, on: &mut dyn FnMut(Vec<Found>)) -> u64 {
+/// Whether a file's bytes are only in the cloud (iCloud Drive with Optimise Mac Storage, or another File Provider):
+/// it lists at its full size, but reading it downloads the original, so the fast pass leaves it until it's on this Mac
+#[cfg(target_os = "macos")]
+fn cloud_only(m: &std::fs::Metadata) -> bool {
+    use std::os::macos::fs::MetadataExt;
+    const SF_DATALESS: u32 = 0x4000_0000;
+    m.st_flags() & SF_DATALESS != 0
+}
+
+#[cfg(not(target_os = "macos"))]
+fn cloud_only(_: &std::fs::Metadata) -> bool {
+    false
+}
+
+/// Every picture and video under `root`, `on` called with each batch of `every` as they're found; says how many it
+/// found and how many it left out as only in the cloud (cloud_only)
+pub fn walk(root: &Path, every: usize, on: &mut dyn FnMut(Vec<Found>)) -> (u64, u64) {
     let mut batch = Vec::with_capacity(every);
-    let mut n = 0u64;
+    let (mut n, mut cloud) = (0u64, 0u64);
     let it = walkdir::WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| e.depth() == 0 || !skipped(&e.file_name().to_string_lossy(), e.depth()));
     for e in it.flatten() {
         // a link to a file counts as the file (a link to a folder isn't followed: no loops)
@@ -54,6 +69,10 @@ pub fn walk(root: &Path, every: usize, on: &mut dyn FnMut(Vec<Found>)) -> u64 {
             continue;
         }
         if m.len() < 1024 {
+            continue;
+        }
+        if cloud_only(&m) {
+            cloud += 1;
             continue;
         }
         let secs = |t: std::io::Result<std::time::SystemTime>| t.ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64);
@@ -75,5 +94,5 @@ pub fn walk(root: &Path, every: usize, on: &mut dyn FnMut(Vec<Found>)) -> u64 {
     if !batch.is_empty() {
         on(batch);
     }
-    n
+    (n, cloud)
 }

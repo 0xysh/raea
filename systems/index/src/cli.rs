@@ -97,6 +97,9 @@ fn add(f: &Flags, home: &std::path::Path) -> Result<()> {
             }
             if !f.json {
                 println!("{}: {} found ({} new), {} searchable, {} failed; {:.0} a second over {:.1} s", root.display(), l.found, l.added, p.done, p.failed, p.per_sec, p.seconds);
+                if l.cloud > 0 {
+                    println!("  {} only in iCloud, left out: reading them would download each original", l.cloud);
+                }
             }
         }
         #[cfg(not(target_vendor = "apple"))]

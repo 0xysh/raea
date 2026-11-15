@@ -51,6 +51,9 @@ pub struct Progress {
     pub seconds: f64,
     /// the items finished since the last report, newest last, for the wall of thumbnails
     pub newest: Vec<i64>,
+    /// pictures and videos the listing left out because their bytes are only in iCloud (walk.rs cloud_only): reading
+    /// one would download its original
+    pub cloud: u64,
     pub stage: &'static str,
 }
 
@@ -99,31 +102,31 @@ pub struct Listed {
     pub added: u64,
     /// items whose file changed since the last listing: their old rows are gone
     pub changed: u64,
+    /// items left out as only in iCloud (Progress::cloud)
+    pub cloud: u64,
 }
 
 /// Lists a folder or a drive into the index: new files added, changed ones put back in line
 pub fn list_folder(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
     let label = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| root.display().to_string());
-    let each = |f: &mut dyn FnMut(Vec<Found>)| {
-        walk::walk(root, 2000, f);
-        Ok(())
-    };
+    let each = |f: &mut dyn FnMut(Vec<Found>)| Ok(walk::walk(root, 2000, f).1);
     list_source(store, ("folder", &root.to_string_lossy(), &label), each, on)
 }
 
 /// Lists Apple Photos into the index (photos.rs): its root is `photos:`, each item an asset
 #[cfg(target_vendor = "apple")]
 pub fn list_photos(store: &mut Store, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
-    list_source(store, ("photos", PHOTOS, "Apple Photos"), |f| photos::list(2000, f).map_err(anyhow::Error::msg), on)
+    list_source(store, ("photos", PHOTOS, "Apple Photos"), |f| photos::list(2000, f).map(|_| 0).map_err(anyhow::Error::msg), on)
 }
 
-/// Lists a source (its kind, root and label) as `each` hands its items over a batch at a time
-fn list_source(store: &mut Store, (kind, root, label): (&str, &str, &str), each: impl FnOnce(&mut dyn FnMut(Vec<Found>)) -> Result<()>, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
+/// Lists a source (its kind, root and label) as `each` hands its items over a batch at a time and then says how many
+/// it left out as only in iCloud
+fn list_source(store: &mut Store, (kind, root, label): (&str, &str, &str), each: impl FnOnce(&mut dyn FnMut(Vec<Found>)) -> Result<u64>, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
     let source = store.source(kind, root, label)?;
     let started = Instant::now();
     let mut l = Listed { source: source.clone(), ..Listed::default() };
     let mut err = None;
-    each(&mut |batch| {
+    l.cloud = each(&mut |batch| {
         l.found += batch.len() as u64;
         match store.list(&source, &batch) {
             Ok((a, c)) => {
@@ -138,6 +141,9 @@ fn list_source(store: &mut Store, (kind, root, label): (&str, &str, &str), each:
     })?;
     if let Some(e) = err {
         return Err(e);
+    }
+    if l.cloud > 0 {
+        on(&Progress { source: source.clone(), found: l.found, cloud: l.cloud, stage: "listing", seconds: started.elapsed().as_secs_f64(), ..Progress::default() });
     }
     Ok(l)
 }

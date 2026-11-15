@@ -84,6 +84,10 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
       Then iCloud Drive is a folder source (~/Library/Mobile Documents/com~apple~CloudDocs); a file kept only in iCloud
         is indexed from its Quick Look thumbnail (QLThumbnailGenerator) without downloading it, marked "in iCloud", and
         downloaded only when opened
+      Status 11-15: until the Quick Look path, a file kept only in iCloud (SF_DATALESS) is left out and counted
+        (walk.rs cloud_only; Progress.cloud, and the CLI says "N only in iCloud, left out"). Reading one downloads its
+        original: on this Mac all 3,849 iCloud Drive files were cloud-only, 2,245 of them pictures and videos, and
+        switching iCloud Drive on would have pulled every one down
 
     Scenario: IX8. Google Drive
       Then through the Drive connection (raea-api src/connect; Drive is live since 11-11), raea-api lists the Drive's
