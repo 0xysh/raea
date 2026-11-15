@@ -7,6 +7,7 @@
 #[cfg(target_vendor = "apple")]
 pub mod apple;
 pub mod cli;
+pub mod export;
 #[cfg(target_vendor = "apple")]
 pub mod cloud;
 #[cfg(target_vendor = "apple")]

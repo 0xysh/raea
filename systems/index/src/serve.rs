@@ -10,6 +10,8 @@
 //!   {"id":5,"op":"remove","source":ID}                         (or the folder's path)
 //!   {"id":6,"op":"stop"}                                       the run going now, and the ones waiting
 //!   {"id":7,"op":"warm"}                                       the text tower loaded before the first search
+//!   {"id":8,"op":"rows","after":-1,"limit":500}                searchable rows after a row, with their vectors (IX10)
+//! A search with "vector": true also answers its query's vector (export.rs: base64 of f16), to ask raea's cloud too.
 //! Events: ready {home, model}, progress (lib.rs Progress: stage listing|embedding|done|stopped, newest item ids),
 //! error {root, message}. A thumbnail is home/thumbs/<id % 256>/<id>.jpg.
 
@@ -50,7 +52,7 @@ impl Shared {
 }
 
 enum Find {
-    Words { id: Value, q: String, k: usize, source: Option<String> },
+    Words { id: Value, q: String, k: usize, source: Option<String>, vector: bool },
     Like { id: Value, item: i64, k: usize, source: Option<String> },
     Warm { id: Value },
 }
@@ -127,8 +129,14 @@ fn answer(sh: &Shared, store: &mut Store, jobs: &mpsc::Sender<PathBuf>, finds: &
         }
         "search" => {
             let q = s("q").filter(|q| !q.trim().is_empty()).ok_or_else(|| anyhow!("search needs words (q)"))?;
-            finds.send(Find::Words { id, q, k, source: s("source") }).map_err(|_| anyhow!("the searcher stopped"))?;
+            let vector = ask.get("vector").and_then(Value::as_bool).unwrap_or(false);
+            finds.send(Find::Words { id, q, k, source: s("source"), vector }).map_err(|_| anyhow!("the searcher stopped"))?;
             Ok(None)
+        }
+        "rows" => {
+            let after = ask.get("after").and_then(Value::as_i64).unwrap_or(-1);
+            let limit = ask.get("limit").and_then(Value::as_u64).unwrap_or(500).clamp(1, 5000) as usize;
+            Ok(Some(crate::export::rows_after(store, MODEL, after, limit)?))
         }
         "similar" => {
             let item = ask.get("item").and_then(Value::as_i64).ok_or_else(|| anyhow!("similar needs an item"))?;
@@ -162,7 +170,7 @@ fn answer(sh: &Shared, store: &mut Store, jobs: &mpsc::Sender<PathBuf>, finds: &
             sh.stop.store(true, Ordering::Relaxed);
             Ok(Some(json!({ "ok": true })))
         }
-        op => anyhow::bail!("no op {op:?}: add, search, similar, warm, status, remove, stop"),
+        op => anyhow::bail!("no op {op:?}: add, search, similar, warm, status, remove, stop, rows"),
     }
 }
 
@@ -241,13 +249,17 @@ fn find(sh: &Shared, dir: &Path, finds: mpsc::Receiver<Find>) {
             }
             match f {
                 Find::Warm { .. } => Ok(json!({ "ok": true, "load_ms": tower(&mut text)?, "rows": rows.live() })),
-                Find::Words { q, k, source, .. } => {
+                Find::Words { q, k, source, vector, .. } => {
                     let load = tower(&mut text)?;
                     let t = Instant::now();
                     let v = text.as_mut().expect("loaded").embed(&q)?;
                     let words = t.elapsed().as_secs_f64() * 1e3;
                     let hits = search::search(&store, &rows, &v, k, source.as_deref())?;
-                    Ok(json!({ "hits": hits, "rows": rows.live(), "ms": { "load": load, "words": words, "search": t.elapsed().as_secs_f64() * 1e3 - words } }))
+                    let mut out = json!({ "hits": hits, "rows": rows.live(), "ms": { "load": load, "words": words, "search": t.elapsed().as_secs_f64() * 1e3 - words } });
+                    if vector {
+                        out["vector"] = crate::export::vector_b64(&v).into();
+                    }
+                    Ok(out)
                 }
                 Find::Like { item, k, source, .. } => {
                     let v = rows.vector(item).ok_or_else(|| anyhow!("item {item} isn't searchable yet"))?;
