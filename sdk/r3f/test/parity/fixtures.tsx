@@ -7,6 +7,7 @@ import { ContactShadows, Environment, Float, Sky, Text, useGLTF } from "@react-t
 import { useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { TARGET_INPUTS } from "./targets";
+import { PATCHED_INPUTS } from "./patched";
 import { MeshBasicNodeMaterial } from "three/webgpu";
 import * as TSLTyped from "three/tsl";
 import { composeEffects, configureFontTexture, createText, parseFont, scramble, wipe } from "lettra/three";
@@ -120,6 +121,8 @@ const clipPlane = new THREE.Plane(new THREE.Vector3(-0.3, -1, 0.2).normalize(), 
 export const INPUTS: Record<string, InputCase> = {
   // render targets an app draws into itself, drawn on raea's GPU (R3F23): test/parity/targets.tsx
   ...TARGET_INPUTS,
+  // materials patched by onBeforeCompile, three's own program with the patch (R3F24): test/parity/patched.tsx
+  ...PATCHED_INPUTS,
   instanced: {
     canvas: { camera: { position: [0, 3.2, 4.2], fov: 45 } },
     frame: 12,

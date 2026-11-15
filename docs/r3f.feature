@@ -488,6 +488,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         target raea draws on its GPU (flipsY, onGpu), 0.9397 (0.9125 before); in-tsl-lit, in-lettra, in-tslpost and
         in-tslpost2 unchanged, in-lettrafx 0.9890 (0.9855 on main without it, its last glyph mid-wipe narrower)
 
+    @done
     Scenario: R3F23. Render targets are drawn on the GPU
       Given what an app draws into a render target itself (`gl.setRenderTarget(t); gl.render(scene, camera)`, drei's
         useFBO, <RenderTexture>, <MeshReflectorMaterial>, <MeshPortalMaterial>, three's GPUComputationRenderer, a
@@ -547,13 +548,39 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       # on maps and in shaders). R3F23d: in-fbo 0.9941 and in-pingpong 0.9949 against three.js at frame 12, both in
       # tools/parity.sh; the full list of 38 passes. Left: in-reflector, whose material's projective read is an
       # onBeforeCompile patch (R3F24).
+      # Status (11-15, done): in-reflector 0.9256 (test/parity/patched.tsx, in tools/parity.sh) with R3F24's patched
+      # program. Its mirrored camera copies the screen camera's projection into a camera of its own (fov 50, aspect 1 as
+      # made), so a pass camera's lens is now its projection matrix's (passes.ts lensOf: fov, and its aspect where that
+      # isn't the target's shape), kept by the engine whatever the image's shape (a rendercam's `aspect`, matchmove's
+      # OffAxis). What's left of the gap is the floor, which raea lights lighter than three wherever it is that dark: a
+      # plain MeshStandardMaterial of the patch's colour reads (11, 12, 13) against three's (6, 7, 9), as the reflector does.
 
+    @done
     Scenario: R3F24. onBeforeCompile patches
       Given a material patched by onBeforeCompile (drei's MeshWobbleMaterial and MeshDistortMaterial, a patched
         MeshStandardMaterial's vertex displacement)
       When raea draws it
       Then the patched GLSL is what runs: three's program for that material with the patch applied, translated as R3F11's
       And in-patched: SSIM at least 0.92 against three.js
+      Status (11-15): built. A MeshStandardMaterial or MeshPhysicalMaterial with an onBeforeCompile of its own is three's
+        ShaderLib program handed to it as three hands it (src/input/patched.ts): the material's defines and cloned
+        uniforms, patched once a program (again when its version or customProgramCacheKey changes, as three recompiles),
+        so a uniform the patch shares (drei's time) or one an app keeps from the patch (userData.shader) is read each
+        frame; the material's own values refreshed into it each frame as three's renderer does; the defines three's
+        WebGLProgram puts in front for its maps (map, alpha, emissive, roughness, metalness, normal, bump and
+        displacement), sides, vertex colours and alpha test, and its light counts at 0. Its lighting is Bevy's, as a lit
+        TSL material's is (R3F21): the fragment is cut at <lights_physical_fragment> and writes base, normal and
+        roughness, emission and metalness, and the point in world space to four outputs, which raea-sys-three-shader's
+        lit GLSL stage returns as its surface (glsl.rs Source lit). A patch past the cut (the light, the output colour)
+        is named once and left out; so are aoMap and lightMap, and a physical material's sheen, clearcoat and
+        transmission. in-patched 0.9717 (drei's MeshWobbleMaterial and MeshDistortMaterial and an app's own waves kept
+        through userData.shader, lit by ambient and a sun) and in-reflector 0.9256 (R3F23), both in tools/parity.sh, and
+        the full list of 41 passes, every other case as it was. On
+        the way: the white picture a ShaderMaterial gets for a texture with no picture (shader.ts WHITE) was a broken
+        PNG (its data cut short, its CRC wrong), so every material given it was refused and drawn in its colour; now a
+        decoding one, tested. Tests: test/patched.test.ts (the patched program, patched once, its uniforms each frame,
+        maps, a patch past the lights named), glsl.rs a_lit_stage_returns_its_surface, test/shader.test.ts (both
+        stand-in pictures decode).
 
     Scenario: R3F25. Post-processing: three's TSL passes and postprocessing's other effects
       Given three/webgpu's PostProcessing (`pass(scene, camera)` with bloom, GTAO, SSR, TRAA, DOF, film, ... nodes) or

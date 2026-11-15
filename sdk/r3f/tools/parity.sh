@@ -25,6 +25,9 @@ CASES+=(in-post2:6 in-post3:6)
 CASES+=(in-tslpost:6 in-tslpost2:6)
 # render targets an app draws itself, on raea's GPU: a useFBO, and GPUComputationRenderer's ping-pong (test/parity/targets.tsx, R3F23)
 CASES+=(in-fbo:12 in-pingpong:12)
+# materials patched by onBeforeCompile (drei's wobble, distort and reflector, an app's waves): three's own program with
+# the patch, lit by raea (test/parity/patched.tsx, R3F24)
+CASES+=(in-patched:12 in-reflector:12)
 [ -z "${R3F_CASES:-}" ] || read -ra CASES <<<"$R3F_CASES"
 mkdir -p "$OUT"
 for c in "${CASES[@]}"; do
