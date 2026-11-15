@@ -362,7 +362,8 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # the fingers round it across its length; stood on end it is taken by its side), with three of five
       # fingers on it on the stand-in body; and raea/character's `fetch`, which takes a thing as asked when it
       # is in reach and otherwise walks the body to the take's standing place first (walkUp) and puts every
-      # time of the take off until it arrives. `fetch` is written and type-checked by use only: not rendered.
+      # time of the take off until it arrives. `fetch` was then rendered on turbo with a walk capture retargeted to it (ACCAD Male2 B3): the body walks 1.5 m
+      # up to a table, stands where the take says to, and takes a cup; the feet slide as the walk settles.
       # The floor take's scenario was itself impossible, which several rounds had been fighting: the box stood on
       # the body's toes (toe skin 11 mm in it at rest) with a solid table 38 cm ahead, 17 cm of floor for a 24 cm
       # box. Set a forearm's length in front of the feet, the table a top with room under it: the hold is kept
