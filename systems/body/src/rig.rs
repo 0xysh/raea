@@ -222,8 +222,12 @@ pub fn rename(name: &str, to_soma: bool) -> Option<String> {
     if let Some(n) = pick(&TRUNK, name) {
         return Some(n.to_string());
     }
-    let cut = |l: &str, r: &str| if to_soma { name.strip_suffix(l).map(|b| (b, true)).or_else(|| name.strip_suffix(r).map(|b| (b, false))) } else { name.strip_prefix(l).map(|b| (b, true)).or_else(|| name.strip_prefix(r).map(|b| (b, false))) };
-    let (base, left) = if to_soma { cut("_l", "_r")? } else { cut("Left", "Right")? };
+    let strip = |side: &str| if to_soma { name.strip_suffix(side) } else { name.strip_prefix(side) };
+    let (base, left) = match if to_soma { (strip("_l"), strip("_r")) } else { (strip("Left"), strip("Right")) } {
+        (Some(base), _) => (base, true),
+        (_, Some(base)) => (base, false),
+        _ => return None,
+    };
     let sided = |n: &str| if to_soma { format!("{}{n}", if left { "Left" } else { "Right" }) } else { format!("{n}_{}", if left { "l" } else { "r" }) };
     if let Some(n) = pick(&LIMB, base) {
         return Some(sided(n));
