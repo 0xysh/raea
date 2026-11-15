@@ -24,18 +24,30 @@ pub(crate) struct ViewBox(pub(crate) Option<[u32; 4]>);
 /// A camera drawing to the Engine's target draws a w x h Viewport of it, the frame's own, above the tag row: a view of
 /// w x (h + 1) drew the 3D 0.14% larger and half a pixel low against a camera on a w x h target, a plain App's
 /// (docs/blitz-bevy.feature B3 H10), and against the looks' cells. With a view box, its own view is the box's (the
-/// target a sub view of it, offset by the box's place).
-pub(crate) fn tag_row_view(t: Res<TagRowTarget>, images: Res<Assets<Image>>, view_box: Option<Res<ViewBox>>, mut q: Query<(&mut Camera, &RenderTarget), Without<raea_sys_frame::TagCamera>>) {
+/// target a sub view of it, offset by the box's place). The Viewport this gave a camera (`ours`) is taken off when a
+/// box comes: a camera given it on the frames before the page had laid the box out (a render's first draws) kept it,
+/// and drew the whole page's view, cropped to the box (#130).
+pub(crate) fn tag_row_view(t: Res<TagRowTarget>, images: Res<Assets<Image>>, view_box: Option<Res<ViewBox>>, mut ours: Local<bevy::platform::collections::HashSet<Entity>>, mut q: Query<(Entity, &mut Camera, &RenderTarget), Without<raea_sys_frame::TagCamera>>) {
     let Some(img) = images.get(&t.0) else { return };
     let s = img.size();
     let view = match view_box.and_then(|v| v.0) {
         Some([x, y, w, h]) => bevy::camera::SubCameraView { full_size: UVec2::new(w, h), offset: Vec2::new(-(x as f32), -(y as f32)), size: s },
         None => bevy::camera::SubCameraView { full_size: UVec2::new(s.x, s.y - 1), offset: Vec2::ZERO, size: s },
     };
-    for (mut c, rt) in &mut q {
-        if c.viewport.is_some() { if c.sub_camera_view.is_some() { c.sub_camera_view = None; } continue; } // a camera with its own Viewport (a ViewportNode's) sees its viewport's shape, as Bevy sizes it, never the tag row
-        if matches!(rt, RenderTarget::Image(i) if i.handle == t.0) && c.sub_camera_view != Some(view) {
-            if view.offset == Vec2::ZERO { c.viewport = Some(bevy::camera::Viewport { physical_size: view.full_size, ..default() }) } else { c.sub_camera_view = Some(view) } // a w x h Viewport: Bevy's orthographic sub view takes its area from the w x (h + 1) target, 0.14% small (2d/sprite_slice), and a draw in clip space (a PhaseItem, custom_phase_item) maps to its h + 1 rows
+    for (e, mut c, rt) in &mut q {
+        // a camera with its own Viewport (a ViewportNode's) sees its viewport's shape, as Bevy sizes it, never the tag row
+        if c.viewport.is_some() && !ours.contains(&e) { if c.sub_camera_view.is_some() { c.sub_camera_view = None; } continue; }
+        if !matches!(rt, RenderTarget::Image(i) if i.handle == t.0) { continue; }
+        if view.offset == Vec2::ZERO {
+            // a w x h Viewport: Bevy's orthographic sub view takes its area from the w x (h + 1) target, 0.14% small
+            // (2d/sprite_slice), and a draw in clip space (a PhaseItem, custom_phase_item) maps to its h + 1 rows
+            if c.viewport.as_ref().is_none_or(|v| v.physical_position != UVec2::ZERO || v.physical_size != view.full_size) { c.viewport = Some(bevy::camera::Viewport { physical_size: view.full_size, ..default() }); }
+            if c.sub_camera_view.is_some() { c.sub_camera_view = None; }
+            ours.insert(e);
+        } else {
+            if c.viewport.is_some() { c.viewport = None; }
+            if c.sub_camera_view != Some(view) { c.sub_camera_view = Some(view); }
+            ours.remove(&e);
         }
     }
 }
