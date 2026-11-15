@@ -95,3 +95,13 @@ export function fitPose(skel: Skeleton, marks: Mark[], from?: Pose, passes?: num
   const start = from && { root: from.root, turns: skel.joints.map((_, i) => from.turns[i] ?? ([0, 0, 0, 1] as Quat)) };
   return native("character.fit", { joints, marks, from: start, passes });
 }
+
+/** A hand shaped by a model of real hand poses (SOMA-X's hand prior): `z` are its numbers, each in its own standard
+ * deviations (none: the average relaxed hand; the first opens the hand when positive and closes it when negative).
+ * The rest of `from` (the rest pose) is kept. `odd` says how far the hand is from the hands people make (0: the
+ * average hand; the rig's own rest hand reads about 2). With no `z`, `from`'s own hand is read. */
+export function handShape(skel: Skeleton, side: "L" | "R", z?: number[], from?: Pose): { pose: Pose; z: number[]; odd: number } {
+  const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
+  const pose = from && { root: from.root, turns: skel.joints.map((_, i) => from.turns[i] ?? ([0, 0, 0, 1] as Quat)) };
+  return native("character.hand", { joints, side, z, pose });
+}

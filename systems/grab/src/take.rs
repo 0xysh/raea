@@ -9,7 +9,9 @@
 use glam::{Quat, Vec3};
 
 use crate::arm::{ArmOptions, forearm_twist, reach};
-use crate::body::{clear, look, stoop};
+use crate::body::{clear, look, roomy, stoop};
+use crate::limits::clamp_turn;
+use crate::prior::shape;
 use crate::hand::{Grip, Touch, curl, facing, hand_rest, wrist_for};
 use crate::rig::{Pose, Posed, Skeleton};
 use crate::shape::Thing;
@@ -58,7 +60,7 @@ pub struct Frame {
     /// the most any joint was turned from the body's own motion, degrees
     pub moved: f32,
     pub touch: [Option<Touch>; 2],
-    /// a wrist was held at the most it bends, so its palm isn't square on its hold
+    /// a joint of an arm was held at its limit, so a palm may not be square on its hold
     pub limited: bool,
 }
 
@@ -67,8 +69,8 @@ const GRAVITY: f32 = 9.81;
 const AWAY: f32 = 0.4;
 /// how long the fingers take to shut, ending at the grab, seconds
 const SHUT: f32 = 0.25;
-/// the most a wrist bends, radians
-const WRIST: f32 = 1.22;
+/// how open the hand comes in, in the hand prior's first component (its standard deviations)
+const OPEN: f32 = 1.5;
 
 fn smooth(u: f32) -> f32 {
     let u = u.clamp(0.0, 1.0);
@@ -181,8 +183,12 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         .collect();
     // a thing lower than the arms reach: the body bends and squats for it, as far as the hands have got
     let low = holds.iter().map(|h| h.1.0.y).fold(f32::MAX, f32::min);
-    let mut pose = stoop(skel, &own, &w0, face, low, into * (1.0 - away));
-    for (hold, (at, turn)) in holds {
+    // solved with the bend the body has room for: where bending or leaning would put the head or chest into a
+    // solid, less of both and more squat, a step at a time
+    let solve = |give: f32, frame: &mut Frame| {
+    let mut pose = stoop(skel, &own, &w0, face, low, into * (1.0 - away), give);
+    frame.miss = 0.0;
+    for &(hold, (at, turn)) in &holds {
         let (Some(arm), Some(rest)) = (skel.arm(hold.side), hand_rest(skel, hold.side)) else { continue };
         let normal = held.turn * hold.normal;
         // the wrist's path: from where the body has it, in onto the hold from off the surface and over what is in the
@@ -193,18 +199,29 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &rest, &take.avoid);
         // elbows out and down, the way arms hang
         let pole = yaw(&w0) * Vec3::new(0.7 * hold.side.sign(), -1.0, -0.4);
-        let Some(solved) = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(pole), end: Some(end), soft: 0.02 }) else { continue };
+        let Some(solved) = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(pole), end: Some(end), soft: 0.02, stiff: give }) else { continue };
         pose = forearm_twist(skel, &solved.pose, hold.side, 0.7);
-        // a wrist bends about 70 degrees and no further
-        let bend = pose.turns[arm[2]].angle_between(Quat::IDENTITY);
-        if bend > WRIST {
-            pose.turns[arm[2]] = Quat::IDENTITY.slerp(pose.turns[arm[2]], WRIST / bend);
-            frame.limited = true;
+        // each joint of the arm kept inside its range (limits.rs): a wrist bends so far and no further, and a
+        // frame that needed more says so
+        for joint in arm {
+            let (turn, by) = clamp_turn(skel, joint, pose.turns[joint]);
+            if by > 0.5 {
+                pose.turns[joint] = turn;
+                frame.limited = true;
+            }
         }
         if t >= take.grab && away <= 0.0 {
             frame.miss = frame.miss.max((skel.fk(&pose).pos[arm[2]] - at).length());
         }
+        // the hand opens as it comes in, as a hand does before it takes something (the prior's open hand), then
         // the fingers shut over the last moments of the reach, and open again as the hand leaves
+        let mut open = pose.turns.clone();
+        if shape(skel, &mut open, hold.side, &[OPEN]).is_some() {
+            let wide = smooth(span(t, take.start, take.grab - SHUT));
+            for (mine, open) in pose.turns.iter_mut().zip(&open) {
+                *mine = mine.slerp(*open, wide);
+            }
+        }
         let close = smooth(span(t, take.grab - SHUT, take.grab)) * (1.0 - smooth(span(away, 0.0, 0.5)));
         if close > 0.0 {
             frame.touch[hold.side as usize] = curl(skel, &mut pose.turns, (at, turn), hold.side, &held, close);
@@ -212,7 +229,15 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     }
     // the eyes go to the thing as the hands do, and mostly leave it once it is carried
     let watching = into * (1.0 - away) * (1.0 - 0.7 * smooth(span(t, take.grab, take.carried)));
-    pose = look(skel, &pose, held.at, watching);
+    look(skel, &pose, held.at, watching * (1.0 - 0.5 * give))
+    };
+    let mut pose = solve(0.0, &mut frame);
+    for step in 1..=6 {
+        if roomy(skel, &pose, &take.avoid) {
+            break;
+        }
+        pose = solve(step as f32 / 6.0, &mut frame);
+    }
     if away > 0.0 {
         // the last of the way back is a blend of the joints, so the arm ends exactly as the body has it
         let w = 1.0 - smooth(span(away, 0.5, 1.0));

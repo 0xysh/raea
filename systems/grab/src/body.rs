@@ -16,8 +16,10 @@ use crate::shape::Thing;
 const EASY: f32 = 0.7;
 
 /// The body bent and lowered for hands that must get down to `low` (a height, metres), by `amount` (0 to 1) of what
-/// that needs. `own` drawn is `w`; `face` is the level way the body faces.
-pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amount: f32) -> Pose {
+/// that needs. `own` drawn is `w`; `face` is the level way the body faces. `give` (0 to 1) trades the bend for more
+/// squat, down to an upright, deep squat at 1: for a body that can't bend forward because something stands there
+/// (`roomy` says when it can).
+pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amount: f32, give: f32) -> Pose {
     let (Some(l), Some(r)) = (skel.arm(Side::L), skel.arm(Side::R)) else { return own.clone() };
     let shoulders = (w.pos[l[0]].y + w.pos[r[0]].y) / 2.0;
     let arm = skel.offset(l[1]).length() + skel.offset(l[2]).length();
@@ -25,8 +27,11 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
     if short <= 0.0 || amount <= 0.0 {
         return own.clone();
     }
-    // the hips take most of it by coming down (a squat), the trunk the rest by bending
-    let (drop, pitch) = ((short * 0.75).min(0.55) * amount, (short * 0.8).min(0.85) * amount);
+    // the hips take most of it by coming down (a squat), the trunk the rest by bending; giving up the bend, the hips
+    // come down by what the bend had lowered the shoulders
+    let give = give.clamp(0.0, 1.0);
+    let (drop, pitch) = ((short * 0.75).min(0.55), (short * 0.8).min(0.85));
+    let (drop, pitch) = ((drop + 0.45 * pitch * give).min(0.82) * amount, pitch * (1.0 - give) * amount);
     let left = Vec3::Y.cross(face);
     let mut pose = own.clone();
     // the hips go back a little as the trunk goes forward, as a body keeps its balance
@@ -43,9 +48,21 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
         let leg = [format!("thigh_{x}"), format!("calf_{x}"), format!("foot_{x}")].map(|n| skel.joint(&n));
         let [Some(a), Some(b), Some(c)] = leg else { continue };
         let pole = face + left * (0.25 * s.sign());
-        pose = two_bone(skel, &pose, [a, b, c], w.pos[c], ArmOptions { pole: Some(pole), end: Some(w.rot[c]), soft: 0.0 }).pose;
+        pose = two_bone(skel, &pose, [a, b, c], w.pos[c], ArmOptions { pole: Some(pole), end: Some(w.rot[c]), ..Default::default() }).pose;
     }
     pose
+}
+
+/// Whether the head's top, the neck and the chest are a hand's breadth off every solid.
+pub fn roomy(skel: &Skeleton, pose: &Pose, solids: &[Thing]) -> bool {
+    if solids.is_empty() {
+        return true;
+    }
+    let at = skel.fk(pose);
+    ["head", "neck_01", "spine_03"].iter().filter_map(|n| skel.joint(n)).all(|i| {
+        let tip = at.pos[i] + at.rot[i] * (skel.joints[i].tail - skel.joints[i].head);
+        solids.iter().all(|s| s.distance(at.pos[i]) > 0.09 && s.distance(tip) > 0.09)
+    })
 }
 
 /// A wrist's place moved the least that keeps the hand (its wrist, palm and fingers' reach) clear of every solid.

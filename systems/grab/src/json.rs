@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use crate::body::stand_for;
 use crate::fit::{Mark, fit};
+use crate::prior::{coefficients, oddness, shape};
 use crate::hand::{Grip, HoldOptions, find_holds};
 use crate::rig::{Pose, Side, Skeleton};
 use crate::shape::{Solid, Thing};
@@ -138,4 +139,29 @@ pub fn fit_json(v: &Value) -> Result<Value, String> {
     let (pose, miss) = fit(&skel, &from, &marks, passes);
     let turns: Vec<[f32; 4]> = pose.turns.iter().map(|q| q.to_array()).collect();
     Ok(json!({ "pose": { "root": pose.root.to_array(), "turns": turns }, "miss": miss }))
+}
+
+pub const HAND_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; side: \"L\" | \"R\"; z?: number[]; pose?: { root: [number, number, number]; turns: [number, number, number, number][] } }";
+pub const HAND_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; z: number[]; odd: number }";
+
+/// `character.hand`: a hand shaped by the hand prior's coefficients (prior.rs) on a pose, and that hand read back:
+/// its coefficients and how odd it is.
+pub fn hand_json(v: &Value) -> Result<Value, String> {
+    let skel = Skeleton::from_value(v)?;
+    let side = if v["side"] == "L" { Side::L } else { Side::R };
+    let mut pose = skel.rest();
+    if !v["pose"].is_null() {
+        pose.root = vec3(&v["pose"]["root"], "pose.root")?;
+        for (slot, turn) in pose.turns.iter_mut().zip(v["pose"]["turns"].as_array().into_iter().flatten()) {
+            *slot = quat(turn, "the pose's turn")?;
+        }
+    }
+    if let Some(z) = v["z"].as_array() {
+        let z = z.iter().map(|n| num(n, "a number of z")).collect::<Result<Vec<f32>, String>>()?;
+        shape(&skel, &mut pose.turns, side, &z).ok_or("character.hand: the body has no hand on that side")?;
+    }
+    let (z, _) = coefficients(&skel, &pose, side).ok_or("character.hand: the body has no hand on that side")?;
+    let odd = oddness(&skel, &pose, side).unwrap_or(0.0);
+    let turns: Vec<[f32; 4]> = pose.turns.iter().map(|q| q.to_array()).collect();
+    Ok(json!({ "pose": { "root": pose.root.to_array(), "turns": turns }, "z": z, "odd": odd }))
 }

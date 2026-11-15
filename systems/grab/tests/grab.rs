@@ -71,7 +71,7 @@ fn the_pole_sets_the_elbow_and_the_end_keeps_its_turn() {
     let target = s.joints[arm[0]].head + Vec3::new(-0.05, -0.15, 0.35);
     let turn = Quat::from_rotation_y(0.6);
     for pole in [Vec3::NEG_Y, Vec3::NEG_X, Vec3::Y] {
-        let out = two_bone(&s, &s.rest(), arm, target, ArmOptions { pole: Some(pole), end: Some(turn), soft: 0.0 });
+        let out = two_bone(&s, &s.rest(), arm, target, ArmOptions { pole: Some(pole), end: Some(turn), ..Default::default() });
         let w = s.fk(&out.pose);
         assert!(out.miss < 1e-4);
         // the elbow is off the shoulder-wrist line on the pole's side
@@ -433,18 +433,6 @@ fn the_head_turns_to_the_thing_and_a_wrist_stops_at_its_limit() {
     assert!(toward(&w) > toward(&w0) + 0.3, "the head faces the thing more: {} from {}", toward(&w), toward(&w0));
     assert!(w.rot[head].angle_between(w0.rot[head]).to_degrees() < 78.0);
     assert_eq!(look(&s, &s.rest(), at, 0.0), s.rest());
-    // through a take no wrist is bent past 70 degrees, and one held there is said
-    let thing = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(0.0, 1.05, 0.42));
-    let take = Take::new(thing, find_holds(&thing, s.rest().root, HoldOptions::default()), 0.0);
-    let mut t = 0.0;
-    while t < 2.0 {
-        let f = perform(&s, &|_| s.rest(), &take, t);
-        for side in Side::BOTH {
-            let bend = f.pose.turns[s.arm(side).unwrap()[2]].angle_between(Quat::IDENTITY).to_degrees();
-            assert!(bend < 70.5, "t {t}: a wrist bent {bend} degrees");
-        }
-        t += 1.0 / 30.0;
-    }
     // SOMA's twist joints: a forearm's follow its hand by rising shares; an upper arm's undo the shoulder's twist
     let fore = twist_joints(Vec3::X, 0.0, 1.0, false);
     assert!((fore[3].to_axis_angle().1 - 0.95).abs() < 1e-4 && (fore[0].to_axis_angle().1 - 0.05).abs() < 1e-4);

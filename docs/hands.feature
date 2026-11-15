@@ -178,25 +178,55 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # Not converted, and why: SOMA's body and hand layers, identity models and correctives are a different
       # mesh and a 78-joint rig driven by PyTorch and Warp, and raea's body is MakeHuman's; its hand
       # articulation prior (SOMAHand.npz, 32 components over SOMA's 24 finger joints, bind-relative) needs
-      # SOMA's finger frames mapped onto game_engine's 15 finger joints before a score means anything (HG8);
-      # its Lie-algebra and autograd refinements fit mesh vertices through skinning, which marks don't need.
+      # SOMA's finger frames mapped onto game_engine's 15 finger joints before a score means anything (done
+      # since: HG5b); its Lie-algebra and autograd refinements fit mesh vertices through skinning, which marks don't need.
       Then a body can choose what to take, look at it, and be posed from positions seen
+
+    @done
+    Scenario: HG6b. The arms inside the rig's ranges, and the head and chest out of the scene's solids
+      # 11-14, built. limits.rs is sdk/body's axes.ts and limits.ts in Rust: each joint's turn read as flex, side
+      # and twist from the rest pose, the same ranges (13 roles, the right side mirrored), a turn brought inside
+      # them, a pose's violations. Through a take every joint of both arms is inside its range and a frame that
+      # had to hold one says so (`limited`). body.rs `roomy`: when the solved pose puts the head's top, the neck
+      # or the chest within 9 cm of a solid in a take's `avoid`, the take is solved again with less bend and
+      # lean and more squat (to 0.82 m of hips), a sixth at a time. With a table 38 cm in front and a box on the
+      # floor between, none of the three is in the table at any frame and the hold is kept within 5 cm; with no
+      # table the same take bends over where the table was. Seen on teal: an upright deep squat beside the
+      # table, the head clear, the eyes on the box. Not done: the knees and the forearms keep out of nothing,
+      # and the two copies of the limits (TypeScript, Rust) are kept in step by hand.
+      Then no arm joint is past its range, and bending never puts the head or chest into a solid
+
+    @done
+    Scenario: HG5b. SOMA-X's hand prior on raea's fingers
+      # 11-14, built. prior.rs and data/soma_hand_prior.bin (12 KB; data/README.md has its source and licence):
+      # the left hand's 32-component model of real hand poses, cut to the fifteen finger joints raea has (the
+      # metacarpals and fingertip ends left out; 99% of the first component is on the kept joints). SOMA's
+      # turns are from its flat bind hand in the wrist's axes (fingers along +x, palm +z); each raea finger bone
+      # is pointed where SOMA's would, in the hand's own rest frame, the right hand mirrored. `shape` gives a
+      # hand from a few numbers: none is the average relaxed hand, the first opens it (+2) and closes it to a
+      # fist (-2). `coefficients` reads a hand back (a shape's numbers within 0.05, under half a degree left
+      # over) and `oddness` compares hands: the average 0, the rig's rest hand 2.0, fingers bent back at the
+      # middle joint 4.3. A take now opens the hand as it comes in (the first number at +1.5) before the
+      # fingers shut. raea/character's `handShape(skel, side, z)` is the native call character.hand. Seen on
+      # teal: the sweep goes from a fist to an open hand, on a hand mesh whose skinning is coarse.
+      # Still not converted: SOMA's body and hand meshes, identity models and correctives (a different mesh
+      # and a 78-joint rig on PyTorch and Warp), and the vertex-fitting refinements of its pose inversion.
+      Then a hand can be given a natural shape by number, and any hand can be scored against real ones
 
   Rule: Next, in order
 
     @needs:HG5
-    Scenario: HG6. The rig's real limits and the body's real shape
-      # sdk/body has both in TypeScript (limits.ts: ranges checked against 26,288 captured frames; shape.ts,
-      # shell.ts: the skin). systems/grab has caps on the trunk's lean and finger ranges, and HG6a for the hands.
-      Given a solved arm
-      Then every joint is inside the range sdk/body's limits give, the elbow and wrist first
-      And the forearm, the elbow, the trunk, the head and the held thing stay out of the body and the scene's
-        solids, by the least move
+    Scenario: HG6. The whole body out of itself and the scene
+      # HG6a keeps the hands out of solids and HG6b the head and chest; the arms are inside their ranges.
+      Then the forearms, the elbows, the knees and the held thing stay out of the body's own shape (sdk/body's
+        shape.ts and shell.ts) and the scene's solids, by the least move
       And one copy of the limits serves both the TypeScript and the Rust
 
     @needs:HG5
     Scenario: HG7. The body walks to the thing
-      # HG7a says where to stand; nothing walks there yet.
+      # HG7a says where to stand; nothing walks there yet. sdk/body's locomotion plays a library retargeted to a
+      # body, and only the MakeHuman test people have one: the Character SDK project's characters have a single
+      # walk clip each, so this waits on their library (or on locomotion taking any body's).
       Given a thing out of reach
       Then locomotion (sdk/body's) is asked to arrive at the take's standing place, facing it, and the take
         starts when it has
@@ -209,7 +239,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       Then its holds come with the thing, as places and hand shapes, from the 35 captured hand poses
         (character/captured.ts) where one fits
       And a thing with no holds of its own gets HG2's
-      And a hand shape is scored against SOMA-X's hand prior before it is kept
+      And a hand shape is scored against the hand prior (HG5b) before it is kept
 
     @needs:HG5
     Scenario: HG9. Using what is held, and handing it over

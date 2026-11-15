@@ -18,6 +18,9 @@ pub struct ArmOptions {
     /// metres short of straight where the limb starts to ease toward its full length instead of snapping straight
     /// (0: exact, and an elbow that locks the frame the target passes the arm's length)
     pub soft: f32,
+    /// how much of the trunk's lean a reach gives up (0: it leans as far as it may; 1: the arm alone), for a body
+    /// with something in front of it
+    pub stiff: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -104,7 +107,7 @@ pub fn reach(skel: &Skeleton, p: &Pose, s: Side, target: Vec3, o: ArmOptions) ->
         .iter()
         .filter_map(|(n, share, cap)| {
             let name = if *n == "clavicle" { format!("clavicle_{}", s.sx()) } else { n.to_string() };
-            Some((skel.joint(&name)?, *share, *cap))
+            Some((skel.joint(&name)?, *share, *cap * (1.0 - o.stiff.clamp(0.0, 1.0))))
         })
         .collect();
     if out.miss <= within || !out.out_of_reach {
