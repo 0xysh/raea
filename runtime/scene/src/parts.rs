@@ -171,7 +171,7 @@ pub(crate) fn meshes_rows(tr: &Tracks, names: &[String], p: &mut Program) {
         for (prop, col) in [("map", "map"), ("normalMap", "normal_map"), ("roughnessMap", "rough_map"), ("metalnessMap", "metal_map"), ("metallicRoughnessMap", "mr_map"), ("aoMap", "ao_map"), ("emissiveMap", "emissive_map"), ("depthMap", "depth_map"), ("clearcoatNormalMap", "clearcoat_normal_map")] {
             let Some(src) = m0.get(prop).and_then(Value::as_str) else { continue };
             // render images an app ping-pongs between are keyed frame by frame (R3F23c: raea-sys-rendermap); a picture is its first frame's
-            let srcs: Vec<String> = if src.starts_with("render:") { mats.iter().map(|m| m.get(prop).and_then(Value::as_str).unwrap_or(src).to_string()).collect() } else { vec![src_path(src)] };
+            let srcs: Vec<String> = if src.starts_with("render:") { mats.iter().map(|m| match m.get(prop) { Some(Value::String(s)) => s.clone(), _ => src.to_string() }).collect() } else { vec![src_path(src)] };
             keyed_strings(p, &mut row, &id, col, &srcs);
         }
         if let Some(Value::Array(r)) = m0.get("repeat") {

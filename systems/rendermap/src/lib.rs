@@ -15,10 +15,15 @@ pub fn sync_render_maps(frame: Res<FrameRows>, renders: Option<Res<RenderImages>
         let Some(src) = raea_sys_frame::keyed(|c| v.get(c).cloned(), "map") else { continue };
         let Some(img) = RenderImages::name(&src).and_then(|n| renders.0.get(n)).map(|i| i.0.clone()) else { continue };
         // looked at first: get_mut marks the material changed whether or not it is
-        if mats.get(&m.0).is_some_and(|s| s.base_color_texture.as_ref() != Some(&img)) {
-            if let Some(mut s) = mats.get_mut(&m.0) {
-                s.base_color_texture = Some(img);
-            }
+        let shown = match mats.get(&m.0) {
+            Some(s) => s.base_color_texture.as_ref() == Some(&img),
+            None => true,
+        };
+        if shown {
+            continue;
+        }
+        if let Some(mut s) = mats.get_mut(&m.0) {
+            s.base_color_texture = Some(img);
         }
     }
 }
