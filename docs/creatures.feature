@@ -43,12 +43,12 @@ Feature: Creatures: a four-legged body in the character SDK
       # `creature` from raea/body. The moves that need a world (CR7 on) are in the trashpanda project until they
       # have settled (its game/ folder).
       Then the plan:
-        | file                          | lines | job                                                                  |
-        | sdk/body/src/creature/q.ts    | 40    | the body layer's maths under short names; a bend from places; a turn from axes |
-        | sdk/body/src/creature/body.ts | 45    | a rig's measures: sockets, bone lengths, where each foot belongs, reach |
-        | sdk/body/src/creature/loco.ts | 185   | the gait by speed and posture; feet planted in the world and stepped   |
-        | sdk/body/src/creature/pose.ts | 225   | the rigging, the solver, the blend between riggings, the tail on springs |
-        | sdk/body/test/creature.test.ts | 60   | slide, gait, every joint posed, feet squared up on a stop             |
+        | crate | file                           | lines | job                                                                  |
+        | sdk   | sdk/body/src/creature/q.ts     | 40    | the body layer's maths under short names; a bend from places; a turn from axes |
+        | sdk   | sdk/body/src/creature/body.ts  | 45    | a rig's measures: sockets, bone lengths, where each foot belongs, reach |
+        | sdk   | sdk/body/src/creature/loco.ts  | 185   | the gait by speed and posture; feet planted in the world and stepped   |
+        | sdk   | sdk/body/src/creature/pose.ts  | 225   | the rigging, the solver, the blend between riggings, the tail on springs |
+        | sdk   | sdk/body/test/creature.test.ts | 60    | slide, gait, every joint posed, feet squared up on a stop             |
 
     @done
     Scenario: CR1. A creature's rig is read from its joints
