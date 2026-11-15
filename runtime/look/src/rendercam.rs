@@ -25,6 +25,10 @@ pub fn render_cameras(all: &[Vec<Item>], tracks: &[(String, Vec<Option<Item>>)],
             p.keys.insert((id.clone(), "on".into()), step_keys(&on));
         }
         row.insert("tonemap".into(), V::S(first.get("tonemap").and_then(Value::as_str).unwrap_or("none").to_string()));
+        // its own aspect where its image's shape isn't it (three draws a projection into any target; matchmove's OffAxis)
+        if let Some(a) = first.get("aspect").and_then(Value::as_f64) {
+            row.insert("aspect".into(), V::N(a));
+        }
         ambient_columns(all, p, &mut row, &id, &layers_of(first));
         rows.push(row);
     }

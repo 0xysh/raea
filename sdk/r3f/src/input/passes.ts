@@ -50,6 +50,16 @@ function intoTarget(p: Part): Part {
  *  shader places the quad itself, so any camera that sees the quad at z 0 will do */
 const QUAD: Part = { type: "OrthographicCamera", props: { position: [0, 0, 1], lookAt: [0, 0, 0], up: [0, 1, 0], height: 2, near: 0.01, far: 2 } };
 
+/** a perspective pass camera's lens as three draws with it, from its projection matrix (drei's reflector copies the
+ *  screen camera's projection into a camera of its own, whose fov and aspect stay as it was made): its fov, and its
+ *  aspect where that isn't its target's shape (three draws the projection into any target; the engine keeps it) */
+function lensOf(c: THREE.Camera, t: THREE.RenderTarget): Partial<Record<"fov" | "aspect", number>> {
+  if (!(c as THREE.PerspectiveCamera).isPerspectiveCamera) return {};
+  const e = c.projectionMatrix.elements;
+  const fov = (2 * Math.atan(1 / e[5]) * 180) / Math.PI, aspect = e[5] / e[0];
+  return Math.abs(aspect - t.width / t.height) > 1e-3 ? { fov, aspect } : { fov };
+}
+
 /** a pass as parts: its scene's on its layer and its camera into the target's image */
 function passParts(p: Omit<Pass, "parts">, gl: THREE.WebGLRenderer): Part[] {
   const key = `${p.target.texture.uuid}#${p.what}#${p.k}`;
@@ -60,7 +70,7 @@ function passParts(p: Omit<Pass, "parts">, gl: THREE.WebGLRenderer): Part[] {
   const cam = cameraOf(p.camera) ?? QUAD;
   const bg = (p.scene as THREE.Scene).background;
   const clear = bg instanceof THREE.Color ? { bg: clearOf(bg, 1) } : p.autoClear ? { bg: clearOf(new THREE.Color(p.clear[0], p.clear[1], p.clear[2]), p.clear[3]) } : { clear: "none" };
-  const camera: Part = { type: cam.type, props: { ...cam.props, name: root, target: imageOf(p.target), layers: [layer], order: FIRST_ORDER + i, ...clear } };
+  const camera: Part = { type: cam.type, props: { ...cam.props, ...lensOf(p.camera, p.target), name: root, target: imageOf(p.target), layers: [layer], order: FIRST_ORDER + i, ...clear } };
   return [camera, ...onLayer([...world, ...drawn], layer)];
 }
 
