@@ -148,7 +148,7 @@ function Marker({{ f, to, conf, next }}: {{ f: number; to: number; conf: string;
   }}, [done]);
   return <div data-raea-frame={{f}} data-raea-done={{done}} data-raea-config={{conf}} />;
 }}
-mount(<surface id="motion" w={{1}} px={{cfg.width}} pxH={{cfg.height}}><Root /></surface>);
+mount(<surface id="motion" w={{1}} px={{cfg.width}} pxH={{cfg.height}}><Root /></surface>).catch((globalThis as any).__raea_loop_died);
 "#,
         comp = comp.map(|c| format!("{c:?}")).unwrap_or("null".into())
     )
@@ -241,7 +241,7 @@ addEventListener("raea-frame", (v: any) => {{
 // render sends its own ops)
 reset();
 draw();
-runEventLoop();
+runEventLoop().catch((globalThis as any).__raea_loop_died);
 "#,
         preamble = &full[start..end],
         marker = if o.comps { "<Marker f={f} />" } else { "<div data-raea-frame={f} data-raea-done={HOLD.n ? -3 : f} data-raea-config={conf} />" },

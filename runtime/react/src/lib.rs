@@ -21,7 +21,7 @@ pub mod scene;
 /// React's on* props on the entities it makes: Bevy picking's pointer events to their handlers (S2c, B3 H3)
 pub mod pointer;
 /// state React and the World share: useResource, useComponent (docs/blitz-bevy.feature B3 H4)
-pub use raea_runtime_shared::{self as shared, ReactOutbox};
+pub use raea_runtime_shared::{self as shared, JsState, ReactJs, ReactOutbox, Stepping};
 pub use raea_runtime_calls::{self as native, CLI};
 use serde_json::Value;
 
@@ -171,16 +171,18 @@ impl Plugin for ReactPlugin {
         // the runtime's layout reads (layout.rs): asked on its JS thread, answered by its settle
         let ask = layout::LayoutAsk::default();
         let js_ask = ask.0.clone();
+        let state = std::sync::Arc::new(JsState::default());
+        let js_state = state.clone();
         std::thread::Builder::new()
             .name("raea-runtime-react js".into())
             .spawn(move || {
                 layout::ASK.with(|a| *a.borrow_mut() = Some(js_ask));
                 // JavaScriptCore on Apple (the system's engine, the JIT on with the entitlement tools/link-jit.sh signs in),
                 // QuickJS elsewhere
-                js_thread(bundle, tx, out_rx)
+                js_thread(bundle, tx, out_rx, js_state)
             })
             .expect("the JS thread");
-        app.insert_resource(ask);
+        app.insert_resource(ask).insert_resource(ReactJs(state));
         app.insert_resource(ReactOutbox(Mutex::new(out_tx)));
         let root = app.world_mut().spawn((ReactRoot, ReactNode(ROOT_ID), ReactKind("#root".into()))).id();
         let mut ents = ReactEntities::default();
@@ -195,7 +197,7 @@ impl Plugin for ReactPlugin {
 }
 
 thread_local! {
-    static FLUSH: std::cell::RefCell<Option<Sender<Batch>>> = const { std::cell::RefCell::new(None) };
+    static FLUSH: std::cell::RefCell<Option<(Sender<Batch>, std::sync::Arc<JsState>)>> = const { std::cell::RefCell::new(None) };
 }
 
 /// The bundle's own throw while it was evaluated (before React committed anything): a render waiting for its first
@@ -243,16 +245,18 @@ pub fn js_call_for() -> Option<Duration> {
     Some(if at == 0 { Duration::ZERO } else { JS_BASE.elapsed().saturating_sub(Duration::from_millis(at - 1)) })
 }
 
-fn js_call_begins(deliver: bool) {
+fn js_call_begins(deliver: bool, state: &JsState) {
     use std::sync::atomic::Ordering::SeqCst;
+    state.in_call(true);
     if JS_CALLS.fetch_add(1, SeqCst) == 0 {
         JS_CALL_WHO.store(JS_RUNTIME.get() * 2 + deliver as u64, SeqCst);
         JS_CALL_SINCE.store(JS_BASE.elapsed().as_millis() as u64 + 1, SeqCst);
     }
 }
 
-fn js_call_ends() {
+fn js_call_ends(state: &JsState) {
     use std::sync::atomic::Ordering::SeqCst;
+    state.in_call(false);
     if JS_CALLS.fetch_sub(1, SeqCst) == 1 {
         JS_CALL_SINCE.store(0, SeqCst);
     }

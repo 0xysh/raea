@@ -10,8 +10,9 @@ fn flush(a: &[String]) -> Result<Ret, String> {
     let json = arg(a, 0).to_string();
     let len = json.len() as u64;
     FLUSH.with(|f| {
-        if let Some(tx) = f.borrow().as_ref() {
+        if let Some((tx, state)) = f.borrow().as_ref() {
             let _ = tx.send(Batch(json));
+            state.flushed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
     });
     FLUSH_BYTES.fetch_add(len, std::sync::atomic::Ordering::Relaxed);
@@ -42,8 +43,8 @@ pub fn register_natives() {
 
 /// The JS thread: the prelude, the shims, the bundle, then timers and Bevy's events. Both engines run promise jobs as
 /// each call returns, so there are no microtask checkpoints to make.
-pub(crate) fn js_thread(bundle: PathBuf, tx: Sender<Batch>, events: Receiver<String>) {
-    FLUSH.with(|f| *f.borrow_mut() = Some(tx));
+pub(crate) fn js_thread(bundle: PathBuf, tx: Sender<Batch>, events: Receiver<String>, state: std::sync::Arc<JsState>) {
+    FLUSH.with(|f| *f.borrow_mut() = Some((tx, state.clone())));
     let code = match std::fs::read_to_string(&bundle) {
         Ok(c) => c,
         Err(e) => {
@@ -91,11 +92,15 @@ pub(crate) fn js_thread(bundle: PathBuf, tx: Sender<Batch>, events: Receiver<Str
     let mut delivered: u64 = 0;
     let release_every: f64 = std::env::var("RAEA_JSC_RELEASE_S").ok().and_then(|v| v.parse().ok()).unwrap_or(5.0);
     let mut released = Instant::now();
+    let mut fault = raea_runtime_shared::DropFault::from_env();
+    // the next timers call has a timer to run (an empty tick isn't work, #158): the bundle's, an event handler's, or one
+    // that came due while the thread waited
+    let mut due = true;
     loop {
         let busy = Instant::now();
-        js_call_begins(false);
+        js_call_begins(false, &state);
         let timers = ctx.call("__raea_timers", &[Arg::Num(now_ms())]);
-        js_call_ends();
+        js_call_ends(&state);
         let next = match timers {
             None => break,
             Some(Ok(n)) if n.is_finite() => n,
@@ -106,25 +111,33 @@ pub(crate) fn js_thread(bundle: PathBuf, tx: Sender<Batch>, events: Receiver<Str
             }
         };
         JS_NS.fetch_add(busy.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+        state.timers(due, next);
         let wait = if next < 0.0 { Duration::from_millis(500) } else { Duration::from_millis(next.clamp(0.0, 500.0) as u64) };
+        due = (0.0..=500.0).contains(&next);
         let msg = match events.recv_timeout(wait) {
             Ok(json) => Some(json),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
         };
+        if msg.as_deref().is_some_and(|j| fault.drops(j)) {
+            continue;
+        }
         let busy = Instant::now();
         let event = match &msg {
             Some(json) => Arg::Str(json),
             None => Arg::Null,
         };
-        js_call_begins(true);
+        js_call_begins(true, &state);
         let outcome = ctx.call("__raea_deliver", &[event]);
-        js_call_ends();
-        match outcome {
+        js_call_ends(&state);
+        match &outcome {
             None => break,
             Some(Err(e)) => error!("raea-runtime-react: an event threw: {e}"),
             Some(Ok(_)) => {}
         }
+        // the prelude answers 0 for an event queued with no one waiting: the bridge's event loop has stopped
+        state.delivered(!matches!(outcome, Some(Ok(n)) if n == 0.0));
+        due = true;
         JS_NS.fetch_add(busy.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
         // a young collection after the frame when RAEA_JSC_EDEN is set (off: each cost ~0.5 ms and held memory no
         // flatter in pong; every 16th frame left 1 collection of 360 started by allocation inside a frame, where 71

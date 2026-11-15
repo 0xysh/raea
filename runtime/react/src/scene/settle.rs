@@ -50,9 +50,9 @@ pub fn settle_with(app: &mut App, want: Option<i64>, secs: f64, answer: &mut cra
     // no polling for quiet: each pass applies what React flushed, then waits for its next flush. The composition marks
     // a frame done (data-raea-done) once its commit and that commit's effects have run, so the frame is taken the
     // moment the mark lands (it waited for three quiet updates with 1 ms sleeps, ~4 ms a frame)
-    // the last time anything moved, and what it was (settle's no-progress guard, below)
-    let mut still = std::time::Instant::now();
-    let mut moved = (u64::MAX, u64::MAX, f64::NAN);
+    // the no-progress guard over this runtime's JS thread (shared stall.rs; a replay's App has none: the process's counts)
+    let js = app.world().get_resource::<crate::ReactJs>().map(|j| j.0.clone());
+    let mut watch = crate::shared::Settling::default();
     // the marker as last seen (frame, done), for the refusal's message
     let mut marked = (-2i64, -2i64);
     // the frame is held (below): its marker at the frame, not done
@@ -131,36 +131,34 @@ pub fn settle_with(app: &mut App, want: Option<i64>, secs: f64, answer: &mut cra
         if let Some(e) = crate::BUNDLE_ERROR.lock().unwrap().take() {
             return Err(format!("the composition threw before its first frame: {e}"));
         }
-        // refused only when nothing moves for `secs`: no commit flushed, no JS run, nothing made on first use (a
-        // matchmove solve: minutes). A call the JS thread is still in counts too, up to HANG_SECS (a frame's render
-        // under load runs seconds before its first flush). A total-time limit refused film.tsx under load (10-27)
-        let now = (crate::flushed(), crate::JS_NS.load(std::sync::atomic::Ordering::Relaxed), track::making_secs());
-        let in_call = crate::js_call_for().is_some_and(|d| d.as_secs_f64() < HANG_SECS);
-        if now != moved || in_call {
-            moved = now;
-            still = std::time::Instant::now();
-        }
+        // refused only when nothing moves for `secs`, by this runtime's own counts (Settling, raea-runtime-shared
+        // stall.rs); a call the JS thread is still in counts too, up to HANG_SECS
+        let (flushed, work) = js.as_ref().map_or_else(|| (crate::flushed(), crate::JS_NS.load(std::sync::atomic::Ordering::Relaxed)), |j| j.counts());
+        let in_call = js.as_ref().map_or_else(crate::js_call_for, |j| j.since(&j.call_since)).is_some_and(|d| d.as_secs_f64() < HANG_SECS);
         // a held frame (delayRender, a scene still loading: its marker at the frame, not done) waits up to
         // HOLD_SECS, so a hold's own timeout (30 s unless it says) fails the render naming it first (layout-reads LR9)
         held = want.is_some_and(|w| marked.0 == w && marked.1 != w);
-        let left = if held { secs.max(HOLD_SECS) } else { secs } - still.elapsed().as_secs_f64();
-        if left <= 0.0 {
-            break;
-        }
+        let Some(left) = watch.watch((flushed, work, track::making_secs()), in_call, if held { secs.max(HOLD_SECS) } else { secs }, HOLD_SECS) else { break };
         // commits held to be applied one an update (OneBatch): the next is applied without waiting
         if app.world().get_resource::<crate::OneBatch>().is_some_and(|q| !q.0.is_empty()) {
             continue;
         }
+        // a stepped range's frame lost (#158): its runtime idle, the frame neither drawn nor held. Asked for again (pure)
+        if let (Some(j), Some(s), Some(o)) = (&js, app.world().get_resource::<crate::Stepping>(), app.world().get_resource::<crate::ReactOutbox>())
+            && watch.nudge(j, want.unwrap_or(-1), s.to, held, marked)
+        {
+            o.send(serde_json::json!({"t": "event", "name": "raea-frames", "value": {"from": want, "to": s.to}}));
+        }
         seen = crate::wait_flush(seen, std::time::Duration::from_secs_f64(left.min(0.5)), ask.as_deref());
     }
     // a call past HANG_SECS is a hang, named: which runtime's call, and how long it has run
-    if let Some(d) = crate::js_call_for().filter(|d| d.as_secs_f64() >= HANG_SECS) {
+    if let Some(d) = js.as_ref().map_or_else(crate::js_call_for, |j| j.since(&j.call_since)).filter(|d| d.as_secs_f64() >= HANG_SECS) {
         return Err(format!("the composition hangs on frame {want:?}: {} has run for {:.0} s without returning (past {HANG_SECS} s: an endless loop, or a native call that never returns; `sample <pid>` shows where), its marker at frame {} (done {})", crate::js_call_who(), d.as_secs_f64(), marked.0, marked.1));
     }
     if held {
         return Err(format!("frame {want:?} was held for {HOLD_SECS} s and never released: a delayRender never continued, or a scene that never finished loading"));
     }
-    Err(format!("the composition made no progress on frame {want:?} for {secs} s, its marker at frame {} (done {}) (does it throw? its [js] lines are above, and `raea traces show last` has the run's log)", marked.0, marked.1))
+    Err(watch.refusal(js.as_deref(), want, secs, HOLD_SECS, marked))
 }
 
 /// The entity carrying the frame marker (data-raea-frame), once found.

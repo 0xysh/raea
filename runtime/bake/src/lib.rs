@@ -219,12 +219,17 @@ pub fn step_frames_with(app: &mut App, a: i64, b: i64, answer: &mut raea_runtime
     let (t0, w0, a0, j0) = (std::time::Instant::now(), ld(&raea_runtime_react::FLUSH_WAIT_NS), ld(&raea_runtime_react::APPLY_NS), ld(&raea_runtime_react::JS_NS));
     let mut t_each = std::time::Duration::ZERO;
     app.world().resource::<ReactOutbox>().send(json!({"t": "event", "name": "raea-frames", "value": {"from": a, "to": b}}));
-    for g in a..b {
+    // the range's end, for a settle that finds a frame lost to ask for the rest again (#158)
+    app.world_mut().insert_resource(raea_runtime_react::Stepping { to: b });
+    let stepped = (a..b).try_for_each(|g| {
         raea_runtime_react::scene::settle_with(app, Some(g), 20.0, answer)?;
         let te = std::time::Instant::now();
         each(app, g)?;
         t_each += te.elapsed();
-    }
+        Ok::<(), String>(())
+    });
+    app.world_mut().remove_resource::<raea_runtime_react::Stepping>();
+    stepped?;
     if std::env::var_os("RAEA_BAKE_TRACE").is_some() {
         let ms = |a: &std::sync::atomic::AtomicU64, z: u64| (ld(a) - z) as f64 / 1e6;
         eprintln!(

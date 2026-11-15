@@ -34,6 +34,9 @@ use std::sync::mpsc::Sender;
 
 #[cfg(test)]
 mod tests;
+/// one runtime's JS thread as its settle sees it, and the settle's watch (#158)
+pub mod stall;
+pub use stall::{DropFault, JsState, ReactJs, Settling, Stepping};
 
 /// Bevy to React: events for the bridge's `op_next_event` (bevy-react's Outbound messages, as JSON).
 #[derive(Resource)]
