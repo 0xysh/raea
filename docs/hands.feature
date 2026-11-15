@@ -480,3 +480,44 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       Then a pushed or struck character gives way and recovers (the ragdoll looked at again, with a physics
         crate chosen for the whole engine first: there is none in the workspace today)
       And a hand or a foot can brace on a wall, a rail or the floor as a contact found the way holds are
+
+  Rule: SOMA is the standard body for people, decided by the user 11-15
+
+    # After HG12b and HG15 the user asked which body works best with generated motion and a generated head, and
+    # decided: standardize on SOMA (NVlabs/SOMA-X, Apache-2.0). Its skeleton is the one Kimodo generates on, so
+    # motion plays with no retarget; its rig has the twist joints HG15 measured the need for, and pose
+    # correctives; its own body and hand shape models are Apache-2.0 (MHR and Anny are optional backends; SMPL is
+    # separately licensed and not used). It ships a bare body: 18,056 vertices with UVs, eyes, teeth and tongue,
+    # no texture, clothes or hair. The 52-joint game_engine rig and the people built on it are what this
+    # replaces; animals keep their own rigs (HG11). HG15 is answered by this: the twist joints come with the rig.
+
+    @done
+    Scenario: HG16a. SOMA's own body plays generated motion in raea with nothing fitted
+      # 11-15. SOMA's template rig (110 joints: 78 named ones and 32 twist joints) is read in Blender, posed
+      # frame by frame from a Kimodo motion's own joint turns (given from SOMA's T-pose, for 30 joints, with
+      # the hips' place), its twist joints set by SOMA's shares (0.05, 1/3, 2/3, 0.95: a forearm or shin takes
+      # up its far joint's turn, an upper arm or thigh undoes its own near its start), and saved as a glTF
+      # clip that `<Model animation>` plays. Shown beside turbo following the same run and leap through the
+      # retarget. The largest limb twist in that motion is 77 degrees. Not yet: the body as a `<Character>`,
+      # posed by the engine each frame; its shape model; its correctives; any surface but plain grey.
+      Then a Kimodo motion plays on SOMA's body as the model made it
+
+    Scenario: HG16. A SOMA body is a raea body
+      Given SOMA's rig as a body folder (its 78 joints by SOMA's names, metres, with the twist joints as helpers)
+      Then `<Character>` poses it, raea-sys-body knows its joints' roles and limits, and the engine sets its twist
+        joints each frame (arm.rs `twist_joints`)
+      And a take (reach, grab, carry, put down, throw) runs on it and passes the audit that turbo's takes pass
+      And a motion on SOMA's skeleton is played as it is, with `from_soma` kept only for other rigs
+
+    @needs:HG16
+    Scenario: HG17. Different people from SOMA's shape model
+      Then a body's build takes SOMA's shape numbers (its own model's 128, or Anny's measures for age and build)
+        and writes the body folder, so a cast is a list of numbers and not a set of hand-made meshes
+      And SOMA's pose correctives are applied, in the engine or baked as shapes, with the cost of each measured
+
+    @needs:HG16
+    Scenario: HG18. A surface: skin, clothes, hair, and the generated head
+      Then a SOMA body has a skin texture, clothes and hair made by raea, or its surface is the drawn or
+        generated one with SOMA as the hidden driver
+      And the generated head replaces the body's head from the collar up, skinned to SOMA's Neck1, Neck2 and
+        Head and using its eye joints, the face's skin colour carried across the seam
