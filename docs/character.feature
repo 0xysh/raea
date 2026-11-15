@@ -408,9 +408,11 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # two rings pinned to the hips and each ring below free to stray further. The cloth follower already
       # built carries it through the matched walk with the legs as capsules sized from the body's own skin
       # samples, and it is drawn as a mesh sequence over the walking body. Measured: edges stretched 19 per
-      # cent at the 99th percentile, a particle strayed 39 cm at most. Wrong still: it rides up and shortens by
-      # the end of the walk, the seat pushes through the back (the legs are kept out, the pelvis is not), and
-      # it sits on the hips, not the waist. Not yet: grown from a garment's edge or drawn from a picture's
+      # cent at the 99th percentile. Two faults mended the same day: the seat came through the back (each ring
+      # is now at least as wide as the body at its height down to the crotch, and the pelvis has a collider),
+      # and it rode up and shortened by the end of the walk (less room to stray: 27 cm at most, was 39). Wrong
+      # still: the thighs show through the front at the longest stride (sizing the rings to the thighs and
+      # more room to stray were tried and taken back: the cloth bunched), and it sits on the hips, not the waist. Not yet: grown from a garment's edge or drawn from a picture's
       # outline (it is a plain tube), a hood or a coat's tails, and its colour from a garment file.
       Then cloth hangs free of the body and moves with it
 
