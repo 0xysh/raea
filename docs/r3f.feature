@@ -480,9 +480,13 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         raea-sys-compute three.rs and three-shader storage.rs tests (runs packed once by (epoch, seq), copies repeated
         with their number, matrix and values), tools/parity.sh in-tsl-particles. Not yet: Points and a Sprite with a
         count (drawn as before), per-vertex storage reads, indirect dispatch, a compute first dispatched after frame 0
-        (runtime-scene makes compute rows from the first frame's items), and a texture bound in a compute. Dense
-        additive particles come out more saturated than three's: raea's camera without Hdr tone-maps each fragment in
-        its shader before the blend, where three tone-maps the sum
+        (runtime-scene makes compute rows from the first frame's items), and a texture bound in a compute. Later the
+        same day: an unlit node material's colour is tone-mapped by Bevy's own tone_mapping after the camera's colour
+        grading (tone.wesl), as a lit or standard material's is, where it had a curve of three-shader's own without
+        the Grade exposure that stands for three's ACES 1/0.6 (R3F25), so it came out darker and redder:
+        in-tsl-particles 0.9799 (it was 0.9510, the "saturation" was this), and in-tsl-fbo, a node material reading a
+        target raea draws on its GPU (flipsY, onGpu), 0.9397 (0.9125 before); in-tsl-lit, in-lettra, in-tslpost and
+        in-tslpost2 unchanged, in-lettrafx 0.9890 (0.9855 on main without it, its last glyph mid-wipe narrower)
 
     Scenario: R3F23. Render targets are drawn on the GPU
       Given what an app draws into a render target itself (`gl.setRenderTarget(t); gl.render(scene, camera)`, drei's
