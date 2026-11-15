@@ -149,6 +149,13 @@ Feature: Creatures: a four-legged body in the character SDK
       # needed that a raccoon did not: any number of neck joints sharing the head's turn, optional ears, lids, digits
       # and belly, wings (CR17), a body on nearly straight legs carried a little lower so it has slack to step with,
       # and how it carries itself as four numbers in its rig (head low, heel down, tail's hang, wings' fold).
+      # 11-15 later: a dog and a cat made by another project (the monk game's animals, on the same names) walk, trot
+      # and gallop on it too (sdk/body test/creature.test.ts, private repo 3de8813). They needed two things the
+      # raccoon and the dragon hid: a fore leg may end in a paw instead of a hand (the body names each leg's planted
+      # joint), and a body whose legs have less room behind their feet than a raccoon's (straighter legs: measured
+      # from the rest pose at the height it is carried) steps at a smaller size, so shorter, quicker steps at the
+      # same speed. Before that, setting off left a hind foot planted up to 31 mm out of its leg's reach while the
+      # other three swung. The raccoon's steps are unchanged; the dragon's are 9% shorter.
       Given a dragon's rig
       Then it passes CR2 to CR5 and CR10 on the raccoon's solver with no line of the solver naming it
 
