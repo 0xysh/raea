@@ -117,7 +117,11 @@ pub fn module(source: &str, uniforms: &[(String, &'static str)], textures: &[Str
          @group(0) @binding(2) var<uniform> raea_pass: RaeaPass;\n\
          // a uv over the camera's Viewport as one over the frame's texture (view: its size, then its corner, over the texture's)\n\
          fn raea_view_uv(uv: vec2<f32>) -> vec2<f32> { return raea_pass.view.zw + uv * raea_pass.view.xy; }\n\
-         fn frame(uv: vec2<f32>) -> vec4<f32> { return textureSampleLevel(raea_frame, raea_frame_sampler, raea_view_uv(uv), 0.0); }\n",
+         // read past its edge, the frame's edge pixel (as a clamped texture is), never the row under the Viewport\n\
+         fn frame(uv: vec2<f32>) -> vec4<f32> {\n\
+         \x20   let h = 0.5 / (vec2<f32>(textureDimensions(raea_frame)) * raea_pass.view.xy);\n\
+         \x20   return textureSampleLevel(raea_frame, raea_frame_sampler, raea_view_uv(clamp(uv, h, 1.0 - h)), 0.0);\n\
+         }\n",
     );
     for (i, t) in textures.iter().enumerate() {
         m += &format!("@group(0) @binding({}) var tex_{t}: texture_2d<f32>;\n@group(0) @binding({}) var samp_{t}: sampler;\n", 3 + i * 2, 4 + i * 2);
@@ -128,7 +132,7 @@ pub fn module(source: &str, uniforms: &[(String, &'static str)], textures: &[Str
     if prepass {
         m += "@group(0) @binding(13) var raea_depth: texture_depth_2d;\n\
               @group(0) @binding(14) var raea_normal: texture_2d<f32>;\n\
-              fn raea_texel(uv: vec2<f32>, size: vec2<u32>) -> vec2<i32> { return clamp(vec2<i32>(raea_view_uv(uv) * vec2<f32>(size)), vec2<i32>(0), vec2<i32>(size) - vec2<i32>(1)); }\n\
+              fn raea_texel(uv: vec2<f32>, size: vec2<u32>) -> vec2<i32> { return clamp(vec2<i32>(raea_view_uv(clamp(uv, vec2<f32>(0.0), vec2<f32>(0.99999))) * vec2<f32>(size)), vec2<i32>(0), vec2<i32>(size) - vec2<i32>(1)); }\n\
               // reverse-Z: the depth is near / distance, 0 where nothing was drawn\n\
               fn depth(uv: vec2<f32>) -> f32 {\n\
               \x20   let d = textureLoad(raea_depth, raea_texel(uv, textureDimensions(raea_depth)), 0);\n\
@@ -441,8 +445,8 @@ mod tests {
         let d = module("@fragment fn f(in: FullscreenVertexOutput) -> @location(0) vec4<f32> { return vec4(depth(in.uv)); }", &[], &[], None, true);
         assert!(d.contains("fn depth(") && d.contains("fn normal(") && !d.contains("raea_frame_pass("));
         // the frame, the depth and the normals are read at the Viewport's uv mapped onto their textures
-        assert!(m.contains("textureSampleLevel(raea_frame, raea_frame_sampler, raea_view_uv(uv), 0.0)"));
-        assert!(d.contains("vec2<i32>(raea_view_uv(uv) * vec2<f32>(size))"));
+        assert!(m.contains("textureSampleLevel(raea_frame, raea_frame_sampler, raea_view_uv(clamp(uv, h, 1.0 - h)), 0.0)"));
+        assert!(d.contains("vec2<i32>(raea_view_uv(clamp(uv, vec2<f32>(0.0), vec2<f32>(0.99999))) * vec2<f32>(size))"));
     }
 
     #[test]

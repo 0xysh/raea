@@ -6,14 +6,9 @@
 // it when it comes after a <ToneMapping>. The effects that read the frame elsewhere, a texture or the depth are in
 // effects-sampled.ts.
 import type * as THREE from "three";
-import { FramePass } from "raea/3d";
-import { COMPONENTS } from "../parts";
 import type { Part } from "./material";
 import { SAMPLED } from "./effects-sampled";
-
-// raea's <FramePass> among the components a part may name (here until parts.tsx's table takes it: lane r3f-tsl has
-// that table open for R3F22's <Compute>)
-COMPONENTS.FramePass ??= FramePass;
+import { TSL } from "./effects-tsl";
 
 /** an effect of pmndrs' postprocessing, as post.ts reads it */
 export interface PPEffect {
@@ -141,7 +136,7 @@ const BODIES: Record<string, Spec> = {
   },
 };
 
-const SPECS: Record<string, Spec> = { ...BODIES, ...SAMPLED };
+const SPECS: Record<string, Spec> = { ...BODIES, ...SAMPLED, ...TSL };
 
 /** the effects this module draws */
 export const FRAME_EFFECTS = new Set(Object.keys(SPECS));

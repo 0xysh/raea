@@ -1,9 +1,7 @@
 // three.js's lights, cameras, fog and environment as raea's parts, in world space (raea places a light and the camera
 // by position and target, not inside a group). Intensities go through units.ts: a three light and the raea light it
 // becomes put the same light on screen.
-import { Fragment } from "react";
 import * as THREE from "three";
-import { COMPONENTS } from "../parts";
 import { toRaea, stopsOf } from "../units";
 import type { Part, Props } from "./material";
 import { srcOf } from "./texture";
@@ -190,7 +188,6 @@ export function skyOf(scene: THREE.Scene, gl?: THREE.WebGLRenderer, webgpu = fal
 export function toneParts(mode: string, stops: number): Part {
   const tone: Part = { type: "ToneMapping", props: { mode } };
   if (stops === 0) return tone;
-  COMPONENTS.Fragment ??= Fragment as unknown as (typeof COMPONENTS)[string];
   return { type: "Fragment", props: {}, children: [tone, { type: "Grade", props: { exposure: stops } }] };
 }
 

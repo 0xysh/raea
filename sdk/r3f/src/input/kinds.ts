@@ -96,3 +96,20 @@ export const EFFECTS: Record<string, { status: InputStatus; raea: string; note?:
   GodRaysEffect: { status: "near", raea: "FramePass: rays streaked from the sun's disc on screen, where the depth prepass has nothing nearer", note: "its light source's own mask and the rays' blur aren't drawn" },
   ...Object.fromEntries(["LUT1DEffect", "TextureEffect", "DepthEffect", "OutlineEffect"].map((k) => [k, { status: "none" as const, raea: "left out, named once", note: "write it as a raea <FramePass> (WESL) outside <R3F>" }])),
 };
+
+/** three/webgpu's post nodes (three/addons/tsl/display) in a PostProcessing (RenderPipeline), and the raea effect each
+ * becomes (tsl-post.ts). The chain starts from its scene pass, which raea draws; its output's tone mapping is raea's.
+ * The arithmetic joining nodes is taken as the raea effect's own blend; an Fn of the app's own isn't run. */
+export const TSL_POST: Record<string, { status: InputStatus; raea: string; note?: string }> = {
+  PassNode: { status: "drawn", raea: "the frame: its scene seen by its camera" },
+  BloomNode: { status: "near", raea: "Bloom, added on top (additive: strength x 4 as its intensity, its threshold)", note: "Bevy's bloom, not three's mip blur: a glow of its own size" },
+  GTAONode: { status: "near", raea: "AmbientOcclusion (Bevy's SSAO)" },
+  DepthOfFieldNode: { status: "near", raea: "DepthOfField bokeh (focusDistance as focus, bokehScale as its blur)" },
+  FXAANode: { status: "drawn", raea: "AntiAliasing fxaa" },
+  SMAANode: { status: "drawn", raea: "AntiAliasing smaa" },
+  ...Object.fromEntries(["TRAANode", "TAAUNode"].map((k) => [k, { status: "near" as const, raea: "AntiAliasing smaa", note: "temporal anti-aliasing needs the frames before: raea draws a frame from that frame alone" }])),
+  SSAAPassNode: { status: "near", raea: "its scene pass, AntiAliasing msaa" },
+  PixelationPassNode: { status: "near", raea: "its scene pass, Look pixel (pixelSize as the cell)", note: "its normal and depth edges aren't drawn" },
+  ...Object.fromEntries(["FilmNode", "DotScreenNode", "RGBShiftNode", "ChromaticAberrationNode", "Lut3DNode", "sepia", "bleach"].map((k) => [k, { status: "drawn" as const, raea: "FramePass: what its setup() builds, in WGSL (effects-tsl.ts)" }])),
+  ...Object.fromEntries(["AfterImageNode", "AnaglyphPassNode", "BilateralBlurNode", "DenoiseNode", "FSR1Node", "GaussianBlurNode", "GodraysNode", "LensflareNode", "OutlineNode", "ParallaxBarrierPassNode", "RecurrentDenoiseNode", "RetroPassNode", "SharpenNode", "SobelOperatorNode", "SSGINode", "SSRNode", "SSSNode", "StereoCompositePassNode", "StereoPassNode", "TemporalReprojectNode", "TransitionNode"].map((k) => [k, { status: "none" as const, raea: "left out, named once", note: "write it as a raea <FramePass> (WESL) outside <R3F>" }])),
+};

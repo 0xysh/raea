@@ -9,6 +9,7 @@
 import * as THREE from "three";
 import { standInRenderer, warnOnce } from "./renderer";
 import { nextRandom, seedOf } from "./seed";
+import { recordPipeline } from "./tsl-post";
 
 type Rec = Record<string | symbol, any>;
 type Loop = (time: number) => void;
@@ -151,7 +152,9 @@ export function standIn(params: { canvas?: unknown } | undefined, webgpu: boolea
     const d = { scene, camera, gl: self as unknown as THREE.WebGLRenderer };
     if ((scene as Rec).isScene) run.scene = d;
     if (base.getRenderTarget()) return base.render(scene, camera);
-    run.drawn = d;
+    // three/webgpu's PostProcessing: the scene its chain starts from, the chain recorded at the run's clock (tsl-post.ts)
+    const p = recordPipeline(scene, self as unknown as THREE.WebGLRenderer, run.now / 1000);
+    run.drawn = p ? { ...p, gl: d.gl } : d;
   };
   const own: Rec = {
     domElement: params?.canvas ?? run?.canvas ?? programCanvas(300, 150),

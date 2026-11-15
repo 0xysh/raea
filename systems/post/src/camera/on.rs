@@ -55,6 +55,11 @@ pub fn bloom(world: &mut World, e: Entity, vals: &Vals) {
     if bloom > 0.0 {
         let mut b = bevy::post_process::bloom::Bloom::NATURAL;
         b.intensity = bloom;
+        // a glow added on top of the frame (three.js's UnrealBloom, postprocessing's), where Bevy's natural bloom takes
+        // its light from around it
+        if vals.get("bloom_additive").is_some_and(V::truthy) {
+            b.composite_mode = bevy::post_process::bloom::BloomCompositeMode::Additive;
+        }
         if let Some(th) = vals.get("bloom_threshold").map(V::num) {
             b.prefilter.threshold = th as f32;
             b.prefilter.threshold_softness = 0.2;

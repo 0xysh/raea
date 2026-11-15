@@ -12,6 +12,7 @@
 import type * as THREE from "three";
 import type { Part, Props } from "./material";
 import { framePass, type PPEffect } from "./effects";
+import { pipelineOf } from "./tsl-post";
 
 const warned = new Set<string>();
 function warnOnce(k: string, why: string) {
@@ -58,6 +59,12 @@ export function composerEffects(scene: THREE.Scene): { found: boolean; effects: 
       }
     }
   });
+  // three/webgpu's PostProcessing drawn from this scene's pass: its chain (tsl-post.ts), at its own clock in a program
+  const tsl = pipelineOf(scene);
+  if (tsl) {
+    root = { time: tsl.time ?? root.time, size: tsl.time === undefined ? root.size : tsl.size, camera: tsl.camera };
+    return { found: true, effects: tsl.effects };
+  }
   return { found, effects };
 }
 
@@ -77,6 +84,11 @@ export function postParts(effects: unknown[]): { parts: Part[]; tone?: Part } {
       continue;
     }
     const e = raw as Effect;
+    // one of raea's own effects, as a PostProcessing's node gives it (tsl-post.ts)
+    if (e.name === "RaeaPart") {
+      parts.push(e.part as Part);
+      continue;
+    }
     // a blend of SKIP (BlendFunction 9, DST) draws nothing; an effect's opacity scales it
     if (e.blendMode?.blendFunction === 9) continue;
     const share = num(e.blendMode?.opacity?.value, 1);
@@ -114,7 +126,9 @@ export function postParts(effects: unknown[]): { parts: Part[]; tone?: Part } {
         // three's ACES scales its input by 1/0.6 where Bevy's doesn't: as the Grade's exposure, on every pixel just before
         // the curve (lights.ts's toneParts), so the effects before it see three's values
         tone = { type: "ToneMapping", props: { mode } };
-        if (mode === "aces") grade.exposure = Math.log2(1 / 0.6);
+        // and three's own exposure, from a PostProcessing's output (tsl-post.ts)
+        const k = num(e.exposure, 1) / (mode === "aces" ? 0.6 : 1);
+        if (k !== 1) grade.exposure = Math.log2(k);
         mapped = true;
         break;
       }

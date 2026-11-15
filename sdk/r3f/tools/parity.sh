@@ -19,6 +19,8 @@ CASES+=(in-tsl-particles:12)
 CASES+=(in-vanilla:24)
 # postprocessing's effects as raea <FramePass>es (test/parity/post2.tsx), before and after an ACES tone mapping (R3F25)
 CASES+=(in-post2:6 in-post3:6)
+# three/webgpu's PostProcessing: its scene pass and TSL nodes as raea's effects (test/parity/tslpost.tsx, R3F25)
+CASES+=(in-tslpost:6 in-tslpost2:6)
 [ -z "${R3F_CASES:-}" ] || read -ra CASES <<<"$R3F_CASES"
 mkdir -p "$OUT"
 for c in "${CASES[@]}"; do

@@ -5,7 +5,7 @@
 //!
 //! Columns (all optional; the defaults are what the engine drew before these existed):
 //!   camera: x y z look_x look_y look_z fov near far, ambient ambient_color, bloom (intensity, 0 = none)
-//!           bloom_threshold, fog_color fog_start fog_end | fog_density, tonemap ('aces' 'agx' 'tony' 'reinhard'
+//!           bloom_threshold bloom_additive, fog_color fog_start fog_end | fog_density, tonemap ('aces' 'agx' 'tony' 'reinhard'
 //!           'none'), exposure (EV100), grade_temperature grade_tint grade_saturation, grade_{s,m,h}_{saturation,
 //!           contrast,gamma,gain,lift} (shadows, midtones, highlights), vignette vignette_radius vignette_smooth
 //!           vignette_color, aberration, vfog (1: volumetric fog) vfog_steps vfog_dither vfog_resolution vfog_ambient vfog_ambient_color, ssao

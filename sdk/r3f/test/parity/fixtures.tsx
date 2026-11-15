@@ -15,6 +15,7 @@ import inter from "./fonts/Inter-400.json";
 export { OUTPUTS } from "./outputs";
 import { TSL_INPUTS } from "./tsl";
 import { POST2_INPUTS } from "./post2";
+import { TSLPOST_INPUTS } from "./tslpost";
 
 export const SIZE = { width: 640, height: 360, fps: 24 };
 
@@ -381,6 +382,8 @@ export const INPUTS: Record<string, InputCase> = {
   ...TSL_INPUTS,
   // postprocessing's effects raea draws as frame passes (R3F25): test/parity/post2.tsx
   ...POST2_INPUTS,
+  // three/webgpu's PostProcessing, its TSL chain as raea's effects (R3F25): test/parity/tslpost.tsx
+  ...TSLPOST_INPUTS,
 };
 
 const WAVE_VERTEX = /* glsl */ `

@@ -127,6 +127,9 @@ export interface BloomProps {
   skip?: string[];
   /** each named pass's share of it, 0 (as skip) to 1 (all of it, as "scene" has) */
   passes?: Record<string, number>;
+  /** the glow added on top of the frame, brightening it, as three.js's and postprocessing's bloom do; by default it
+   * takes its light from around the bright parts (Bevy's energy-conserving bloom) */
+  additive?: boolean;
 }
 
 /** Glow around bright parts (emissive materials, strong highlights). Put it inside the Canvas3D.

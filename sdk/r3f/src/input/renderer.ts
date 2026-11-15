@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import { renderInto } from "./targets";
 import { Dispatches } from "./tsl-compute";
+import { recordPipeline } from "./tsl-post";
 
 const warned = new Set<string>();
 export function warnOnce(k: string, why: string) {
@@ -66,6 +67,10 @@ export function standInRenderer(): THREE.WebGLRenderer {
   // a pass the CPU doesn't do is drawn by raea's engine as a camera into the target's image, its scene's parts taken as
   // they are when it's drawn (targets.ts recordPass, passes.ts: R3F23)
   own.render = (scene: THREE.Object3D, camera: THREE.Camera) => void (target && renderInto(target, scene, camera, clear, own as unknown as THREE.WebGLRenderer));
+  // three/webgpu's PostProcessing draws its quad to the screen: its chain is recorded for the scene it starts from,
+  // which R3F's frame is (tsl-post.ts, docs/r3f.feature R3F25)
+  const into = own.render as (scene: THREE.Object3D, camera: THREE.Camera) => void;
+  own.render = (scene: THREE.Object3D, camera: THREE.Camera) => (target ? into(scene, camera) : void recordPipeline(scene, own as unknown as THREE.WebGLRenderer));
   // any other of WebGLRenderer's methods (setRenderTarget, clear, readRenderTargetPixels ...) does nothing: raea draws
   // (verbs only: a catch-all would answer `then`, and the renderer would read as a promise)
   const verb = /^(set|get|clear|read|copy|init|reset|render|dispose|compile|update|bind)[A-Z]?/;

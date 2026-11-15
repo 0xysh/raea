@@ -128,6 +128,10 @@ pub fn frame_post(its: &[Item]) -> BTreeMap<String, V> {
         if let Some(s) = shares(b) {
             row.insert("bloom_passes".into(), V::S(s));
         }
+        // three.js's and postprocessing's bloom: the glow added on top, not traded for the light around it
+        if b.get("additive") == Some(&Value::Bool(true)) {
+            row.insert("bloom_additive".into(), V::N(1.0));
+        }
     }
     if let Some(f) = first("fog") {
         row.insert("fog_color".into(), V::S(hex(f.get("color")).unwrap_or("#808080".into())));
@@ -347,6 +351,13 @@ mod tests {
         post(&[shot.clone(), vec![], shot], &mut p, &mut row, "cam");
         assert!(row.contains_key("bloom") && row.get("tonemap") == Some(&V::S("agx".into())));
         assert!(!row.contains_key("frame_sets") && p.keys.is_empty());
+    }
+
+    #[test]
+    fn an_additive_bloom_says_so_and_a_natural_one_doesnt() {
+        let row = frame_post(&[item("bloom", serde_json::json!({"intensity": 2.0, "additive": true}))]);
+        assert_eq!(row.get("bloom_additive"), Some(&V::N(1.0)));
+        assert!(!frame_post(&[item("bloom", serde_json::json!({"intensity": 2.0}))]).contains_key("bloom_additive"));
     }
 }
 

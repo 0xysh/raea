@@ -554,9 +554,18 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         frame's foot). three's tone exposure (toneMappingExposure, ACES's 1/0.6) is a Grade `exposure`, Bevy's colour
         grading on every pixel before the curve (new: grade_exposure), not the camera's, which skipped unlit colours (0.74
         stops dark under ACES) and made effects before a composer's ToneMapping read lit and unlit pixels in two scales.
-        in-post2 0.9879, in-post3 0.9767; the full parity list unchanged. Left: Outline (selected meshes in a composition
-        pass, once scene.ts is free), Texture, Depth, LUT1D, three/webgpu's PostProcessing (in-tslpost), and the
-        background under a composer's ToneMapping (three maps it, raea shows it as given)
+        in-post2 0.9879, in-post3 0.9767; the full parity list unchanged. three/webgpu's PostProcessing (RenderPipeline):
+        its render() hands the stand-in renderer a QuadMesh whose fragmentNode is the chain, read for its pass(scene,
+        camera), which raea draws as the frame, and its nodes in the order the frame goes through them
+        (src/input/tsl-post.ts): bloom as a Bloom added on top (new: Bloom `additive`, bloom_additive, Bevy's additive
+        composite; three's UnrealBloom brightens where Bevy's natural bloom trades light), GTAO, DOF, FXAA, SMAA (TRAA as
+        SMAA), SSAA and pixelation passes as raea's, film, dotScreen, rgbShift, chromaticAberration, lut3D, sepia and
+        bleach as FramePasses doing what their setup() builds (effects-tsl.ts), the output's tone mapping and exposure as
+        raea's; the other display nodes and an Fn of the app's own are named once (kinds.ts TSL_POST covers every node
+        three ships). A FramePass's frame() read past the edge now takes the edge pixel, not the tag row under the
+        Viewport. in-tslpost 0.9737 (bloom), in-tslpost2 0.9233 (sepia, chromatic aberration). Left: Outline (selected
+        meshes in a composition pass, once scene.ts is free), Texture, Depth, LUT1D, and the background under a
+        composer's or a PostProcessing's tone mapping (three maps it, raea shows it as given)
 
     Scenario: R3F26. <R3F> in a box smaller than the page (#130)
       Given an <R3F> in a box of its own inside a larger page
