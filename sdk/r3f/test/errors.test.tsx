@@ -103,7 +103,12 @@ describe("what the 11-15 audit found refused", () => {
   test("drei's <MeshReflectorMaterial> (it sets gl.state.buffers.depth) draws its plane", async () => {
     const { MeshReflectorMaterial } = await import("@react-three/drei");
     const { out } = quiet(() => partsOf(() => (<><Box /><mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[4, 4]} /><MeshReflectorMaterial resolution={64} mirror={0.8} /></mesh></>)));
-    expect(out.filter((p) => p.type === "Mesh").length).toBe(2);
+    // the box and the plane on the screen; its mirrored camera's pass draws the box (the plane hides itself) into its
+    // target on a layer of its own (R3F23)
+    expect(out.filter((p) => p.type === "Mesh" && !p.props.layers).length).toBe(2);
+    const pass = out.find((p) => typeof p.props.target === "string");
+    expect(pass?.props.target).toMatch(/^render:.+:64x64(:float)?$/);
+    expect(out.filter((p) => p.type === "Mesh" && (p.props.layers as number[] | undefined)?.[0] === (pass?.props.layers as number[])[0]).length).toBe(1);
   });
 
   test("drei's <Environment> with Lightformers (a CubeCamera reads the renderer's coordinate system) draws the scene", async () => {

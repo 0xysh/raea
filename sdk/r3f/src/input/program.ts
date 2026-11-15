@@ -32,6 +32,8 @@ export interface Run {
   rand: number;
   /** the time the step being run reads, ms */
   now: number;
+  /** the renderers it made: each one's passes into targets are emptied as a frame steps (R3F23) */
+  renderers: Set<object>;
   /** its renderers' animation loops */
   loops: Map<object, Loop>;
   /** the frame callbacks it asked for, run at the next step */
@@ -168,6 +170,7 @@ export function standIn(params: { canvas?: unknown } | undefined, webgpu: boolea
     },
     has: (t, k) => k in t || k in base,
   });
+  run?.renderers.add(self);
   return self as unknown as THREE.WebGLRenderer;
 }
 
@@ -175,7 +178,7 @@ export function standIn(params: { canvas?: unknown } | undefined, webgpu: boolea
 
 /** `program` run for the <Three> keyed `key`, on `canvas`: what it made recorded, no frame stepped yet */
 export function startRun(key: string, program: Program, canvas: HTMLCanvasElement): Run {
-  const run: Run = { source: String(program), frame: -1, rand: seedOf(key), now: 0, loops: new Map(), rafs: new Map(), raf: 0, drawn: null, scene: null, canvas, depth: 0 };
+  const run: Run = { source: String(program), frame: -1, rand: seedOf(key), now: 0, renderers: new Set(), loops: new Map(), rafs: new Map(), raf: 0, drawn: null, scene: null, canvas, depth: 0 };
   enter(run);
   let out: unknown;
   try {
@@ -212,6 +215,8 @@ export function stepRun(run: Run, frame: number, fps: number) {
   for (let i = run.frame + 1; i <= frame; i++) {
     run.now = (i * 1000) / (fps > 0 ? fps : 30);
     within(run, () => {
+      // what its renderers drew into targets is this step's (R3F23): the last step's passes go
+      for (const r of run.renderers) (r as { __raea?: { step?: () => void } }).__raea?.step?.();
       const due = [...run.rafs.values()];
       run.rafs.clear();
       for (const cb of [...run.loops.values()]) cb(run.now);

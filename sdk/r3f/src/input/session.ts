@@ -107,6 +107,8 @@ export function stepTo(key: string, frame: number, fps: number, width: number, h
     }
   }
   for (let i = s.frame + 1; i <= frame; i++) {
+    // what it draws into targets is this step's (R3F23): the last step's passes go
+    (live.state?.gl as unknown as { __raea?: { step?: () => void } } | undefined)?.__raea?.step?.();
     render(i);
     seeded(live, () => advance(i / fps, true, live.state));
     live.frame = i;

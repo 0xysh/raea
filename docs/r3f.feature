@@ -516,6 +516,18 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       #   R3F23d. in-fbo (the audit's fbo probe: a torus knot drawn into a useFBO shown on a plane), in-pingpong
       #     (GPUComputationRenderer's wave), in-reflector (<MeshReflectorMaterial>: its mirrored camera's pass, its
       #     blur, and its material's projective read; the read is an onBeforeCompile patch, so it lands with R3F24).
+      # Status (11-15): R3F23a and R3F23b written, unit-tested and in the tree. The engine's camera into an image is a
+      # "rendercam" row (raea-runtime-look rendercam.rs: its image in `into`, since a live row's `target` names the row
+      # a component is on; `on` keyed by step; the ambient light on its own layers, the screen camera's likewise), spawned
+      # by raea-render's render_camera (raea-sys-frame camera.rs into_image: IntoImage, no MSAA or dither, Hdr for a
+      # float image); every "render:" source resolves through raea-sys-frame's render_image.rs. sdk/r3f: a target is
+      # named "render:<texture uuid>@WxH:WxH" (a resized target is a new image), counted as drawn on the GPU once a pass
+      # drew into it (targets.ts onGpu: three's PMREM stand-in isn't), read with v turned over as a flipY picture is
+      # (texture.ts flipsY: scene.ts, shader.ts; tsl.ts's node textures next); a pass is recorded on the renderer that
+      # drew it (targets.ts renderInto, its __raea.passes, emptied by step() as session.ts and program.ts step a frame),
+      # its parts taken when it's drawn (two passes of one quad with another uniform each keep their own), and cube or
+      # 3D targets stay left out. Next: in-fbo's SSIM on a release build (test/parity/targets.tsx; R3F_CASES="in-fbo:12"
+      # until tools/parity.sh lists it), then R3F23c.
 
     Scenario: R3F24. onBeforeCompile patches
       Given a material patched by onBeforeCompile (drei's MeshWobbleMaterial and MeshDistortMaterial, a patched

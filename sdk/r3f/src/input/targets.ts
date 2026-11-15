@@ -8,8 +8,10 @@
 //     colour plain depth or drei's tint (ucolor * z * 2, alpha 1 - z, read from the material's onBeforeCompile)
 //   a blur pass: three's HorizontalBlurShader or VerticalBlurShader (9 taps, h or v apart in uv) over a target
 //
-// Anything else drawn into a target is left out, with one warning: the target stays empty.
+// Anything else drawn into a target is drawn by raea's engine: recorded here as a pass (passes.ts makes its parts),
+// a camera into the target's image (docs/r3f.feature R3F23).
 import * as THREE from "three";
+import type { Part } from "./material";
 
 /** a target's pixels: RGBA floats, row 0 at v = 0 (as three's targets hold them) */
 interface Pixels {
@@ -19,12 +21,6 @@ interface Pixels {
 }
 
 const drawn = new WeakMap<THREE.Texture, Pixels>();
-const warned = new Set<string>();
-function warnOnce(k: string, why: string) {
-  if (warned.has(k)) return;
-  warned.add(k);
-  console.warn(`raea/r3f: ${k} ${why}`);
-}
 
 /** raea's working size for a target (the passes are in uv, so a smaller one blurs the same) */
 const MAX = 256;
@@ -46,24 +42,96 @@ export function targetPixels(t: THREE.Texture): Pixels | undefined {
 
 const BLUR = [0.051, 0.0918, 0.12245, 0.1531, 0.1633, 0.1531, 0.12245, 0.0918, 0.051];
 
-/** `gl.render(scene, camera)` into `rt` (the stand-in renderer's), done here when it's a pass raea knows */
-export function renderInto(rt: THREE.RenderTarget, scene: THREE.Object3D, camera: THREE.Camera, clear: [number, number, number, number]) {
-  const out = pixelsFor(rt);
+/** `gl.render(scene, camera)` into `rt` (the stand-in renderer `gl`'s, renderer.ts): done here when it's a pass raea
+ *  does on the CPU, otherwise drawn by raea's engine (recordPass) */
+export function renderInto(rt: THREE.RenderTarget, scene: THREE.Object3D, camera: THREE.Camera, clear: [number, number, number, number], gl?: THREE.WebGLRenderer) {
+  if (!onCpu(rt, scene, camera, clear) && gl) recordPass(rt, scene, camera, clear, gl);
+}
+
+/** `gl.render(scene, camera)` into `rt` done here, when it's a pass raea does on the CPU: whether it was */
+function onCpu(rt: THREE.RenderTarget, scene: THREE.Object3D, camera: THREE.Camera, clear: [number, number, number, number]): boolean {
   const mat = (scene as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
   const u = mat?.uniforms;
   if ((scene as THREE.Mesh).isMesh && u?.tDiffuse && ("h" in u || "v" in u)) {
     const src = u.tDiffuse.value as THREE.Texture | null;
     const from = src ? drawn.get(src) : undefined;
-    if (from) blur(from, out, "h" in u ? Number(u.h.value) : 0, "v" in u ? Number(u.v.value) : 0);
-    return;
+    // a blur of a picture drawn here is done here; one of a target raea's engine draws is drawn there too
+    if (from || !(src && onGpu(src))) {
+      if (from) blur(from, pixelsFor(rt), "h" in u ? Number(u.h.value) : 0, "v" in u ? Number(u.v.value) : 0);
+      return true;
+    }
   }
   const over = (scene as THREE.Scene).overrideMaterial;
   if ((scene as THREE.Scene).isScene && (over as THREE.MeshDepthMaterial | null)?.isMeshDepthMaterial && (camera as THREE.OrthographicCamera).isOrthographicCamera) {
+    const out = pixelsFor(rt);
     for (let i = 0; i < out.data.length; i += 4) out.data.set(clear, i);
     depth(scene as THREE.Scene, camera as THREE.OrthographicCamera, over as THREE.MeshDepthMaterial, out);
-    return;
+    return true;
   }
-  warnOnce(`a render into a target (${(scene as THREE.Mesh).type}${mat ? " with " + mat.type : ""})`, "isn't one raea draws (a depth pass or a blur): the target stays empty");
+  return false;
+}
+
+/** a render into a target raea's engine draws: what was drawn, as it was then (its parts, made by passes.ts as the
+ *  render is asked for, since an app changes its uniforms between passes), into which target, the k-th into it this
+ *  frame */
+export interface Pass {
+  target: THREE.RenderTarget;
+  scene: THREE.Object3D;
+  camera: THREE.Camera;
+  /** the renderer's clear colour, linear rgba, when the render was asked for */
+  clear: [number, number, number, number];
+  autoClear: boolean;
+  k: number;
+  parts: Part[];
+}
+
+/** the targets a pass was drawn into on raea's GPU (recordPass), ever, by their texture */
+const onGpuTargets = new WeakMap<THREE.Texture, THREE.RenderTarget>();
+
+let partsOf: ((p: Omit<Pass, "parts">, gl: THREE.WebGLRenderer) => Part[]) | undefined;
+
+/** how a pass becomes parts (passes.ts, set as it loads: it walks scenes as scene.ts does, which reads targets) */
+export function drawPassesWith(fn: (p: Omit<Pass, "parts">, gl: THREE.WebGLRenderer) => Part[]) {
+  partsOf = fn;
+}
+
+/** the passes the stand-in renderer `gl` drew on raea's GPU this frame, in draw order (its __raea.passes), with the
+ *  step() that empties them as each frame steps (session.ts, program.ts) */
+function passesFor(gl: THREE.WebGLRenderer): Pass[] {
+  const own = gl as unknown as { __raea?: { passes?: Pass[]; step?: () => void } };
+  const raea = (own.__raea ??= {});
+  if (!raea.passes) {
+    const passes: Pass[] = [];
+    raea.passes = passes;
+    raea.step = () => void (passes.length = 0);
+  }
+  return raea.passes;
+}
+
+/** `gl.render(scene, camera)` into `rt` that raea's engine draws, added to the frame's passes with its parts as they
+ *  are now */
+function recordPass(rt: THREE.RenderTarget, scene: THREE.Object3D, camera: THREE.Camera, clear: [number, number, number, number], gl: THREE.WebGLRenderer) {
+  // a cube or 3D target (a CubeCamera's, drei's <Environment> with children) isn't a 2D image a camera draws: left out
+  // as before, the scene drawn without it (lights.ts skyOf says so for an environment)
+  if ((rt as { isWebGLCubeRenderTarget?: boolean }).isWebGLCubeRenderTarget || (rt.texture as { isCubeTexture?: boolean }).isCubeTexture || rt.depth > 1) return;
+  const passes = passesFor(gl);
+  const p = { target: rt, scene, camera, clear: [...clear] as Pass["clear"], autoClear: gl.autoClear !== false, k: passes.filter((x) => x.target === rt).length };
+  onGpuTargets.set(rt.texture, rt);
+  passes.push({ ...p, parts: partsOf ? partsOf(p, gl) : [] });
+  // a renderer whose frames nobody steps (step() not called) keeps its latest passes, not every one ever drawn
+  if (passes.length > 1024) passes.splice(0, passes.length - 1024);
+}
+
+/** whether `t` is a render target's that a pass was drawn into on raea's GPU (not one drawn on the CPU here, nor a
+ *  target nothing drew into: three's PMREMGenerator's stand-in, pmrem.ts): an image a camera draws into, which counts
+ *  rows from the top where three's target counts them from the bottom */
+export function onGpu(t: THREE.Texture): boolean {
+  return onGpuTargets.has(t) && !drawn.has(t);
+}
+
+/** the target a pass drew `t` into on raea's GPU, if one did */
+export function gpuTargetOf(t: THREE.Texture): THREE.RenderTarget | undefined {
+  return drawn.has(t) ? undefined : onGpuTargets.get(t);
 }
 
 /** three's 9-tap blur, `h` and `v` apart in uv, sampled linearly with edges clamped */
@@ -186,4 +254,19 @@ function depth(scene: THREE.Scene, cam: THREE.OrthographicCamera, m: THREE.MeshD
       }
     }
   }
+}
+
+/** a render target's image as raea names it ("render:NAME:WxH", ":float" for a float target): by its texture and
+ *  size, so a resized target is a new image */
+export function imageOf(rt: THREE.RenderTarget): string {
+  const w = Math.max(1, Math.round(rt.width)), h = Math.max(1, Math.round(rt.height));
+  const t = rt.texture;
+  const float = t.type === THREE.FloatType || t.type === THREE.HalfFloatType;
+  return `render:${t.uuid}@${w}x${h}:${w}x${h}${float ? ":float" : ""}`;
+}
+
+/** the parts of what the app drew into targets on raea's GPU this frame (the stand-in renderer's passes), in order */
+export function passesOf(gl: THREE.WebGLRenderer): Part[] {
+  const passes = (gl as unknown as { __raea?: { passes?: Pass[] } }).__raea?.passes;
+  return passes ? passes.flatMap((p) => p.parts) : [];
 }

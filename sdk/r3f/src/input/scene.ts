@@ -4,6 +4,10 @@
 // Lights, the camera, fog and the environment come out in world space (lights.ts). Each part is named by its place in
 // the tree (and its own name), so raea matches it across frames.
 import * as THREE from "three";
+// what the app draws into render targets itself, drawn on the GPU (R3F23): passes.ts makes each pass's parts as it's drawn
+import "./passes";
+import { passesOf } from "./targets";
+import { flipsY } from "./texture";
 import { arraysOf, posed, posedArrays, rewound, type Arrays } from "./geometry";
 import { isTroikaText, textParts } from "./text";
 import { clipArrays, clipOf, type Clip } from "./clip";
@@ -61,7 +65,7 @@ function flipped(m: THREE.Material | THREE.Material[]): boolean {
   // a ShaderMaterial reads its uvs as three gives them; the engine flips where it samples a flipped picture
   if (one && isShader(one)) return false;
   const map = ((Array.isArray(m) ? m[0] : m) as THREE.MeshBasicMaterial | undefined)?.map;
-  return map ? map.flipY : true;
+  return map ? flipsY(map) : true;
 }
 
 function colouredByVertex(m: THREE.Material) {
@@ -406,15 +410,26 @@ export interface Converted {
   background?: string;
 }
 
-/** R3F's scene, camera and renderer settings as raea's parts, this frame */
-export function convert(scene: THREE.Scene, camera: THREE.Camera, gl: THREE.WebGLRenderer, height: number, time = 0, delta = 0): Converted {
+/** a scene (or one object three was asked to render alone: a full-screen quad) seen by `camera` as raea's parts, its
+ *  objects' named under `root`: its lights (`world`) and what it draws. The screen's (convert) and a pass's into a
+ *  render target (passes.ts) */
+export function sceneParts(scene: THREE.Object3D, camera: THREE.Camera, gl: THREE.WebGLRenderer, height: number, root = "r3f", time = 0, delta = 0): { w: Walk; world: Part[]; drawn: Part[] } {
   scene.updateMatrixWorld();
   camera.updateMatrixWorld();
   if (camera.parent === null) camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-  const w: Walk = { camera, shadows: gl.shadowMap.enabled, world: [], height, scene, time, delta, gl, clips: [] };
-  let drawn = scene.children.flatMap((c, i) => walk(c, `r3f/${i}`, w));
+  const isScene = (scene as THREE.Scene).isScene === true;
+  const w: Walk = { camera, shadows: gl.shadowMap.enabled, world: [], height, scene: scene as THREE.Scene, time, delta, gl, clips: [] };
+  let drawn = isScene ? scene.children.flatMap((c, i) => walk(c, `${root}/${i}`, w)) : walk(scene, `${root}/0`, w);
   // a scene moved, turned or scaled as a whole (rare, but three allows it)
-  if (!scene.matrix.equals(new THREE.Matrix4()) && drawn.length) drawn = [{ type: "Group", props: { name: "r3f", ...place(scene) }, children: drawn }];
+  if (isScene && !scene.matrix.equals(new THREE.Matrix4()) && drawn.length) drawn = [{ type: "Group", props: { name: root, ...place(scene) }, children: drawn }];
+  return { w, world: w.world, drawn };
+}
+
+/** R3F's scene, camera and renderer settings as raea's parts, this frame */
+export function convert(scene: THREE.Scene, camera: THREE.Camera, gl: THREE.WebGLRenderer, height: number, time = 0, delta = 0): Converted {
+  const { w, drawn } = sceneParts(scene, camera, gl, height, "r3f", time, delta);
+  // what the app drew into render targets itself this frame, drawn on the GPU before the screen (passes.ts, R3F23)
+  drawn.unshift(...passesOf(gl));
   // a node material runs only under three's WebGPURenderer, so a scene with one is drawn by it (whatever gl stands in)
   let webgpu = (gl as { isWebGPURenderer?: boolean }).isWebGPURenderer === true;
   if (!webgpu) scene.traverse((o) => {

@@ -63,6 +63,9 @@ export function standInRenderer(): THREE.WebGLRenderer {
     outputColorSpace: THREE.SRGBColorSpace, toneMapping: THREE.NoToneMapping, toneMappingExposure: 1,
     capabilities: { isWebGL2: true, maxTextureSize: 16384, maxSamples: 4, logarithmicDepthBuffer: false }, info: { autoReset: true, reset: noop, render: { calls: 0, triangles: 0, points: 0, lines: 0, frame: 0 }, memory: { geometries: 0, textures: 0 }, programs: [] }, properties: { get: () => ({}) },
   } as Record<string | symbol, unknown>;
+  // a pass the CPU doesn't do is drawn by raea's engine as a camera into the target's image, its scene's parts taken as
+  // they are when it's drawn (targets.ts recordPass, passes.ts: R3F23)
+  own.render = (scene: THREE.Object3D, camera: THREE.Camera) => void (target && renderInto(target, scene, camera, clear, own as unknown as THREE.WebGLRenderer));
   // any other of WebGLRenderer's methods (setRenderTarget, clear, readRenderTargetPixels ...) does nothing: raea draws
   // (verbs only: a catch-all would answer `then`, and the renderer would read as a promise)
   const verb = /^(set|get|clear|read|copy|init|reset|render|dispose|compile|update|bind)[A-Z]?/;

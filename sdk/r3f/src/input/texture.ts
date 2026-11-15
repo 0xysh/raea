@@ -3,7 +3,7 @@
 // native render, where there's no DOM to load an <img> into, three's ImageLoader is stood in for by one that hands
 // back the url (with the picture's size unknown) and the engine loads that file.
 import * as THREE from "three";
-import { targetPixels } from "./targets";
+import { gpuTargetOf, imageOf, onGpu, targetPixels } from "./targets";
 
 const urls = new WeakMap<object, string>();
 
@@ -278,6 +278,9 @@ export function srcOf(t: THREE.Texture | null | undefined): string | undefined {
     // row 0 at v = 0: a target isn't flipped in y (its uvs reach raea as three gives them), so it's the PNG's top row
     return pngOf(bytes, drawn.w, drawn.h);
   }
+  // a render target raea's engine draws into (passes.ts, R3F23): the image its camera draws
+  const rt = gpuTargetOf(t);
+  if (rt) return imageOf(rt);
   const given = t.userData?.src;
   if (typeof given === "string") return given;
   const img = t.image as { src?: string; toDataURL?: () => string; data?: unknown } | undefined;
@@ -298,6 +301,13 @@ export function srcOf(t: THREE.Texture | null | undefined): string | undefined {
     return s;
   }
   return undefined;
+}
+
+/** whether `t` counts v from the bottom of its picture, as three's flipY picture does and a render target raea draws
+ *  on the GPU does (Bevy's image counts rows from the top, three's target from the bottom): a mesh reading it has its v
+ *  turned over (scene.ts), a shader's samples of it too (shader.ts, tsl.ts) */
+export function flipsY(t: THREE.Texture): boolean {
+  return t.flipY || onGpu(t);
 }
 
 /** a texture's repeat and offset, rotation, wrap and filter as raea's material props */

@@ -8,7 +8,7 @@
 // that includes <tonemapping_fragment> on a tone-mapped material goes as "linear", those includes dropped, and Bevy's
 // tone mapping maps it as three's would.
 import * as THREE from "three";
-import { srcOf } from "./texture";
+import { flipsY, srcOf } from "./texture";
 import type { Part, Props } from "./material";
 
 const hex = (c: THREE.Color) => "#" + c.getHexString();
@@ -182,7 +182,7 @@ export function shaderPart(m: THREE.ShaderMaterial, points = false): Part {
       if (!src) warnOnce(`${m.type} texture ${name}`, "has no picture raea can load (a render target's?): drawn as white");
       // three samples a picture without a colour space raw, an sRGB one decoded (as Bevy's sRGB image is)
       textures[name] = src && t.colorSpace !== THREE.SRGBColorSpace ? { src, colorSpace: "linear" } : src ?? WHITE;
-      if (t.flipY && src) flipY.push(name);
+      if (flipsY(t) && src) flipY.push(name);
       continue;
     }
     if (v instanceof THREE.Color && !color && /^(u?[cC]olou?r|diffuse)$/.test(name)) color = hex(v);
