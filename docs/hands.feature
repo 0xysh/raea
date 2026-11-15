@@ -46,6 +46,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
 
   Rule: Built
 
+    @done
     Scenario: HG0. Where it lives
       # Two crates, split when the first passed 2,000 lines: raea-sys-body is the character's body in Rust (what
       # sdk/body is in TypeScript), raea-sys-grab is what the hands do with things.
