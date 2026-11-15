@@ -86,6 +86,16 @@ fn audit(skel: &Skeleton, name: &str, base: &dyn Fn(f32) -> Pose, take: &Take, u
             w.palm_gap = w.palm_gap.max(gap);
             w.miss = w.miss.max(f.miss);
         }
+        if let Ok(span) = std::env::var("WATCH") {
+            // WATCH="mug 1.82 1.92": the right arm's angles and the hand's world turn over those seconds of that take
+            let mut words = span.split_whitespace();
+            let (take_name, from, to) = (words.next().unwrap_or(""), words.next().and_then(|x| x.parse::<f32>().ok()).unwrap_or(0.0), words.next().and_then(|x| x.parse::<f32>().ok()).unwrap_or(0.0));
+            if name.starts_with(take_name) && t >= from && t <= to {
+                let arm = skel.arm(Side::R).unwrap();
+                let angles = arm.map(|j| angles_of(skel, j, f.pose.turns[j]).map(|a| (a.flex.round(), a.side.round(), a.twist.round())));
+                eprintln!("  {t:.3} {:?} limited {} hand world {:.2?} thing up {:.2?}", angles, f.limited, at.rot[arm[2]].to_array(), (f.thing.turn * Vec3::Y).to_array());
+            }
+        }
         w.limited += f.limited as usize;
         let up = (at.pos[chest] - at.pos[0]).normalize();
         w.pitch = w.pitch.max(up.angle_between(Vec3::Y).to_degrees());

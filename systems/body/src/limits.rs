@@ -178,7 +178,9 @@ pub fn angles_of(skel: &Skeleton, i: usize, q: Quat) -> Option<Angles> {
 
 fn read(ax: &Axes, q: Quat) -> Angles {
     let twist = twist_about(q, ax.bone);
-    let swing = (q * twist.inverse()).to_scaled_axis();
+    // the short way round: a turn and its negative are one turn, and only one of them reads under half a turn
+    let swing = q * twist.inverse();
+    let swing = if swing.w < 0.0 { -swing } else { swing }.to_scaled_axis();
     let about = 2.0
         * Vec3::new(twist.x, twist.y, twist.z)
             .dot(ax.bone)

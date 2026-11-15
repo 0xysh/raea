@@ -24,6 +24,12 @@ fn limits_read_and_hold_a_joint() {
         // a turn inside its range comes back as it is
         let fine = Quat::from_axis_angle(Vec3::Z, 0.3 * side.sign());
         assert_eq!(clamp_turn(&s, upper, fine), (fine, 0.0));
+        // a turn reads the same whichever sign its numbers carry (it read the long way round, 329 degrees for 31, and
+        // was then held to a limit it was nowhere near)
+        let small = Quat::from_axis_angle(Vec3::new(0.3, 0.5, 0.8).normalize(), 0.5);
+        assert!((clamp_turn(&s, hand, -small).1 - clamp_turn(&s, hand, small).1).abs() < 0.01 && clamp_turn(&s, hand, small).1 < 10.0);
+        let (a, b) = (angles_of(&s, hand, small).unwrap(), angles_of(&s, hand, -small).unwrap());
+        assert!((a.flex - b.flex).abs() < 0.01 && (a.side - b.side).abs() < 0.01 && (a.twist - b.twist).abs() < 0.01, "{a:?} {b:?}");
         // a wrist's twist past 25 degrees is held there
         let twisted = Quat::from_axis_angle((s.joints[hand].tail - s.joints[hand].head).normalize(), 0.9 * side.sign());
         let (held, _) = clamp_turn(&s, hand, twisted);

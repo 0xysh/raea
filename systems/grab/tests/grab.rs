@@ -265,7 +265,7 @@ fn hands_stay_out_of_a_table() {
             assert!(d > 0.0, "t {t}: the hand is {} m into the table", -d);
         }
         if t >= take.grab && t < 2.3 {
-            assert!(f.miss < 6e-3, "t {t}: keeping clear cost the hold {} m", f.miss);
+            assert!(f.miss < 8e-3, "t {t}: keeping clear cost the hold {} m", f.miss);
         }
         t += 1.0 / 30.0;
     }

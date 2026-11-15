@@ -90,7 +90,13 @@ pub fn find_holds(thing: &Thing, holder: Vec3, o: HoldOptions) -> Grip {
 pub fn wrist_for(skel: &Skeleton, thing: &Thing, hold: &Hold, facing: Vec3) -> Option<(Vec3, Quat)> {
     let rest = hand_rest(skel, hold.side)?;
     let (at, n) = (thing.world(hold.at), (thing.turn * hold.normal).normalize());
-    let along = (facing - n * facing.dot(n)).try_normalize().unwrap_or_else(|| Vec3::Y.cross(n).normalize_or(Vec3::X));
+    // the fingers point the way asked, as near as the surface lets them. An asking nearly straight into the surface
+    // says little, and less the straighter it is: there the fingers turn toward upright (or, on a level surface,
+    // toward the holder's left), by as much as the asking falls short, so the way they point never flips
+    let flat = |v: Vec3| v - n * v.dot(n);
+    let (asked, up) = (flat(facing), flat(Vec3::Y));
+    let spare = if up.length() > 0.3 { up.normalize() } else { flat(Vec3::X).normalize_or(Vec3::X) };
+    let along = (asked + spare * (1.0 - asked.length()).max(0.0) * 0.6).normalize_or(spare);
     let frame = |a: Vec3, p: Vec3| Mat3::from_cols(a, p, a.cross(p));
     let turn = Quat::from_mat3(&(frame(along, -n) * frame(rest.along, rest.palm).transpose())).normalize();
     Some((at - turn * rest.mid, turn))
