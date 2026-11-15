@@ -37,7 +37,13 @@ function clearOf(c: THREE.Color, a: number): string {
 /** `parts` on render layer `layer`: each part but a group's (a mesh, a light, text); a mesh's own children (its
  *  geometry and surface) go with it */
 function onLayer(parts: Part[], layer: number): Part[] {
-  return parts.map((p) => (p.type === "Group" ? { ...p, children: onLayer(p.children ?? [], layer) } : { ...p, props: { ...p.props, layers: [layer] } }));
+  return parts.map((p) => (p.type === "Group" ? { ...p, children: onLayer(p.children ?? [], layer) } : { ...p, props: { ...p.props, layers: [layer] }, children: p.children?.map(intoTarget) }));
+}
+
+/** a three shader drawn into a target writes its colour as it is: three tone-maps and encodes only what it draws to
+ *  the screen (raea-sys-three-shader's output "target") */
+function intoTarget(p: Part): Part {
+  return p.type === "ThreeShaderMaterial" ? { ...p, props: { ...p.props, output: "target" } } : { ...p, children: p.children?.map(intoTarget) };
 }
 
 /** a camera for a pass three draws with a bare THREE.Camera (GPUComputationRenderer's, a full-screen quad's): its

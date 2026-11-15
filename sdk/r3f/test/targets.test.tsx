@@ -107,6 +107,9 @@ describe("a render into a target, drawn by raea's engine", () => {
     };
     expect(k((cams[0].props.layers as number[])[0])).toBe(0.25);
     expect(k((cams[1].props.layers as number[])[0])).toBe(0.75);
+    // a three shader drawn into a target writes its colour as it is, never through the screen's tone mapping
+    const outputs = out.filter((p) => ((p.props.layers as number[] | undefined)?.[0] ?? 0) >= 64).flatMap((p) => flat(p.children ?? [])).filter((c) => c.type === "ThreeShaderMaterial").map((c) => c.props.output);
+    expect(outputs).toEqual(["target", "target"]);
   });
 
   test("is the same thing's frame to frame: one quad, its material swapped, keeps a pass for each (GPUComputationRenderer)", () => {

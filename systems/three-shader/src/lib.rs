@@ -84,6 +84,9 @@ pub struct ThreeShader {
     depth_test: bool,
     /// whether its colour is what three's canvas shows (taken back through Bevy's tone mapping) or scene light
     display: bool,
+    /// drawn into a render image (`output` "target"): its colour written as it is, as three draws into a target (no
+    /// tone mapping, colour space or exposure), so the screen camera's tone mapping isn't followed
+    into: bool,
     layout: Vec<Uniform>,
     /// its textures' names, as tex0 to tex3 bind them (a frame's `three:uniforms` swaps one by name)
     bound: Vec<String>,
@@ -179,7 +182,8 @@ pub fn modules(vertex: &str, fragment: &str, layout: &[Uniform], textures: Optio
 ///   uniforms: {name: number | [numbers]}   each one's value (a matrix column-major, an array's elements in turn)
 ///   textures: {name: picture | {src, colorSpace: "srgb" | "linear", sampler}}   "linear": sampled raw, as three
 ///                                         samples a NoColorSpace texture
-///   output: "display" | "linear"          what its colour is (display for a ShaderMaterial, linear for TSL)
+///   output: "display" | "linear" | "target"   what its colour is (display for a ShaderMaterial, linear for TSL;
+///                                         target for one drawn into a render target, written as it is)
 ///   transparent, blending ("normal" | "additive" | "add" | "multiply" | "none"), side ("front" | "back" | "double"), depthWrite,
 ///   depthTest, alphaTest, time: [t, delta, frame]
 /// Returns the material and the names of the mesh's own attributes it reads (a0.. in order).
@@ -252,9 +256,10 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
             slots[TIME_SLOT][i] = x.as_f64().unwrap_or(0.0) as f32;
         }
     }
-    let display = o.get("output").and_then(Value::as_str).unwrap_or("display") == "display";
+    let output = o.get("output").and_then(Value::as_str).unwrap_or("display");
+    let display = output == "display";
     // tone.wesl reads which it is: a display colour is taken back through the camera's tone mapping, a linear one
-    // mapped forward when the camera maps in its materials' shaders
+    // mapped forward when the camera maps in its materials' shaders (a target's is neither, its tone mapping left at 0)
     slots[DISPLAY_SLOT][1] = if display { 1.0 } else { 0.0 };
     // the textures bound in the order the shader binds them (bound), each found by name
     let by = |n: &str| tex.iter().find(|t| t.0 == n).map(|t| t.1.clone());
@@ -296,6 +301,7 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
         depth_write: o.get("depthWrite").and_then(Value::as_bool).unwrap_or(!transparent),
         depth_test: o.get("depthTest").and_then(Value::as_bool).unwrap_or(true),
         display,
+        into: output == "target",
         layout,
         bound: bound.clone(),
     };
@@ -403,7 +409,7 @@ fn follow_tonemapping(cams: Query<(&Camera, Option<&bevy::core_pipeline::tonemap
         T::BlenderFilmic => (8.0, luts.as_ref().map(|l| l.blender_filmic.clone())),
         T::KhronosPbrNeutral => (9.0, None),
     };
-    let ids: Vec<AssetId<ThreeShader>> = mats.iter().filter(|(_, m)| m.slots[DISPLAY_SLOT].x != 1.0 + method || m.lut != lut).map(|(id, _)| id).collect();
+    let ids: Vec<AssetId<ThreeShader>> = mats.iter().filter(|(_, m)| !m.into && (m.slots[DISPLAY_SLOT].x != 1.0 + method || m.lut != lut)).map(|(id, _)| id).collect();
     for id in ids {
         if let Some(mut m) = mats.get_mut(id) {
             m.slots[DISPLAY_SLOT].x = 1.0 + method;
