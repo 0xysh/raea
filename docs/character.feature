@@ -384,6 +384,13 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # still gape: their gap runs into the collar). Seen now that the detail is there: the views' colours
       # differ (the back of the jeans is paler than the front), so a seam shows where one view hands over to
       # the next; matching them garment by garment is not done.
+      # Looked into after: the skin still seen at the shoulders is not a hole in the jacket. Both garment files
+      # cover the shoulder tops; what shows is the slope between neck and shoulder, which the t-shirt's
+      # neckline leaves bare (read too wide: that skin faces up, and the level views see it at a glance).
+      # An upward-facing vertex among mostly covered skin is now counted as covered, which did not reach it.
+      # Tried and taken back: matching the views' colours by the front's main colours (pale denim on the back
+      # was taken for the shirt's white), and counting any changed pixel of a layer as its cloth (the jacket
+      # then covered the hands).
       Then a garment carries its own picture, and its detail is the drawing's
 
     Scenario: CH42. A garment is kept as data on SOMA's topology
