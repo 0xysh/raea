@@ -363,6 +363,14 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # fingers on it on the stand-in body; and raea/character's `fetch`, which takes a thing as asked when it
       # is in reach and otherwise walks the body to the take's standing place first (walkUp) and puts every
       # time of the take off until it arrives. `fetch` is written and type-checked by use only: not rendered.
+      # The floor take's scenario was itself impossible, which several rounds had been fighting: the box stood on
+      # the body's toes (toe skin 11 mm in it at rest) with a solid table 38 cm ahead, 17 cm of floor for a 24 cm
+      # box. Set a forearm's length in front of the feet, the table a top with room under it: the hold is kept
+      # within 5 mm (from 69), no body skin is in the box, the hips are at 45 per cent of standing at the grab.
+      # The trunk's lean now comes on as soon as an arm ends short (it waited for the arm's full length and came
+      # on at once), and the squat's give is a smooth measure of the room the head and chest have (finding the
+      # least give that cleared jumped): that take's worst joint jump 1,706 to 707. Left in it: fingers 20 mm
+      # in the table's top as the hands leave, finger skin 15 mm in the box, hips down to 24 per cent later.
       Given the six takes of tools/hands-audit on a clean body with real fingers
       Then no skin is in the thing beyond a pad's give (2 mm), none in the scene or the body
       And every finger meant to hold has its pad on the thing, by a grip chosen for the thing's size and shape

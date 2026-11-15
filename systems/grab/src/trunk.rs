@@ -69,16 +69,26 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
     if near < 0.09 { bent(((0.09 - near) * 1.3).min(0.26)) } else { pose }
 }
 
-/// Whether the head's top, the neck and the chest are a hand's breadth off every solid.
-pub fn roomy(skel: &Skeleton, pose: &Pose, solids: &[Thing]) -> bool {
-    if solids.is_empty() {
-        return true;
-    }
+/// How much room the head's top, the neck and the chest have: the least distance from any of them to any solid,
+/// metres (a lot when there are no solids).
+pub fn room(skel: &Skeleton, pose: &Pose, solids: &[Thing]) -> f32 {
     let at = skel.fk(pose);
-    ["head", "neck_01", "spine_03"].iter().filter_map(|n| skel.joint(n)).all(|i| {
+    let mut least = 10.0f32;
+    for i in ["head", "neck_01", "spine_03"].iter().filter_map(|n| skel.joint(n)) {
         let tip = at.pos[i] + at.rot[i] * (skel.joints[i].tail - skel.joints[i].head);
-        solids.iter().all(|s| s.distance(at.pos[i]) > 0.09 && s.distance(tip) > 0.09)
-    })
+        for solid in solids {
+            least = least.min(solid.distance(at.pos[i])).min(solid.distance(tip));
+        }
+    }
+    least
+}
+
+/// How much of its bend a body gives up for more squat, from the room its head and chest would have bending freely:
+/// none with 20 cm to spare, all of it by the time they would touch. A smooth measure, where finding the least give
+/// that just clears jumped from frame to frame.
+pub fn give_for(room: f32) -> f32 {
+    let u = ((0.2 - room) / 0.2).clamp(0.0, 1.0);
+    u * u * (3.0 - 2.0 * u)
 }
 
 /// A wrist's place moved the least that keeps the hand (its wrist, palm and fingers' reach) clear of every solid.

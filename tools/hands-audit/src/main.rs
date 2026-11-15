@@ -157,10 +157,14 @@ fn main() {
     t.release = Some(Release::Put { at: 1.9, down: 2.5, place: Vec3::new(0.02, top + 0.05, 0.48) });
     audit(&skel, "cup, moved", &base, &t, 3.3);
 
-    let low = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(0.0, 0.1, 0.2));
+    // a box on the floor where a body would stand for it (a forearm's length in front of the feet), lifted onto a
+    // table that is a top with room under it. (The first audits had the box on the body's toes with a solid table
+    // 38 cm ahead: 17 cm of floor for a 24 cm box, a take no body could make.)
+    let low = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(0.0, 0.1, 0.44));
+    let slab = Thing::new(Solid::Box { half: Vec3::new(0.6, 0.02, 0.3) }, Vec3::new(0.0, top - 0.02, 0.8));
     let mut t = Take::new(low, found(&low), 0.4);
-    (t.grab, t.carried, t.avoid) = (1.2, 2.0, vec![table]);
-    t.release = Some(Release::Put { at: 2.2, down: 2.9, place: Vec3::new(0.0, top + 0.1, 0.52) });
+    (t.grab, t.carried, t.avoid) = (1.2, 2.0, vec![slab]);
+    t.release = Some(Release::Put { at: 2.2, down: 2.9, place: Vec3::new(0.0, top + 0.1, 0.62) });
     audit(&skel, "box, floor to table", &base, &t, 3.6);
 
     let hold = Hold { side: Side::R, at: Vec3::new(-0.035, 0.0, 0.0), normal: Vec3::NEG_X, along: None, shape: Some([-1.2, 0.0, 0.0]) };

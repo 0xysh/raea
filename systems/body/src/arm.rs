@@ -125,7 +125,9 @@ pub fn reach(skel: &Skeleton, p: &Pose, s: Side, target: Vec3, o: ArmOptions) ->
             Some((skel.joint(&name)?, *share, *cap * (1.0 - o.stiff.clamp(0.0, 1.0))))
         })
         .collect();
-    if out.miss <= within || !out.out_of_reach {
+    // (whenever the arm ends short, not only past its full length: the arm eases toward straight before that, and a
+    // lean that waited for the full length came on all at once)
+    if out.miss <= within {
         return Some(out);
     }
     let hand = o.end.unwrap_or(skel.fk(p).rot[arm[2]]);

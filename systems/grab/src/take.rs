@@ -10,7 +10,7 @@ use glam::{Quat, Vec3};
 
 use raea_sys_body::arm::{ArmOptions, forearm_twist, reach};
 use crate::grip::{lie_at_grab, past_range, swivel};
-use crate::trunk::{clear, hand_points, look, of_the_arm, own_solids, roomy, spread_for, stoop, torso};
+use crate::trunk::{clear, give_for, hand_points, look, of_the_arm, own_solids, room, spread_for, stoop, torso};
 use raea_sys_body::limits::clamp_turn;
 use raea_sys_body::prior::shape;
 use crate::hand::{Grip, Hold, Touch, curl};
@@ -450,15 +450,12 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let second = attempt(give, first, frame).1 * 1.3;
         attempt(give, first + second, frame).0
     };
+    // bent as far as the head and chest have room for: the nearer a solid they would come bending freely, the more
+    // of the bend is given up for squat
     let mut pose = solve(0.0, &mut frame);
-    if !roomy(skel, &pose, &take.avoid) {
-        // the least give that keeps the head and chest clear, found by halving, so it changes smoothly
-        let (mut lo, mut hi) = (0.0f32, 1.0f32);
-        for _ in 0..7 {
-            let mid = (lo + hi) / 2.0;
-            if roomy(skel, &solve(mid, &mut frame), &take.avoid) { hi = mid } else { lo = mid }
-        }
-        pose = solve(hi, &mut frame);
+    let give = give_for(room(skel, &pose, &take.avoid));
+    if give > 0.0 {
+        pose = solve(give, &mut frame);
     }
     // a thing held in one hand is where that hand has it: if the wrist was held at its limit, the thing turns with
     // the hand it is in (a cup tips less than asked) and nothing of the hand passes into it
