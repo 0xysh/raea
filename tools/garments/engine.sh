@@ -2,6 +2,8 @@
 # The garment data engine (docs/character.feature CH48a): N random GarmentCode designs cut to SOMA's measurements,
 # draped on the GPU, skinned, pictured on the mannequin, one contact sheet.
 #   tools/garments/engine.sh OUT_DIR N [SEED]
+#   LEAN=1 tools/garments/engine.sh ...   training data at scale: no glb, no pictures, no sheet, and each design's
+#     panels.json dropped once draped (GarmentCode makes it again from design.yaml); about 0.4 MB a design
 # Needs (see README.md): GARMENTCODE (a clone at d449629), GARMENT_PY (its venv's python, with mlx and libigl),
 # and the body's signed distance grid at $GARMENT_DATA/soma_sdf.npz (sdf_igl.py builds it once).
 set -euo pipefail
@@ -19,6 +21,8 @@ for d in "$OUT"/g*/; do
   [ -f "$d/$n.drape.json" ] && continue
   (cd "$T" && "$PY" -I drape_mlx.py "$DATA/soma_sdf.npz" "$d/$n.panels.json" "$d" 150 -0.064 "$T/soma.yaml") \
     | grep --line-buffered -E '^drape: \{|Error|Traceback' || echo "drape: $n failed"
+  [ "${LEAN:-0}" = 1 ] && [ -f "$d/$n.drape.json" ] && rm -f "${d:?}${n:?}.panels.json"
 done
+[ "${LEAN:-0}" = 1 ] && exit 0
 "$RAEA" blender run "$T/bake_batch.py" "$BODY" "$OUT"/g*/ 2>&1 | grep --line-buffered -E '^bake|Error|Traceback'
 "$PY" -I "$T/sheet.py" "$OUT/sheet.jpg" "$OUT"/g*/

@@ -688,3 +688,28 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # between the layers of one design; the captions are written from the settings, not seen.
       Then one command makes N random garments, each worn on SOMA and labelled with its design
       And a garment that slides off is caught by the drape's own check, not by eye
+
+    Scenario: CH48b. The training data at scale, with periods, genres and things that are not sewn (proposed)
+      # The user's choice, 11-15: scale the data and train now, before writing the missing pattern pieces. And,
+      # in his words: "use examples of time periods, futurism, armor/suits/helmets/hats/etc". The engine's lean
+      # mode (LEAN=1) keeps what training needs, about 0.4 MB a design: the design, its caption, the drape's
+      # numbers and the draped mesh; pictures and glbs are made again from those for the examples that need
+      # them. A caption from the settings alone ("fitted sleeveless top, trousers") can't name a period or a
+      # genre, so captions also come from a picture of the garment on the mannequin, written by an image-reading
+      # model asked what the garment is and what it evokes (Edwardian, 1970s, workwear, futurist, uniform), with
+      # its price per caption said first. What can't be sewn comes from CH49.
+      Then the training set holds sewn garments captioned by their settings and by what they look like
+      And worn hard pieces from CH49, each with its words, its picture and its 3D on SOMA
+
+    Scenario: CH49. Worn hard pieces: helmets, hats, armour, visors (proposed)
+      # Patterns make only what is cut and sewn. A helmet, a hat, a breastplate or a visor is made the way the
+      # user first proposed for clothes and the creature flow makes animals: a picture of SOMA's mannequin
+      # (one view, its camera written down) is dressed by an image model, keeping the pose and the view; Idol
+      # (Apache-2.0, run on this Mac) makes the dressed figure 3D; it is laid on SOMA by its camera and size; the
+      # body is cut away (everything within a few millimetres of the skin, by the body's distance grid); what is
+      # left is split by the bone it lies nearest, and each piece rides that bone rigidly, as the head's cap and
+      # glasses ride Head (CH21). It differs from the rejected picture-measured clothes: those painted cloth onto
+      # the skin from four separate pictures that never agreed; here one picture is made 3D whole, and only rigid
+      # things are kept, so nothing has to fold.
+      Then words make a helmet, a hat or armour that SOMA wears and moves with
+      And each piece is its own part on the bone it covers, so pieces mix with sewn garments as layers

@@ -34,3 +34,22 @@ stretch, cloth inside the skin, and whether it stayed on).
 - `make_garment.py`, `design.py`: one garment from settings by path (`sleeve.length=0.95`)
 - `render_pretty.py`: a garment to look at (EEVEE, fabric with sheen, soft studio light; `raea blender run`)
 - `sheet.py`, `grid.py`, `snaps_view.py`: contact sheets, and the drape's snapshots (`SNAP=1`) over the body
+
+## Worn hard pieces (CH49)
+
+What can't be sewn (helmets, hats, armour, visors, hard-shell suits) is drawn on SOMA's mannequin by an image model,
+made 3D by Idol on this machine, laid on SOMA and split by bone:
+
+    tools/garments/wear.sh NAME "a tall black Victorian silk top hat" keyed   # leaves skin bare: magenta mannequin
+    tools/garments/wear.sh NAME "a full suit of plate armour" full            # covers the body: kept whole, lifted
+
+- `wear_mannequin.py`: SOMA at rest from three-quarters ahead, its camera written down (`KEY=1`: magenta)
+- `wear_fit.py`: Idol's mesh turned, sized and placed onto SOMA (turn searched, then refined against the skin), bare body
+  cut (by distance, or by the magenta key), what is kept lifted off the skin, each face given its nearest bone
+- `wear_bake.py`: each piece weighted wholly to its bone on SOMA's armature, Idol's colours made linear, one glb + a picture
+
+About 5 cents (the picture) and 5 minutes (Idol) a piece. Faults so far: the surface is as lumpy as Idol's 4 mm mesh;
+a full suit's hands and feet copy SOMA's bare shape when the drawn gauntlets don't match its hand pose.
+
+For training data at scale, `LEAN=1 tools/garments/engine.sh OUT N SEED` keeps each design's settings, caption, drape
+numbers and draped mesh only (about 0.4 MB a design).
