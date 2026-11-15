@@ -170,7 +170,13 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # SOMA's hand (hand skin 22 mm into a box, no pads on a cup, 41 to 47 mm into the table as a hand leaves).
       # The joint limits have a SOMA table (the body SDK's, measured over the library on SOMA). The fingers'
       # rest curl is close to the old rig's (the thumb's first bone lies 31 degrees off the hand against 69),
-      # so the misses are not a matter of rest pose alone: not found yet.
+      # so the misses were not a matter of rest pose. Found: the finger curl placed a knuckle from its parent
+      # joint, which on the old rig is the wrist and on SOMA is a bone in the palm, so each finger was worked
+      # out 8 cm from where it is. Placed from the hand's joint: finger pads on a cup go from none to 6, hand
+      # skin in a box from 22 to 17 mm (the old rig's own numbers unchanged). Six takes are drawn on SOMA's
+      # body (a box thrown, a cup moved, a mug drunk from, a cup passed between hands, a box at 14 kg). Left:
+      # the middle finger and thumb tip 15 to 17 mm into a box, and hands 41 to 47 mm into the table as they
+      # leave.
       Then a take runs on SOMA, its fingers still to be fitted to SOMA's hand
 
     Scenario: CH18. What a clip cannot know is added on top, and measured
