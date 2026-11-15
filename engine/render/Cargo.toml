@@ -33,6 +33,8 @@ raea-runtime-plugins = { path = "../../runtime/plugins" }
 raea-sys-screen = { path = "../../systems/screen" }
 raea-sys-matchmove = { path = "../../systems/matchmove" }
 raea-sys-grid = { path = "../../systems/grid" }
+# the view a camera on the Engine's target draws: the frame above its tag row, or a page's box (#130)
+raea-sys-viewbox = { path = "../../systems/viewbox" }
 raea-sys-rendermap = { path = "../../systems/rendermap" }
 raea-sys-meshseq = { path = "../../systems/meshseq" }
 raea-sys-environment = { path = "../../systems/environment" }

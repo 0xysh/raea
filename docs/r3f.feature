@@ -587,12 +587,12 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       And #130's five cases each draw the plane at its expected size and place
       Status (11-15): done. The cause was the engine's, not <R3F>'s: a camera in a page element (docs/sdk.feature S3a)
         is drawn as the element's box's own view (a SubCameraView: the box's size as the full view, offset by its
-        place), but engine/render target.rs gave every camera on the Engine's target a w x h Viewport on the frames
+        place), but raea-render's tag_row_view gave every camera on the Engine's target a w x h Viewport on the frames
         before the page had laid the box out, and skipped a camera with a Viewport after that, so the box's view never
         came and the page's was cropped to the box (raea's own camera in a box too). The Viewport it gives is now taken
-        off when a box comes (unit tests in target.rs). #130's cases: 600 x 600 at fov 90, 80 px centred in the box
-        (was 120 px centred on the page); fov 32, 278 px (three: 279); 1080 x 1920, 80 px (was nothing); 2160 x 3840
-        with the box at (800, 1600), 80 px in the box. <R3F width height> (the box's size)
+        off when a box comes (the new crate raea-sys-viewbox, with its tests). #130's cases: 600 x 600 at fov 90, 80 px
+        centred in the box (was 120 px centred on the page); fov 32, 278 px (three: 279); 1080 x 1920, 80 px (was
+        nothing); 2160 x 3840 with the box at (800, 1600), 80 px in the box. <R3F width height> (the box's size)
         makes R3F's own size, its camera's aspect and an orthographic camera's frame the box's: an orthographic plane
         R3F frames at zoom 40 is 80 px in a 400 x 300 box with them, 40 px without (R3F sizes it from the frame)
 

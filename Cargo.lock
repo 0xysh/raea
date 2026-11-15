@@ -14854,6 +14854,7 @@ dependencies = [
  "raea-sys-sprite",
  "raea-sys-text3d",
  "raea-sys-three-shader",
+ "raea-sys-viewbox",
  "raea-sys-volume",
  "raea-sys-wear",
  "serde_json",
@@ -16243,6 +16244,14 @@ version = "0.1.0"
 dependencies = [
  "oxc",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-viewbox"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-sys-frame",
 ]
 
 [[package]]
