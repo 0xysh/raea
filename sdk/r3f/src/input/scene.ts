@@ -1,7 +1,6 @@
 // A three.js scene as raea's parts. The scene graph keeps its shape: an object with children is a <Group> at its own
 // transform (raea composes them as three does, shear included), a mesh a <Mesh> with its <BufferMesh> and material.
-// An InstancedMesh is <Instances> while its copies hold still and one mesh a copy when they move or each has its own
-// colour; Points are one mesh of quads facing the camera; lines are a <Gizmo>; a Sprite is a quad facing the camera.
+// An InstancedMesh is one <Instances> whose copies are the frame's instance matrices and colours; Points are one mesh of quads facing the camera; lines are a <Gizmo>; a Sprite is a quad facing the camera.
 // Lights, the camera, fog and the environment come out in world space (lights.ts). Each part is named by its place in
 // the tree (and its own name), so raea matches it across frames.
 import * as THREE from "three";
@@ -122,32 +121,47 @@ function meshParts(mesh: THREE.Mesh, name: string, w: Walk, at: Props): Part[] {
   return out;
 }
 
-/** whose copies have moved since the first frame: those are drawn one mesh a copy */
-const firstPlacement = new WeakMap<THREE.InstancedMesh, number>();
+/** the surfaces raea's <Instances> draws its copies with (scene3d's instance_mesh takes a standard material) */
+const INSTANCED = new Set(["MeshStandardMaterial", "MeshPhysicalMaterial", "MeshBasicMaterial"]);
 
+/** An InstancedMesh as one <Instances>, still or moving, its copies this frame's instance matrices and colours (R3F20):
+ * one row the engine draws by Bevy's instancing, its list the frame's buffer. All instanceMatrix.count copies are sent
+ * so the count holds when `count` changes, those past it shrunk to nothing; a mirrored copy is drawn unmirrored. A
+ * ShaderMaterial, several materials, MeshNormalMaterial, a shadow catcher or clipping planes: one mesh a copy. */
 function instancedParts(m: THREE.InstancedMesh, name: string, w: Walk, at: Props): Part[] {
-  const v = m.instanceMatrix.version;
-  if (!firstPlacement.has(m)) firstPlacement.set(m, v);
-  const moving = firstPlacement.get(m) !== v || m.instanceColor !== null || Array.isArray(m.material);
-  const one = new THREE.Matrix4();
-  const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler();
-  const copies: { position: V3; quaternion: Q; rotation: V3; scale: V3 }[] = [];
-  for (let i = 0; i < m.count; i++) {
+  const material = m.material as THREE.Material;
+  const surface = Array.isArray(m.material) || !material.visible ? undefined : materialOf(material, colouredByVertex(material), { object: m, scene: w.scene, camera: w.camera, time: w.time, delta: w.delta });
+  if (!surface || !INSTANCED.has(surface.type) || surface.normals || surface.catchShadow || clipOf(material, w.gl, w.clips)) return copyParts(m, name, w, at);
+  const arrays = arraysOf(m.geometry, { flipV: flipped(material), colors: colouredByVertex(material) });
+  if (!arrays) return [];
+  const one = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler(), c = new THREE.Color();
+  const n = m.instanceMatrix.count, shown = Math.min(m.count, n);
+  const colours = m.instanceColor;
+  const copies = new Array(n);
+  for (let i = 0; i < n; i++) {
     m.getMatrixAt(i, one);
     one.decompose(p, q, s);
-    copies.push({ position: p.toArray() as V3, quaternion: q.toArray() as Q, rotation: e.setFromQuaternion(q, "XYZ").toArray().slice(0, 3) as V3, scale: s.toArray() as V3 });
+    const hide = i >= shown || !Number.isFinite(p.x + p.y + p.z + q.x + q.y + q.z + q.w + s.x + s.y + s.z);
+    const size = (v: number) => (hide ? 1e-5 : Math.max(Math.abs(v), 1e-5));
+    e.setFromQuaternion(hide ? q.identity() : q, "XYZ");
+    const copy: { position: number[]; rotation: number[]; scale: number[]; color?: number[] } = { position: hide ? [0, 0, 0] : [p.x, p.y, p.z], rotation: [e.x, e.y, e.z], scale: [size(s.x), size(s.y), size(s.z)] };
+    if (colours) {
+      m.getColorAt(i, c);
+      copy.color = [c.r, c.g, c.b];
+    }
+    copies[i] = copy;
   }
-  if (!moving) {
-    const material = m.material as THREE.Material;
-    const arrays = arraysOf(m.geometry, { flipV: flipped(material), colors: colouredByVertex(material) });
-    const surface = materialOf(material, false, { object: m, scene: w.scene, camera: w.camera, time: w.time, delta: w.delta });
-    if (!arrays || !surface.type) return [];
-    return [{ type: "Instances", props: { name, ...at, at: copies.map(({ position, rotation, scale }) => ({ position, rotation, scale })), shadow: w.shadows && m.castShadow, receiveShadow: m.receiveShadow }, children: [{ type: "BufferMesh", props: { ...arrays } }, surface] }];
-  }
+  return [{ type: "Instances", props: { name, ...at, at: copies, shadow: w.shadows && m.castShadow, receiveShadow: m.receiveShadow }, children: [{ type: "BufferMesh", props: { ...arrays } }, surface] }];
+}
+
+/** an InstancedMesh whose surface <Instances> can't share: one mesh a copy, each in its colour */
+function copyParts(m: THREE.InstancedMesh, name: string, w: Walk, at: Props): Part[] {
+  const one = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
   const kids: Part[] = [];
-  const c = new THREE.Color();
-  copies.forEach((k, i) => {
-    for (const part of meshParts(m, `${name}.${i}`, w, { position: k.position, quaternion: k.quaternion, scale: k.scale })) {
+  for (let i = 0; i < Math.min(m.count, m.instanceMatrix.count); i++) {
+    m.getMatrixAt(i, one);
+    one.decompose(p, q, s);
+    for (const part of meshParts(m, `${name}.${i}`, w, { position: p.toArray() as V3, quaternion: q.toArray() as Q, scale: s.toArray() as V3 })) {
       if (m.instanceColor) {
         m.getColorAt(i, c);
         const surface = part.children![1];
@@ -156,7 +170,7 @@ function instancedParts(m: THREE.InstancedMesh, name: string, w: Walk, at: Props
       }
       kids.push(part);
     }
-  });
+  }
   return [{ type: "Group", props: { name, ...at }, children: kids }];
 }
 

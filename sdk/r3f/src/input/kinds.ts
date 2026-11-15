@@ -15,7 +15,7 @@ export const CLASSES: Record<string, { status: InputStatus; raea: string; note?:
   // drawn things
   Mesh: { status: "drawn", raea: "Mesh + BufferMesh (its triangles, normals, uvs, vertex colours; a range per geometry group)" },
   SkinnedMesh: { status: "drawn", raea: "Mesh + BufferMesh posed on the CPU each frame (bones and morph targets)" },
-  InstancedMesh: { status: "drawn", raea: "Instances while its copies hold still; a Mesh a copy when they move or have colours" },
+  InstancedMesh: { status: "drawn", raea: "Instances, its copies the frame's matrices and colours (a Mesh a copy under a ShaderMaterial)" },
   BatchedMesh: { status: "drawn", raea: "a Mesh per instance: its geometry's range, matrix and colour" },
   Points: { status: "drawn", raea: "one Mesh of quads facing the camera, three's point size (attenuated or in pixels), vertex colours" },
   Line: { status: "drawn", raea: "Gizmo strip in world space (vertex colours)", note: "lines are drawn 1 pixel wide in WebGL whatever linewidth says; raea draws linewidth" },

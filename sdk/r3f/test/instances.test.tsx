@@ -54,4 +54,19 @@ describe("Instances", () => {
     inst[0].getMatrixAt(0, m);
     expect(new THREE.Vector3().setFromMatrixPosition(m).toArray()).toEqual([2, 2, 0]);
   });
+
+  test("a colour a copy is the InstancedMesh's instanceColor (R3F20a)", () => {
+    const { out } = meshesOf(
+      <Instances at={[{ position: [0, 0, 0], color: [1, 0, 0] }, { position: [1, 0, 0] }]}>
+        <Sphere radius={0.1} />
+        <StandardMaterial base_color="#ffffff" />
+      </Instances>,
+    );
+    const inst = out.find((m) => (m as THREE.InstancedMesh).isInstancedMesh) as THREE.InstancedMesh;
+    const c = new THREE.Color();
+    inst.getColorAt(0, c);
+    expect(c.toArray()).toEqual([1, 0, 0]);
+    inst.getColorAt(1, c);
+    expect(c.toArray()).toEqual([1, 1, 1]);
+  });
 });

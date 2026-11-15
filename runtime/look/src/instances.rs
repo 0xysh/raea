@@ -1,26 +1,49 @@
 //! <Instances> (sdk/render 3d/instances.tsx): a Mesh or Model whose props carry `at`, its placements 9 numbers a copy
-//! (position, XYZ euler radians, scale), written as the row's `inst` column: 10 numbers a copy (position, rotation as
-//! a quaternion xyzw, scale), space-separated. The engine draws one copy per placement, sharing the mesh and material
-//! (runtime/scene3d's instance.rs; rows from runtime/scene). Placements that change over the shot are keyed (inst_all, inst_k).
+//! (position, XYZ euler radians, scale), or 12 with a colour a copy (its linear r, g, b after; data-at
+//! {"stride":12,"at":[...]}), written as the row's `inst` column: 10 numbers a copy (position, rotation as a quaternion
+//! xyzw, scale), 13 with the colour (and `inst_tint` 1), space-separated. The engine draws one copy per placement,
+//! sharing the mesh and material (runtime/scene3d's instance.rs; rows from runtime/scene). Placements that change over
+//! the shot are keyed (inst_all, inst_k).
 
 use super::*;
 use bevy::math::{EulerRot, Quat};
+use std::fmt::Write;
 
-fn packed(at: &[Value]) -> Option<String> {
-    if at.len() % 9 != 0 {
-        eprintln!("WARN  Instances: placements are 9 numbers a copy, got {}", at.len());
+/// A data-at's numbers and how many make a copy: a list is 9 a copy, {"stride":12,"at":[...]} (as instances.tsx writes
+/// it) 12. Parsed as plain numbers, not JSON values: a set of 20,000 copies is 240,000 of them a frame.
+fn numbers(t: &str) -> Option<(usize, Vec<f64>)> {
+    let t = t.trim();
+    if t.starts_with('[') {
+        return serde_json::from_str(t).ok().map(|a| (9, a));
+    }
+    let (head, list) = t.strip_prefix('{')?.split_once("\"at\":")?;
+    let stride: usize = head.split(',').find_map(|kv| kv.trim().strip_prefix("\"stride\":")).and_then(|s| s.trim().parse().ok())?;
+    let list: Vec<f64> = serde_json::from_str(list.trim_end().strip_suffix('}')?).ok()?;
+    (stride == 9 || stride == 12).then_some((stride, list))
+}
+
+fn packed(stride: usize, at: &[f64]) -> Option<String> {
+    if at.len() % stride != 0 {
+        eprintln!("WARN  Instances: placements are {stride} numbers a copy, got {}", at.len());
         return None;
     }
-    let f = |v: &Value| v.as_f64().unwrap_or(0.0);
-    let nums: Vec<String> = at
-        .chunks(9)
-        .flat_map(|c| {
-            let q = Quat::from_euler(EulerRot::XYZ, f(&c[3]) as f32, f(&c[4]) as f32, f(&c[5]) as f32);
-            [f(&c[0]), f(&c[1]), f(&c[2]), q.x as f64, q.y as f64, q.z as f64, q.w as f64, f(&c[6]), f(&c[7]), f(&c[8])]
-        })
-        .map(|v| format!("{}", r6(v)))
-        .collect();
-    Some(nums.join(" "))
+    let mut out = String::with_capacity(at.len() * 8);
+    let mut put = |v: f64| {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        let _ = write!(out, "{}", r6(v));
+    };
+    for c in at.chunks(stride) {
+        let q = Quat::from_euler(EulerRot::XYZ, c[3] as f32, c[4] as f32, c[5] as f32);
+        for v in [c[0], c[1], c[2], q.x as f64, q.y as f64, q.z as f64, q.w as f64, c[6], c[7], c[8]] {
+            put(v);
+        }
+        for v in &c[9..] {
+            put(*v);
+        }
+    }
+    Some(out)
 }
 
 /// An item's placements as its text: its data-at (#84, shared across frames while unchanged), or an `at` prop written
@@ -38,16 +61,15 @@ fn at_text(it: &Item) -> Option<std::borrow::Cow<'_, str>> {
 /// as `inst_k`, as a panel's pictures are (src_k): the engine moves its copies to the frame's (scene3d sync_instances).
 /// The count is the first frame's: a frame with another count holds the list before it.
 pub fn instances_column(p: &mut Program, row: &mut BTreeMap<String, V>, id: &str, its: &[Item]) {
-    let parse = |t: &str| serde_json::from_str::<Vec<Value>>(t).ok();
     let Some(first_text) = at_text(&its[0]) else { return };
-    let Some(at) = parse(&first_text) else { return };
-    let Some(first) = packed(&at) else { return };
+    let Some((stride, at)) = numbers(&first_text) else { return };
+    let Some(first) = packed(stride, &at) else { return };
     // each frame's list against the one before it only, by its text (the same Arc when React kept it): parsed only
     // when it differs (a frame without one holds the one before)
     let (mut lists, mut k, mut before, mut recounted) = (vec![first], Vec::with_capacity(its.len()), first_text, false);
     for it in its {
         if let Some(t) = at_text(it).filter(|t| *t != before) {
-            match parse(&t).filter(|a| a.len() == at.len()).and_then(|a| packed(&a)) {
+            match numbers(&t).filter(|(s, a)| *s == stride && a.len() == at.len()).and_then(|(s, a)| packed(s, &a)) {
                 Some(s) => {
                     lists.push(s);
                     before = t;
@@ -61,6 +83,9 @@ pub fn instances_column(p: &mut Program, row: &mut BTreeMap<String, V>, id: &str
         eprintln!("WARN  Instances {}: how many copies it has changes over the shot; a frame with another count holds the placements before it", its[0].props.get("name").and_then(Value::as_str).unwrap_or("?"));
     }
     row.insert("inst".into(), V::S(lists[0].clone()));
+    if stride == 12 {
+        row.insert("inst_tint".into(), V::N(1.0));
+    }
     if lists.len() > 1 {
         row.insert("inst_all".into(), V::S(lists.join("|")));
         exact(p, row, id, "inst_k", &k);
@@ -98,6 +123,16 @@ mod tests {
         assert!(all.split('|').nth(2).unwrap().starts_with("5 0 0 "));
         let k: Vec<f64> = p.keys[&("m0".to_string(), "inst_k".to_string())].iter().map(|k| k.1).collect();
         assert_eq!(k, [0.0, 0.0, 1.0, 2.0]);
+    }
+
+    // R3F20a: a colour a copy rides after its placement, and the row says so
+    #[test]
+    fn a_colour_a_copy_is_three_more_numbers() {
+        let (mut p, mut row) = (Program::default(), BTreeMap::new());
+        let it = Item { kind: "mesh", props: Default::default(), shape: None, material: None, at: Some(r#"{"stride":12,"at":[1,0,0,0,0,0,1,1,1,0.5,0.25,1]}"#.into()), world: Default::default() };
+        instances_column(&mut p, &mut row, "m0", &[it]);
+        assert_eq!(row.get("inst"), Some(&V::S("1 0 0 0 -0 0 1 1 1 1 0.5 0.25 1".into())));
+        assert_eq!(row.get("inst_tint"), Some(&V::N(1.0)));
     }
 
     #[test]

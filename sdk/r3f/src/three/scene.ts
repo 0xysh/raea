@@ -220,11 +220,11 @@ export class Scene3d {
         k.waiting = !primitive && !!shape && !fromShape;
         if (k.waiting) this.warnOnce("Mesh shape", "is a solid: load raea's shape module (loadShapes) to draw it");
         // <Instances>' copies: their placements in data-at, apart from its props (sdk/render instances.tsx)
-        const at = (p.at as number[] | undefined) ?? placements(el);
+        const at = p.at ? { at: p.at as number[], stride: 9 } : placements(el);
         const had = k.obj as THREE.Mesh | undefined;
         const geometry = fromShape ?? had?.geometry ?? new THREE.BufferGeometry();
         const material = (had?.material as THREE.Material | undefined) ?? new THREE.MeshStandardMaterial();
-        const m = at ? instanced(had instanceof THREE.InstancedMesh ? had : undefined, geometry, material, at) : had && !(had instanceof THREE.InstancedMesh) ? had : new THREE.Mesh(geometry, material);
+        const m = at ? instanced(had instanceof THREE.InstancedMesh ? had : undefined, geometry, material, at.at, at.stride) : had && !(had instanceof THREE.InstancedMesh) ? had : new THREE.Mesh(geometry, material);
         m.geometry = geometry;
         place(m, p);
         // shadow="only": it casts its shadow and isn't seen
@@ -471,13 +471,15 @@ export class Scene3d {
 
 export { vec };
 
-/** an <Instances>' placements, 9 numbers a copy (position, rotation, scale), from its data-at; undefined without one */
-function placements(el: Element): number[] | undefined {
+/** an <Instances>' placements from its data-at: 9 numbers a copy (position, rotation, scale), or 12 with a colour a
+ * copy ({"stride":12,"at":[...]}); undefined without one */
+function placements(el: Element): { at: number[]; stride: number } | undefined {
   const raw = el.getAttribute("data-at");
   if (!raw) return undefined;
   try {
     const at = JSON.parse(raw);
-    return Array.isArray(at) ? (at as number[]) : undefined;
+    if (Array.isArray(at)) return { at: at as number[], stride: 9 };
+    return at && Array.isArray(at.at) && (at.stride === 9 || at.stride === 12) ? { at: at.at as number[], stride: at.stride as number } : undefined;
   } catch {
     return undefined;
   }

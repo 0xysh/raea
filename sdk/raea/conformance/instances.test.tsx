@@ -28,6 +28,14 @@ describe("Instances", () => {
     expect(p.at).toBeUndefined();
     expect(p.shadow).toBe(false);
   });
+  test("a colour a copy: 12 numbers a copy (linear r, g, b after), a copy without one white (R3F20a)", () => {
+    const at = [{ position: [1, 0, 2] as [number, number, number], color: "#ff0000" }, { position: [0, 0, 0] as [number, number, number] }, { position: [0, 1, 0] as [number, number, number], color: [0, 0.5, 0] as [number, number, number] }];
+    const h = html(<Instances at={at}><Cuboid args={[1, 1, 1]} /><MeshStandardMaterial /></Instances>);
+    const d = placed(h, "Mesh");
+    expect(d.stride).toBe(12);
+    expect(d.at).toEqual([1, 0, 2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0.5, 0]);
+    expect(() => html(<Instances at={[{ position: [0, 0, 0], color: "red" }]}><Cuboid args={[1, 1, 1]} /><MeshStandardMaterial /></Instances>)).toThrow(/color/);
+  });
   test("the glTF form: a Model node", () => {
     const h = html(<Instances src="daisy.glb" at={[{ position: [0, 0, 0] }]} />);
     expect(props(h, "Model").src).toBe("daisy.glb");

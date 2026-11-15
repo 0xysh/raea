@@ -94,22 +94,38 @@ describe("the clock", () => {
 });
 
 describe("the scene graph", () => {
-  test("an InstancedMesh holding still is Instances; moving, a mesh a copy", () => {
+  test("an InstancedMesh is one Instances, still or moving, its copies' colours with it (R3F20)", () => {
     const geo = new THREE.BoxGeometry(), mat = new THREE.MeshStandardMaterial({ color: "#336699" });
-    const im = new THREE.InstancedMesh(geo, mat, 3);
+    const im = new THREE.InstancedMesh(geo, mat, 4);
     const m = new THREE.Matrix4();
-    for (let i = 0; i < 3; i++) im.setMatrixAt(i, m.makeTranslation(i * 2, 0, 0));
+    for (let i = 0; i < 4; i++) im.setMatrixAt(i, m.makeTranslation(i * 2, 0, 0));
+    im.count = 3;
     const a = partsOf(() => <primitive object={im} />);
     const inst = flat(a.parts).find((p) => p.type === "Instances")!;
-    expect((inst.props.at as unknown[]).length).toBe(3);
-    expect((inst.props.at as { position: number[] }[])[2].position).toEqual([4, 0, 0]);
+    const at = () => inst.props.at as { position: number[]; scale: number[]; color?: number[] }[];
+    expect(at().length).toBe(4);
+    expect(at()[2].position).toEqual([4, 0, 0]);
+    // past `count`: still sent, so the count holds, shrunk to nothing
+    expect(at()[3].scale).toEqual([1e-5, 1e-5, 1e-5]);
+    expect(at()[0].color).toBeUndefined();
     im.setMatrixAt(1, m.makeTranslation(0, 5, 0));
+    im.setColorAt(2, new THREE.Color(1, 0, 0));
     im.instanceMatrix.needsUpdate = true;
-    const b = convert(a.st.scene, a.st.camera, a.st.gl, 360);
-    const meshes = flat(b.parts).filter((p) => p.type === "Mesh");
-    expect(meshes.length).toBe(3);
-    expect(meshes[1].props.position).toEqual([0, 5, 0]);
+    const b = flat(convert(a.st.scene, a.st.camera, a.st.gl, 360).parts);
+    expect(b.filter((p) => p.type === "Mesh").length).toBe(0);
+    const moved = b.find((p) => p.type === "Instances")!.props.at as { position: number[]; color: number[] }[];
+    expect(moved[1].position).toEqual([0, 5, 0]);
+    expect(moved[2].color).toEqual([1, 0, 0]);
     end(a.key);
+  });
+
+  test("an InstancedMesh under a ShaderMaterial is a mesh a copy", () => {
+    const sh = new THREE.ShaderMaterial({ vertexShader: "void main() { gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }", fragmentShader: "void main() { gl_FragColor = vec4(1.0); }" });
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(), sh, 2);
+    const r = partsOf(() => <primitive object={im} />);
+    expect(flat(r.parts).filter((p) => p.type === "Instances").length).toBe(0);
+    expect(flat(r.parts).filter((p) => p.type === "Mesh").length).toBe(2);
+    end(r.key);
   });
 
   test("a mesh swapped into the same place with another shader program is another part; the same program keeps its", () => {

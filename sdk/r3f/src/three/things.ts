@@ -174,22 +174,25 @@ export function imagePlane(had: THREE.Mesh | undefined, p: Props): THREE.Mesh {
   return mesh;
 }
 
-// ---- instanced copies: `at` packs 9 numbers a copy (position, rotation XYZ, scale) ----
-export function instanced(had: THREE.InstancedMesh | undefined, geometry: THREE.BufferGeometry, material: THREE.Material, at: number[]): THREE.InstancedMesh {
-  const n = Math.floor(at.length / 9);
+// ---- instanced copies: `at` packs 9 numbers a copy (position, rotation XYZ, scale), 12 with its linear colour ----
+export function instanced(had: THREE.InstancedMesh | undefined, geometry: THREE.BufferGeometry, material: THREE.Material, at: number[], stride = 9): THREE.InstancedMesh {
+  const n = Math.floor(at.length / stride);
   const m = had && had.count === n ? had : new THREE.InstancedMesh(geometry, material, n);
   m.geometry = geometry;
   m.material = material;
   const o = new THREE.Object3D();
+  const c = new THREE.Color();
   for (let i = 0; i < n; i++) {
-    const k = i * 9;
+    const k = i * stride;
     o.position.set(at[k], at[k + 1], at[k + 2]);
     o.rotation.set(at[k + 3], at[k + 4], at[k + 5], "XYZ");
     o.scale.set(at[k + 6], at[k + 7], at[k + 8]);
     o.updateMatrix();
     m.setMatrixAt(i, o.matrix);
+    if (stride === 12) m.setColorAt(i, c.setRGB(at[k + 9], at[k + 10], at[k + 11]));
   }
   m.instanceMatrix.needsUpdate = true;
+  if (m.instanceColor) m.instanceColor.needsUpdate = true;
   m.castShadow = m.receiveShadow = true;
   return m;
 }
