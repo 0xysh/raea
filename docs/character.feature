@@ -57,6 +57,10 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
     # while a scene plays, is not planned.
 
     Scenario: CH10. One clip format, on the body's own skeleton
+      # The clip file the SDK already reads is the base (sdk/body/src/clip.ts `ClipFile`: the skeleton's name,
+      # the joints' names, and per clip its frame rate, the root's place as 32-bit floats and each joint's turn
+      # relative to its parent as 16-bit parts). It gains the rig's name, and per clip the contacts, tags and
+      # source below.
       Then a clip is each joint's turn and the root's place per frame, at its own frame rate, with its contacts
         (a list by joint name, each planted or not and where, so four legs or six fit as two do; hands and a
         seat the same way), its situation tags, and where it came from (a capture and its licence; a model, its
