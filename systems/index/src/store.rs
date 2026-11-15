@@ -42,6 +42,18 @@ pub struct Counts {
     pub rows: u64,
 }
 
+/// A source and what it holds
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Source {
+    pub id: String,
+    pub kind: String,
+    pub root: String,
+    pub label: String,
+    pub found: u64,
+    pub done: u64,
+    pub failed: u64,
+}
+
 /// An item waiting for the fast pass
 #[derive(Debug, Clone)]
 pub struct Pending {
@@ -55,7 +67,7 @@ impl Store {
     pub fn open(dir: &Path) -> Result<Store> {
         std::fs::create_dir_all(dir.join("thumbs")).with_context(|| format!("making {}", dir.display()))?;
         let db = Connection::open(dir.join("index.db"))?;
-        db.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;")?;
+        db.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 10000;")?;
         db.execute_batch(SCHEMA)?;
         Ok(Store { dir: dir.to_path_buf(), db })
     }
@@ -77,28 +89,36 @@ impl Store {
         if let Some(id) = self.db.query_row("SELECT id FROM sources WHERE kind = ?1 AND root = ?2", params![kind, root], |r| r.get(0)).optional()? {
             return Ok(id);
         }
-        let n: i64 = self.db.query_row("SELECT COUNT(*) FROM sources", [], |r| r.get(0))?;
-        let id = format!("ix{}-{n}", kind.chars().next().unwrap_or('s'));
+        // never a removed source's id again
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+        let id = format!("ix{}-{stamp:x}", kind.chars().next().unwrap_or('s'));
         self.db.execute("INSERT INTO sources (id, kind, root, label, created) VALUES (?1, ?2, ?3, ?4, strftime('%s','now'))", params![id, kind, root, label])?;
         Ok(id)
     }
 
-    /// Lists items in one transaction: new ones as LISTED, a changed one (size or mtime) back to LISTED; the rest kept
-    pub fn list(&mut self, source: &str, items: &[crate::Found]) -> Result<usize> {
+    /// Lists items in one transaction: new ones as LISTED, a changed one (size or mtime) back to LISTED with its old
+    /// rows dropped; the rest kept. Returns how many were new and how many changed.
+    pub fn list(&mut self, source: &str, items: &[crate::Found]) -> Result<(usize, usize)> {
         let tx = self.db.transaction()?;
-        let mut added = 0;
+        let (mut added, mut changed) = (0, 0);
         {
-            let mut up = tx.prepare_cached(
-                "INSERT INTO items (source, locator, kind, name, size, mtime, taken, w, h, dur) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-                 ON CONFLICT (source, locator) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, state = 0, err = NULL
-                 WHERE items.size != excluded.size OR items.mtime != excluded.mtime",
-            )?;
+            let mut had = tx.prepare_cached("SELECT id, size, mtime FROM items WHERE source = ?1 AND locator = ?2")?;
+            let mut add = tx.prepare_cached("INSERT INTO items (source, locator, kind, name, size, mtime, taken, w, h, dur) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)")?;
+            let mut redo = tx.prepare_cached("UPDATE items SET size = ?2, mtime = ?3, state = 0, err = NULL WHERE id = ?1")?;
+            let mut drop = tx.prepare_cached("DELETE FROM rows WHERE item = ?1")?;
             for f in items {
-                added += up.execute(params![source, f.locator, f.kind, f.name, f.size as i64, f.mtime, f.taken, f.w, f.h, f.dur])?;
+                match had.query_row(params![source, f.locator], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))).optional()? {
+                    None => added += add.execute(params![source, f.locator, f.kind, f.name, f.size as i64, f.mtime, f.taken, f.w, f.h, f.dur])?,
+                    Some((id, size, mtime)) if size != f.size as i64 || mtime != f.mtime => {
+                        drop.execute([id])?;
+                        changed += redo.execute(params![id, f.size as i64, f.mtime])?;
+                    }
+                    Some(_) => {}
+                }
             }
         }
         tx.commit()?;
-        Ok(added)
+        Ok((added, changed))
     }
 
     pub fn pending(&self, source: &str, limit: usize) -> Result<Vec<Pending>> {
@@ -138,6 +158,40 @@ impl Store {
     pub fn fail(&self, item: i64, why: &str) -> Result<()> {
         self.db.execute("UPDATE items SET state = 2, err = ?2 WHERE id = ?1", params![item, why])?;
         Ok(())
+    }
+
+    /// Every source with what it holds, oldest first
+    pub fn sources(&self) -> Result<Vec<Source>> {
+        let mut q = self.db.prepare(
+            "SELECT s.id, s.kind, s.root, s.label, COUNT(i.id), COALESCE(SUM(i.state = 1), 0), COALESCE(SUM(i.state = 2), 0)
+             FROM sources s LEFT JOIN items i ON i.source = s.id GROUP BY s.id ORDER BY s.created, s.id",
+        )?;
+        let rows = q.query_map([], |r| {
+            Ok(Source { id: r.get(0)?, kind: r.get(1)?, root: r.get(2)?, label: r.get(3)?, found: r.get::<_, i64>(4)? as u64, done: r.get::<_, i64>(5)? as u64, failed: r.get::<_, i64>(6)? as u64 })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// A source by its id, or by its root (the folder someone added)
+    pub fn find(&self, id_or_root: &str) -> Result<Option<String>> {
+        Ok(self.db.query_row("SELECT id FROM sources WHERE id = ?1 OR root = ?1", [id_or_root], |r| r.get(0)).optional()?)
+    }
+
+    /// A source gone from the index: its items, their rows (left in the vectors' file, out of search) and thumbnails
+    pub fn remove(&mut self, source: &str) -> Result<u64> {
+        let ids: Vec<i64> = {
+            let mut q = self.db.prepare("SELECT id FROM items WHERE source = ?1")?;
+            q.query_map([source], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?
+        };
+        let tx = self.db.transaction()?;
+        tx.execute("DELETE FROM rows WHERE item IN (SELECT id FROM items WHERE source = ?1)", [source])?;
+        tx.execute("DELETE FROM items WHERE source = ?1", [source])?;
+        tx.execute("DELETE FROM sources WHERE id = ?1", [source])?;
+        tx.commit()?;
+        for id in &ids {
+            let _ = std::fs::remove_file(self.thumb(*id));
+        }
+        Ok(ids.len() as u64)
     }
 
     pub fn counts(&self, source: Option<&str>) -> Result<Counts> {

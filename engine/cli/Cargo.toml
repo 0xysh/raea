@@ -55,6 +55,8 @@ raea-app-direction = { path = "../../apps/direction" }
 raea-app-notes = { path = "../../apps/notes" }
 # `raea fingerprint`: axes with small heads over on-device encoders, and the service that keeps them loaded (docs/fingerprint.feature FP3a)
 raea-app-fingerprint = { path = "../../apps/fingerprint" }
+# `raea index`: every picture on a folder or a drive searchable by words, embedded on the Neural Engine (docs/index.feature IX13)
+raea-sys-index = { path = "../../systems/index" }
 raea-app-sound = { path = "../../apps/sound" }
 raea-app-ci = { path = "../../apps/ci" }
 raea-app-tools = { path = "../../apps/tools" }

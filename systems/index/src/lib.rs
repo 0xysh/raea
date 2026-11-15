@@ -6,7 +6,9 @@
 
 #[cfg(target_vendor = "apple")]
 pub mod apple;
+pub mod cli;
 pub mod search;
+pub mod serve;
 pub mod store;
 pub mod text;
 pub mod walk;
@@ -14,7 +16,7 @@ pub mod walk;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use store::{DONE, LISTED, MODEL, Store};
+use store::{MODEL, Store};
 
 /// A picture or a video a source holds, before the fast pass reads it
 #[derive(Debug, Clone, Default)]
@@ -67,30 +69,47 @@ pub fn text_files() -> (PathBuf, PathBuf) {
     (d.join("onnx/text_model.onnx"), d.join("tokenizer.json"))
 }
 
-/// Lists a folder or a drive into the index; returns its source id and how many it found
-pub fn list_folder(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)) -> Result<(String, u64)> {
+/// What listing a source found
+#[derive(Debug, Clone, Default)]
+pub struct Listed {
+    pub source: String,
+    pub found: u64,
+    pub added: u64,
+    /// items whose file changed since the last listing: their old rows are gone
+    pub changed: u64,
+}
+
+/// Lists a folder or a drive into the index: new files added, changed ones put back in line
+pub fn list_folder(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
     let label = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| root.display().to_string());
     let source = store.source("folder", &root.to_string_lossy(), &label)?;
     let started = Instant::now();
-    let mut found = 0u64;
+    let mut l = Listed { source: source.clone(), ..Listed::default() };
     let mut err = None;
     walk::walk(root, 2000, &mut |batch| {
-        found += batch.len() as u64;
-        if let Err(e) = store.list(&source, &batch) {
-            err.get_or_insert(e);
+        l.found += batch.len() as u64;
+        match store.list(&source, &batch) {
+            Ok((a, c)) => {
+                l.added += a as u64;
+                l.changed += c as u64;
+            }
+            Err(e) => {
+                err.get_or_insert(e);
+            }
         }
-        on(&Progress { source: source.clone(), found, stage: "listing", seconds: started.elapsed().as_secs_f64(), ..Progress::default() });
+        on(&Progress { source: source.clone(), found: l.found, stage: "listing", seconds: started.elapsed().as_secs_f64(), ..Progress::default() });
     });
     if let Some(e) = err {
         return Err(e);
     }
-    Ok((source, found))
+    Ok(l)
 }
 
 /// The fast pass over a source's pictures that wait for it: decoded on every core but two, embedded 32 at a time on
 /// the Neural Engine, each batch's rows written as it finishes. Videos wait for their frames (IX2).
 #[cfg(target_vendor = "apple")]
-pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, on: &mut dyn FnMut(&Progress)) -> Result<Progress> {
+pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, stop: &std::sync::Arc<std::sync::atomic::AtomicBool>, on: &mut dyn FnMut(&Progress)) -> Result<Progress> {
+    use std::sync::atomic::Ordering;
     use rayon::prelude::*;
     const BATCH: usize = 32;
     let all: Vec<store::Pending> = store.pending(source, usize::MAX)?.into_iter().filter(|p| p.kind == "picture").collect();
@@ -98,10 +117,14 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, on:
     let (tx, rx) = std::sync::mpsc::sync_channel::<Result<apple::Ready, (i64, String)>>(BATCH * 8);
     let thumbs: Vec<PathBuf> = all.iter().map(|p| store.thumb(p.id)).collect();
     let threads = std::thread::available_parallelism().map(|n| n.get().saturating_sub(2).max(2)).unwrap_or(4);
+    let halt = stop.clone();
     let decoder = std::thread::spawn(move || {
         let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a decoding pool");
         pool.install(|| {
             all.par_iter().zip(thumbs.par_iter()).for_each_with(tx, |tx, (p, thumb)| {
+                if halt.load(Ordering::Relaxed) {
+                    return;
+                }
                 let r = apple::picture(Path::new(&p.locator), Some(thumb)).map(|(px, w, h)| apple::Ready { item: p.id, t: 0.0, px, w, h }).map_err(|e| (p.id, e));
                 let _ = tx.send(r);
             })
@@ -112,7 +135,7 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, on:
     let mut prog = Progress { source: source.into(), found: base.found, done: base.done, failed: base.failed, stage: "embedding", ..Progress::default() };
     let mut batch: Vec<apple::Ready> = Vec::with_capacity(BATCH);
     let mut embedded = 0u64;
-    let mut flush = |batch: &mut Vec<apple::Ready>, prog: &mut Progress, store: &mut Store| -> Result<()> {
+    let flush = |batch: &mut Vec<apple::Ready>, prog: &mut Progress, store: &mut Store| -> Result<()> {
         if batch.is_empty() {
             return Ok(());
         }
@@ -127,6 +150,10 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, on:
         Ok(())
     };
     for r in rx {
+        if stop.load(Ordering::Relaxed) {
+            prog.stage = "stopped";
+            break;
+        }
         match r {
             Ok(ready) => {
                 batch.push(ready);
@@ -153,9 +180,10 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, on:
     let _ = decoder.join();
     prog.seconds = started.elapsed().as_secs_f64();
     prog.per_sec = embedded as f64 / prog.seconds.max(1e-3);
-    prog.stage = "done";
+    if prog.stage != "stopped" {
+        prog.stage = "done";
+    }
     on(&prog);
     prog.newest.clear();
-    let _ = (LISTED, DONE);
     Ok(prog)
 }

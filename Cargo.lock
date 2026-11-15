@@ -14196,6 +14196,7 @@ dependencies = [
  "raea-runtime-plugins",
  "raea-runtime-react",
  "raea-runtime-sound",
+ "raea-sys-index",
  "regex",
  "serde",
  "serde_json",
