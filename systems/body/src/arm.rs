@@ -1,4 +1,4 @@
-//! Arm IK. `two_bone` puts a limb's end joint (wrist, ankle) on a target: the middle joint bends about the hinge it
+//! Arm and leg IK. `two_bone` puts a limb's end joint (wrist, ankle) on a target: the middle joint bends about the hinge it
 //! already has, the limb swings the least that gets there, and `pole` chooses the swivel (where the elbow points).
 //! `reach` adds the trunk: when the arm alone falls short, the clavicle, chest and spine lean the shoulder toward the
 //! target, each by a capped share (sdk/body/src/reach.ts). Both report how far they missed and how far they turned
