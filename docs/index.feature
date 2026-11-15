@@ -59,8 +59,9 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
       Status 11-15: the Library's Search asks the Index beside the libraries and shows its hits as a list of their own
         ("On this Mac": one per file, a video at its best moment, a press shows it in Finder; raea-feed #37); a
         described sound isn't asked of it, and the host doesn't start the indexer for a Mac that never indexed
-        anything. Not yet: one fused ranking (the weight and MARGIN need LB1's queries plus a photo set measured), "more
-        like this" from the page (serve's similar op is there), and agents' `raea library search` reading the fast rows
+        anything. A picture is a query on the Index page (raea-feed #40): a tile's corner button asks serve's similar
+        op for more like it, said in a chip over the field. Not yet: one fused ranking (the weight and MARGIN need
+        LB1's queries plus a photo set measured), and agents' `raea library search` reading the fast rows
 
     Scenario: IX4. The deep pass follows
       Then once a source's fast pass is done, Libraries' indexFile runs on its videos, sounds and words at low priority,
@@ -122,6 +123,17 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         through 2026-10). Listing a whole Drive needs drive.readonly or drive.metadata.readonly, restricted scopes that
         need Google's restricted-scope verification and a yearly security assessment (CASA) before a public app may
         ask for them. Shane's call (open question 3)
+      Built 11-15 inside drive.file (raea-feed #41): files picked in Google's Picker go in. The Index's Google Drive row
+        connects a Drive and opens the Picker in the browser; the feed's host takes the connection's token for the
+        picked files from raea-api (the Picker page's own, GET /v1/connections/ID/token) and fetches Drive's thumbnail
+        of each picture and video at 512 px into a folder beside the index, one per connection, which the indexer reads
+        as a folder source. The token goes only to Google's hosts and no picture reaches raea-api, so Free can do it
+        and raea-api needed no change. A picture Drive has no thumbnail of is fetched once and made small with sips; a
+        video Drive hasn't pictured, a folder, a document is left out and said. A hit carries the file's Drive name
+        and opens its page in Drive. Measured on the real indexer with a fake Google: 4 picks searchable in 25 ms of
+        fetching plus one batch, each found by words under its Drive name. Not yet: tried on a real Drive account, the
+        Picker showing only pictures and videos (the page is raea-api's, shared with Libraries), and a whole Drive
+        without picking (the scope question above)
 
     Scenario: IX9. The phone itself, later
       Then 0.1.5 reaches the phone's library through iCloud Photos on the Mac. Indexing on the iPhone in raea's iOS app
