@@ -168,6 +168,7 @@ members = [
     "runtime/export",
     "runtime/live",
     "runtime/page",
+    "runtime/appscreen",
     "runtime/sound",
     "runtime/look",
     "runtime/scene",
