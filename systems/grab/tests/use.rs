@@ -162,3 +162,42 @@ fn an_elbow_stays_out_of_the_trunk_when_a_hand_reaches_across() {
         t += 1.0 / 30.0;
     }
 }
+
+#[test]
+fn a_carried_thing_and_the_hands_on_it_stay_out_of_the_body() {
+    let s = mannequin();
+    let rest = s.fk(&s.rest());
+    let body = own_solids(&s, &rest);
+    assert_eq!(body.len(), 3);
+    // a deep box, and a carry place asked for inside the belly
+    let thing = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.12, 0.2) }, Vec3::new(0.0, 1.05, 0.5));
+    let grip = find_holds(&thing, s.rest().root, HoldOptions::default());
+    let mut take = Take::new(thing, grip, 0.0);
+    take.carry = Vec3::new(0.0, -0.25, 0.08);
+    let hands = Side::BOTH.map(|side| s.arm(side).unwrap()[2]);
+    let mut t = take.carried;
+    while t < 2.5 {
+        let f = perform(&s, &|_| s.rest(), &take, t);
+        for corner in f.thing.corners() {
+            for solid in &body {
+                assert!(solid.distance(corner) > 0.0, "t {t}: a corner of the box is {} m into the body", -solid.distance(corner));
+            }
+        }
+        // and so are the wrists that hold it
+        let w = s.fk(&f.pose);
+        for hand in hands {
+            assert!(body.iter().all(|solid| solid.distance(w.pos[hand]) > 0.0), "t {t}: a wrist is in the body");
+        }
+        assert!(f.miss < 0.01);
+        t += 1.0 / 15.0;
+    }
+    // it was moved the least: the box or a wrist is against the body (the trunk or a thigh), not out at arm's length
+    let f = perform(&s, &|_| s.rest(), &take, 2.0);
+    let w = s.fk(&f.pose);
+    let near = f.thing.corners().into_iter().chain(hands.map(|h| w.pos[h])).flat_map(|p| body.iter().map(move |solid| solid.distance(p))).fold(f32::MAX, f32::min);
+    assert!(near < 0.04, "the nearest of the box and the wrists is {near} m off the body");
+    // a take whose carry is clear of the body is as it was
+    let usual = Take::new(thing, grip, 0.0);
+    let chest = s.joint("spine_03").unwrap();
+    assert!((perform(&s, &|_| s.rest(), &usual, 2.0).thing.at - (rest.pos[chest] + usual.carry)).length() < 1e-4);
+}

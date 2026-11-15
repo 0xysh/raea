@@ -65,7 +65,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab | src/json.rs         | 190   | character.take, character.fit, character.hand                    |
         | raea-sys-grab | tests/grab.rs       | 470   | the hands' measures, on the stand-in body                        |
         | raea-sys-grab | tests/body.rs       | 150   | limits, the body out of solids, the hand prior                   |
-        | raea-sys-grab | examples/strip.rs   | 90    | a take drawn as an SVG filmstrip                                 |
+        | raea-sys-grab | tests/use.rs        | 230   | passing, sliding, wind-up, a turned body, keeping out of solids  |
         | sdk           | sdk/character/src/take.ts | 170 | take(), fitPose(), handShape(): the calls made, typed          |
 
     @done
@@ -111,7 +111,6 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # way and is set down within 0.1 mm of its place; a thrown box flies, lands on the floor and stays; the
       # body is back on its own motion 0.4 s after letting go. A frame asked for twice, in any order, is the same
       # frame; no joint of the body turns over 6 degrees in a 60th of a second, no finger joint over 20.
-      # `cargo run -p raea-sys-grab --example strip -- out.svg` draws a take as a filmstrip of stick figures.
       Given the body's own motion as a pose at any time, a thing, and its holds
       When a frame of the take is asked for
       Then the hands leave the body's motion, come onto the holds from off the surface, and close
@@ -298,6 +297,16 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # at every frame. Not done: the forearm and the hand against the thighs and the belly, and the thing
       # against the body.
       Then reaching across the body doesn't put the elbow through it
+
+    @done
+    Scenario: HG6e. The carried thing and the hands on it out of the body
+      # 11-14, built. trunk.rs `own_solids`: the trunk and both thighs as capsules where the pose has them. A
+      # carried thing is moved the way the body faces until none of its corners, nor a point a hand's length
+      # behind each hold (the wrist), is within 1 cm of them. A deep box asked to be carried inside the belly:
+      # no corner and no wrist is in the body at any frame, the nearest of them is within 4 cm of it, the holds
+      # are kept within 1 cm; a carry that was clear is unchanged. Not done: the forearm against the thighs in
+      # a squat, and the fingers against the body.
+      Then a thing is carried against the body, never in it
 
   Rule: Next, in order
 

@@ -9,7 +9,7 @@
 use glam::{Quat, Vec3};
 
 use raea_sys_body::arm::{ArmOptions, forearm_twist, reach};
-use crate::trunk::{clear, look, roomy, stoop, torso};
+use crate::trunk::{clear, look, own_solids, roomy, stoop, torso};
 use raea_sys_body::limits::clamp_turn;
 use raea_sys_body::prior::shape;
 use crate::hand::{Grip, Hold, Touch, curl, facing, wrist_for};
@@ -217,6 +217,19 @@ impl Take {
             let mut thing = self.thing.moved(self.thing.at.lerp(ride.at, u) + Vec3::Y * 0.04 * rise, self.thing.turn.slerp(ride.turn, u));
             let deep = thing.corners().iter().flat_map(|c| self.avoid.iter().map(|s| 0.01 - s.distance(*c))).fold(0.0f32, f32::max);
             thing.at.y += deep * (rise * 4.0).min(1.0);
+            // and out of the body's own trunk and thighs, the way it faces, by how deep its corners would be in
+            // them (a thing asked to be carried inside the belly is carried against it)
+            let body = skel.fk(&base(t));
+            let (ahead, solids) = (yaw(&body) * Vec3::Z, own_solids(skel, &body));
+            for _ in 0..10 {
+                // its corners, and where the wrists that hold it are: a hand's length behind each hold
+                let wrists = self.grip.holds().map(|h| thing.world(h.at) - ahead * 0.08);
+                let inside = thing.corners().into_iter().chain(wrists).flat_map(|c| solids.iter().map(move |s| 0.01 - s.distance(c))).fold(0.0f32, f32::max);
+                if inside <= 0.0 {
+                    break;
+                }
+                thing.at += ahead * (inside + 0.005) * u;
+            }
             // a throw is wound up: drawn back against the throw over its last moments, and brought through
             if let Some(Release::Throw { at, velocity, .. }) = self.release {
                 let wind = (std::f32::consts::PI * span(t, at - WIND, at)).sin() * (velocity.length() / 3.0).min(1.0);

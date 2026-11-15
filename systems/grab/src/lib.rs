@@ -24,4 +24,4 @@ pub use interact::pick;
 pub use json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, TAKE_ANSWER, TAKE_ARGS, fit_json, hand_json, take_json};
 pub use shape::{Solid, Thing};
 pub use take::{Frame, Key, Phase, Release, Take, perform};
-pub use trunk::{clear, look, roomy, stand_for, stoop, torso};
+pub use trunk::{clear, look, own_solids, roomy, stand_for, stoop, torso};
