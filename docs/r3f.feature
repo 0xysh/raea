@@ -302,6 +302,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         vertex GLSL and in a node material's vertex WGSL (material.ts, on the part tsl.ts makes); in-sky SSIM 0.9986 (in-shader 0.9935, in-drei 0.9932,
         in-approx 0.9848 unchanged); test/errors.test.tsx holds the rewrite
 
+    @done
     Scenario: R3F18. Agents are taught <R3F>
       Given the raea skill (raea-skills skills/raea) and its source guides (sdk/guides/craft/bevy)
       When an agent reads what 3D in raea can be written with
@@ -310,6 +311,13 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       And the lines saying useFrame, refs and drei "don't exist" say instead that they don't exist in raea's own 3D parts
         and do inside <R3F>
       And SKILL.md's router sends an agent with three.js or R3F code to 3d/r3f.md
+      Status (11-15): sdk/guides/craft/bevy/r3f.md, copied as the skill's 3d/r3f.md (raea-skills #81, pinned at
+        89ab557): when to use <R3F> and <Three program>, the project set-up (raea add three @react-three/fiber), an
+        example of each, how their loops are stepped from the frame, what draws (by kind, the postprocessing effects
+        raea has) and what doesn't yet, each named once in a render's output. bevy.md's router, the skill's 3d.md and
+        SKILL.md route three.js work to it; the four lines (bevy.md and 3d.md's rule 1, bevy/scene.md, bevy/animation.md,
+        bevy/limits.md) say useFrame, refs and drei don't drive raea's own components and work inside <R3F>. Landed
+        1f02317e8.
 
     @done
     Scenario: R3F19. Plain three.js with its own renderer
