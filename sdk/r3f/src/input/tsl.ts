@@ -20,7 +20,8 @@
 import * as THREE from "three";
 import { ModelNode, NodeFrame, WebGPURenderer } from "three/webgpu";
 import type { Part, Props } from "./material";
-import { srcOf } from "./texture";
+import { onGpu } from "./targets";
+import { flipsY, srcOf } from "./texture";
 import { isLit, litBuilder, litStages } from "./tsl-lit";
 import { MaterialStorage, declaration, elementType, isStorage, storageOfAttribute, type SharedBuffer, type StorageAttribute } from "./tsl-storage";
 import { ATTRIBUTES, ATTRIBUTES_OWN, ELEMENT, FLIP, STORED, Unsupported, fit, flipSamples, indexed, params, slotsOf, structs, word } from "./tsl-wgsl";
@@ -227,7 +228,7 @@ function rewrite(b: Builder, copies?: THREE.InstancedMesh): Omit<Compiled, "key"
         const src = srcOf(t);
         if (!t || !src) throw new Unsupported(`texture ${x.name} has no picture raea can load (a render target, a video, a canvas it can't read)`);
         textures.push({ name: x.name, texture: t });
-        if (t.flipY) flipped.add(`tex_${x.name}`);
+        if (flipsY(t)) flipped.add(`tex_${x.name}`);
       } else if (x.isSampler) {
         // its texture's: samp_NAME
       } else if (x.isBuffer && (x as unknown as { nodeUniform?: { array?: unknown[] } }).nodeUniform?.array) {
@@ -414,7 +415,7 @@ export function nodeMaterialOf(m: THREE.Material, at: NodeAt): Part | undefined 
       wgsl: { vertex: c.vertex, fragment: c.fragment, uniforms: vals.map(({ name, type, array }) => ({ name, type, ...(array ? { array } : {}) })), ...(c.attributes.length ? { attributes: c.attributes } : {}), ...(c.storage.length ? { storage: c.storage } : {}), ...(c.lit ? { lit: true } : {}) },
       ...(c.lit && (m as { fog?: boolean }).fog === false ? { fog: false } : {}),
       uniforms: Object.fromEntries(vals.map((u) => [u.name, u.value])),
-      textures: Object.fromEntries(c.textures.map(({ name, texture }) => [name, { src: srcOf(texture)!, colorSpace: texture.colorSpace === THREE.SRGBColorSpace ? "srgb" : "linear" }])),
+      textures: Object.fromEntries(c.textures.map(({ name, texture }) => [name, { src: srcOf(texture)!, colorSpace: texture.colorSpace !== THREE.SRGBColorSpace && !onGpu(texture) ? "linear" : "srgb" }])),
       // three's node materials write linear colour (the renderer's output pass tone-maps and encodes), as raea's do
       output: "linear",
       transparent: m.transparent,
