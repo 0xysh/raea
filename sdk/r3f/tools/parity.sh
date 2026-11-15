@@ -15,13 +15,16 @@ CASES=(in-basic:24 in-instanced:12 in-lights:0 in-things:0 in-catch:0 in-lettra:
 CASES+=(in-tsl-lit:12)
 # a plain three.js program (test/parity/programs.ts) through <Three> (R3F19)
 CASES+=(in-vanilla:24)
+# postprocessing's effects as raea <FramePass>es (test/parity/post2.tsx), before and after an ACES tone mapping (R3F25)
+CASES+=(in-post2:6 in-post3:6)
 [ -z "${R3F_CASES:-}" ] || read -ra CASES <<<"$R3F_CASES"
 mkdir -p "$OUT"
 for c in "${CASES[@]}"; do
   # a src-* case is its out-* composition, drawn from the R3F source the source export wrote for it
   (cd test/parity && raea render native.tsx --composition "$(echo "${c%%:*}" | sed 's/^src-/out-/')" --frame "${c##*:}" -o "$OUT/${c%%:*}-native.png" >/dev/null)
 done
-bun tools/shoot.ts "$URL" "$OUT" $([ -z "${R3F_CASES:-}" ] || for c in "${CASES[@]}"; do echo "${c%%:*}"; done)
+# Chrome shoots exactly these cases (shoot.ts's own list is for running it alone)
+bun tools/shoot.ts "$URL" "$OUT" $(for c in "${CASES[@]}"; do echo "${c%%:*}"; done)
 fail=0
 for c in "${CASES[@]}"; do
   id=${c%%:*}

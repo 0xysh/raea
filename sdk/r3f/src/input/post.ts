@@ -1,14 +1,17 @@
 // @react-three/postprocessing's <EffectComposer> as raea's frame effects (docs/r3f.feature R3F12). Its effects are R3F
 // instances under the composer's <group>, objects of pmndrs' postprocessing library, not three's: each is read here and
 // becomes the raea effect that does the same thing (Bloom, Grade, ToneMapping, DepthOfField, AntiAliasing,
-// AmbientOcclusion, Look, LensDistortion), which raea's engine draws after the scene as Bevy does. One raea has nothing
-// for (noise, glitch, scanlines, god rays ...) is named once and left out.
+// AmbientOcclusion, Look, LensDistortion), which raea's engine draws after the scene as Bevy does, or a <FramePass>
+// that does what the effect's shader does (noise, scanlines, sepia, dot screen, colour average and depth, grid,
+// glitch, shock wave, tilt shift, ASCII, LUT, god rays: effects.ts, effects-sampled.ts, R3F25). One raea has neither
+// for is named once and left out.
 //
 // A composer renders the scene into a render target, where three doesn't tone-map: the frame is mapped only by a
 // <ToneMapping> effect in it (postprocessing's ToneMappingEffect), so a scene with a composer is drawn untonemapped
 // unless it has one.
 import type * as THREE from "three";
 import type { Part, Props } from "./material";
+import { framePass, type PPEffect } from "./effects";
 
 const warned = new Set<string>();
 function warnOnce(k: string, why: string) {
@@ -33,12 +36,20 @@ const TONE: Record<number, string> = { 0: "none", 1: "reinhard", 2: "reinhard", 
 
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 
+/** the R3F root's clock and size where the composer was last found: the effects' time and resolution (an EffectPass's
+ *  time is its composer's deltas summed, R3F's clock as raea steps it) */
+let root: { time: number; size: [number, number]; camera?: THREE.Camera } = { time: 0, size: [1, 1] };
+
+type R3FInstance = { children?: { object?: unknown }[]; root?: { getState?: () => { clock?: { elapsedTime?: number }; size?: { width: number; height: number }; camera?: THREE.Camera } } };
+
 /** the composers' effects in a scene, in the order they're drawn, and whether a composer was found */
 export function composerEffects(scene: THREE.Scene): { found: boolean; effects: unknown[] } {
   const effects: unknown[] = [];
   let found = false;
   scene.traverse((o) => {
-    const inst = (o as unknown as { __r3f?: { children?: { object?: unknown }[] } }).__r3f;
+    const inst = (o as unknown as { __r3f?: R3FInstance }).__r3f;
+    const st = inst?.children?.length ? inst.root?.getState?.() : undefined;
+    if (st) root = { time: st.clock?.elapsedTime ?? 0, size: [st.size?.width ?? 1, st.size?.height ?? 1], camera: st.camera };
     for (const c of inst?.children ?? []) {
       const e = c.object;
       if (isEffect(e) || isPass(e)) {
@@ -55,6 +66,9 @@ export function postParts(effects: unknown[]): { parts: Part[]; tone?: Part } {
   const parts: Part[] = [];
   const grade: Props = {};
   let tone: Part | undefined;
+  // effects after a <ToneMapping> run on the tone-mapped frame; before it, on the frame as three has it (the tone's
+  // exposure is the Grade's, put on in the tone mapping pass)
+  let mapped = false;
   for (const raw of effects) {
     if (isPass(raw) && !isEffect(raw)) {
       const n = raw.constructor.name;
@@ -63,8 +77,8 @@ export function postParts(effects: unknown[]): { parts: Part[]; tone?: Part } {
       continue;
     }
     const e = raw as Effect;
-    // a blend of SKIP (0) draws nothing; an effect's opacity scales it
-    if (e.blendMode?.blendFunction === 0) continue;
+    // a blend of SKIP (BlendFunction 9, DST) draws nothing; an effect's opacity scales it
+    if (e.blendMode?.blendFunction === 9) continue;
     const share = num(e.blendMode?.opacity?.value, 1);
     switch (e.name) {
       case "BloomEffect":
@@ -97,8 +111,11 @@ export function postParts(effects: unknown[]): { parts: Part[]; tone?: Part } {
       }
       case "ToneMappingEffect": {
         const mode = TONE[num(e.mode, 7)] ?? "agx";
-        // three's ACES scales its input by 1/0.6 where Bevy's doesn't (lights.ts's toneOf does the same)
-        tone = { type: "ToneMapping", props: mode === "aces" ? { mode, exposure: Math.log2(1 / 0.6) } : { mode } };
+        // three's ACES scales its input by 1/0.6 where Bevy's doesn't: as the Grade's exposure, on every pixel just before
+        // the curve (lights.ts's toneParts), so the effects before it see three's values
+        tone = { type: "ToneMapping", props: { mode } };
+        if (mode === "aces") grade.exposure = Math.log2(1 / 0.6);
+        mapped = true;
         break;
       }
       case "DepthOfFieldEffect": {
@@ -133,8 +150,11 @@ export function postParts(effects: unknown[]): { parts: Part[]; tone?: Part } {
         parts.push({ type: "LensDistortion", props: { k1: d?.x ?? 0 } });
         break;
       }
-      default:
-        warnOnce(`<EffectComposer> effect ${e.name}`, "has no raea counterpart: left out (write it as a raea <FramePass> outside <R3F>)");
+      default: {
+        const pass = framePass(e as PPEffect, { ...root, after: mapped, warn: warnOnce });
+        if (pass) parts.push(pass);
+        else warnOnce(`<EffectComposer> effect ${e.name}`, "has no raea counterpart: left out (write it as a raea <FramePass> outside <R3F>)");
+      }
     }
   }
   if (Object.keys(grade).length) parts.push({ type: "Grade", props: grade });

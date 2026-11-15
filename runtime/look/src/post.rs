@@ -190,7 +190,7 @@ fn grade(g: &Map<String, Value>, row: &mut BTreeMap<String, V>) {
     if let Some(s) = shares(g) {
         row.insert("grade_passes".into(), V::S(s));
     }
-    for (k, col) in [("temperature", "grade_temperature"), ("tint", "grade_tint"), ("saturation", "grade_saturation")] {
+    for (k, col) in [("temperature", "grade_temperature"), ("tint", "grade_tint"), ("saturation", "grade_saturation"), ("exposure", "grade_exposure")] {
         if let Some(x) = num(g, k) {
             row.insert(col.into(), V::N(x));
         }

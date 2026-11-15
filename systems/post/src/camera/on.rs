@@ -112,6 +112,9 @@ pub fn grading(world: &mut World, e: Entity, vals: &Vals) {
     cg.global.temperature = num(vals, "grade_temperature", 0.0);
     cg.global.tint = num(vals, "grade_tint", 0.0);
     cg.global.post_saturation = num(vals, "grade_saturation", 1.0);
+    // stops on every pixel just before the curve (Bevy's tonemapping applies it), where <ToneMapping exposure>, the
+    // camera's, lights only lit and emissive shading: three's toneMappingExposure (and its ACES's 1/0.6) is this one
+    cg.global.exposure = num(vals, "grade_exposure", 0.0);
     for (pre, sec) in [("grade_s_", &mut cg.shadows), ("grade_m_", &mut cg.midtones), ("grade_h_", &mut cg.highlights)] {
         let d = ColorGradingSection::default();
         *sec = ColorGradingSection {

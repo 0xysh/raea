@@ -470,6 +470,17 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         ray-traced reflections) or a <FramePass> raea ships for it: Noise, Scanline, Sepia, DotScreen, ColorAverage,
         ColorDepth, Grid, Glitch, ShockWave, TiltShift, ASCII, LUT, GodRays, Outline
       And none is left out without a warning; in-post2 and in-tslpost: SSIM at least 0.92 against three.js
+      Status (11-15, in progress): postprocessing's Noise, Scanline, Sepia, DotScreen, ColorAverage, ColorDepth, Grid,
+        Glitch, ShockWave, LUT3D and @react-three/postprocessing's ASCII and TiltShift2 are FramePasses with their own
+        shaders in WGSL (sdk/r3f src/input/effects.ts, effects-sampled.ts); TiltShift (one Gaussian for its Kawase blur)
+        and GodRays (the sun's disc against the depth prepass, unblurred) are close and say so. A FramePass's uv now spans
+        the camera's Viewport, not the Engine's w x (h + 1) target (systems/framepass: patterns drifted a row by the
+        frame's foot). three's tone exposure (toneMappingExposure, ACES's 1/0.6) is a Grade `exposure`, Bevy's colour
+        grading on every pixel before the curve (new: grade_exposure), not the camera's, which skipped unlit colours (0.74
+        stops dark under ACES) and made effects before a composer's ToneMapping read lit and unlit pixels in two scales.
+        in-post2 0.9879, in-post3 0.9767; the full parity list unchanged. Left: Outline (selected meshes in a composition
+        pass, once scene.ts is free), Texture, Depth, LUT1D, three/webgpu's PostProcessing (in-tslpost), and the
+        background under a composer's ToneMapping (three maps it, raea shows it as given)
 
     Scenario: R3F26. <R3F> in a box smaller than the page (#130)
       Given an <R3F> in a box of its own inside a larger page

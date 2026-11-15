@@ -42,6 +42,9 @@ export interface Settings {
    * AgX, its nearest, for a renderer drawing without the composer */
   tony: boolean;
   exposure: number;
+  /** a <Grade>'s exposure (a multiplier): Bevy's colour grading puts it on every pixel before the curve, as three's
+   * toneMappingExposure does */
+  grade: number;
   shadows: boolean;
   shadowMap: number;
 }
@@ -86,7 +89,7 @@ function panorama(src: string, done: () => void): THREE.Texture {
 export class Scene3d {
   readonly scene = new THREE.Scene();
   camera: THREE.Camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
-  settings: Settings = { toneMapping: THREE.AgXToneMapping, tony: true, exposure: 1, shadows: true, shadowMap: 2048 };
+  settings: Settings = { toneMapping: THREE.AgXToneMapping, tony: true, exposure: 1, grade: 1, shadows: true, shadowMap: 2048 };
   /** the frame effects on the page (Bloom, DepthOfField, Outline ...), each kind's props: the app's composer draws them */
   effects: { kind: string; props: Props }[] = [];
   /** whether the page drew any 3D at the last sync */
@@ -134,6 +137,8 @@ export class Scene3d {
     }
     // a paint look is in the surfaces (paint.ts); the frame pass only draws its cells
     paintLook(this.scene, this.effects.find((e) => e.kind === "Look")?.props);
+    const ge = this.effects.find((e) => e.kind === "Grade")?.props.exposure;
+    this.settings.grade = 2 ** (typeof ge === "number" ? ge : 0);
     this.fit(this.width, this.height);
   }
 
@@ -461,7 +466,7 @@ export class Scene3d {
   apply(renderer: THREE.WebGLRenderer) {
     renderer.toneMapping = this.settings.toneMapping;
     // three's ACES scales its input by 1/0.6 (tonemapping_pars_fragment); Bevy's ACESFitted doesn't
-    renderer.toneMappingExposure = this.settings.exposure * (this.settings.toneMapping === THREE.ACESFilmicToneMapping ? 0.6 : 1);
+    renderer.toneMappingExposure = this.settings.exposure * this.settings.grade * (this.settings.toneMapping === THREE.ACESFilmicToneMapping ? 0.6 : 1);
     paintTone.mode.value = !this.settings.tony && this.settings.toneMapping === THREE.ACESFilmicToneMapping ? 1 : 0;
     paintTone.exposure.value = renderer.toneMappingExposure;
     renderer.shadowMap.enabled = this.settings.shadows;

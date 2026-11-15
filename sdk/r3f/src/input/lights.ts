@@ -1,7 +1,9 @@
 // three.js's lights, cameras, fog and environment as raea's parts, in world space (raea places a light and the camera
 // by position and target, not inside a group). Intensities go through units.ts: a three light and the raea light it
 // becomes put the same light on screen.
+import { Fragment } from "react";
 import * as THREE from "three";
+import { COMPONENTS } from "../parts";
 import { toRaea, stopsOf } from "../units";
 import type { Part, Props } from "./material";
 import { srcOf } from "./texture";
@@ -182,12 +184,21 @@ export function skyOf(scene: THREE.Scene, gl?: THREE.WebGLRenderer, webgpu = fal
   return { parts, background };
 }
 
+/** a tone mapping and the stops three scales every pixel by before its curve, as raea's: the stops are a <Grade>'s
+ *  exposure (Bevy's colour grading, all pixels), not <ToneMapping exposure>, the camera's, which lights only what lights
+ *  shade (under ACES an unlit colour, a sprite, a line, a basic material was 0.74 stops dark); the two in a fragment */
+export function toneParts(mode: string, stops: number): Part {
+  const tone: Part = { type: "ToneMapping", props: { mode } };
+  if (stops === 0) return tone;
+  COMPONENTS.Fragment ??= Fragment as unknown as (typeof COMPONENTS)[string];
+  return { type: "Fragment", props: {}, children: [tone, { type: "Grade", props: { exposure: stops } }] };
+}
+
 /** three's renderer settings (R3F sets them from <Canvas flat linear>) as raea's tone mapping */
 export function toneOf(gl: THREE.WebGLRenderer): Part {
   const modes: Record<number, string> = { [THREE.ACESFilmicToneMapping]: "aces", [THREE.AgXToneMapping]: "agx", [THREE.NeutralToneMapping]: "neutral", [THREE.ReinhardToneMapping]: "reinhard", [THREE.CineonToneMapping]: "aces", [THREE.LinearToneMapping]: "none", [THREE.NoToneMapping]: "none" };
-  const props: Props = { mode: modes[gl.toneMapping] ?? "none" };
-  // three's ACES scales its input by 1/0.6 where Bevy's ACESFitted doesn't: the same picture is 0.74 stops up in raea
-  const stops = stopsOf(gl.toneMappingExposure / (gl.toneMapping === THREE.ACESFilmicToneMapping ? 0.6 : 1));
-  if (stops !== 0) props.exposure = stops;
-  return { type: "ToneMapping", props };
+  const mode = modes[gl.toneMapping] ?? "none";
+  // three's ACES scales its input by 1/0.6 where Bevy's ACESFitted doesn't; with no curve, three ignores the exposure
+  const stops = mode === "none" ? 0 : stopsOf(gl.toneMappingExposure / (gl.toneMapping === THREE.ACESFilmicToneMapping ? 0.6 : 1));
+  return toneParts(mode, stops);
 }

@@ -212,6 +212,9 @@ export interface GradeProps {
   tint?: number;
   /** the whole frame's saturation after tone mapping (1 keeps it) */
   saturation?: number;
+  /** stops of exposure on every pixel just before tone mapping, unlit colours and emission included (0 keeps it):
+   *  <ToneMapping exposure> is the camera's, which brightens only what lights shade */
+  exposure?: number;
   /** the grade on the shadows: saturation, contrast, gamma, gain, lift */
   shadows?: GradeSection;
   /** the grade on the midtones */
