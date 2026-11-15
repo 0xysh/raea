@@ -20,6 +20,8 @@ Feature: Creatures: a four-legged body in the character SDK
     on joints that move 10 cm apart: 0.4% of edges torn at a walk. Moving the knees and elbows clear, so a leg joins
     the trunk only at its hip or shoulder, took the walk to 0.05% with the same weights. Smoothing weights harder
     made it worse (0.2% to 0.4%): it spreads a far-moving joint's pull into the trunk.
+  - What ended the tearing at the hip and shoulder was to stop joining them: each leg its own closed piece of
+    skin set into the trunk, the join hidden by the fur. A furred animal does not need one watertight skin.
   - Bone heat gives the belly to the elbows and knees (they sit just inside it, the spine far above). The trunk's
     skin has to be given to the spine outright: each point to the two spine joints it lies between.
   - Feet kept in the world, not in the gait's cycle, are what stop sliding: a planted foot is a point that does not
@@ -125,10 +127,13 @@ Feature: Creatures: a four-legged body in the character SDK
   Rule: To do
 
     Scenario: CR10. The skin holds in every move
-      # Measured 2026-11-15 (tools/rigcheck.ts in the project: edges past 0.4x or 1.6x their length by more than
-      # 8 mm, as a share of all edges): stand 0.003%, walk 0.05%, turn 0.06%, rise 0.04% pass; trot 0.23%, sneak
-      # 0.18%, crawl 0.87%, gallop 1.2%, two legs 1.5% do not, all at the hip and shoulder. A leg folded hard against
-      # the body needs more than linear blending at its socket: a helper joint in the crease, or a corrective shape.
+      # Measured by tools/rigcheck.ts in the project: edges past 0.4x or 1.6x their length by more than 8 mm, as a
+      # share of all edges. With one skin over the whole body (11-15 early) 9 of 13 moves passed, and the gallop
+      # (0.76%), the crawl (0.48%) and two legs (0.9%) tore at the hip and shoulder, whatever the weights.
+      # 11-15: each leg is now its own closed piece of skin, set into the trunk under the fur, and follows only its
+      # own bones; the trunk follows none of a leg's. No skin bridges a leg and the trunk, so none tears there: 10 of
+      # 13 pass (crawl 0.007%), and the fur hides the join. Left: gallop 0.11% (the back's flexing), two legs 0.22%
+      # and 0.20% (the neck's fold and the tail's root).
       Then no move tears more than 0.1% of the skin's edges
 
     Scenario: CR11. A gallop with a back
