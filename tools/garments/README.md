@@ -35,6 +35,22 @@ stretch, cloth inside the skin, and whether it stayed on).
 - `render_pretty.py`: a garment to look at (EEVEE, fabric with sheen, soft studio light; `raea blender run`)
 - `sheet.py`, `grid.py`, `snaps_view.py`: contact sheets, and the drape's snapshots (`SNAP=1`) over the body
 
+## Words to a garment: the first model (CH48c)
+
+SigLIP 2 (in raea's models) puts pictures and words in one space, so a small network trained on pictures of the
+draped designs answers lines of words, with no captions written. Needs `onnxruntime` and `tokenizers` in the venv.
+
+    LEAN=1 tools/garments/engine.sh DATA 300 101                                     # designs, draped
+    PICTURES=1 raea blender run tools/garments/bake_batch.py BODY.glb DATA/g*/       # four pictures each
+    $GARMENT_PY -I tools/garments/garment_embed.py DATA                              # DATA/embeds.npz
+    $GARMENT_PY -I tools/garments/garment_model.py train DATA MODEL.npz              # seconds
+    $GARMENT_PY -I tools/garments/garment_model.py eval DATA MODEL.npz               # held out, lines of words
+    tools/garments/words.sh MODEL.npz OUT "a pencil skirt" "a top with a hood"       # designed, cut, draped, sheet
+
+- `garment_params.py`: a design's settings as one vector (numbers by place in range, choices one-hot) and back
+- `garment_embed.py`: SigLIP 2 picture and text embeddings, ONNX on the CPU (Core ML's GPU is wrong on this Mac)
+- `garment_model.py`: the network (embedding to settings), its training with noise so text lands, eval, `make`
+
 ## Worn hard pieces (CH49)
 
 What can't be sewn (helmets, hats, armour, visors, hard-shell suits) is drawn on SOMA's mannequin by an image model,

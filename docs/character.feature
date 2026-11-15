@@ -730,6 +730,27 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       Then the training set holds sewn garments captioned by their settings and by what they look like
       And worn hard pieces from CH49, each with its words, its picture and its 3D on SOMA
 
+    Scenario: CH48c. Words to a sewn garment through SigLIP 2, trained with no captions (first form of CH48)
+      # 11-15. The base weights are SigLIP 2 (siglip2-base-p16-256, already in raea's models, Apache-2.0), whose
+      # pictures and words share one space. Each lean design is pictured on the mannequin from four sides
+      # (bake_batch.py PICTURES=1, 0.3 s a design) and embedded on the CPU (garment_embed.py; Core ML's GPU computes
+      # SigLIP 2 wrong on this Mac); a small network (two layers of 512, garment_model.py) learns the design's 122
+      # settings as 196 slots (garment_params.py: numbers by their place in range, choices one-hot, the options
+      # being every value seen, since GarmentCode's own defaults fall outside its ranges) from the picture
+      # embeddings, centred on the pictures' mean, with noise added; asked in words, it is given the text
+      # embedding centred on a bank of garment lines' mean (the two kinds sit apart by a near-constant offset).
+      # So no caption is needed to train, and a line nobody wrote a caption for still lands near its pictures.
+      # First run, 86 designs: held-out pictures give the top's kind 0.66 (most common 0.44) and the bottom's
+      # 0.59 (0.31); the numbers are no better than their mean yet. Twelve lines of words with a check each
+      # ("trousers", "a pencil skirt", "a top with a hood", "a strapless top" ...): 11 of 12, as many as taking
+      # the nearest training picture's design, where a random design passes one or two; nonsense ("a bowl of
+      # soup") falls back to a fitted top and trousers. words.sh makes each line a design, cuts it to SOMA and
+      # drapes it, about 20 s and $0: seven of seven were valid patterns and hung right, six read as asked.
+      # Faults: "long-sleeved" comes out at the elbow, a turtleneck's collar collapses in the drape, unasked parts
+      # come along (trousers with a turtleneck), and "a long dress" is not known as a top joined to a skirt.
+      Then a line of words becomes a sewing pattern cut to SOMA and draped, with no caption written to train it
+      And its eval says how it compares with the nearest picture and with chance, on held-out designs and lines
+
     Scenario: CH49. Worn hard pieces: helmets, hats, armour, visors (proposed)
       # Patterns make only what is cut and sewn. A helmet, a hat, a breastplate or a visor is made the way the
       # user first proposed for clothes and the creature flow makes animals: a picture of SOMA's mannequin

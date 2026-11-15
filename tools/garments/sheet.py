@@ -10,6 +10,8 @@ for d in dirs:
     w, h = ims[0].size; row = Image.new("RGB", (w * len(ims), h + 36), "white")
     for i, im in enumerate(ims): row.paste(im, (i * w, 36))
     cap = open(os.path.join(d, "caption.txt")).read().strip() if os.path.exists(os.path.join(d, "caption.txt")) else ""
+    if os.path.exists(os.path.join(d, "words.txt")):  # asked in words (words.sh): the words, then what was made
+        cap = f'asked "{open(os.path.join(d, "words.txt")).read().strip()}", made: {cap}'
     rep = glob.glob(os.path.join(d, "*.drape.json")); r = __import__("json").load(open(rep[0])) if rep else {}
     flag = "" if r.get("ok", True) else "  [FAILED: " + ("slid" if not r.get("stayed", True) else "seams/inside") + "]"
     ImageDraw.Draw(row).text((8, 10), f"{os.path.basename(d.rstrip('/'))}: {cap}{flag}", fill="red" if flag else "black")

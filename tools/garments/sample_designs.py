@@ -1,6 +1,7 @@
 # The garment data engine's first step: random GarmentCode designs, cut to SOMA's measurements, each a folder with
 # its design (the labels), a caption in words, the pattern and the flat pieces for the drape.
 #   python sample_designs.py GARMENTCODE_SRC SOMA.yaml OUT_DIR N [SEED]
+#   DESIGN=design.yaml python sample_designs.py ... OUT_DIR 1     that design, not a random one (garment_model.py make)
 # OUT_DIR/<id>/{design.yaml, caption.txt, <id>_specification.json, <id>.panels.json}
 import sys, json, random, string, traceback
 from pathlib import Path
@@ -43,11 +44,12 @@ def caption(d):
     if wb: words.append("a gathered waistband" if v(d, "waistband", "waist") > 1.15 else "a waistband")
     return ", ".join(words)
 
+GIVEN = __import__("os").environ.get("DESIGN")
 made, tries = 0, 0
-while made < N and tries < N * 20:
+while made < N and tries < (1 if GIVEN else N * 20):
     tries += 1
-    d = sampler.randomize()
-    gid = "g" + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    d = yaml.safe_load(open(GIVEN))["design"] if GIVEN else sampler.randomize()
+    gid = __import__("os").environ.get("GID") or "g" + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
     folder = out / gid
     try:
         assert_param_combinations(d)

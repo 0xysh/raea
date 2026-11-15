@@ -2,6 +2,8 @@
 # The body loads once; per garment: seams welded, the cut as UVs, weights from the skin, skinned to SOMA's armature,
 # exported as <name>.glb, and rendered on the mannequin from four sides (<name>_<view>.png).
 #   raea blender run bake_batch.py BODY.glb DIR...      (each DIR holds one <name>.draped.npz)
+# PICTURES=1: the pictures alone, as JPEG (<name>_<view>.jpg), no weights or glb: what a lean design needs for training
+# (garment_embed.py reads them); a DIR that has them already is skipped.
 import bpy, bmesh, sys, os, glob, json, zlib, time
 import numpy as np
 from mathutils import Vector
@@ -26,12 +28,15 @@ sc.display.shading.show_cavity = True; sc.render.resolution_x = 512; sc.render.r
 cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); sc.collection.objects.link(cam); sc.camera = cam
 cam.data.type = "ORTHO"; cam.data.ortho_scale = 2.0
 VIEWS = {"front": (0, -4, 0.95), "threequarter": (2.8, -2.8, 0.95), "side": (4, 0, 0.95), "back": (0, 4, 0.95)}
+PICS = os.environ.get("PICTURES") == "1"
+if PICS: sc.render.image_settings.file_format = "JPEG"; sc.render.image_settings.quality = 88
 
 for d in dirs:
     t0 = time.time()
     src = glob.glob(os.path.join(d, "*.draped.npz"))
     if not src: print(f"bake: {d}: nothing draped", flush=True); continue
     Z = np.load(src[0]); name = os.path.basename(src[0])[:-len(".draped.npz")]
+    if PICS and all(os.path.exists(os.path.join(d, f"{name}_{v}.jpg")) for v in VIEWS): continue
     X = Z["X"].astype(float); X = np.c_[X[:, 0], -X[:, 2], X[:, 1]]  # glTF (x, y, z) is Blender (x, -z, y)
     me = bpy.data.meshes.new(name); me.from_pydata(X.tolist(), [], Z["F"].tolist()); me.update()
     g = bpy.data.objects.new(name, me); sc.collection.objects.link(g)
@@ -49,14 +54,15 @@ for d in dirs:
     # smooth: a flat-shaded mesh exports every triangle with its own three vertices (198,881 for 66,305), shading
     # as facets ("pebbles") wherever it is drawn
     me.polygons.foreach_set("use_smooth", [True] * len(me.polygons)); me.update()
-    for vg in skin.vertex_groups: g.vertex_groups.new(name=vg.name)
-    for o in bpy.data.objects: o.select_set(o is g)
-    bpy.context.view_layer.objects.active = g
-    dt = g.modifiers.new("weights", "DATA_TRANSFER"); dt.object = skin
-    dt.use_vert_data = True; dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "POLYINTERP_NEAREST"
-    dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
-    bpy.ops.object.modifier_apply(modifier=dt.name)
-    g.parent = arm; g.modifiers.new("skin", "ARMATURE").object = arm
+    if not PICS:
+        for vg in skin.vertex_groups: g.vertex_groups.new(name=vg.name)
+        for o in bpy.data.objects: o.select_set(o is g)
+        bpy.context.view_layer.objects.active = g
+        dt = g.modifiers.new("weights", "DATA_TRANSFER"); dt.object = skin
+        dt.use_vert_data = True; dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "POLYINTERP_NEAREST"
+        dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
+        bpy.ops.object.modifier_apply(modifier=dt.name)
+        g.parent = arm; g.modifiers.new("skin", "ARMATURE").object = arm
     colour = PALETTE[zlib.crc32(name.encode()) % len(PALETTE)]
     rgb = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
     mat = bpy.data.materials.new(name); mat.use_nodes = True
@@ -64,14 +70,16 @@ for d in dirs:
     bsdf.inputs["Base Color"].default_value = (*[x ** 2.2 for x in rgb], 1); bsdf.inputs["Roughness"].default_value = 0.9
     mat.diffuse_color = (*[x ** 2.2 for x in rgb], 1)
     me.materials.append(mat)
-    for o in bpy.data.objects: o.select_set(o is g or o is arm)
-    bpy.ops.export_scene.gltf(filepath=os.path.join(d, name + ".glb"), export_format="GLB", use_selection=True,
-                              export_animations=False, export_yup=True, export_skins=True)
+    if not PICS:
+        for o in bpy.data.objects: o.select_set(o is g or o is arm)
+        bpy.ops.export_scene.gltf(filepath=os.path.join(d, name + ".glb"), export_format="GLB", use_selection=True,
+                                  export_animations=False, export_yup=True, export_skins=True)
     for view, loc in VIEWS.items():
         cam.location = loc; cam.rotation_euler = (Vector((0, 0, 0.95)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
-        sc.render.filepath = os.path.join(d, f"{name}_{view}.png"); bpy.ops.render.render(write_still=True)
+        sc.render.filepath = os.path.join(d, f"{name}_{view}.{'jpg' if PICS else 'png'}"); bpy.ops.render.render(write_still=True)
     welded = len(me.vertices)
-    json.dump({"name": name, "colour": colour, "views": list(VIEWS), "vertices": welded},
-              open(os.path.join(d, name + ".bake.json"), "w"))
+    if not PICS:
+        json.dump({"name": name, "colour": colour, "views": list(VIEWS), "vertices": welded},
+                  open(os.path.join(d, name + ".bake.json"), "w"))
     bpy.data.objects.remove(g); bpy.data.meshes.remove(me); bpy.data.materials.remove(mat)
     print(f"bake: {name}: {len(X)} -> {welded} vertices, {colour}, {time.time() - t0:.1f} s", flush=True)
