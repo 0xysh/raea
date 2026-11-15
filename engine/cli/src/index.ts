@@ -25,6 +25,8 @@ const out = (stdout: string, exitCode = 0, stderr = "") => ({ stdout, stderr, ex
 import { libraryVerb } from "./library";
 // `raea show` (show.ts): what a session shows the person, in the raea app
 import { showVerb } from "./show";
+// `raea clothes` (clothes.ts): garments for SOMA's body from words
+import { clothesVerb } from "./clothes";
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name);
@@ -263,6 +265,8 @@ export function raeaHandler(host?: Host, engine?: Engine) {
           return out(libraryVerb(ask, args.slice(1), (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}));
         case "show":
           return out(showVerb(ask, args.slice(1), c.cwd, (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}));
+        case "clothes":
+          return out(clothesVerb(ask, args.slice(1)));
         default:
           return await native();
       }

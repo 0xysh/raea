@@ -11,6 +11,7 @@ import { brandKit } from "./brand";
 import { readSite, stylesOf } from "./scrape";
 import { wordsOf } from "./heard";
 import { harness, library, show, task } from "./app";
+import { clothesHost } from "./wardrobe";
 import { raeaHandler, type Engine, type Host } from "./index";
 
 const [raea, ...args] = process.argv.slice(2);
@@ -388,6 +389,8 @@ const host: Host = (op, a) => {
       return library(a);
     case "show":
       return show(a);
+    case "clothes":
+      return clothesHost(raea, cwd, process.env, a);
     case "harness":
       return harness();
     case "task":

@@ -484,6 +484,33 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # yet a `raea` verb, and it makes no garment by hand or by procedure.
       Then a line of words becomes a garment file with its cost said
 
+    @done
+    Scenario: CH45b. `raea clothes`: garments from words, by procedure, and worn
+      # 11-15. A shell verb (engine/cli/src/clothes.ts reads the words, wardrobe.ts does the work on the native raea;
+      # the Blender scripts are tools/clothes, shipped with a release). The first use fetches SOMA-X's two body files
+      # at a fixed commit, checked by SHA-256, into raea's models folder (soma/, with the Apache-2.0 licence), and makes
+      # SOMA's body folder and the mannequin's four views there once (18 s on this Mac). `make NAME "words" [--over
+      # A,B]` draws the four views at once (flux_2_pro, one picture a view) and measures them onto SOMA's template
+      # vertices: assets/clothes/NAME.json, its pictures kept in assets/clothes/NAME/views as its source. Over a
+      # garment made by procedure, or several at once, the mannequin is first drawn wearing them, and the layers beneath
+      # are taken as one for the stand-off. `cover NAME --parts chest,torso,waist,upperArm:0.45 --colour #e8e4da` makes
+      # one by procedure in the same file with no picture: the skin of the parts named (a limb as far along as its
+      # share), with a one-ring hem allowance so garments on neighbouring parts overlap. `wear OUT_DIR A B C [--body
+      # DIR]` writes a body folder (each garment's glb and picture, the body without the skin wholly under cloth, its
+      # skeleton, joint stand-in and collar) and prints the composition's lines. `remeasure NAME` measures a garment
+      # again from its kept pictures, for nothing. Run on an outfit: a t-shirt and shorts by procedure, a flannel
+      # overshirt drawn over them for 20 cents in 35 seconds, all three worn on the headless body with the generated
+      # head through the matched walk (sheet3d compositions/soma_wardrobe.tsx). Mended in the measuring on the way: each
+      # garment's open edge is evened (it ran in a stair along the body's triangles; the body's own UV seams are left
+      # where they are); a garment stands off each part no further than that part allows (a loose sleeve drawn hanging
+      # below the arm had made a balloon of it); the top of a shoulder, and the slope by an open collar, is cloth when
+      # there is cloth in front of it and behind it; a texel that the chosen view shows as backdrop or bare mannequin
+      # takes the garment's measured colour (grey cuffs). Wrong still: the overshirt hangs to the hips in every
+      # picture but wraps the hips when worn (a skin-offset garment can't hang free: CH44), the views disagree on
+      # sleeve length (the back drew it to the elbow), and a sliver by the collar is still open. The verb makes one
+      # garment a call; an outfit is several calls, innermost first.
+      Then a garment is made by one command from words or by procedure, and an outfit is worn by one more
+
     Scenario: CH45. From words to a wardrobe
       Then `raea` takes a description of an outfit, draws its layers and views, builds the garments, and writes
         them beside the body, saying what each picture cost; the pictures are kept with the garment as its source
