@@ -129,7 +129,8 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # Agreed between the body and face sessions 11-15, reported to the user by the face session. The face
       # side fits a head model (Apache-2.0) to close-up photographs: identity, expressions, eyes, skin texture.
       Given head.glb skinned to SOMA's Neck1, Neck2 and Head, with SOMA's eye joints, and its expressions as
-        about fifty named morph targets, and head.json (its collar ring, eye centres, morph names, neck colour)
+        about fifty named morph targets, and head.json (its collar ring, eye centres, morph names, neck colour,
+        and the size it was fitted at, so the body's build scales the head to the body)
       Then the body's own head is cut away from the collar up when the body is built, and the neck is one mesh
       And the body's motion drives the neck and head; the face layer adds expression and the eyes on top; the
         eyes take a look target in the world and cover what the head has not turned
@@ -137,8 +138,12 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And `<Character>` takes the face's weights and look target (it passes no morph weights today)
 
     Scenario: CH21. Hair
-      # The face session is testing hair. sdk/body/src/cloth.ts already moves hair and clothes that follow skin.
-      Then hair is delivered with the head, attached to SOMA's Head, and moves by the same follower as clothes
+      # Agreed with the face session 11-15. sdk/body/src/cloth.ts already moves hair and clothes that follow
+      # skin. Hair cards are the face session's working choice, pending its tests; strand hair stays a reference
+      # for offline renders. Open: whether spring chains under Head (helper joints) drive the cards instead.
+      Then hair is a card mesh delivered with the head, attached to SOMA's Head, each vertex carrying how far it
+        may stray (0 at the scalp), moved by the same follower as clothes
+      And hats and glasses are rigid pieces on Head, delivered with the head
 
   Rule: Creatures
 
