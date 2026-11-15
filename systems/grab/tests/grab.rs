@@ -271,3 +271,39 @@ fn any_frame_can_be_asked_for() {
     assert!(body < 6.0, "a joint of the body turned {body} degrees in one frame");
     assert!(fingers < 20.0, "a finger joint turned {fingers} degrees in one frame");
 }
+
+#[test]
+fn a_take_asked_for_as_json_is_the_same_frame() {
+    let s = mannequin();
+    let joints: Vec<serde_json::Value> = s
+        .joints
+        .iter()
+        .map(|j| serde_json::json!({"name": j.name, "parent": j.parent.map_or(-1, |p| p as i64), "head": j.head.to_array(), "tail": j.tail.to_array()}))
+        .collect();
+    let rest = s.rest();
+    let turns: Vec<[f32; 4]> = rest.turns.iter().map(|q| q.to_array()).collect();
+    let ask = |t: f32| {
+        take_json(&serde_json::json!({
+            "joints": joints, "t": t, "start": 0.5,
+            "base": [{"t": t, "root": rest.root.to_array(), "turns": turns}],
+            "thing": {"box": [0.16, 0.1, 0.12], "at": [0.0, 1.05, 0.42]},
+            "throw": {"at": 2.5, "velocity": [0.0, 2.0, 3.0]},
+        }))
+        .unwrap()
+    };
+    let thing = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(0.0, 1.05, 0.42));
+    let mut take = Take::new(thing, find_holds(&thing, rest.root, HoldOptions::default()), 0.5);
+    take.release = Some(Release::Throw { at: 2.5, velocity: Vec3::new(0.0, 2.0, 3.0), floor: 0.0 });
+    for t in [0.0, 0.8, 1.4, 2.0, 2.7] {
+        let (json, direct) = (ask(t), perform(&s, &|_| s.rest(), &take, t));
+        assert_eq!(json["phase"], format!("{:?}", direct.phase));
+        assert_eq!(json["hands"], 2);
+        let at = &json["thing"]["at"];
+        assert!((Vec3::new(at[0].as_f64().unwrap() as f32, at[1].as_f64().unwrap() as f32, at[2].as_f64().unwrap() as f32) - direct.thing.at).length() < 1e-5);
+        for (a, b) in json["pose"]["turns"].as_array().unwrap().iter().zip(&direct.pose.turns) {
+            let q = Quat::from_xyzw(a[0].as_f64().unwrap() as f32, a[1].as_f64().unwrap() as f32, a[2].as_f64().unwrap() as f32, a[3].as_f64().unwrap() as f32);
+            assert!(q.dot(*b).abs() > 0.999999, "t {t}: {q} against {b}");
+        }
+    }
+    assert!(take_json(&serde_json::json!({"joints": joints, "t": 0, "start": 0, "base": [], "thing": {"at": [0, 0, 0]}})).is_err());
+}

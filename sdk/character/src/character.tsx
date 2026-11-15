@@ -17,3 +17,6 @@ export { I, handRest, B, SIDES, BODY_JOINTS, FINGER_JOINTS, sideOf, mirrorName, 
 export type { Quat, Joint, Skeleton, Pose, Posed, Side, Finger, HandShape, Closing, FingerSegment, SurfacePoint, HandGoal, FootGoal, SeatGoal, Goals, Placement, CharacterProps, CharacterGhost, FaceUnit, FacePreset, Face, HairLook } from "./character/all";
 
 
+// a character takes a thing with its hands, with no capture of the action (docs/hands.feature)
+export { take } from "./take";
+export type { TakeThing, TakeSpec, Taken } from "./take";

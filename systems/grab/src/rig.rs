@@ -63,7 +63,10 @@ impl Skeleton {
 
     /// A character's skeleton.json (projects/psx/export.py): `joints` of name, parent (-1 for the root), head, tail.
     pub fn from_json(text: &str) -> Result<Self, String> {
-        let v: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("skeleton.json: {e}"))?;
+        Self::from_value(&serde_json::from_str(text).map_err(|e| format!("skeleton.json: {e}"))?)
+    }
+
+    pub fn from_value(v: &serde_json::Value) -> Result<Self, String> {
         let list = v["joints"].as_array().ok_or("skeleton.json: no joints")?;
         let vec3 = |a: &serde_json::Value| -> Option<Vec3> {
             let a = a.as_array()?;

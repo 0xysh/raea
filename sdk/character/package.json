@@ -22,6 +22,7 @@
     "./things": "./src/things.ts",
     "./character": "./src/character.tsx",
     "./ragdoll": "./src/ragdoll.ts",
+    "./take": "./src/take.ts",
     "./plugin": "./src/plugin.ts"
   },
   "peerDependencies": { "react": "19.2.0" },

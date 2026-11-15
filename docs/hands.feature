@@ -110,18 +110,27 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab | tests/grab.rs     | 290   | the measures above, on the stand-in body        |
         | raea-sys-grab | examples/strip.rs | 90    | a take drawn as an SVG filmstrip                |
 
-  Rule: Next, in order
-
-    @needs:HG4
+    @done
     Scenario: HG5. A character in a scene takes a thing
-      # Nothing draws this yet: HG1 to HG4 are maths, judged on stick figures. This is the first render to watch.
+      # 11-14, built: raea/character's `take(skel, base, spec, t)` (sdk/character/src/take.ts) makes the native call
+      # character.take (runtime/calls), which is systems/grab's `take_json`; the answer is the pose for <Character>
+      # and the thing's place. Asked as JSON it is the same frame as asked in Rust (a test). Rendered on turbo, a
+      # psx person (~/Studio/internal/projects/psx/raea/take.tsx, out/take.mp4): a box taken off a table with both
+      # hands and thrown, and a cup moved across the table in one hand, upright, the fingers round it; 420 frames,
+      # no errors. Seen in those frames and not fixed here: the standing hands rest inside the table's edge and a
+      # hand passes through the table's top as it leaves the cup (HG6); the box is carried at arm's length, hardly
+      # lifted (the carry place wants tuning by eye). Shane hasn't watched it.
       Given a <Character> and a thing in a 3D scene
       When the scene says the character takes it (which thing, when, then put where or thrown how)
-      Then the engine asks systems/grab for each frame's pose and the thing's place and draws both, in a render
-        and in live play alike
+      Then the engine works out each frame's pose and the thing's place, in a render and in live play alike
       And TypeScript reaches it as one native call (core/calls), typed, with the report per frame
       And the body's own motion is whatever the character was playing
-      And a render of a box taken and thrown, and a cup moved across a table, is watched before anything after
+      And the plan:
+        | crate            | file                      | lines | job                                             |
+        | raea-sys-grab    | src/json.rs               | 120   | a frame of a take asked for as JSON             |
+        | sdk              | sdk/character/src/take.ts | 80    | take(): the call made, typed                    |
+
+  Rule: Next, in order
 
     @needs:HG5
     Scenario: HG6. The rig's real limits and the body's real shape

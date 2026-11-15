@@ -173,6 +173,8 @@ pub fn call(name: &str, v: &Value) -> R<Value> {
             n if n.starts_with("ecs.") => ecs::call(n, v),
             // placement by relations (raea-core-place)
             "place.solve" => raea_core_place::solve_json(v),
+            // a frame of a character taking a thing (raea-sys-grab, docs/hands.feature HG5)
+            "character.take" => raea_sys_grab::take_json(v),
             "fonts.families" => Ok(families().into()),
             "fonts.google" => {
                 let family = s(v, "family")?;
@@ -221,6 +223,7 @@ pub fn register() {
             ("section.op", "{ fn: \"make\" | \"circle\" | \"square\" | \"hull_points\" | \"union\" | \"minus\" | \"intersect\" | \"hull\" | \"minkowski\" | \"offset\" | \"simplify\" | \"translate\" | \"rotate\" | \"scale\" | \"mirror\" | \"decompose\"; polygons?: [number, number][][]; others?: [number, number][][][]; args?: number[] }", &format!("{SECTION} | {SECTION}[]"), "a 2D cross-section made, combined, offset or moved (Manifold's CrossSection), held by value"),
             ("solid.free", "{ id: number }", "null", "drop a solid"),
             ("place.solve", "{ objects: { id: string; size: [number, number, number]; at?: [number, number, number]; yaw?: number; fixed?: boolean }[]; rules: Record<string, string | number>[]; room?: { min: [number, number]; max: [number, number] } }", "{ objects: { id: string; at: [number, number, number]; yaw: number; size: [number, number, number] }[]; found: { part: string; check: string; level: string; says: string }[]; errors: number }", "boxes placed by relations (on, against, beside, near, apart, facing, align, clear), what can't hold found"),
+            ("character.take", raea_sys_grab::TAKE_ARGS, raea_sys_grab::TAKE_ANSWER, "a frame of a character taking a thing with its hands (reach, grab, lift, carry, put down or throw): the pose to draw and where the thing is, with how far a wrist missed (metres) and how far the body was turned from its own motion (degrees)"),
             ("fonts.families", "{}", "string[]", "the system's font families by name, sorted, as fontique (bevy_text's FontCx) lists them"),
             ("fonts.google", "{ family: string }", "{ family: string }", "a Google Fonts family the page loads (its Latin faces, every weight and style, fetched once through raea's URL cache), as a stylesheet link loads it in Chrome (raea/text loadFont)"),
             ("fonts.atlases", "{ font: string; size: number; text: string }", "{ width: number; height: number; src: string }[]", "bevy_text's glyph atlases for a text in a font file at a size px, each page a PNG data: URL, as Bevy's FontAtlasSet holds them"),
