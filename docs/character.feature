@@ -163,6 +163,12 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # it; she walks off after. Faults seen: she stops 25 cm past her mark, into the table's edge (the stop's
       # overshoot again); and the other character stood with raised arms, which was two turning captures
       # whose actor holds his hands up throughout: dropped from locomotion.
+      # The stop's overshoot was then measured and dealt with in the matcher: over six paths a walk came to
+      # rest 20 to 37 cm past its mark along its way (26 on average), whatever the path. Nothing may drag a
+      # standing body back, so the walk is played again (up to four times) with each stop's mark set back by
+      # what the last playing overran, and the playing whose worst stop is nearest its mark is kept: 6 cm on
+      # average, 14 at worst, the planted feet's slide unchanged (7 mm). She now stands at her mark by the
+      # table. The cost: a staged character is performed several times over, seconds for a scene.
       # Not in the vocabulary yet: do (a line of text made into a clip, which waits on CH11). A controller's unmet ask is not logged
       # yet (CH15).
       Then a script and a controller give acts in one vocabulary and the matcher carries them out
