@@ -638,9 +638,29 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         makes R3F's own size, its camera's aspect and an orthographic camera's frame the box's: an orthographic plane
         R3F frames at zoom 40 is 80 px in a 400 x 300 box with them, 40 px without (R3F sizes it from the frame)
 
+    @done
     Scenario: R3F27. R3F's pointer events and controls in a live play
       Given an <R3F> in a game played live: meshes with onClick, onPointerOver, onPointerMove; drei's <OrbitControls>
       When the player moves and clicks the pointer over the 3D
       Then R3F's events fire on the mesh the pointer is over (raycast from raea's pointer through the <R3F>'s camera), and
         controls move the camera, while a render (no pointer) is unchanged
       And a recorded input log replays to the same frames
+      Status (11-15): done. raea's input, frame by frame, is sent to R3F's canvas as the DOM events a browser would send
+        (sdk/r3f src/input/pointer.ts): the move, the presses, a release and its click, the right button's context
+        menu, the wheel, the pointer gone, each against the frame before, with the modifier keys held. The root runs
+        R3F's own event manager on a stand-in canvas that is an event target (the renderer's domElement too), whose
+        document gets the events that bubble, so R3F raycasts each through its camera and calls the handlers on the
+        mesh it hits, and drei's <OrbitControls> (three-stdlib's, listening on the canvas and its document) turn and
+        zoom the camera. A step sends its frame's events before it renders, inside flushSync, so what a handler sets is
+        drawn that step; a render with no input sends none, and a root stepped again from frame 0 sends the same. An
+        <R3F> in a box takes the pointer in its box (page.viewBox, as events3d picks), scaled to its width and height.
+        Live play ran every composition on raea's lite runtime, which can't run R3F's reconciler: its bundle failed
+        ("use" isn't exported by lite), so an <R3F> never played live. An edit whose own sources import raea/r3f or
+        @react-three/ now plays on React, as RAEA_LIVE_REACT=1 does (raea-runtime-live needs_react; an exported game
+        the same). Measured: test/pointer.test.tsx 7/7 (over, down, a click with its point, out, a missed click; a drag
+        turning OrbitControls' camera and the wheel moving it back; the same input stepped twice ends the same); a
+        render with an input log: the ball hovered, clicked, and the box's <R3F> (400 x 400 at 100,100 of 600 x 600)
+        the same; bench/render-play's new row sdk/r3f/test/live/pointer.tsx (hover, click, a drag on the empty frame)
+        plays and renders the same frames, 1.000000 at frames 6, 12, 18 and 27, and the whole bench 13 of 13 at
+        1.000000. Not yet: a double click, touches as pointers, a timeline baked for the player (raea-runtime-bake
+        bakes on the lite runtime)
