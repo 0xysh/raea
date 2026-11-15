@@ -55,8 +55,6 @@ A compute over the frame, in the 3D beside the camera; several run in the order 
 
 Rust: `raea_sys_compute::Computes`.
 
-Takes [`ComputeProps`](3d.md#computeprops)'s props.
-
 ### `DepthOfField`
 
 A lens's depth of field: what's nearer or farther than the camera's `focus` blurs. Put it inside the Canvas3D;
