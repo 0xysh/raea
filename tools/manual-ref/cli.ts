@@ -26,13 +26,15 @@ const verbs: Verb[] = JSON.parse(run(["help", "--json"])).verbs
 // the index's groups, in the order a reader meets them; every verb is in one
 const GROUPS: [string, string, string[]][] = [
   ["Make", "Render, play and package what you wrote.", ["render", "play", "export-game", "export", "bundle", "app", "run"]],
-  ["Projects", "The workspace, its projects and what a project holds.", ["init", "workspace", "project", "controller", "spec", "component", "part", "add", "brand", "library"]],
+  ["Projects", "The workspace, its projects and what a project holds.", ["init", "workspace", "project", "controller", "spec", "component", "part", "add", "brand", "library", "index"]],
   ["Check", "What's wrong before anyone watches it.", ["check", "judge", "fingerprint", "findings", "scene", "world", "solid", "next", "doctor", "hook", "traces"]],
   ["Footage", "Takes, cuts and the camera, from your own media.", ["media", "cut", "frame", "track", "splat", "mezz", "neural"]],
   ["Sound", "Music read, foley and instruments made on this machine.", ["song", "sounds", "sao", "tokensynth", "setup-audio"]],
   ["Generate and 3D tools", "Generated media, physics bakes, Blender and Godot.", ["gen", "physics", "blender", "godot"]],
   ["Agents and setup", "What an agent reads and shows the person, and the tools raea installs.", ["guide", "context", "notes", "show", "skill", "skills", "setup"]],
 ]
+/** A verb's page: VERB.md, but index.md is this section's own page, so raea index's is indexer.md */
+const pageOf = (verb: string) => (verb === "index" ? "indexer.md" : `${verb}.md`)
 const groupOf = new Map(GROUPS.flatMap(([g, , vs]) => vs.map((v, i) => [v, { g, i }] as const)))
 
 // a verb with its own parser lists its forms itself: that list is its usage
@@ -103,7 +105,7 @@ if (mode === "gen") mkdirSync(DIR, { recursive: true })
 for (const v of verbs) {
   const at = groupOf.get(v.verb)
   if (!at) { problems.push(`${v.verb}: in no group (GROUPS in tools/manual-ref/cli.ts)`); continue }
-  const file = path.join(DIR, `${v.verb}.md`)
+  const file = path.join(DIR, pageOf(v.verb))
   const old = readPage(file)
   const desc = old?.desc ?? new Map()
   let head = old?.head ?? newHead(v)
@@ -126,7 +128,7 @@ const ihead = ib < 0 ? idx : idx.slice(0, ib), itail = ib < 0 ? "" : idx.slice(i
 const list = [BEGIN.replace("; edit only the flag descriptions", ""), ""]
 for (const [g, what, vs] of GROUPS) {
   list.push(`## ${g}`, "", what, "", "| Verb | What it does |", "| --- | --- |")
-  for (const v of vs) { const r = rows.get(g)?.find((x) => x.verb === v); if (r) list.push(`| [\`raea ${v}\`](${v}.md) | ${cell(r.summary)} |`) }
+  for (const v of vs) { const r = rows.get(g)?.find((x) => x.verb === v); if (r) list.push(`| [\`raea ${v}\`](${pageOf(v)}) | ${cell(r.summary)} |`) }
   list.push("")
 }
 list.push(END)

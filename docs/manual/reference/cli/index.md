@@ -56,6 +56,7 @@ The workspace, its projects and what a project holds.
 | [`raea add`](add.md) | Add, remove and install npm packages for a project, with no Node or npm: raea.lock and node_modules. |
 | [`raea brand`](brand.md) | Read a brand kit from a website on this machine: colours, fonts and logos into brand/ and BRAND.md. |
 | [`raea library`](library.md) | Search and manage the person's media libraries in the raea app: folders and drives indexed on this machine, searched by meaning. |
+| [`raea index`](indexer.md) | Make every picture on a folder or a drive searchable by words, embedded on this Mac's Neural Engine, and keep the index open for the raea app. |
 
 ## Check
 
