@@ -1,0 +1,161 @@
+//! Index (docs/index.feature): every picture and video a person has, searchable in minutes. This crate is the fast
+//! pass: sources are listed (walk.rs), each picture's small copy decoded and embedded by SigLIP 2 B/16-256 on the
+//! Neural Engine (apple.rs) while the next ones decode, its row appended as its batch finishes (store.rs), and rows
+//! searched by words through SigLIP 2's text tower (text.rs, search.rs). Libraries' deep pass (EmbeddingGemma 2 per
+//! shot, sound and words) follows in the feed's host.
+
+#[cfg(target_vendor = "apple")]
+pub mod apple;
+pub mod search;
+pub mod store;
+pub mod text;
+pub mod walk;
+
+use anyhow::Result;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+use store::{DONE, LISTED, MODEL, Store};
+
+/// A picture or a video a source holds, before the fast pass reads it
+#[derive(Debug, Clone, Default)]
+pub struct Found {
+    /// where it lives in its source: a path, a Photos asset id, a Drive file id
+    pub locator: String,
+    /// "picture" or "video"
+    pub kind: String,
+    pub name: String,
+    pub size: u64,
+    /// seconds since 1970
+    pub mtime: i64,
+    pub taken: Option<i64>,
+    pub w: Option<u32>,
+    pub h: Option<u32>,
+    pub dur: Option<f64>,
+}
+
+/// How a run is going, said as it goes
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct Progress {
+    pub source: String,
+    pub found: u64,
+    pub done: u64,
+    pub failed: u64,
+    /// pictures embedded a second since the fast pass started
+    pub per_sec: f64,
+    pub seconds: f64,
+    /// the items finished since the last report, newest last, for the wall of thumbnails
+    pub newest: Vec<i64>,
+    pub stage: &'static str,
+}
+
+pub fn normalise(v: &mut [f32]) {
+    let n = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-12);
+    v.iter_mut().for_each(|x| *x /= n);
+}
+
+/// Where SigLIP 2 B/16-256's files are: $RAEA_MODELS, else ~/.local/share/raea-models
+pub fn models_dir() -> PathBuf {
+    std::env::var_os("RAEA_MODELS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/raea-models"))
+}
+
+pub fn image_package() -> PathBuf {
+    models_dir().join("siglip2-base-p16-256/SigLIP2Image.mlpackage")
+}
+
+pub fn text_files() -> (PathBuf, PathBuf) {
+    let d = models_dir().join("siglip2-base-p16-256");
+    (d.join("onnx/text_model.onnx"), d.join("tokenizer.json"))
+}
+
+/// Lists a folder or a drive into the index; returns its source id and how many it found
+pub fn list_folder(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)) -> Result<(String, u64)> {
+    let label = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| root.display().to_string());
+    let source = store.source("folder", &root.to_string_lossy(), &label)?;
+    let started = Instant::now();
+    let mut found = 0u64;
+    let mut err = None;
+    walk::walk(root, 2000, &mut |batch| {
+        found += batch.len() as u64;
+        if let Err(e) = store.list(&source, &batch) {
+            err.get_or_insert(e);
+        }
+        on(&Progress { source: source.clone(), found, stage: "listing", seconds: started.elapsed().as_secs_f64(), ..Progress::default() });
+    });
+    if let Some(e) = err {
+        return Err(e);
+    }
+    Ok((source, found))
+}
+
+/// The fast pass over a source's pictures that wait for it: decoded on every core but two, embedded 32 at a time on
+/// the Neural Engine, each batch's rows written as it finishes. Videos wait for their frames (IX2).
+#[cfg(target_vendor = "apple")]
+pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, on: &mut dyn FnMut(&Progress)) -> Result<Progress> {
+    use rayon::prelude::*;
+    const BATCH: usize = 32;
+    let all: Vec<store::Pending> = store.pending(source, usize::MAX)?.into_iter().filter(|p| p.kind == "picture").collect();
+    let base = store.counts(Some(source))?;
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<apple::Ready, (i64, String)>>(BATCH * 8);
+    let thumbs: Vec<PathBuf> = all.iter().map(|p| store.thumb(p.id)).collect();
+    let threads = std::thread::available_parallelism().map(|n| n.get().saturating_sub(2).max(2)).unwrap_or(4);
+    let decoder = std::thread::spawn(move || {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a decoding pool");
+        pool.install(|| {
+            all.par_iter().zip(thumbs.par_iter()).for_each_with(tx, |tx, (p, thumb)| {
+                let r = apple::picture(Path::new(&p.locator), Some(thumb)).map(|(px, w, h)| apple::Ready { item: p.id, t: 0.0, px, w, h }).map_err(|e| (p.id, e));
+                let _ = tx.send(r);
+            })
+        })
+    });
+    let started = Instant::now();
+    let mut last = Instant::now();
+    let mut prog = Progress { source: source.into(), found: base.found, done: base.done, failed: base.failed, stage: "embedding", ..Progress::default() };
+    let mut batch: Vec<apple::Ready> = Vec::with_capacity(BATCH);
+    let mut embedded = 0u64;
+    let mut flush = |batch: &mut Vec<apple::Ready>, prog: &mut Progress, store: &mut Store| -> Result<()> {
+        if batch.is_empty() {
+            return Ok(());
+        }
+        let pxs: Vec<&objc2_core_video::CVPixelBuffer> = batch.iter().map(|r| &*r.px).collect();
+        let vs = model.embed(&pxs).map_err(|e| anyhow::anyhow!(e))?;
+        let rows: Vec<(i64, f64, Vec<f32>)> = batch.iter().zip(vs).map(|(r, v)| (r.item, r.t, v)).collect();
+        let dims: Vec<(i64, u32, u32)> = batch.iter().map(|r| (r.item, r.w, r.h)).collect();
+        store.append(MODEL, &rows, &dims)?;
+        prog.done += batch.len() as u64;
+        prog.newest.extend(batch.iter().map(|r| r.item));
+        batch.clear();
+        Ok(())
+    };
+    for r in rx {
+        match r {
+            Ok(ready) => {
+                batch.push(ready);
+                if batch.len() == BATCH {
+                    embedded += BATCH as u64;
+                    flush(&mut batch, &mut prog, store)?;
+                }
+            }
+            Err((item, why)) => {
+                store.fail(item, &why)?;
+                prog.failed += 1;
+            }
+        }
+        if last.elapsed().as_millis() >= 250 {
+            prog.seconds = started.elapsed().as_secs_f64();
+            prog.per_sec = embedded as f64 / prog.seconds.max(1e-3);
+            on(&prog);
+            prog.newest.clear();
+            last = Instant::now();
+        }
+    }
+    embedded += batch.len() as u64;
+    flush(&mut batch, &mut prog, store)?;
+    let _ = decoder.join();
+    prog.seconds = started.elapsed().as_secs_f64();
+    prog.per_sec = embedded as f64 / prog.seconds.max(1e-3);
+    prog.stage = "done";
+    on(&prog);
+    prog.newest.clear();
+    let _ = (LISTED, DONE);
+    Ok(prog)
+}

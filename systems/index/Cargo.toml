@@ -1,0 +1,29 @@
+[package]
+name = "raea-sys-index"
+version = "0.1.0"
+edition = "2024"
+license = "FSL-1.1-ALv2"
+publish = false
+description = "Index's fast pass (docs/index.feature IX1-IX3): every picture, and a few frames of every video, listed, decoded from its small copy and embedded by SigLIP 2 on the Neural Engine, kept as f16 rows beside a SQLite list, and searched by words through SigLIP 2's text tower"
+
+[dependencies]
+anyhow = "1"
+half = "2"
+rayon = "1"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# the text tower: ONNX on ONNX Runtime's CPU kernels, as raea's other encoders
+raea-sys-ml = { path = "../ml" }
+ort = { version = "=2.0.0-rc.13", features = ["half"] }
+tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
+walkdir = "2"
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSError", "NSDictionary", "NSArray", "NSValue"] }
+objc2-core-foundation = { version = "0.3", features = ["CFString", "CFDictionary", "CFNumber", "CFURL", "CFData"] }
+objc2-core-ml = { version = "0.3", features = ["MLModel", "MLModelConfiguration", "MLFeatureProvider", "MLDictionaryFeatureProvider", "MLFeatureValue", "MLMultiArray", "MLModel_MLModelCompilation", "MLArrayBatchProvider", "MLBatchProvider", "objc2-core-video"] }
+objc2-core-video = { version = "0.3", features = ["CVPixelBuffer", "CVImageBuffer", "CVBuffer", "CVReturn"] }
+objc2-core-graphics = { version = "0.3", features = ["CGImage", "CGColorSpace", "CGContext", "CGBitmapContext"] }
+objc2-image-io = { version = "0.3", features = ["CGImageSource", "CGImageDestination", "CGImageProperties"] }

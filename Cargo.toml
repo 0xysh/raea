@@ -85,6 +85,7 @@ members = [
     "systems/layout",
     "systems/vision",
     "systems/columns",
+    "systems/index",
     "systems/fingerprint",
     "systems/fingerprint-use",
     "systems/fingerprint-things",

@@ -11460,6 +11460,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32b0446e98cf4a784cc7a0177715ff317eeaa8463841c616cfc78aa4f953c4ea"
 dependencies = [
+ "block2 0.6.2",
  "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-core-graphics",
@@ -15781,6 +15782,29 @@ name = "raea-sys-image"
 version = "0.1.0"
 dependencies = [
  "bevy",
+]
+
+[[package]]
+name = "raea-sys-index"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "half",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-core-ml",
+ "objc2-core-video",
+ "objc2-foundation 0.3.2",
+ "objc2-image-io",
+ "ort",
+ "raea-sys-ml",
+ "rayon",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokenizers",
+ "walkdir",
 ]
 
 [[package]]
