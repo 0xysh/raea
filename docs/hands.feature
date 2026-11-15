@@ -114,12 +114,11 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
     Scenario: HG5. A character in a scene takes a thing
       # 11-14, built: raea/character's `take(skel, base, spec, t)` (sdk/character/src/take.ts) makes the native call
       # character.take (runtime/calls), which is systems/grab's `take_json`; the answer is the pose for <Character>
-      # and the thing's place. Asked as JSON it is the same frame as asked in Rust (a test). Rendered on turbo, a
-      # psx person (~/Studio/internal/projects/psx/raea/take.tsx, out/take.mp4): a box taken off a table with both
-      # hands and thrown, and a cup moved across the table in one hand, upright, the fingers round it; 420 frames,
-      # no errors. Seen in those frames and not fixed here: the standing hands rest inside the table's edge and a
-      # hand passes through the table's top as it leaves the cup (HG6); the box is carried at arm's length, hardly
-      # lifted (the carry place wants tuning by eye). Shane hasn't watched it.
+      # and the thing's place. Asked as JSON it is the same frame as asked in Rust (a test). Rendered on teal, the
+      # Character SDK project's drawn character, 1.70 m (the sheet3d project's compositions/take.tsx, out/take.mp4;
+      # first on a 1.81 m MakeHuman person, the same code): a box taken off a table with both hands and thrown, a
+      # cup moved across the table in one hand, upright, the fingers round it, a box lifted from the floor onto
+      # the table; 735 frames, no errors. Shane hasn't watched it.
       Given a <Character> and a thing in a 3D scene
       When the scene says the character takes it (which thing, when, then put where or thrown how)
       Then the engine works out each frame's pose and the thing's place, in a render and in live play alike
