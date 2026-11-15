@@ -79,16 +79,15 @@ pub fn roomy(skel: &Skeleton, pose: &Pose, solids: &[Thing]) -> bool {
 }
 
 /// A wrist's place moved the least that keeps the hand (its wrist, palm and fingers' reach) clear of every solid.
-pub fn clear(wrist: Vec3, turn: Quat, rest: &HandRest, solids: &[Thing]) -> Vec3 {
-    const MARGIN: f32 = 0.02;
-    let points = [Vec3::ZERO, rest.mid, rest.along * 0.17];
+pub fn clear(wrist: Vec3, turn: Quat, hand: &(Vec<Vec3>, f32), solids: &[Thing]) -> Vec3 {
+    let (points, margin) = hand;
     let mut at = wrist;
     for _ in 0..4 {
         let mut worst: Option<(f32, Vec3)> = None;
         for solid in solids {
             for p in points {
-                let p = at + turn * p;
-                let d = solid.distance(p) - MARGIN;
+                let p = at + turn * *p;
+                let d = solid.distance(p) - margin;
                 if d < worst.map_or(0.0, |w| w.0) {
                     worst = Some((d, solid.normal(p)));
                 }
@@ -98,6 +97,23 @@ pub fn clear(wrist: Vec3, turn: Quat, rest: &HandRest, solids: &[Thing]) -> Vec3
         at -= normal * d;
     }
     at
+}
+
+/// The points of a hand that `clear` keeps off solids, from the wrist in the hand's rest axes, and how far off: the
+/// hand's own skin (palm and fingers as they are at rest, 8 mm off) where the body has samples of it; else the wrist,
+/// the palm and the fingers' reach, 2 cm off.
+pub fn hand_points(skel: &Skeleton, s: Side, rest: &HandRest) -> (Vec<Vec3>, f32) {
+    let Some(hand) = skel.arm(s).map(|arm| arm[2]) else { return (Vec::new(), 0.0) };
+    let wrist = skel.joints[hand].head;
+    let mut joints = vec![hand];
+    joints.extend(raea_sys_body::rig::FINGERS.iter().filter_map(|f| skel.finger(f, s)).flatten());
+    let skin: Vec<Vec3> = joints.iter().flat_map(|&j| skel.skin_of(j)).map(|x| x.at - wrist).collect();
+    if skin.is_empty() { (vec![Vec3::ZERO, rest.mid, rest.along * 0.17], 0.02) } else { (skin, 0.008) }
+}
+
+/// whether a part of the skin (a sample's name) is the arm's or the hand's
+pub fn of_the_arm(part: &str) -> bool {
+    part == "palm" || part.ends_with("Arm") || ["thumb", "index", "middle", "ring", "pinky"].iter().any(|f| part.starts_with(f))
 }
 
 /// Where a body coming from `from` should stand to take a thing, and the turn about the vertical to face it.

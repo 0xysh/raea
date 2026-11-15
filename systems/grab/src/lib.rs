@@ -23,4 +23,4 @@ pub use hand::{Grip, Hold, HoldOptions, Touch, curl, find_holds, wrist_for};
 pub use interact::pick;
 pub use json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, TAKE_ANSWER, TAKE_ARGS, fit_json, hand_json, take_json};
 pub use take::{Frame, Key, Phase, Release, Take, perform};
-pub use trunk::{clear, look, own_solids, roomy, stand_for, stoop, torso};
+pub use trunk::{clear, hand_points, look, own_solids, roomy, stand_for, stoop, torso};

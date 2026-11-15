@@ -10,7 +10,7 @@ use glam::{Quat, Vec3};
 
 use raea_sys_body::arm::{ArmOptions, forearm_twist, reach};
 use crate::grip::{lie_at_grab, past_range, swivel};
-use crate::trunk::{clear, look, own_solids, roomy, stoop, torso};
+use crate::trunk::{clear, hand_points, look, of_the_arm, own_solids, roomy, stoop, torso};
 use raea_sys_body::limits::clamp_turn;
 use raea_sys_body::prior::shape;
 use crate::hand::{Grip, Hold, Touch, curl};
@@ -218,23 +218,25 @@ impl Take {
             let mut thing = self.thing.moved(self.thing.at.lerp(ride.at, u) + Vec3::Y * 0.04 * rise, self.thing.turn.slerp(ride.turn, u));
             let deep = thing.corners().iter().flat_map(|c| self.avoid.iter().map(|s| 0.01 - s.distance(*c))).fold(0.0f32, f32::max);
             thing.at.y += deep * (rise * 4.0).min(1.0);
-            // and out of the body's own trunk and thighs, the way it faces, by how deep its corners would be in
-            // them (a thing asked to be carried inside the belly is carried against it)
-            let body = skel.fk(&base(t));
-            let (ahead, solids) = (yaw(&body) * Vec3::Z, own_solids(skel, &body));
-            for _ in 0..10 {
-                // its corners, and where the wrists that hold it are: a hand's length behind each hold
-                let wrists = self.grip.holds().map(|h| thing.world(h.at) - ahead * 0.08);
-                let inside = thing.corners().into_iter().chain(wrists).flat_map(|c| solids.iter().map(move |s| 0.01 - s.distance(c))).fold(0.0f32, f32::max);
-                if inside <= 0.0 {
-                    break;
-                }
-                thing.at += ahead * (inside + 0.005) * u;
-            }
             // a throw is wound up: drawn back against the throw over its last moments, and brought through
             if let Some(Release::Throw { at, velocity, .. }) = self.release {
                 let wind = (std::f32::consts::PI * span(t, at - WIND, at)).sin() * (velocity.length() / 3.0).min(1.0);
                 thing.at -= velocity.normalize_or_zero() * 0.18 * wind;
+            }
+            // and out of the body, the way it faces, by how deep it would be in it: its corners and the wrists that
+            // hold it (a hand's length behind each hold) against the trunk and thighs, and the body's own skin,
+            // where it has samples, against the thing (a thing asked to be carried in the belly is carried against it)
+            let body = skel.fk(&base(t));
+            let (ahead, solids) = (yaw(&body) * Vec3::Z, own_solids(skel, &body));
+            let skin: Vec<Vec3> = skel.skin(&body).into_iter().zip(&skel.surface).filter(|(_, x)| !of_the_arm(&x.part)).map(|(p, _)| p).collect();
+            for _ in 0..10 {
+                let wrists = self.grip.holds().map(|h| thing.world(h.at) - ahead * 0.08);
+                let boxed = thing.corners().into_iter().chain(wrists).flat_map(|c| solids.iter().map(move |s| 0.01 - s.distance(c))).fold(0.0f32, f32::max);
+                let inside = skin.iter().map(|p| 0.004 - thing.distance(*p)).fold(boxed, f32::max);
+                if inside <= 0.0 {
+                    break;
+                }
+                thing.at += ahead * (inside + 0.005) * u;
             }
             thing
         };
@@ -336,7 +338,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let (u, off) = if away > 0.0 { (1.0 - away, (normal * 0.08 + follow) * (away * 4.0).min(1.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
         let arc = Vec3::Y * 0.06 * (std::f32::consts::PI * u).sin();
         let end = w0.rot[arm[2]].slerp(turn, smooth(span(u, 0.0, 0.8)));
-        let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &rest, &take.avoid);
+        let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &hand_points(skel, hold.side, &rest), &take.avoid);
         // elbows out and down, the way arms hang; where that puts the shoulder or the elbow past its range, the
         // elbow is swung about the line from shoulder to hand, 10 degrees at a time, to the nearest swing that
         // doesn't (the wrist is then held to its own range, and a frame that had to says so)

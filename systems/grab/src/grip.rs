@@ -9,7 +9,7 @@ use raea_sys_body::shape::Thing;
 
 use crate::hand::{facing, wrist_for};
 use crate::take::{Part, Release, Take, smooth, span, yaw};
-use crate::trunk::{clear, stoop};
+use crate::trunk::{clear, hand_points, roomy, stoop};
 
 /// how far past their ranges an arm's shoulder and elbow are in a pose, degrees
 pub(crate) fn past_range(skel: &Skeleton, arm: [usize; 3], pose: &Pose) -> f32 {
@@ -33,15 +33,25 @@ pub(crate) fn lie_at_grab(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Ta
     let (at, turn) = if hold.along.is_some() {
         level
     } else {
-        let pose = stoop(skel, &own, &w, face, level.0.y, 1.0, 0.0, &take.avoid);
-        let probe = reach(skel, &pose, hold.side, thing.world(hold.at) + thing.turn * hold.normal * 0.04, ArmOptions::default());
+        // the body as it will be at the grab: bent for a low thing, with the give its head and chest need there
+        let bent = |give: f32| stoop(skel, &own, &w, face, level.0.y, 1.0, give, &take.avoid);
+        let (mut lo, mut hi) = (0.0f32, if roomy(skel, &bent(0.0), &take.avoid) { 0.0 } else { 1.0 });
+        for _ in 0..6 {
+            if hi <= 0.0 {
+                break;
+            }
+            let mid = (lo + hi) / 2.0;
+            if roomy(skel, &bent(mid), &take.avoid) { hi = mid } else { lo = mid }
+        }
+        let pose = bent(hi);
+        let probe = reach(skel, &pose, hold.side, thing.world(hold.at) + thing.turn * hold.normal * 0.04, ArmOptions { stiff: hi, ..Default::default() });
         let forearm = probe.map_or(face, |r| {
             let drawn = skel.fk(&r.pose);
             (drawn.pos[arm[2]] - drawn.pos[arm[1]]).normalize_or(face)
         });
         let lie = |keep: f32| wrist_for(skel, &thing, &hold, Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face));
         match lie(1.0) {
-            Some(along) => lie(1.0 - smooth((clear(along.0, along.1, &rest, &take.avoid) - along.0).length() / 0.03)).unwrap_or(level),
+            Some(along) => lie(1.0 - smooth((clear(along.0, along.1, &hand_points(skel, hold.side, &rest), &take.avoid) - along.0).length() / 0.03)).unwrap_or(level),
             None => level,
         }
     };
