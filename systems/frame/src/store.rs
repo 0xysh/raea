@@ -56,6 +56,11 @@ fn column(world: &mut World, kind: &str, col: &str, ty: usize) -> ComponentId {
     id
 }
 
+/// The kinds a row spawns as a thing in the 3D scene (raea-render's spawn_3d).
+pub fn is_3d_spawn(kind: &str) -> bool {
+    matches!(kind, "light" | "model" | "cube" | "sphere" | "plane" | "mesh" | "panel" | "decal" | "fogvolume" | "fire" | "grass" | "plate" | "splat" | "meshseq" | "entity" | "text" | "glyph" | "screenpage" | "sprite" | "shape2d")
+}
+
 /// The rows, in the edit's order.
 pub fn rows(world: &World) -> &[Entity] {
     world.get_resource::<Schema>().map(|s| s.order.as_slice()).unwrap_or(&[])

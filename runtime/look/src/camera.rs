@@ -128,23 +128,12 @@ pub fn placed(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>,
 /// The rest of a screen camera's row: the scene's ambient light, environment, sky, post-processing, composition
 /// passes, lens and motion blur, frame by frame.
 fn lit(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, id: &str) {
-    // ambient: every AmbientLight's intensity summed, per frame; its colour the first one's. Any AmbientLight sends the
-    // column, so one of brightness 0 turns the ambient off as Bevy's does (with none, the camera keeps Bevy's default 80)
-    // (those on the camera's layers: an image's pass lights its own scene with its own, rendercam.rs)
+    // ambient: the AmbientLights on the camera's layers (an image's pass lights its own scene with its own): rendercam.rs
     let layers: Vec<u64> = match row.get("layers") {
         Some(V::S(l)) => l.split(',').filter_map(|x| x.trim().parse().ok()).collect(),
         _ => vec![0],
     };
-    let amb: Vec<f64> = all.iter().map(|its| ambient_on(its, &layers)).collect();
-    let lit_by = |i: &&Item| i.kind == "ambient" && sees(&layers, i);
-    if all.iter().flatten().any(|i| lit_by(&i)) {
-        column(p, row, id, "ambient", &amb);
-        if let Some(c) = all.iter().flatten().find(lit_by).and_then(|i| hex(i.props.get("color"))) {
-            if c != "#ffffff" {
-                row.insert("ambient_color".into(), V::S(c));
-            }
-        }
-    }
+    ambient_columns(all, p, row, id, &layers);
     // an <Environment>: each frame's panorama (an index into env_srcs, -1 for none), its light, turn and sky, keyed, so
     // a cut from a hall to a street changes the light on that frame
     // Bevy's EnvironmentMapLight with its own prefiltered maps (<EnvironmentMapLight>: its diffuse and specular

@@ -25,15 +25,25 @@ pub fn render_cameras(all: &[Vec<Item>], tracks: &[(String, Vec<Option<Item>>)],
             p.keys.insert((id.clone(), "on".into()), step_keys(&on));
         }
         row.insert("tonemap".into(), V::S(first.get("tonemap").and_then(Value::as_str).unwrap_or("none").to_string()));
-        let layers = layers_of(first);
-        let amb: Vec<f64> = all.iter().map(|f| ambient_on(f, &layers)).collect();
-        if all.iter().flatten().any(|i| i.kind == "ambient" && sees(&layers, i)) {
-            column(p, &mut row, &id, "ambient", &amb);
-        }
+        ambient_columns(all, p, &mut row, &id, &layers_of(first));
         rows.push(row);
     }
     if !rows.is_empty() {
         p.spawns.push(("rendercam".into(), rows));
+    }
+}
+
+/// A camera's ambient light, from the AmbientLights on its `layers`: their intensities summed per frame (`ambient`,
+/// keyed) and the first one's colour. Any such light sends the column, so one of brightness 0 turns the ambient off as
+/// Bevy's does; with none, the camera keeps Bevy's default 80.
+pub(crate) fn ambient_columns(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, id: &str, layers: &[u64]) {
+    let lit_by = |i: &&Item| i.kind == "ambient" && sees(layers, i);
+    if !all.iter().flatten().any(|i| lit_by(&i)) {
+        return;
+    }
+    column(p, row, id, "ambient", &all.iter().map(|its| ambient_on(its, layers)).collect::<Vec<_>>());
+    if let Some(c) = all.iter().flatten().find(lit_by).and_then(|i| hex(i.props.get("color"))).filter(|c| c != "#ffffff") {
+        row.insert("ambient_color".into(), V::S(c));
     }
 }
 

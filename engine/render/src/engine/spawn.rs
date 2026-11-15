@@ -37,17 +37,12 @@ pub(crate) fn relational(edit: Res<Edit>, clock: Res<Clock>, mut err: ResMut<Err
     let _ = &mut err;
 }
 
-/// The kinds a row spawns as a thing in the 3D scene (spawn_3d).
-pub(crate) fn is_3d_spawn(kind: &str) -> bool {
-    matches!(kind, "light" | "model" | "cube" | "sphere" | "plane" | "mesh" | "panel" | "decal" | "fogvolume" | "fire" | "grass" | "plate" | "splat" | "meshseq" | "entity" | "text" | "glyph" | "screenpage" | "sprite" | "shape2d")
-}
-
 /// A 3D row's entity made what it draws (a light, a model, a mesh with its surface, a panel): what a load does for each
 /// one, and what a live scene does for a row first seen mid-play (Engine::set_rows).
-/// A camera row's entity made the 3D camera, drawing into `target` (the edit's frame in an Engine; a plain App's own,
-/// SceneTarget): its lens and post-processing, motion blur's prepasses, the environment and a window on a larger view.
+/// A camera row's entity made the 3D camera, drawing into `target` (the edit's frame in an Engine, a plain App's own
+/// SceneTarget, or a rendercam's image: R3F23a): its lens and post, motion blur's prepasses, environment and view.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn spawn_camera(world: &mut World, e: Entity, vals: &BTreeMap<String, V>, inserted: &[Tup], dir: &Path, size: (u32, u32), target: RenderTarget, has_3d: bool) -> Result<(), String> {
+pub(crate) fn spawn_camera(world: &mut World, e: Entity, vals: &BTreeMap<String, V>, inserted: &[Tup], dir: &Path, (size, target): ((u32, u32), RenderTarget), has_3d: bool) -> Result<(), String> {
     let g = |k: &str, d: f32| num(vals, k, d);
                 world.entity_mut(e).insert((
                     Camera3d::default(),
@@ -78,18 +73,7 @@ pub(crate) fn spawn_camera(world: &mut World, e: Entity, vals: &BTreeMap<String,
                 environment::environment(world, e, vals, inserted, dir)?;
                 // a window on a larger view (view_*): matchmove
                 matchmove::camera_view(world, e, vals, Vec2::new(size.0 as f32, size.1 as f32));
-    Ok(())
-}
-
-/// A camera row drawing into an image (a "rendercam", `into` "render:NAME:WxH[:float]": docs/r3f.feature R3F23a): the
-/// camera spawn_camera makes, on that image (raea-sys-frame's into_image), which a material's map naming it reads.
-pub(crate) fn render_camera(world: &mut World, e: Entity, vals: &BTreeMap<String, V>, inserted: &[Tup], dir: &Path) -> Result<(), String> {
-    let Some(V::S(into)) = vals.get("into") else { return Err("a camera into an image needs `into` (\"render:NAME:WxH\")".into()) };
-    let image = RenderImages::image(world, into, None)?;
-    let size = RenderImages::name(into).and_then(|n| world.resource::<RenderImages>().0.get(n)).map_or((512, 512), |i| i.1);
-    spawn_camera(world, e, vals, inserted, dir, size, RenderTarget::Image(image.into()), true)?;
-    raea_sys_frame::camera::into_image(world, e, into);
-    Ok(())
+    raea_sys_frame::camera::into_image(world, e, vals) // a rendercam's: no tone curve, MSAA or dither (R3F23a)
 }
 
 /// A live scene's rows applied to a World (Engine::set_rows, or a plain App's: docs/sdk.feature S6a): each row's values
@@ -128,9 +112,8 @@ pub fn apply_rows(world: &mut World, dir: &Path, rows: &[Tup]) -> Result<bool, S
             None => {
                 let e = store::spawn(world, t);
                 // a camera first seen here is a plain App's (SceneTarget); an Engine's comes with its load
-                match world.get_resource::<SceneTarget>().map(|s| (s.target.clone(), s.size)) {
-                    _ if t.kind == "rendercam" => render_camera(world, e, &t.vals, rows, dir)?,
-                    Some((target, size)) if t.kind == "camera" => spawn_camera(world, e, &t.vals, rows, dir, size, target, true)?,
+                match raea_sys_frame::camera::image_of(world, &t.vals)?.or_else(|| world.get_resource::<SceneTarget>().map(|s| (s.size, s.target.clone()))) {
+                    Some(on) if matches!(t.kind.as_str(), "camera" | "rendercam") => spawn_camera(world, e, &t.vals, rows, dir, on, true)?,
                     _ => spawn_3d(world, e, t, &media, dir)?,
                 }
                 let r = store::rows(world).len() - 1;

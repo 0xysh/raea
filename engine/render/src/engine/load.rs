@@ -46,13 +46,12 @@ impl Engine {
         for (t, e) in order {
             let vals = &t.vals;
             match t.kind.as_str() {
-                "camera" => {
-                    spawn_camera(world, e, vals, inserted, &self.dir, (prog.width, prog.height), RenderTarget::Image(self.target.clone().into()), has_3d)?;
-                    camera.get_or_insert(e); // (the first camera: a second draws over it, two_passes)
+                "camera" | "rendercam" => {
+                    let on = raea_sys_frame::camera::image_of(world, vals)?.unwrap_or(((prog.width, prog.height), RenderTarget::Image(self.target.clone().into())));
+                    spawn_camera(world, e, vals, inserted, &self.dir, on, has_3d || t.kind == "rendercam")?;
+                    if t.kind == "camera" { camera.get_or_insert(e); } // (the first camera: a second draws over it, two_passes)
                 }
-                // a camera into an image, a pass before the screen's (R3F23a)
-                "rendercam" => render_camera(world, e, vals, inserted, &self.dir)?,
-                k if is_3d_spawn(k) => {
+                k if store::is_3d_spawn(k) => {
                     spawn_3d(world, e, t, inserted, &self.dir)?;
                 }
                 // without native a clip or a 2D row is a row only (a browser's page draws its own video and text)
