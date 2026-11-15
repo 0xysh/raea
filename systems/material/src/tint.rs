@@ -35,7 +35,10 @@ impl MaterialExtension for Tint {
 /// The copies' colours as the buffer holds them: linear rgba, alpha 1. A buffer of the same size is written in place
 /// on the GPU (GpuShaderBuffer reuses it), so the material's bind group stands.
 pub fn colour_buffer(rgb: &[[f32; 3]]) -> ShaderBuffer {
-    let words: Vec<[f32; 4]> = rgb.iter().map(|c| [c[0], c[1], c[2], 1.0]).collect();
+    let mut words: Vec<[f32; 4]> = Vec::with_capacity(rgb.len());
+    for &[r, g, b] in rgb {
+        words.push([r, g, b, 1.0]);
+    }
     ShaderBuffer::new(words, bevy::asset::RenderAssetUsages::default())
 }
 

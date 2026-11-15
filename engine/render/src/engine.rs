@@ -80,8 +80,6 @@ use raea_sys_volume as volume;
 // meshes that cast shadows without being drawn (<Mesh shadow="only">)
 use raea_sys_material::shadow_only;
 use raea_sys_material::shadow_catch;
-// a colour a copy over an <Instances>' surface (three's instanceColor)
-use raea_sys_material::tint;
 // baked simulations played back by the frame (<MeshSequence>, <Goo>) and glitches on any part (physics.tsx)
 use raea_sys_meshseq as meshseq;
 // toon (cel) surfaces and their ink outlines (<MeshToonMaterial>)

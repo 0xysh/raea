@@ -64,7 +64,7 @@ raea_plugin! {
     GrassPlugin: raea_sys_grass::install, "Fields of grass, made in tiles as detailed as the camera's distance asks (systems/grass).";
     ShadowOnlyPlugin: super::shadow_only::install, "Meshes in the shadow maps only (shadow_only.rs).";
     ShadowCatchPlugin: super::shadow_catch::install, "Surfaces that show only the shadows falling on them (shadow_catch.rs).";
-    TintPlugin: super::tint::install, "A colour a copy over an <Instances>' surface, three's instanceColor (tint.rs).";
+    TintPlugin: raea_sys_material::tint::install, "A colour a copy over an <Instances>' surface, three's instanceColor (tint.rs).";
     ToonPlugin: super::toon::install, "The toon surface and its ink outline's materials (toon.rs).";
     ShaderExtPlugin: super::shader_ext::install, "Shaders written in TypeScript over the lit standard surface (raea-sys-shader).";
     ThreeShaderPlugin: raea_sys_three_shader::install, "three.js's shaders: a ShaderMaterial's GLSL (naga) and a node material's WGSL, with three's built-ins (raea-sys-three-shader).";
