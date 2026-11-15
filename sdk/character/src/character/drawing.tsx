@@ -108,6 +108,9 @@ export interface CharacterProps extends Placement {
 export interface CharacterPart {
   /** its .glb */
   src: string;
+  /** the body's joints its glTF has, when it has only some of them (a head: the neck, the head and the eyes); all of
+   * the body's by default, and the engine refuses a part that lacks one it is given */
+  joints?: string[];
   /** its morph targets' weights by name (a kit part carries the body's weight-*, age-* and, for hair, face-*) */
   morphs?: Record<string, number>;
   /** its cloth: a baked simulation of its vertices in its bind pose and the frame drawn (<Model cloth>, docs/cloth.md) */
@@ -197,7 +200,7 @@ export function Character(props: CharacterProps) {
       {(props.parts ?? []).map((part) => {
         const id = part.src.split("/").pop()!.replace(/\.glb$/, "");
         return (
-          <Model key={id} name={`${name}-${id}`} src={part.src} bones={bones} scale={k} {...(glitch ? { glitch } : {})} {...pass} {...(part.morphs && Object.keys(part.morphs).length ? { morphs: part.morphs } : {})} {...(part.cloth ? { cloth: part.cloth } : {})}>
+          <Model key={id} name={`${name}-${id}`} src={part.src} bones={part.joints ? Object.fromEntries(part.joints.filter((j) => j in bones).map((j) => [j, bones[j]])) : bones} scale={k} {...(glitch ? { glitch } : {})} {...pass} {...(part.morphs && Object.keys(part.morphs).length ? { morphs: part.morphs } : {})} {...(part.cloth ? { cloth: part.cloth } : {})}>
             {part.children}
             {id.includes("hair") && props.hair !== false && hairMaterial(props.hair)}
           </Model>
