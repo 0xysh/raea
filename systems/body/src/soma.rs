@@ -11,7 +11,7 @@ use glam::{Mat3, Quat, Vec3};
 
 use crate::arm::settle_hinge;
 use crate::fit::{Mark, fit};
-use crate::rig::{Pose, Side, Skeleton};
+use crate::rig::{LIMB, Pose, Side, Skeleton, TRUNK};
 
 /// where the middle of SOMA's eyes is from its head joint in its bind pose (somaskel's T-pose), centimetres
 const SOMA_EYES: Vec3 = Vec3::new(0.0, 5.371, 7.573);
@@ -19,14 +19,12 @@ const SOMA_EYES: Vec3 = Vec3::new(0.0, 5.371, 7.573);
 /// raea's joint for a SOMA joint: the trunk and head by name, limbs and fingers by side. A SOMA finger's 2, 3, 4 are
 /// raea's 01, 02, 03 (its 1 is the metacarpal, which raea's hand has none of); the thumb's are 1, 2, 3.
 pub fn raea_joint(soma: &str) -> Option<String> {
-    let trunk = [("Hips", "pelvis"), ("Spine1", "spine_01"), ("Spine2", "spine_02"), ("Chest", "spine_03"), ("Neck1", "neck_01"), ("Head", "head")];
-    if let Some(t) = trunk.iter().find(|t| t.0 == soma) {
-        return Some(t.1.to_string());
+    if let Some(t) = TRUNK.iter().find(|t| t.1 == soma) {
+        return Some(t.0.to_string());
     }
     let (side, rest) = soma.strip_prefix("Left").map(|r| ("l", r)).or_else(|| soma.strip_prefix("Right").map(|r| ("r", r)))?;
-    let limb = [("Shoulder", "clavicle"), ("Arm", "upperarm"), ("ForeArm", "lowerarm"), ("Hand", "hand"), ("Leg", "thigh"), ("Shin", "calf"), ("Foot", "foot"), ("ToeBase", "ball")];
-    if let Some(l) = limb.iter().find(|l| l.0 == rest) {
-        return Some(format!("{}_{side}", l.1));
+    if let Some(l) = LIMB.iter().find(|l| l.1 == rest) {
+        return Some(format!("{}_{side}", l.0));
     }
     let finger = rest.strip_prefix("Hand")?;
     let (name, n) = finger.split_at(finger.len().checked_sub(1)?);
