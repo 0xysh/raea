@@ -413,6 +413,50 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         undisplaced shape (three-shader's shadow pass is the standard one), and a fragmentNode keeps three's output
 
     Scenario: R3F22. TSL compute and storage buffers
+      Given the plan
+        | crate                 | file                                 | lines | job                                                        |
+        | raea-sys-material     | systems/material/src/storage.rs      | 80    | storage buffers shared by key, kept, reset to their first contents |
+        | raea-sys-compute      | systems/compute/src/three.rs         | 220   | three's kernels: the frame's dispatches run once, in order |
+        | raea-sys-three-shader | systems/three-shader/src/storage.rs  | 120   | a node material's storage reads; a mesh drawn as copies    |
+        | sdk/r3f               | sdk/r3f/src/input/tsl-compute.ts     | 200   | a ComputeNode's WGSL, each dispatch recorded, the Compute part |
+        | sdk/r3f               | sdk/r3f/src/input/tsl-storage.ts     | 90    | a storage attribute's key; a material reading it           |
+        | sdk/r3f               | sdk/r3f/src/input/tsl-instances.ts   | 90    | a node material on an InstancedMesh as one mesh of copies  |
+      # The plan (r3f-tsl, 11-15). A composition with a compute row already steps every frame from 0, with a fresh App
+      # on a seek back (runtime/plugins steps(): a compute isn't frame-pure; engine catch_up), so the engine runs each
+      # frame's dispatches once, in order, and a still at frame F runs all of them. What's missing is three's WGSL as a
+      # compute, buffers a compute and a material share, and the dispatches as a list a frame.
+      #   R3F22a. Engine, compute: a storage buffer shared by key (raea-sys-material storage.rs: Bevy's ShaderBuffer, made
+      #     with its size and first contents, kept from frame to frame, reset to them; a 16-byte one for an empty slot).
+      #     A <Compute kernels> (three.rs): each kernel three's own WGSL, its `@group(0)` storage buffers keys of the
+      #     shared ones and its uniforms packed by the struct three declares (raea-sys-shader uniform_slots). Its keyed
+      #     `runs` column each frame: {epoch, frame, fresh, runs: [[kernel, [x, y, z], {UNIFORM: {field: value}}]]}, run
+      #     once for each (epoch, frame) in the frame's compute pass, a fresh one (a new three session's first) resetting
+      #     the buffers first; a run whose pipeline or buffer isn't on the GPU yet is held, never dropped. The computes
+      #     there are (game_of_life, compute_mesh, bevy-ts compute, sdk/web's) are unchanged.
+      #   R3F22b. Engine, three shader: ThreeShader binds two read-only storage buffers (bindings 11 and 12, the empty
+      #     one when unused); a node material's spec lists `storage: [{name, key, size}]` and each stage's
+      #     `var<storage, read> NAME` takes its binding (storage.rs). A BufferMesh with `copies` (count, per-copy
+      #     attributes, matrices when not all identity) is repeated by fit_mesh count times, the copy's number in its own
+      #     attribute `tsl_copy`; such a mesh, and one reading storage, isn't frustum culled (its vertices are placed on
+      #     the GPU).
+      #   R3F22c. sdk/r3f, compute: a ComputeNode compiled by three's WGSLNodeBuilder against the stand-in, cached per
+      #     node and version; renderer.ts's compute and computeAsync (a node or a list) record its kernel, the dispatch
+      #     size as three's WebGPU backend works it out and its uniforms' values then (three's node updates, as a
+      #     material's); the walk empties gl.__raea.computes into one Compute part a frame (kernels, buffers, runs; the
+      #     stand-in's epoch; fresh on its first). <Three program>'s renderer is the same stand-in, so a program's
+      #     dispatches are drawn the same way.
+      #   R3F22d. sdk/r3f, materials: a storage binding in a node material (`.element(i)`) and an attribute three made of
+      #     a storage attribute (`.toAttribute()`) read the shared buffer by its attribute's key (tsl-storage.ts). A node
+      #     material on an InstancedMesh (or a Sprite with count above 1) is compiled for copies: three built with no
+      #     uniform room, so the copies' matrices and colours are attributes; instance_index is `tsl_copy`, the matrices
+      #     identity (baked into the copies), instanceColor and any other per-copy attribute the copy's own.
+      #     tsl-instances.ts's nodeInstancedParts makes the one mesh (cached on the geometry, count, instanceMatrix.version
+      #     and instanceColor's), undefined for what it doesn't take (several materials, GLSL), from scene.ts's
+      #     instancedParts before copyParts (agreed with r3f-gpu, 11-15).
+      #   R3F22e. in-tsl-particles: 65,536 particles in a disc, placed by an init compute and orbited each frame by an
+      #     update compute at a speed by radius, drawn as one InstancedMesh of small quads (positionNode their storage
+      #     position, coloured by radius), additive; against three.js on WebGPU in Chrome (its WebGL 2 backend if
+      #     headless Chrome has no WebGPU), frame 12, SSIM at least 0.92.
       Given TSL storage (`instancedArray`, `storage`, `attributeArray`), compute nodes (`Fn(...)().compute(n)`) run with
         `gl.compute` / `computeAsync` in useFrame, and a material reading the buffers (`.element(instanceIndex)`,
         `.toAttribute()`) on an InstancedMesh, Points or Sprite
