@@ -338,19 +338,15 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
                 let w = skel.fk(&r.pose);
                 (w.pos[arm[2]] - w.pos[arm[1]]).normalize_or(face)
             });
-            let mut best = (f32::MAX, level);
-            for keep in [1.0, 0.5, 0.0] {
-                let along = Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face);
-                let Some(lie) = wrist_for(skel, &held, &hold, along) else { continue };
-                let pushed = (clear(lie.0, lie.1, &rest, &take.avoid) - lie.0).length();
-                if pushed < best.0 - 1e-4 {
-                    best = (pushed, lie);
+            // by how far the forearm's lie would have to be pushed off a solid (nothing at none, all of it at 3 cm)
+            let lie = |keep: f32| wrist_for(skel, &held, &hold, Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face));
+            match lie(1.0) {
+                Some(along) => {
+                    let pushed = (clear(along.0, along.1, &rest, &take.avoid) - along.0).length();
+                    lie(1.0 - smooth(pushed / 0.03)).unwrap_or(level)
                 }
-                if pushed < 0.004 {
-                    break;
-                }
+                None => level,
             }
-            best.1
         };
         // the wrist's path: from where the body has it, in onto the hold from off the surface and over what is in the
         // way; and when letting go, back off the surface and out to where the body has it
@@ -363,30 +359,36 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         // doesn't (the wrist is then held to its own range, and a frame that had to says so)
         let pole = yaw(&w0) * Vec3::new(0.7 * hold.side.sign(), -1.0, -0.4);
         let line = (target - skel.fk(&pose).pos[arm[0]]).normalize_or(face);
-        let mut best: Option<(f32, Pose)> = None;
-        for step in [0.0f32, 1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 4.0, -4.0, 5.0, -5.0, 6.0, -6.0] {
-            let swung = Quat::from_axis_angle(line, (step * 10.0).to_radians()) * pole;
-            let Some(solved) = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(swung), end: Some(end), soft: 0.02, stiff: give }) else { break };
-            let tried = forearm_twist(skel, &solved.pose, hold.side, 1.0);
-            let mut past: f32 = arm[..2].iter().map(|&joint| clamp_turn(skel, joint, tried.turns[joint]).1).sum();
-            // a swing that puts the elbow or the forearm into a solid counts as far past
+        // each swing's cost: how far past their ranges the shoulder and elbow are (degrees), and how deep the elbow
+        // and forearm are in the scene's solids and the body's own trunk (a degree a millimetre); the swing taken is
+        // the mean of them all, weighted steeply toward the cheapest and gently toward none, so it moves smoothly
+        // from frame to frame where a first-that-passes choice jumped
+        let solve_at = |swing: f32| {
+            let swung = Quat::from_axis_angle(line, swing.to_radians()) * pole;
+            let solved = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(swung), end: Some(end), soft: 0.02, stiff: give })?;
+            Some(forearm_twist(skel, &solved.pose, hold.side, 1.0))
+        };
+        let (mut sum, mut weights, mut least) = (0.0f32, 0.0f32, f32::MAX);
+        let mut costs = Vec::with_capacity(13);
+        for step in -6..=6 {
+            let swing = step as f32 * 10.0;
+            let Some(tried) = solve_at(swing) else { continue };
+            let mut cost = past_range(skel, arm, &tried);
             let drawn = skel.fk(&tried);
             let (elbow, wrist) = (drawn.pos[arm[1]], drawn.pos[arm[2]]);
-            if take.avoid.iter().any(|s| s.distance(elbow) < 0.04 || s.distance(elbow.lerp(wrist, 0.5)) < 0.03) {
-                past += 30.0;
-            }
-            // and so does one that puts the elbow into the body's own trunk
-            if torso(skel, &drawn).is_some_and(|body| body.distance(elbow) < 0.03) {
-                past += 30.0;
-            }
-            if best.as_ref().is_none_or(|b| past < b.0 - 0.01) {
-                best = Some((past, tried));
-            }
-            if past < 0.5 {
-                break;
-            }
+            let depth = |solid: &Thing, margin: f32| (margin - solid.distance(elbow)).max(margin - 0.01 - solid.distance(elbow.lerp(wrist, 0.5))).max(0.0);
+            cost += take.avoid.iter().map(|s| depth(s, 0.04)).sum::<f32>() * 1000.0;
+            cost += torso(skel, &drawn).map_or(0.0, |body| depth(&body, 0.03)) * 1000.0;
+            least = least.min(cost);
+            costs.push((swing, cost));
         }
-        let Some((past, solved)) = best else { continue };
+        for (swing, cost) in costs {
+            let w = (-(cost - least) / 4.0).exp() * (-(swing / 45.0).powi(2)).exp();
+            sum += swing * w;
+            weights += w;
+        }
+        let Some(solved) = solve_at(if weights > 0.0 { sum / weights } else { 0.0 }) else { continue };
+        let past = past_range(skel, arm, &solved);
         pose = solved;
         let (wrist, by) = clamp_turn(skel, arm[2], pose.turns[arm[2]]);
         pose.turns[arm[2]] = wrist;
@@ -423,11 +425,14 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     look(skel, &pose, thing.at, watching * (1.0 - 0.5 * give))
     };
     let mut pose = solve(0.0, &mut frame);
-    for step in 1..=6 {
-        if roomy(skel, &pose, &take.avoid) {
-            break;
+    if !roomy(skel, &pose, &take.avoid) {
+        // the least give that keeps the head and chest clear, found by halving, so it changes smoothly
+        let (mut lo, mut hi) = (0.0f32, 1.0f32);
+        for _ in 0..7 {
+            let mid = (lo + hi) / 2.0;
+            if roomy(skel, &solve(mid, &mut frame), &take.avoid) { hi = mid } else { lo = mid }
         }
-        pose = solve(step as f32 / 6.0, &mut frame);
+        pose = solve(hi, &mut frame);
     }
     // the first and the last of a hand's part are a blend of the joints, so its arm leaves and ends exactly as the
     // body has it: each hand's own arm by its own part, the rest of the body by the hand most on
@@ -453,4 +458,9 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     frame.moved = pose.turns.iter().zip(&own.turns).map(|(a, b)| a.angle_between(*b).to_degrees()).fold(0.0, f32::max);
     frame.pose = pose;
     frame
+}
+
+/// how far past their ranges an arm's shoulder and elbow are in a pose, degrees
+fn past_range(skel: &Skeleton, arm: [usize; 3], pose: &Pose) -> f32 {
+    arm[..2].iter().map(|&joint| clamp_turn(skel, joint, pose.turns[joint]).1).sum()
 }

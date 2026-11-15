@@ -308,6 +308,31 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # a squat, and the fingers against the body.
       Then a thing is carried against the body, never in it
 
+  Rule: The bar, set by the user 11-14: a complete tool, not scenarios
+
+    Scenario: HG14. Measured on the body's own skin, the takes are seamless and clip nothing
+      # 11-14, after the third pass was posted: "I doubt you solved it it should be a complete tool with fingers,
+      # grips, holds no clipping into somehting. hwo far away do you need to move to get something how smooth is
+      # the rig is we want perfect seemless motion, npc behaivior, not colliding with things not bending down
+      # weirdly we want something that is complete. as well i notice you use teal which loosk broken stubbed
+      # fingers, broken face, weird body type and skelton." He was right. The scenarios above were judged on
+      # wrists and palm centres, on stills, on a drawn character. tools/hands-audit runs six takes on a clean
+      # body (turbo, 1,588 skin samples, every finger segment) at 60 frames a second and prints the worst of
+      # each measure. First run: body joints jumping up to 6,000 degrees a second in one frame; finger skin 14
+      # to 22 mm inside what it holds; the waist 99 mm inside a box drawn back for a throw; fingers 10 to 30 mm
+      # inside the table; a mug held with no finger pad on it; a floor squat with the hips at a fifth of
+      # standing height. Since: the elbow's swing, the hand's lie on its hold, the squat's give and the knees'
+      # set-back are continuous instead of chosen from steps, and body-joint jumps are down to 400 to 750 in
+      # five of six takes. Not fixed: a wrist flip in the mug take (6,100), finger jumps of 1,500 to 4,000 where
+      # a curl flips between touching and not, and every clipping number above.
+      Given the six takes of tools/hands-audit on a clean body with real fingers
+      Then no skin is in the thing beyond a pad's give (2 mm), none in the scene or the body
+      And every finger meant to hold has its pad on the thing, by a grip chosen for the thing's size and shape
+      And no joint's speed changes by more than 300 degrees a second in a frame, fingers included
+      And a low thing is taken with the hips no lower than a real squat and the back as a person holds it
+      And a body that can't reach walks until it can, on any body, and the walk stops without sliding
+      And it is shown on that clean body, in motion, and Shane has watched it
+
   Rule: Next, in order
 
     @needs:HG5

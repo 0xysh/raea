@@ -17,4 +17,4 @@ pub mod rig;
 pub use arm::{ArmOptions, IkReport, forearm_twist, reach, twist_joints, two_bone};
 pub use fit::{Mark, fit, marks_of};
 pub use limits::{Angles, angles_of, clamp_turn, violations};
-pub use rig::{HandRest, Pose, Posed, Side, Skeleton, hand_rest, mannequin};
+pub use rig::{HandRest, Pose, Posed, Sample, Side, Skeleton, hand_rest, mannequin};

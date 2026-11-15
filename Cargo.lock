@@ -14350,6 +14350,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-hands-audit"
+version = "0.1.0"
+dependencies = [
+ "glam 0.33.12",
+ "raea-sys-body",
+ "raea-sys-grab",
+]
+
+[[package]]
 name = "raea-io-alpha"
 version = "0.1.0"
 dependencies = [

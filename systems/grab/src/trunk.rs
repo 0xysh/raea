@@ -34,12 +34,11 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
     let (drop, pitch) = ((drop + 0.45 * pitch * give).min(0.82) * amount, pitch * (1.0 - give) * amount);
     let left = Vec3::Y.cross(face);
     let knees: Vec<usize> = ["calf_l", "calf_r"].iter().filter_map(|n| skel.joint(n)).collect();
-    let mut pose = own.clone();
-    // the hips go back a little as the trunk goes forward, as a body keeps its balance; and further back, 4 cm at a
-    // time, while a knee would be in a solid (a squat in front of a table sits back from it)
-    for back in 0..6 {
-        pose = own.clone();
-        pose.root = own.root - Vec3::Y * drop - face * (0.12 * pitch + 0.04 * back as f32);
+    // the hips go back a little as the trunk goes forward, as a body keeps its balance; and further back by how near
+    // a knee would be to a solid (a squat in front of a table sits back from it): found once, then by as much
+    let bent = |back: f32| {
+        let mut pose = own.clone();
+        pose.root = own.root - Vec3::Y * drop - face * (0.12 * pitch + back);
         pose.turns[0] = (Quat::from_axis_angle(left, pitch * 0.4) * own.turns[0]).normalize();
         for name in ["spine_01", "spine_02", "spine_03"] {
             if let Some(i) = skel.joint(name) {
@@ -54,12 +53,17 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
             let pole = face + left * (0.25 * s.sign());
             pose = two_bone(skel, &pose, [a, b, c], w.pos[c], ArmOptions { pole: Some(pole), end: Some(w.rot[c]), ..Default::default() }).pose;
         }
-        let at = skel.fk(&pose);
-        if knees.iter().all(|&k| solids.iter().all(|s| s.distance(at.pos[k]) > 0.07)) {
-            break;
+        pose
+    };
+    let pose = bent(0.0);
+    let at = skel.fk(&pose);
+    let mut near = f32::MAX;
+    for &k in &knees {
+        for solid in solids {
+            near = near.min(solid.distance(at.pos[k]));
         }
     }
-    pose
+    if near < 0.09 { bent(((0.09 - near) * 1.3).min(0.26)) } else { pose }
 }
 
 /// Whether the head's top, the neck and the chest are a hand's breadth off every solid.

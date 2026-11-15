@@ -203,6 +203,7 @@ conformance-fake = "tools"
 rtools = "tools"
 skillcheck = "tools"
 seetool = "tools"
+raea-hands-audit = "tools"
 
 # systems that hold only a facility another system may build on (docs/overhaul.md: the mixer graph, ONNX sessions,
 # Vision requests, K kernels on the GPU)

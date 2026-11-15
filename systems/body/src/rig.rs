@@ -35,9 +35,21 @@ pub struct Joint {
     pub tail: Vec3,
 }
 
+/// A point of the skin: the part of the body it is on ("palm", "index3", "thigh"...), the joints that carry it with
+/// their weights, where it is at rest, and the way the skin faces there.
+#[derive(Clone, Debug)]
+pub struct Sample {
+    pub part: String,
+    pub joints: Vec<(usize, f32)>,
+    pub at: Vec3,
+    pub normal: Vec3,
+}
+
 #[derive(Clone, Debug)]
 pub struct Skeleton {
     pub joints: Vec<Joint>,
+    /// samples of the body's skin at rest (skeleton.json's `surface`; none on the stand-in body)
+    pub surface: Vec<Sample>,
     index: HashMap<String, usize>,
 }
 
@@ -58,7 +70,7 @@ pub struct Posed {
 impl Skeleton {
     pub fn new(joints: Vec<Joint>) -> Self {
         let index = joints.iter().enumerate().map(|(i, j)| (j.name.clone(), i)).collect();
-        Skeleton { joints, index }
+        Skeleton { joints, surface: Vec::new(), index }
     }
 
     /// A character's skeleton.json (projects/psx/export.py): `joints` of name, parent (-1 for the root), head, tail.
@@ -83,7 +95,18 @@ impl Skeleton {
             let tail = vec3(&j["tail"]).unwrap_or(head);
             joints.push(Joint { name: name.to_string(), parent: usize::try_from(parent).ok(), head, tail });
         }
-        Ok(Skeleton::new(joints))
+        let mut skel = Skeleton::new(joints);
+        // the skin's samples: each an offset from its first joint's head, carried by up to four joints
+        for x in v["surface"].as_array().into_iter().flatten() {
+            let js: Vec<usize> = x["j"].as_array().into_iter().flatten().filter_map(|j| j.as_u64().map(|j| j as usize)).collect();
+            let ws = x["w"].as_array().into_iter().flatten().filter_map(|w| w.as_f64().map(|w| w as f32));
+            let (Some(&first), Some(o)) = (js.first(), vec3(&x["o"])) else { continue };
+            if js.iter().any(|&j| j >= skel.joints.len()) {
+                continue;
+            }
+            skel.surface.push(Sample { part: x["part"].as_str().unwrap_or("").to_string(), joints: js.iter().copied().zip(ws).collect(), at: skel.joints[first].head + o, normal: vec3(&x["n"]).unwrap_or(Vec3::Y) });
+        }
+        Ok(skel)
     }
 
     pub fn joint(&self, name: &str) -> Option<usize> {
@@ -135,6 +158,11 @@ impl Skeleton {
             }
         }
         Posed { pos, rot }
+    }
+
+    /// Where every sample of the skin is in a pose drawn: each carried by its joints, by their weights.
+    pub fn skin(&self, at: &Posed) -> Vec<Vec3> {
+        self.surface.iter().map(|s| s.joints.iter().map(|&(j, w)| (at.pos[j] + at.rot[j] * (s.at - self.joints[j].head)) * w).sum::<Vec3>() / s.joints.iter().map(|j| j.1).sum::<f32>().max(1e-6)).collect()
     }
 
     /// the local turn that gives joint `i` the world turn `world`, against its drawn parent

@@ -189,6 +189,7 @@ members = [
     "apps/capcut",
     "apps/play",
     "tools/sdk-props",
+    "tools/hands-audit",
 ]
 exclude = [
     "engine/sandbox/rtools",
