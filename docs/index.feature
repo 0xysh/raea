@@ -56,6 +56,11 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         scored against another model's
       And a picture or a frame can be the query ("more like this"), against the fast rows
       And results show the thumbnails, grouped per file, with the moment for a video
+      Status 11-15: the Library's Search asks the Index beside the libraries and shows its hits as a list of their own
+        ("On this Mac": one per file, a video at its best moment, a press shows it in Finder; raea-feed #37); a
+        described sound isn't asked of it, and the host doesn't start the indexer for a Mac that never indexed
+        anything. Not yet: one fused ranking (the weight and MARGIN need LB1's queries plus a photo set measured), "more
+        like this" from the page (serve's similar op is there), and agents' `raea library search` reading the fast rows
 
     Scenario: IX4. The deep pass follows
       Then once a source's fast pass is done, Libraries' indexFile runs on its videos, sounds and words at low priority,
