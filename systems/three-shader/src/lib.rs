@@ -26,6 +26,7 @@ pub mod scan;
 pub mod linear;
 pub mod module;
 mod row;
+pub mod surface;
 pub use row::{fitted, of_row};
 
 use module::{Ty, Uniform, ATTRIBUTES, DISPLAY_SLOT, SLOTS, TEXTURES, TIME_SLOT};
@@ -148,15 +149,22 @@ fn register(world: &mut World, module: String, kind: &str) -> u128 {
     id
 }
 
-/// The two modules of a material, from its stages' WGSL: the prelude in front of each, the entry point after.
-pub fn modules(vertex: &str, fragment: &str, layout: &[Uniform], textures: Option<&[String]>, attributes: usize) -> (String, String) {
+/// The two modules of a material, from its stages' WGSL: the prelude in front of each, the entry point after. A lit one
+/// (surface.rs) returns its surface from the fragment stage, and Bevy's lighting makes its colour.
+pub fn modules(vertex: &str, fragment: &str, layout: &[Uniform], textures: Option<&[String]>, attributes: usize, lit: bool) -> (String, String) {
     let pre = module::prelude(layout, textures, attributes);
-    (format!("{pre}{vertex}\n{}", module::vertex_entry(attributes)), format!("{pre}{fragment}\n{}", module::fragment_entry()))
+    let mut ve = module::vertex_entry(attributes);
+    if lit {
+        ve = ve.replace("    return three_vertex(v);\n", surface::VERTEX_TAIL);
+    }
+    let fe = if lit { surface::fragment_entry() } else { module::fragment_entry() };
+    (format!("{pre}{vertex}\n{ve}"), format!("{pre}{fragment}\n{fe}"))
 }
 
 /// A three shader's spec, as the SDK's ThreeShaderMaterial gives it:
 ///   glsl: {vertex, fragment, raw?, vertexColors?}   a ShaderMaterial's (includes expanded, defines in front)
-///   wgsl: {vertex, fragment, uniforms: [{name, type, array?}], attributes?: [name]}   the contract's, written already
+///   wgsl: {vertex, fragment, uniforms: [{name, type, array?}], attributes?: [name], lit?}   the contract's, written
+///                                         already; `lit`: its fragment stage returns a surface Bevy lights (surface.rs)
 ///   uniforms: {name: number | [numbers]}   each one's value (a matrix column-major, an array's elements in turn)
 ///   textures: {name: picture | {src, colorSpace: "srgb" | "linear", sampler}}   "linear": sampled raw, as three
 ///                                         samples a NoColorSpace texture
@@ -191,6 +199,7 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
         }
     }
     let names: Vec<String> = tex.iter().map(|t| t.0.clone()).collect();
+    let lit = o.get("wgsl").and_then(|w| w.get("lit")) == Some(&Value::Bool(true));
     let (vsrc, fsrc, list, bound, attrs, own_textures) = if let Some(g) = o.get("glsl") {
         let s = |k: &str| g.get(k).and_then(Value::as_str).ok_or_else(|| format!("a three shader's glsl needs {k}"));
         let flag = |k: &str| g.get(k) == Some(&Value::Bool(true));
@@ -217,7 +226,7 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
     // three's textures with flipY count v from the picture's bottom; Bevy's images from their top
     let flip: Vec<String> = o.get("flipY").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).filter_map(|n| bound.iter().position(|b| b == n)).map(|k| if own_textures { format!("tex_{}", bound[k]) } else { format!("rgt{k}x") }).collect();
     let (vsrc, fsrc) = (module::flip_samples(&vsrc, &flip), module::flip_samples(&fsrc, &flip));
-    let (vm, fm) = modules(&vsrc, &fsrc, &layout, own_textures.then_some(bound.as_slice()), attrs.len());
+    let (vm, fm) = modules(&vsrc, &fsrc, &layout, own_textures.then_some(bound.as_slice()), attrs.len(), lit);
     let vertex = register(world, vm, "v");
     let fragment = register(world, fm, "f");
     let mut slots = [[0f32; 4]; SLOTS];
@@ -247,6 +256,9 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
             None => AlphaMode::Opaque,
         },
     };
+    // a lit surface's alpha mode and fog as the standard material's flags give them (surface.rs)
+    slots[DISPLAY_SLOT][2] = surface::alpha_code(alpha);
+    slots[DISPLAY_SLOT][3] = if o.get("fog") == Some(&Value::Bool(false)) { 0.0 } else { 1.0 };
     let cull = match o.get("side").and_then(Value::as_str).unwrap_or("front") {
         "double" => None,
         "back" => Some(Face::Front),
@@ -275,7 +287,9 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
 /// A `three:uniforms` component row: the frame's uniform values ({uniforms: {name: value}, time: [t, delta, frame]})
 /// onto the part's three shader.
 pub fn patch(world: &mut World, e: Entity, v: &Value) -> Result<(), String> {
-    let Some(h) = world.get::<MeshMaterial3d<ThreeShader>>(e).map(|m| m.0.clone()) else { return Err("three:uniforms: the part has no three shader".into()) };
+    // a part whose shader didn't build here is drawn in its colour (of_row warned once, naming why): its uniforms have
+    // nothing to move, and its frame is never refused for them (docs/r3f.feature R3F16)
+    let Some(h) = world.get::<MeshMaterial3d<ThreeShader>>(e).map(|m| m.0.clone()) else { return Ok(()) };
     let mut mats = world.resource_mut::<Assets<ThreeShader>>();
     let Some(mut m) = mats.get_mut(&h) else { return Err("three:uniforms: its material isn't loaded".into()) };
     let mut slots = m.slots.map(|s| s.to_array());
@@ -364,7 +378,7 @@ mod tests {
     #[test]
     fn modules_wrap_the_contract() {
         let l = super::module::layout(&[("tint".into(), super::Ty::Vec(3), None)]).unwrap();
-        let (v, f) = super::modules("struct ThreeVaryings { @builtin(position) clip: vec4<f32>, };\nfn three_vertex(v: ThreeVertex) -> ThreeVaryings { var o: ThreeVaryings; o.clip = three_projection() * three_view() * three_model(v.instance) * vec4(v.position, 1.0); return o; }", "struct ThreeVaryings { @builtin(position) clip: vec4<f32>, };\nfn three_fragment(in: ThreeVaryings, front: bool) -> vec4<f32> { return vec4(u_tint(), 1.0); }", &l, Some(&[]), 0);
+        let (v, f) = super::modules("struct ThreeVaryings { @builtin(position) clip: vec4<f32>, };\nfn three_vertex(v: ThreeVertex) -> ThreeVaryings { var o: ThreeVaryings; o.clip = three_projection() * three_view() * three_model(v.instance) * vec4(v.position, 1.0); return o; }", "struct ThreeVaryings { @builtin(position) clip: vec4<f32>, };\nfn three_fragment(in: ThreeVaryings, front: bool) -> vec4<f32> { return vec4(u_tint(), 1.0); }", &l, Some(&[]), 0, false);
         assert!(v.contains("@vertex\nfn vertex(m: ThreeMeshIn) -> ThreeVaryings"));
         assert!(f.contains("return three_untone(three_fragment(in, front));"));
         assert!(f.contains("@group(constants::MATERIAL_BIND_GROUP) @binding(9) var three_lut: texture_3d<f32>;"));

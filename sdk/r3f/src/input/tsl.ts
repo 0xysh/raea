@@ -17,6 +17,7 @@ import * as THREE from "three";
 import { ModelNode, NodeFrame, WebGPURenderer } from "three/webgpu";
 import type { Part, Props } from "./material";
 import { srcOf } from "./texture";
+import { isLit, litBuilder, litStages } from "./tsl-lit";
 
 /** what a node material is drawn for this frame: the object it's on, its scene and camera, R3F's clock */
 export interface NodeAt {
@@ -108,6 +109,7 @@ interface Compiled {
   textures: { name: string; texture: THREE.Texture }[];
   /** the mesh's own attributes it reads, in order (the contract's a0..a3) */
   attributes: string[];
+  lit: boolean; // a surface Bevy lights (tsl-lit.ts), not a colour
   frame: NodeFrame;
 }
 
@@ -131,8 +133,10 @@ function compile(m: THREE.Material, at: NodeAt): Compiled {
   b.camera = at.camera;
   b.material = m;
   b.context.material = m;
-  // a lit node material is lit by three's own light nodes, their colours and places this frame's
-  if ((m as unknown as { lights?: boolean }).lights) b.lightsNode = (r as unknown as { lighting: { getNode(s: THREE.Scene, c: THREE.Camera): unknown } }).lighting.getNode(at.scene, at.camera);
+  // a lit node material's surface is lit by Bevy's lights (tsl-lit.ts); a basic one's light map by three's light nodes
+  const lit = isLit(m);
+  if (lit) litBuilder(b, m);
+  else if ((m as unknown as { lights?: boolean }).lights) b.lightsNode = (r as unknown as { lighting: { getNode(s: THREE.Scene, c: THREE.Camera): unknown } }).lighting.getNode(at.scene, at.camera);
   const errors: string[] = [];
   const err = console.error;
   console.error = (...a: unknown[]) => errors.push(a.map(String).join(" "));
@@ -144,7 +148,7 @@ function compile(m: THREE.Material, at: NodeAt): Compiled {
   if (errors.length) throw new Unsupported(`three couldn't build its graph: ${errors[0]}`);
   if (b.updateBeforeNodes.length || b.updateAfterNodes.length) throw new Unsupported("it renders the scene again first (a reflector, a render target, a pass): raea draws one scene");
   const c = rewrite(b);
-  const out: Compiled = { key, builder: b, ...c, frame: new NodeFrame() };
+  const out: Compiled = { key, builder: b, ...c, ...(lit ? litStages(c.vertex, c.fragment) : {}), lit, frame: new NodeFrame() };
   compiled.set(m, out);
   return out;
 }
@@ -236,7 +240,7 @@ const STORED: Record<string, string> = {
   "mat3x3<f32>": "mat3x3<f32>", "mat4x4<f32>": "mat4x4<f32>",
 };
 
-function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame"> {
+function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"> {
   let vertex = b.vertexShader;
   let fragment = b.fragmentShader;
   const groups = b.getBindings();
@@ -459,7 +463,8 @@ export function nodeMaterialOf(m: THREE.Material, at: NodeAt): Part | undefined 
     const vals = values(c, m, at);
     const props: Props = {
       // <ThreeShaderMaterial wgsl>: the contract's two stages and its uniforms' types; this frame's values apart
-      wgsl: { vertex: c.vertex, fragment: c.fragment, uniforms: vals.map(({ name, type, array }) => ({ name, type, ...(array ? { array } : {}) })), ...(c.attributes.length ? { attributes: c.attributes } : {}) },
+      wgsl: { vertex: c.vertex, fragment: c.fragment, uniforms: vals.map(({ name, type, array }) => ({ name, type, ...(array ? { array } : {}) })), ...(c.attributes.length ? { attributes: c.attributes } : {}), ...(c.lit ? { lit: true } : {}) },
+      ...(c.lit && (m as { fog?: boolean }).fog === false ? { fog: false } : {}),
       uniforms: Object.fromEntries(vals.map((u) => [u.name, u.value])),
       textures: Object.fromEntries(c.textures.map(({ name, texture }) => [name, { src: srcOf(texture)!, colorSpace: texture.colorSpace === THREE.SRGBColorSpace ? "srgb" : "linear" }])),
       // three's node materials write linear colour (the renderer's output pass tone-maps and encodes), as raea's do

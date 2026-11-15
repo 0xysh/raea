@@ -330,12 +330,22 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       And in-instanced (2,000 moving copies with colours): SSIM at least 0.92 against three.js
 
     Scenario: R3F21. A lit TSL node material is lit by the scene's lights
-      Given a MeshStandardNodeMaterial or MeshPhysicalNodeMaterial with nodes of its own (colorNode, positionNode,
-        normalNode, roughnessNode, metalnessNode, emissiveNode, opacityNode)
+      Given the plan
+        | crate                 | file                                | lines | job                                                    |
+        | raea-sys-three-shader | systems/three-shader/src/surface.rs | 90    | the lit fragment entry: three's surface as Bevy's PbrInput, lit |
+        | sdk/r3f               | sdk/r3f/src/input/tsl-lit.ts        | 85    | three's builder writing the surface, the lit contract  |
+      And a MeshStandardNodeMaterial or MeshPhysicalNodeMaterial (or a Lambert, Phong or toon one) with nodes of its
+        own (colorNode, positionNode, normalNode, roughnessNode, metalnessNode, emissiveNode, opacityNode)
       When raea draws it
-      Then its nodes become a surface shader over Bevy's standard material (docs/shaders.feature SH1): the colour,
-        normal, roughness, metalness, emission and opacity its nodes give, the position its positionNode moves a vertex
-        to, lit by Bevy's lights and shadows
+      Then three's builder writes its surface with no lights of three's: its output (three's `context.getOutput`) is
+        the colour and opacity, the view-space normal and roughness three lights with, the emission and metalness, and
+        the point in world space after positionNode, returned by the fragment stage as `three_surface` (tsl-lit.ts)
+      And three-shader's lit entry makes Bevy's PbrInput of it and runs the standard material's lighting, fog and tone
+        mapping (surface.rs): lit by Bevy's lights and shadows as raea's StandardMaterial is, in three-shader's own
+        material rather than SH1's ShaderExt, so the vertex stage is three's (positionNode moves it) and its uniforms
+        have 254 slots, not 16
+      And a Lambert surface is fully rough and Phong's shininess a roughness, neither metal; a basic, shadow or volume
+        node material, or one with a fragmentNode, keeps three's own output
       And in-tsl-lit (a noise-displaced, noise-coloured icosahedron under a directional light): SSIM at least 0.92
 
     Scenario: R3F22. TSL compute and storage buffers
