@@ -95,6 +95,23 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And helper joints (twist joints, a belly, ears, eye joints) are listed as helpers: the engine or a part's
         own layer sets them, and no pose, clip or call has to name them
 
+    @done
+    Scenario: CH2a. Bodies, heads and creatures are read as one form and checked
+      # 11-15. sdk/body/src/folder.ts (private repo 47ddc16) reads a folder's skeleton.json, or a creature's
+      # <name>.rig.json (docs/creatures.feature CR1's form) as the same skeleton: `rig` the creature's name, each
+      # bone's tail its `ends` entry, the height its highest joint or mark, the eyes between its eye marks, and
+      # skin samples taken from its skinned mesh (samples.ts) since a rig carries none. Helpers not listed are
+      # found by name (SOMA's 32 twist joints, its eyes and jaw; a creature's ears, lids, belly and jaw).
+      # `bun sdk/body/src/folder.ts BODY [HEAD]` lists a folder's problems against CH2, CH20 and CH21. Run on
+      # the work as it stands: SOMA's headless body with the generated head, its four hair styles, glasses, cap
+      # and beanie has none (the head's collar ring lies exactly on the body's 80 ring vertices; hair and hats
+      # ride Head alone; each hair mesh carries a stray distance per vertex). The raccoon has none: its rig reads
+      # as the same skeleton, its 58 joints all skinned, 1,392 skin samples with the lowest on the ground.
+      # Left to the owners, as notes rather than faults: the head carries 20 expressions where CH20 asks about
+      # fifty; head.json names its body by an absolute path on one machine; the raccoon's body is raccoon.glb,
+      # not body.glb; SOMA's skeleton.json doesn't list its helpers (found by name).
+      Then a person's folder and a creature's are read by one reader, and a folder that breaks the form says how
+
   Rule: Motion: one clip format, two ways to get clips, one way to play them
 
     # The position this plan takes, confirmed by the user 11-15 ("clips at run time"): motion at run time is always chosen from clips on
