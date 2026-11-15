@@ -11,6 +11,7 @@ use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialPlugin};
 use bevy::render::render_resource::AsBindGroup;
 use bevy::render::storage::ShaderBuffer;
 use bevy::shader::ShaderRef;
+use raea_core_program::eval::Tup;
 
 pub type TintMaterial = ExtendedMaterial<StandardMaterial, Tint>;
 
@@ -47,6 +48,31 @@ pub fn copy_tag(copy: usize, pass: u32) -> u32 {
     ((copy as u32) << 2) | (pass & 3)
 }
 
+/// How many numbers a copy a row's lists hold: 10 (position, rotation xyzw, scale), 13 with a colour (`inst_tint`)
+pub fn stride_of(t: &Tup) -> usize {
+    if t.vals.get("inst_tint").is_some_and(V::truthy) { 13 } else { 10 }
+}
+
+/// One list of copies: each one's placement, and its linear colour when the list has them
+pub struct Copies {
+    pub at: Vec<Transform>,
+    pub tint: Vec<[f32; 3]>,
+}
+
+/// A row's list of copies (`stride` numbers each) as placements and colours
+pub fn copies(id: &str, s: &str, stride: usize) -> Result<Copies, String> {
+    let mut n: Vec<f32> = Vec::with_capacity(s.len() / 6);
+    for x in s.split_ascii_whitespace() {
+        n.push(x.parse().map_err(|e| format!("{id}: inst: {x}: {e}"))?);
+    }
+    if n.len() % stride != 0 {
+        return Err(format!("{id}: inst is {stride} numbers a copy, got {}", n.len()));
+    }
+    let at = n.chunks(stride).map(|c| Transform { translation: Vec3::new(c[0], c[1], c[2]), rotation: Quat::from_xyzw(c[3], c[4], c[5], c[6]).normalize(), scale: Vec3::new(c[7], c[8], c[9]) }).collect();
+    let tint = if stride == 13 { n.chunks(13).map(|c| [c[10], c[11], c[12]]).collect() } else { vec![] };
+    Ok(Copies { at, tint })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,5 +82,12 @@ mod tests {
         assert_eq!(copy_tag(5, 2), 22);
         assert_eq!(copy_tag(5, 2) >> 2, 5);
         assert_eq!(copy_tag(5, 2) & 3, 2);
+    }
+
+    #[test]
+    fn a_list_of_13_a_copy_holds_colours() {
+        let c = copies("m", "1 2 3 0 0 0 1 1 1 1 0.5 0.25 0", 13).unwrap();
+        assert_eq!((c.at[0].translation, c.tint[0]), (Vec3::new(1.0, 2.0, 3.0), [0.5, 0.25, 0.0]));
+        assert!(copies("m", "1 2 3", 10).unwrap_err().contains("10 numbers a copy"));
     }
 }

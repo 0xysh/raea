@@ -2,33 +2,28 @@
 //! a copy, each sharing the mesh and material handles, which Bevy's automatic batching draws as one instanced call per
 //! mesh. A mesh row's own Mesh3d moves onto its copies at spawn; a model's scene is copied once it's settled (its
 //! surfaces on), then the scene it was copied from is despawned. The parent keeps its transform, visibility and (a
-//! mesh's) material, so sync_meshes still moves, hides and recolours the whole set.
+//! mesh's) material, so sync_meshes still moves, hides and recolours the whole set. A mesh row with a colour a copy
+//! (`inst_tint`, 13 numbers a copy) gives its copies one TintMaterial (raea-sys-material tint.rs) over its standard
+//! material, each copy's MeshTag its number, and the buffer of colours follows the frame's list.
 
 use super::*;
 use bevy::camera::visibility::RenderLayers;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::skinning::SkinnedMesh;
+use bevy::mesh::MeshTag;
+use bevy::render::storage::ShaderBuffer;
+use raea_sys_material::tint::{self, copies, stride_of, Copies, Tint, TintMaterial};
 
 /// A mesh or model entity drawn as instances: what sync_meshes moves in place of its Mesh3d.
 #[derive(Component)]
 pub struct Instanced;
 
-/// A row's `inst`: 10 numbers a copy (position, rotation xyzw, scale).
+/// A row's `inst`: its copies' placements.
 pub fn placements(t: &Tup) -> Result<Option<Vec<Transform>>, String> {
     let Some(V::S(s)) = t.vals.get("inst") else { return Ok(None) };
-    parsed(&t.id, s).map(Some)
+    copies(&t.id, s, stride_of(t)).map(|l| Some(l.at))
 }
 
-fn parsed(id: &str, s: &str) -> Result<Vec<Transform>, String> {
-    let mut n: Vec<f32> = vec![];
-    for x in s.split_ascii_whitespace() {
-        n.push(x.parse().map_err(|e| format!("{id}: inst: {x}: {e}"))?);
-    }
-    if n.len() % 10 != 0 {
-        return Err(format!("{id}: inst is 10 numbers a copy, got {}", n.len()));
-    }
-    Ok(n.chunks(10).map(|c| Transform { translation: Vec3::new(c[0], c[1], c[2]), rotation: Quat::from_xyzw(c[3], c[4], c[5], c[6]).normalize(), scale: Vec3::new(c[7], c[8], c[9]) }).collect())
-}
 
 /// An <Instances> whose placements may change (#85): the lists a render's row shows (`inst_all`; which one a frame
 /// shows is keyed as `inst_k`) and the one shown, or a live row's `inst` as last applied; and where each of a placement's
@@ -40,20 +35,50 @@ pub struct Placements {
     shown: usize,
     live: String,
     parts: Vec<Mat4>,
+    stride: usize,
+    /// a set with a colour a copy: the buffer its copies' TintMaterial reads, that material, and the standard material
+    /// it was last made over
+    tint: Option<Tinted>,
+}
+
+struct Tinted {
+    colours: Handle<ShaderBuffer>,
+    mat: Handle<TintMaterial>,
+    base: AssetId<StandardMaterial>,
 }
 
 impl Placements {
     pub(crate) fn of(t: &Tup) -> Placements {
         let all = match t.vals.get("inst_all") { Some(V::S(s)) => s.split('|').map(str::to_string).collect(), _ => vec![] };
         let live = match t.vals.get("inst") { Some(V::S(s)) => s.clone(), _ => String::new() };
-        Placements { lists: all, shown: 0, live, parts: vec![] }
+        Placements { lists: all, shown: 0, live, parts: vec![], stride: stride_of(t), tint: None }
     }
 }
 
 /// Each <Instances>' copies moved to the frame's placements when they're another list than the one shown: a render's
 /// `inst_k`, or a live row's `inst`. A frame whose list has another count than the copies is an error.
-pub fn sync_instances(frame: Res<FrameRows>, mut q: Query<(Entity, &mut Placements, &Children)>, mut ts: Query<&mut Transform>, mut error: ResMut<Error>) {
-    for (e, mut pl, kids) in &mut q {
+#[allow(clippy::too_many_arguments)]
+pub fn sync_instances(
+    frame: Res<FrameRows>,
+    mut q: Query<(Entity, &mut Placements, &Children, Option<&MeshMaterial3d<StandardMaterial>>)>,
+    mut ts: Query<&mut Transform>,
+    mut error: ResMut<Error>,
+    mut buffers: ResMut<Assets<ShaderBuffer>>,
+    mut tints: ResMut<Assets<TintMaterial>>,
+    stds: Res<Assets<StandardMaterial>>,
+    mut changed: MessageReader<AssetEvent<StandardMaterial>>,
+) {
+    let recoloured: Vec<AssetId<StandardMaterial>> = changed.read().filter_map(|ev| if let AssetEvent::Modified { id } = ev { Some(*id) } else { None }).collect();
+    for (e, mut pl, kids, std) in &mut q {
+        // a tinted set's surface follows its row's standard material (sync_meshes recolours that one)
+        if let (Some(tn), Some(std)) = (pl.tint.as_mut(), std) {
+            if tn.base != std.0.id() || recoloured.contains(&tn.base) {
+                tn.base = std.0.id();
+                if let (Some(base), Some(mut m)) = (stds.get(&std.0).cloned(), tints.get_mut(&tn.mat)) {
+                    m.base = base;
+                }
+            }
+        }
         if pl.parts.is_empty() {
             continue;
         }
@@ -74,10 +99,10 @@ pub fn sync_instances(frame: Res<FrameRows>, mut q: Query<(Entity, &mut Placemen
             }
             _ => continue,
         };
-        let at = match parsed(&format!("{e}"), &s) {
-            Ok(at) if at.len() * pl.parts.len() == kids.len() => at,
-            Ok(at) => {
-                error.0.get_or_insert(format!("Instances: a frame has {} placements where it began with {}; the count can't change", at.len(), kids.len() / pl.parts.len()));
+        let Copies { at, tint } = match copies(&format!("{e}"), &s, pl.stride) {
+            Ok(l) if l.at.len() * pl.parts.len() == kids.len() => l,
+            Ok(l) => {
+                error.0.get_or_insert(format!("Instances: a frame has {} placements where it began with {}; the count can't change", l.at.len(), kids.len() / pl.parts.len()));
                 continue;
             }
             Err(err) => {
@@ -85,6 +110,11 @@ pub fn sync_instances(frame: Res<FrameRows>, mut q: Query<(Entity, &mut Placemen
                 continue;
             }
         };
+        if let Some(tn) = pl.tint.as_ref() {
+            if let Some(mut b) = buffers.get_mut(&tn.colours) {
+                *b = tint::colour_buffer(&tint);
+            }
+        }
         let places = at.iter().flat_map(|tr| pl.parts.iter().map(move |local| Transform::from_matrix(tr.to_matrix() * *local)));
         for (kid, want) in kids.iter().zip(places) {
             if let Ok(mut t) = ts.get_mut(kid) {
@@ -99,7 +129,7 @@ fn markers(world: &World, e: Entity) -> (bool, bool, Option<RenderLayers>) {
     (world.get::<NotShadowCaster>(e).is_some(), world.get::<NotShadowReceiver>(e).is_some(), world.get::<RenderLayers>(e).cloned())
 }
 
-fn spawn_copy(world: &mut World, parent: Entity, mesh: Mesh3d, mat: MeshMaterial3d<StandardMaterial>, at: Transform, (no_cast, no_receive, layers): &(bool, bool, Option<RenderLayers>)) {
+fn spawn_copy<M: Material>(world: &mut World, parent: Entity, mesh: Mesh3d, mat: MeshMaterial3d<M>, at: Transform, (no_cast, no_receive, layers): &(bool, bool, Option<RenderLayers>)) -> Entity {
     let mut c = world.spawn((mesh, mat, at, ChildOf(parent)));
     if *no_cast {
         c.insert(NotShadowCaster);
@@ -110,11 +140,13 @@ fn spawn_copy(world: &mut World, parent: Entity, mesh: Mesh3d, mat: MeshMaterial
     if let Some(l) = layers {
         c.insert(l.clone());
     }
+    c.id()
 }
 
 /// A mesh row with `inst`, after its spawn (shadows and layers on): its Mesh3d onto one child a copy.
 pub fn instance_mesh(world: &mut World, e: Entity, t: &Tup) -> Result<(), String> {
-    let Some(at) = placements(t)? else { return Ok(()) };
+    let Some(V::S(s)) = t.vals.get("inst") else { return Ok(()) };
+    let Copies { at, tint } = copies(&t.id, s, stride_of(t))?;
     if t.vals.contains_key("shader") {
         return Err(format!("mesh {}: instances take a standard surface (a shader over them isn't instanced yet)", t.id));
     }
@@ -123,10 +155,23 @@ pub fn instance_mesh(world: &mut World, e: Entity, t: &Tup) -> Result<(), String
     };
     let Some(mesh) = world.entity_mut(e).take::<Mesh3d>() else { return Err(format!("mesh {}: no mesh to instance", t.id)) };
     let m = markers(world, e);
-    world.entity_mut(e).insert((Instanced, Placements { parts: vec![Mat4::IDENTITY], ..Placements::of(t) }));
-    for tr in at {
-        spawn_copy(world, e, mesh.clone(), mat.clone(), tr, &m);
+    let mut pl = Placements { parts: vec![Mat4::IDENTITY], ..Placements::of(t) };
+    if tint.is_empty() {
+        for tr in at {
+            spawn_copy(world, e, mesh.clone(), mat.clone(), tr, &m);
+        }
+    } else {
+        // a colour a copy: one TintMaterial over the row's standard material, each copy's number in its MeshTag
+        let base = world.resource::<Assets<StandardMaterial>>().get(&mat.0).cloned().unwrap_or_default();
+        let colours = world.resource_mut::<Assets<ShaderBuffer>>().add(tint::colour_buffer(&tint));
+        let tm = world.resource_mut::<Assets<TintMaterial>>().add(TintMaterial { base, extension: Tint { colours: colours.clone() } });
+        for (i, tr) in at.into_iter().enumerate() {
+            let c = spawn_copy(world, e, mesh.clone(), MeshMaterial3d(tm.clone()), tr, &m);
+            world.entity_mut(c).insert(MeshTag::new(tint::copy_tag(i, 0)));
+        }
+        pl.tint = Some(Tinted { colours, mat: tm, base: mat.0.id() });
     }
+    world.entity_mut(e).insert((Instanced, pl));
     Ok(())
 }
 
