@@ -160,7 +160,8 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
             let mut least = f32::MAX;
             for i in 0..=k {
                 let j = &skel.joints[js[i]];
-                let p = pp + pr * skel.offset(js[i]);
+                // (the knuckle from the hand's joint, whatever lies between: SOMA has a bone in the palm there)
+                let p = pp + pr * if i == 0 { j.head - skel.joints[hand].head } else { skel.offset(js[i]) };
                 let q = (pr * base[i] * Quat::from_axis_angle(axis(i), bend[i])).normalize();
                 if i == k && !skin[k].is_empty() {
                     for o in &skin[k] {

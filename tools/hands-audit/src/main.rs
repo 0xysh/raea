@@ -80,6 +80,17 @@ fn audit(skel: &Skeleton, name: &str, base: &dyn Fn(f32) -> Pose, take: &Take, u
                 gap = gap.min(d);
             }
         }
+        // FINGERS=1: each part of the hands, how near its skin is to the thing a third of a second into the hold
+        if std::env::var("FINGERS").is_ok() && held && (t - (take.grab + 0.3)).abs() < 0.009 {
+            let mut by: std::collections::BTreeMap<String, f32> = Default::default();
+            for (sample, p) in skel.surface.iter().zip(&skin) {
+                if hands_part(&sample.part) {
+                    let e = by.entry(format!("{}{}", sample.part, if p.x > at.pos[0].x { "L" } else { "R" })).or_insert(f32::MAX);
+                    *e = e.min(f.thing.distance(*p));
+                }
+            }
+            eprintln!("{name} at {t:.2}: nearest skin of each part to the thing, mm: {}", by.iter().map(|(k, v)| format!("{k} {:.0}", v * 1000.0)).collect::<Vec<_>>().join(", "));
+        }
         pads += touching.len();
         if held && t >= take.grab + 0.05 {
             w.fewest_pads = w.fewest_pads.min(pads);
