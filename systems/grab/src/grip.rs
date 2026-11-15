@@ -45,10 +45,23 @@ pub(crate) fn lie_at_grab(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Ta
         }
         let pose = bent(hi);
         let probe = reach(skel, &pose, hold.side, thing.world(hold.at) + thing.turn * hold.normal * 0.04, ArmOptions { stiff: hi, ..Default::default() });
-        let forearm = probe.map_or(face, |r| {
-            let drawn = skel.fk(&r.pose);
-            (drawn.pos[arm[2]] - drawn.pos[arm[1]]).normalize_or(face)
-        });
+        let coming = |r: Option<raea_sys_body::arm::IkReport>| {
+            r.map(|r| {
+                let drawn = skel.fk(&r.pose);
+                (drawn.pos[arm[2]] - drawn.pos[arm[1]]).normalize_or(face)
+            })
+        };
+        let mut forearm = coming(probe).unwrap_or(face);
+        // a thing that is then carried is held by a grip that also suits the carry: the fingers point between the
+        // way the forearm comes at the grab and the way it will come once the thing is at its carry place (each
+        // taken in the thing's own frame), so neither asks the wrist for the whole turn between them
+        if take.slide.is_empty() && part.grab <= take.grab + 1e-4 {
+            let then = take.thing_at(skel, base, take.carried).0;
+            let later = coming(reach(skel, &base(take.carried), hold.side, then.world(hold.at) + then.turn * hold.normal * 0.04, ArmOptions::default()));
+            if let Some(later) = later {
+                forearm = (forearm + thing.turn * (then.turn.inverse() * later)).normalize_or(forearm);
+            }
+        }
         let lie = |keep: f32| wrist_for(skel, &thing, &hold, Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face));
         match lie(1.0) {
             Some(along) => lie(1.0 - smooth((clear(along.0, along.1, &hand_points(skel, hold.side, &rest), &take.avoid) - along.0).length() / 0.03)).unwrap_or(level),

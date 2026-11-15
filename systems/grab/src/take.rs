@@ -136,7 +136,7 @@ impl Take {
     /// The take of a thing that weighs `kg`: held lower and closer, lifted slower, the trunk leaning back against it.
     pub fn weighing(mut self, kg: f32) -> Self {
         self.weight = kg.max(0.0);
-        self.carry -= Vec3::new(0.0, (0.015 * self.weight).min(0.18), (0.004 * self.weight).min(0.05));
+        self.carry -= Vec3::new(0.0, (0.01 * self.weight).min(0.12), (0.004 * self.weight).min(0.05));
         self.carried = self.grab + (self.carried - self.grab) * (1.0 + self.weight / 8.0);
         self
     }
@@ -228,8 +228,17 @@ impl Take {
             // where it has samples, against the thing (a thing asked to be carried in the belly is carried against it)
             let body = skel.fk(&base(t));
             let (ahead, solids) = (yaw(&body) * Vec3::Z, own_solids(skel, &body));
-            let skin: Vec<Vec3> = skel.skin(&body).into_iter().zip(&skel.surface).filter(|(_, x)| !of_the_arm(&x.part)).map(|(p, _)| p).collect();
+            // (its skin as the body will be for a thing this low: squatting, its knees sat back from the thing)
+            let mut around = self.avoid.clone();
+            around.push(thing);
+            let low = skel.fk(&stoop(skel, &base(t), &body, ahead, thing.at.y, 1.0, 0.0, &around));
+            let skin: Vec<Vec3> = skel.skin(&low).into_iter().zip(&skel.surface).filter(|(_, x)| !of_the_arm(&x.part)).map(|(p, _)| p).collect();
+            let stood = thing.at;
             for _ in 0..10 {
+                // (no further than 25 cm: past that the arms couldn't hold it)
+                if (thing.at - stood).length() > 0.25 {
+                    break;
+                }
                 let wrists = self.grip.holds().map(|h| thing.world(h.at) - ahead * 0.08);
                 let boxed = thing.corners().into_iter().chain(wrists).flat_map(|c| solids.iter().map(move |s| 0.01 - s.distance(c))).fold(0.0f32, f32::max);
                 let inside = skin.iter().map(|p| 0.004 - thing.distance(*p)).fold(boxed, f32::max);
@@ -318,10 +327,16 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         .collect();
     // a thing lower than the arms reach: the body bends and squats for it, as far as the hands have got
     let low = holds.iter().map(|h| h.4.0.y).fold(f32::MAX, f32::min);
+    // what the knees keep out of: the scene's solids, and the thing itself while it stands (a squat sits back from a
+    // box on the floor instead of putting its shins through it)
+    let mut around = take.avoid.clone();
+    if matches!(phase, Phase::Reach | Phase::Lift) {
+        around.push(thing);
+    }
     // solved with the bend the body has room for: where bending or leaning would put the head or chest into a
     // solid, less of both and more squat, a step at a time
     let solve = |give: f32, frame: &mut Frame| {
-    let mut pose = stoop(skel, &own, &w0, face, low, busy, give, &take.avoid);
+    let mut pose = stoop(skel, &own, &w0, face, low, busy, give, &around);
     frame.miss = 0.0;
     // a heavy thing: the trunk leans back against it once it is off what it stood on
     if let (true, Some(waist)) = (take.weight > 0.0, skel.joint("spine_01")) {
@@ -338,7 +353,10 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let (u, off) = if away > 0.0 { (1.0 - away, (normal * 0.08 + follow) * (away * 4.0).min(1.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
         let arc = Vec3::Y * 0.06 * (std::f32::consts::PI * u).sin();
         let end = w0.rot[arm[2]].slerp(turn, smooth(span(u, 0.0, 0.8)));
-        let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &hand_points(skel, hold.side, &rest), &take.avoid);
+        // (the hand's skin keeps 2 cm off solids while it travels, its fingers opening; on its hold, 4 mm)
+        let mut skin = hand_points(skel, hold.side, &rest);
+        skin.1 = 0.004 + (skin.1 - 0.004).max(0.0) * (1.0 - u);
+        let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &skin, &take.avoid);
         // elbows out and down, the way arms hang; where that puts the shoulder or the elbow past its range, the
         // elbow is swung about the line from shoulder to hand, 10 degrees at a time, to the nearest swing that
         // doesn't (the wrist is then held to its own range, and a frame that had to says so)
@@ -392,13 +410,22 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         }
         let close = smooth(span(t, part.grab - SHUT, part.grab)) * (1.0 - smooth(span(away, 0.0, 0.5)));
         match hold.shape {
-            // a way of holding brings its hand's shape; any other hold curls the fingers onto what is there
+            // a way of holding brings its hand's shape
+            // for the fingers that don't meet the thing; the ones that do are curled onto it as on any hold, so none
+            // sinks in
             Some(z) => {
-                let mut shaped = pose.turns.clone();
-                if shape(skel, &mut shaped, hold.side, &z).is_some() {
-                    for (mine, shaped) in pose.turns.iter_mut().zip(&shaped) {
-                        *mine = mine.slerp(*shaped, close);
+                let (mut fitted, mut shaped) = (pose.turns.clone(), pose.turns.clone());
+                let touch = curl(skel, &mut fitted, (at, turn), hold.side, &held, 1.0);
+                if let (Some(touch), Some(())) = (touch, shape(skel, &mut shaped, hold.side, &z)) {
+                    for (n, name) in raea_sys_body::rig::FINGERS.iter().enumerate() {
+                        for j in skel.finger(name, hold.side).into_iter().flatten().filter(|_| !touch.on[n]) {
+                            fitted[j] = shaped[j];
+                        }
                     }
+                }
+                frame.touch[hold.side as usize] = touch;
+                for (mine, fitted) in pose.turns.iter_mut().zip(&fitted) {
+                    *mine = mine.slerp(*fitted, close);
                 }
             }
             None if close > 0.0 => frame.touch[hold.side as usize] = curl(skel, &mut pose.turns, (at, turn), hold.side, &held, close),

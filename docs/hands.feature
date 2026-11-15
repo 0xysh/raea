@@ -333,6 +333,15 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # to 15) with 4 to 5 pads on it (from 0 to 2). Still wrong: a box drawn back 99 mm into the waist for a
       # throw; the floor take (hand 62 mm into the box, hold 27 mm off); the mug at the mouth (palm up to 5 cm
       # off, wrist at its limit); fingers 7 to 21 mm in the table; the squat's hips at a quarter of standing.
+      # Third run, after: a carried thing pushed out of the body's own skin (as it will be posed, squatting for
+      # a low thing) and after a throw's wind-up; the grip chosen between the forearm's way at the grab and at
+      # the carry; the whole hand's skin kept off solids, 2 cm while it travels and 4 mm on its hold; a hold's
+      # hand shape used only for fingers that miss; the squat eased in and out; the knees making way for the
+      # thing. Body skin in a thrown or heavy box 0 mm (from 99 and 45); skin in the table 0 to 11 mm (from 7 to
+      # 30); finger skin in a box or cup 5 to 8 mm; holds kept within 4 to 9 mm in five takes. Still wrong: the
+      # floor take (hold 83 mm off as the box is pushed clear of the squatting body, fingers 25 mm in it, thighs
+      # 18 mm in it); the mug (fingers 25 mm in it, a thumb that starts inside it); fingers 9 to 11 mm in the
+      # table as a hand leaves; body-joint jumps of 360 to 700; `limited` on about 100 frames a take.
       Given the six takes of tools/hands-audit on a clean body with real fingers
       Then no skin is in the thing beyond a pad's give (2 mm), none in the scene or the body
       And every finger meant to hold has its pad on the thing, by a grip chosen for the thing's size and shape

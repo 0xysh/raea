@@ -27,6 +27,8 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
     if short <= 0.0 || amount <= 0.0 {
         return own.clone();
     }
+    // eased in from nothing, so the body starts and stops bending without a kink
+    let short = short * short / (short + 0.1);
     // the hips take most of it by coming down (a squat), the trunk the rest by bending; giving up the bend, the hips
     // come down by what the bend had lowered the shoulders
     let give = give.clamp(0.0, 1.0);
@@ -100,7 +102,7 @@ pub fn clear(wrist: Vec3, turn: Quat, hand: &(Vec<Vec3>, f32), solids: &[Thing])
 }
 
 /// The points of a hand that `clear` keeps off solids, from the wrist in the hand's rest axes, and how far off: the
-/// hand's own skin (palm and fingers as they are at rest, 8 mm off) where the body has samples of it; else the wrist,
+/// hand's own skin (palm and fingers as they are at rest, 2 cm off, the room opened fingers need) where the body has samples of it; else the wrist,
 /// the palm and the fingers' reach, 2 cm off.
 pub fn hand_points(skel: &Skeleton, s: Side, rest: &HandRest) -> (Vec<Vec3>, f32) {
     let Some(hand) = skel.arm(s).map(|arm| arm[2]) else { return (Vec::new(), 0.0) };
@@ -108,7 +110,7 @@ pub fn hand_points(skel: &Skeleton, s: Side, rest: &HandRest) -> (Vec<Vec3>, f32
     let mut joints = vec![hand];
     joints.extend(raea_sys_body::rig::FINGERS.iter().filter_map(|f| skel.finger(f, s)).flatten());
     let skin: Vec<Vec3> = joints.iter().flat_map(|&j| skel.skin_of(j)).map(|x| x.at - wrist).collect();
-    if skin.is_empty() { (vec![Vec3::ZERO, rest.mid, rest.along * 0.17], 0.02) } else { (skin, 0.008) }
+    if skin.is_empty() { (vec![Vec3::ZERO, rest.mid, rest.along * 0.17], 0.02) } else { (skin, 0.02) }
 }
 
 /// whether a part of the skin (a sample's name) is the arm's or the hand's
