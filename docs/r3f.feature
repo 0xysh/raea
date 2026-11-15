@@ -529,7 +529,20 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       # 3D targets stay left out. in-fbo (test/parity/targets.tsx, R3F_CASES="in-fbo:12" until tools/parity.sh lists
       # it): SSIM 0.9557 against three.js at frame 12. What's left of the gap is the unlit plane showing the target, drawn
       # without three's ACES 1/0.6 (Bevy's Exposure scales lit shading only; a plain meshBasicMaterial is as far off): the
-      # pass itself matches (a pass camera keeps ev100 9.7, as three's linear pass is lit). Next: R3F23c.
+      # pass itself matches (a pass camera keeps ev100 9.7, as three's linear pass is lit).
+      # Status (11-15, later): R3F23c built. A pass is keyed by its target, what it drew (its scene and the lone mesh's
+      # material) and its count, so GPUComputationRenderer's start and step passes into each of its two targets keep their
+      # own layer and camera frame to frame. A material's texture follows the target drawn this frame: a map naming render
+      # images is keyed (maps, map_k; raea-sys-rendermap), a ShaderMaterial's (and a node material's) through its
+      # three:uniforms rows (three-shader's patch, by texture name). A three shader drawn into a target writes its colour as
+      # it is (output "target": three tone-maps and encodes only what it draws to the screen). A still with a camera into a
+      # render image steps every frame before it (runtime-scene carries_state), so a start drawn at frame 0 is there at 12.
+      # Two fixes on the way: the engine's load empties its render images before its rows spawn (runtime/plugins emptied
+      # them after, so a three:uniforms row made a second, blank image under the same name and every ShaderMaterial read a
+      # target as black), and a flipY=false DataTexture keeps its rows in order (texture.ts bytesOf turned it upside down,
+      # on maps and in shaders). R3F23d: in-fbo 0.9941 and in-pingpong 0.9949 against three.js at frame 12, both in
+      # tools/parity.sh; the full list of 38 passes. Left: in-reflector, whose material's projective read is an
+      # onBeforeCompile patch (R3F24).
 
     Scenario: R3F24. onBeforeCompile patches
       Given a material patched by onBeforeCompile (drei's MeshWobbleMaterial and MeshDistortMaterial, a patched

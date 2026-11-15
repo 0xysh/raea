@@ -21,6 +21,8 @@ CASES+=(in-vanilla:24)
 CASES+=(in-post2:6 in-post3:6)
 # three/webgpu's PostProcessing: its scene pass and TSL nodes as raea's effects (test/parity/tslpost.tsx, R3F25)
 CASES+=(in-tslpost:6 in-tslpost2:6)
+# render targets an app draws itself, on raea's GPU: a useFBO, and GPUComputationRenderer's ping-pong (test/parity/targets.tsx, R3F23)
+CASES+=(in-fbo:12 in-pingpong:12)
 [ -z "${R3F_CASES:-}" ] || read -ra CASES <<<"$R3F_CASES"
 mkdir -p "$OUT"
 for c in "${CASES[@]}"; do

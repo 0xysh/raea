@@ -85,9 +85,12 @@ function PingPong() {
     show.uniforms.heightmap.value = sim.gpu.getCurrentRenderTarget(sim.height).texture;
   });
   return (
-    <mesh material={show} rotation={[-0.5, 0, 0]}>
-      <planeGeometry args={[3, 3]} />
-    </mesh>
+    <>
+      <color attach="background" args={["#000000"]} />
+      <mesh material={show} rotation={[-0.5, 0, 0]}>
+        <planeGeometry args={[3, 3]} />
+      </mesh>
+    </>
   );
 }
 
