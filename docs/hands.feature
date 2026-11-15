@@ -66,7 +66,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab | tests/grab.rs       | 470   | the hands' measures, on the stand-in body                        |
         | raea-sys-grab | tests/body.rs       | 150   | limits, the body out of solids, the hand prior                   |
         | raea-sys-grab | examples/strip.rs   | 90    | a take drawn as an SVG filmstrip                                 |
-        | sdk           | sdk/character/src/take.ts | 120 | take(), fitPose(), handShape(): the calls made, typed          |
+        | sdk           | sdk/character/src/take.ts | 170 | take(), fitPose(), handShape(): the calls made, typed          |
 
     @done
     Scenario: HG1. An arm reaches a target, and says what it cost
@@ -276,6 +276,29 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # the thighs), which sdk/body's shape.ts knows and the Rust does not.
       Then the limbs and the thing clear a table as the hands, head and chest do
 
+    @done
+    Scenario: HG7b. Walking up to the thing, and a thing handed to another body
+      # 11-14, built. A take works wherever the body stands and faces: a body turned 120 degrees and moved 2 m
+      # keeps its palm within 12 mm of the hold and carries the cup in front of where it faces. raea/character's
+      # `placedPose` stands a pose somewhere else; `walkUp(clip, fps, seconds, stand, to, yaw)` is the body's own
+      # motion for arriving: a walk capture played from its start and set down so it ends at a take's `stand`
+      # walking the way it faces, then eased into a stand over half a second; the take starts when it arrives.
+      # A hand-over needs nothing new: the giver's take holds the thing out on a path and leaves it at the
+      # moment the taker's take, on a body placed facing it, has its hand on. Seen on teal: walking up to the
+      # table and moving the cup; a second teal taking the cup from the first one's hand. Not right: the feet
+      # slide as the walk settles (the project's one walk capture doesn't stop), and the walk isn't chosen or
+      # steered (that is sdk/body's locomotion, which needs a library for the body).
+      Then a body can arrive where a take says to stand and take the thing, and give it to another body
+
+    @done
+    Scenario: HG6d. An elbow out of the body's own trunk
+      # 11-14, built. trunk.rs `torso`: the trunk as a capsule from the hips to the top of the chest, three
+      # fifths of the way out to a shoulder. An elbow swing that puts the elbow within 3 cm of it counts as far
+      # past its range. A cup well to the body's left taken with the right hand: the elbow is outside the trunk
+      # at every frame. Not done: the forearm and the hand against the thighs and the belly, and the thing
+      # against the body.
+      Then reaching across the body doesn't put the elbow through it
+
   Rule: Next, in order
 
     @needs:HG5
@@ -286,13 +309,11 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       And one copy of the limits serves both the TypeScript and the Rust
 
     @needs:HG5
-    Scenario: HG7. The body walks to the thing
-      # HG7a says where to stand; nothing walks there yet. sdk/body's locomotion plays a library retargeted to a
-      # body, and only the MakeHuman test people have one: the Character SDK project's characters have a single
-      # walk clip each, so this waits on their library (or on locomotion taking any body's).
-      Given a thing out of reach
-      Then locomotion (sdk/body's) is asked to arrive at the take's standing place, facing it, and the take
-        starts when it has
+    Scenario: HG7. The walk is chosen and steered
+      # HG7a says where to stand and HG7b arrives there on one capture set down to fit.
+      Given a thing out of reach, anywhere
+      Then sdk/body's locomotion (its chooser, matching and foot holds) brings the body to the take's standing
+        place from wherever it is, with a stop that doesn't slide, on any body that has a library
       And a low thing's bend is checked against the library's pick-low and lift captures, and takes its shape
         from them where they fit (the back straighter, the head up)
 

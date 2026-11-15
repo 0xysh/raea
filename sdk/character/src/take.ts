@@ -14,6 +14,7 @@
 // bending and squatting, the feet staying where they stand. Frame-pure: any frame can be asked for.
 import { native } from "@raea/app/native";
 import type { Pose, Quat, Skeleton } from "./character/core";
+import { qmul, slerp } from "./character/vectors";
 
 type Vec3 = [number, number, number];
 
@@ -120,4 +121,33 @@ export function handShape(skel: Skeleton, side: "L" | "R", z?: number[], from?: 
   const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
   const pose = from && { root: from.root, turns: skel.joints.map((_, i) => from.turns[i] ?? ([0, 0, 0, 1] as Quat)) };
   return native("character.hand", { joints, side, z, pose });
+}
+
+/** A pose turned about the vertical by `yaw` (about the origin, radians) and moved by `by`: the same body stood
+ * somewhere else, facing another way. take() works wherever the body is. */
+export function placedPose(p: Pose, yaw: number, by: Vec3 = [0, 0, 0]): Pose {
+  const c = Math.cos(yaw), s = Math.sin(yaw), [x, y, z] = p.root;
+  const turn: Quat = [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)];
+  return { root: [c * x + s * z + by[0], y + by[1], c * z - s * x + by[2]], turns: [qmul(turn, p.turns[0] ?? [0, 0, 0, 1]), ...p.turns.slice(1)] };
+}
+
+/** The body's own motion for walking up to a place: a walk clip (poses carrying their own root motion, `fps` a
+ * second) played from its start for `seconds`, set down so it ends at `to` (x and z) walking the way `yaw` faces,
+ * then eased over `settle` seconds into `stand` there. Give take() `at` as its base, a take's `stand` as `to` and
+ * `yaw`, and start the take once it `arrives`. The feet slide a little while it settles: a clip that stops would
+ * not. */
+export function walkUp(clip: Pose[], fps: number, seconds: number, stand: Pose, to: Vec3, yaw: number, settle = 0.5): { at: (t: number) => Pose; arrives: number } {
+  const last = Math.min(clip.length - 1, Math.round(seconds * fps)), a = clip[Math.max(0, last - 4)].root, b = clip[last].root;
+  // the way the clip is walking as it ends, and the turn that makes that `yaw`
+  const by = yaw - Math.atan2(b[0] - a[0], b[2] - a[2]), end = placedPose(clip[last], by);
+  const shift: Vec3 = [to[0] - end.root[0], 0, to[2] - end.root[2]];
+  const there = placedPose({ root: [0, stand.root[1], 0], turns: stand.turns }, yaw, [to[0], 0, to[2]]);
+  const at = (t: number): Pose => {
+    const f = Math.max(0, Math.min(last, t * fps)), i = Math.floor(f), u = f - i, p = clip[i], q = clip[Math.min(last, i + 1)];
+    const walking = placedPose({ root: [p.root[0] + (q.root[0] - p.root[0]) * u, p.root[1] + (q.root[1] - p.root[1]) * u, p.root[2] + (q.root[2] - p.root[2]) * u], turns: p.turns.map((turn, j) => slerp(turn, q.turns[j] ?? turn, u)) }, by, shift);
+    const k = Math.max(0, Math.min(1, (t - last / fps) / settle)), e = k * k * (3 - 2 * k);
+    if (e <= 0) return walking;
+    return { root: [walking.root[0] + (there.root[0] - walking.root[0]) * e, walking.root[1] + (there.root[1] - walking.root[1]) * e, walking.root[2] + (there.root[2] - walking.root[2]) * e], turns: walking.turns.map((turn, j) => slerp(turn, there.turns[j] ?? turn, e)) };
+  };
+  return { at, arrives: last / fps + settle };
 }

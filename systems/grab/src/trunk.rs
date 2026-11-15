@@ -121,3 +121,13 @@ pub fn look(skel: &Skeleton, pose: &Pose, at: Vec3, weight: f32) -> Pose {
     }
     out
 }
+
+/// The trunk as a solid, where a pose has it: a capsule from the hips to the top of the chest, as wide as the body
+/// (three fifths of the way out to a shoulder). What an elbow must not swing into.
+pub fn torso(skel: &Skeleton, at: &Posed) -> Option<Thing> {
+    let (chest, shoulder) = (skel.joint("spine_03")?, skel.arm(Side::L)?[0]);
+    let top = at.pos[chest] + at.rot[chest] * (skel.joints[chest].tail - skel.joints[chest].head);
+    let up = top - at.pos[0];
+    let wide = 0.6 * (skel.joints[shoulder].head.x - skel.joints[chest].head.x).abs();
+    Some(Thing { solid: crate::shape::Solid::Capsule { half: up.length() / 2.0, r: wide }, at: at.pos[0] + up / 2.0, turn: Quat::from_rotation_arc(Vec3::Y, up.normalize_or(Vec3::Y)) })
+}

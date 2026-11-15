@@ -115,3 +115,50 @@ fn the_forearms_the_knees_and_the_thing_keep_out_of_a_table() {
         t += 1.0 / 30.0;
     }
 }
+
+#[test]
+fn a_body_turned_and_moved_takes_what_is_in_front_of_it() {
+    let s = mannequin();
+    // the body stands 2 m off, turned a third of the way round; the cup is where it was in front of it
+    let (turn, at) = (Quat::from_rotation_y(2.1), Vec3::new(2.0, 0.0, -1.0));
+    let mut stand = s.rest();
+    stand.root = turn * stand.root + at;
+    stand.turns[0] = turn * stand.turns[0];
+    let base = move |_: f32| stand.clone();
+    let cup = Thing { solid: Solid::Cylinder { half: 0.05, r: 0.035 }, at: turn * Vec3::new(-0.2, 1.0, 0.38) + at, turn };
+    let (there, facing) = stand_for(&cup, base(0.0).root);
+    // it already stands about where a take would have it stand, facing the cup
+    assert!((there - base(0.0).root).length() < 0.25, "{}", (there - base(0.0).root).length());
+    assert!(Quat::from_rotation_y(facing).angle_between(turn) < 0.6);
+    let grip = find_holds(&cup, base(0.0).root, HoldOptions::default());
+    let Grip::One(hold) = grip else { panic!("one hand") };
+    let mut take = Take::new(cup, grip, 0.0);
+    take.release = Some(Release::Put { at: 1.8, down: 2.4, place: turn * Vec3::new(0.05, 1.0, 0.4) + at });
+    let mut t = take.grab;
+    while t < 2.4 {
+        let f = perform(&s, &base, &take, t);
+        assert!(palm_off(&s, &f, &hold) < 0.012, "t {t}: the palm is {} m off", palm_off(&s, &f, &hold));
+        // carried, it is in front of the turned body and upright
+        assert!((f.thing.turn * Vec3::Y).dot(Vec3::Y) > 0.9999);
+        t += 1.0 / 30.0;
+    }
+    let carried = perform(&s, &base, &take, 1.5).thing.at - base(0.0).root;
+    assert!(carried.dot(turn * Vec3::Z) > 0.15, "in front of where it faces");
+}
+
+#[test]
+fn an_elbow_stays_out_of_the_trunk_when_a_hand_reaches_across() {
+    let s = mannequin();
+    // a cup well to the body's left, taken with the right hand
+    let cup = Thing::new(Solid::Cylinder { half: 0.05, r: 0.035 }, Vec3::new(0.22, 1.05, 0.3));
+    let take = Take::new(cup, find_holds(&cup, s.rest().root, HoldOptions::default()), 0.0);
+    let elbow = s.arm(Side::R).unwrap()[1];
+    let mut t = 0.0;
+    while t < 1.5 {
+        let f = perform(&s, &|_| s.rest(), &take, t);
+        let w = s.fk(&f.pose);
+        let body = torso(&s, &w).unwrap();
+        assert!(body.distance(w.pos[elbow]) > 0.0, "t {t}: the elbow is {} m into the trunk", -body.distance(w.pos[elbow]));
+        t += 1.0 / 30.0;
+    }
+}

@@ -9,7 +9,7 @@
 use glam::{Quat, Vec3};
 
 use raea_sys_body::arm::{ArmOptions, forearm_twist, reach};
-use crate::trunk::{clear, look, roomy, stoop};
+use crate::trunk::{clear, look, roomy, stoop, torso};
 use raea_sys_body::limits::clamp_turn;
 use raea_sys_body::prior::shape;
 use crate::hand::{Grip, Hold, Touch, curl, facing, wrist_for};
@@ -360,6 +360,10 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
             let drawn = skel.fk(&tried);
             let (elbow, wrist) = (drawn.pos[arm[1]], drawn.pos[arm[2]]);
             if take.avoid.iter().any(|s| s.distance(elbow) < 0.04 || s.distance(elbow.lerp(wrist, 0.5)) < 0.03) {
+                past += 30.0;
+            }
+            // and so does one that puts the elbow into the body's own trunk
+            if torso(skel, &drawn).is_some_and(|body| body.distance(elbow) < 0.03) {
                 past += 30.0;
             }
             if best.as_ref().is_none_or(|b| past < b.0 - 0.01) {
