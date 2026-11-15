@@ -149,16 +149,18 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         Team's workspace index is shared by its members
       And the cloud index counts toward the plan: its thumbnails and vectors as storage bytes (about 20 KB an item),
         shown on Settings → Storage beside media; what each plan includes is Shane's call (open question 1)
-      Status 11-15, built for the account's other Macs, not merged or deployed: the indexer hands out its rows and a
+      Status 11-15, built for the account's other Macs and going out in 0.1.5: the indexer hands out its rows and a
         search's query vector (systems/index export.rs, serve's rows op and search vector: true; 0722ce3ae); raea-api
         keeps each Mac's rows in turbopuffer, one namespace per account (a Team's org), a row taken only with a
         thumbnail the person has in storage, refused on Free (402) (private 3b99935, POST /v1/fast/rows, search,
         forget; test/fast.sh); the feed copies each run's new rows there and merges the other Macs' hits into the Index
         page's search by score, each tagged with its Mac, a picture both Macs have shown once, and a removed source
-        forgotten (raea-feed #44, held until 0.1.5 ships). Measured live on the real indexer and raea-api on wrangler
-        dev: 3 rows sent in 75 ms; the other Mac's search answers in 23 ms with them at the first Mac's own scores, the
-        thumbnail byte for byte. Not yet: raea-api deployed (Shane's OK), plan amounts, the copy's bytes on Settings →
-        Storage, raea.io and the iPad (they need a text tower on the server: the query vector comes from the Mac)
+        forgotten (raea-feed #44, merged 25a526b). Measured live on the real indexer and raea-api on wrangler dev: 3
+        rows sent in 75 ms; the other Mac's search answers in 23 ms with them at the first Mac's own scores, the
+        thumbnail byte for byte. raea-api deployed 11-15 with Shane's OK (version 137b25ad); the plans count it as
+        storage only (Shane, 11-15): the thumbnails are the person's storage bytes, the vectors are free. Not yet: the
+        copy's bytes shown apart on Settings → Storage, raea.io and the iPad (they need a text tower on the server: the
+        query vector comes from the Mac)
 
   Rule: Managing the index
 
