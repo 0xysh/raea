@@ -13,10 +13,43 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
   8's skeleton), docs/skeleton.feature (the game_engine rig: replaced by CH1). A scenario here that another file
   already plans names it and does not repeat it.
 
-  What exists today, so nothing is planned twice: motion matching, a clip database, style vectors, foot locking,
-  inertialization, a chooser of situations and cloth that follows skin are built (sdk/character, sdk/body), on the
-  52-joint game_engine rig, over captures from ACCAD and Quaternius. Arms and hands are built in Rust
-  (systems/body, systems/grab) on the same rig. All of it moves to SOMA's joints; none of it is thrown away.
+  The system on one page, as it stands 11-15 (each part names the scenarios that hold its detail):
+
+  Body. Every person is SOMA (NVlabs SOMA-X, Apache-2.0): one skeleton of 78 joints and 32 twist helpers the
+  engine sets, one body folder for a person or a creature (skeleton.json, body.glb, parts; CH2), builds from
+  SOMA's shape model. The bodies on the old game_engine rig only play until they are retired (CH1, CH1a).
+
+  Motion. At run time a body only plays clips, chosen by motion matching from a library on SOMA's skeleton, on the
+  user's own machine, so a render and live play give the same frames (CH10, CH14a). Clips come from captures first
+  (ACCAD and Quaternius, moved onto SOMA once) and from Kimodo where no capture exists, made when a project is
+  built, in the cloud: between two poses with no text today (CH15a: "turn and sit", "rise and walk off"), from a
+  line of text once its encoder's licence is granted (CH11). A generated clip is judged by the checks that judge
+  captures before it is kept (CH13). Locomotion is that matcher following a path, its stops landing on their marks.
+
+  Staging and NPCs. A performance is a list of acts: go, wait, look, face, sit, take (and put, throw, hand over and
+  use, which are takes with another spec) and do (a line of text). A script, a behaviour tree and a language model
+  all return those acts to `direct`, which asks a character's controller only when its acts run out, and the
+  matcher carries them out (CH16a). An act no clip plays is stood through and written down as a clip to make, and
+  the build turns that list into Kimodo clips (CH17a, CH15). Hands, eyes and contacts are laid over the matched
+  pose by the Rust takes and the look solver, each saying how far it moved the pose (CH18a).
+
+  Heads. The face session's head (GNM Head, Apache-2.0) is a Character part skinned to SOMA's neck, head and eye
+  joints with about fifty named expressions, ending on the collar ring of a body built without its head; hair is
+  cards skinned to Head with a stray distance per vertex; hats and glasses are rigid parts on Head (CH20a, CH21a).
+
+  Creatures. The raccoon session's flow (docs/creatures.feature): a creature is its own skeleton set down by measure
+  first, its model generated on a grey mannequin of that skeleton and weighted there, moved by a gait solver that
+  owns contact, carriage and the order of the legs, with anymove's generated clips for timing where it has them
+  (CH30 to CH32). The same body folder and the same clip format as a person; Kimodo is for people only.
+
+  Clothes. Pictures of the dressed mannequin measured onto SOMA's skin (CH40 to CH46) were built and rejected by
+  the user on the body. Garments are now sewing patterns cut to SOMA's measurements and draped by a cloth of our
+  own on the GPU (CH47a, CH48a), with a model trained on that data proposed (CH48). CH47 and CH48 are the user's
+  to decide.
+
+  Who holds what: this plan's session the body, motion, staging and clothes, and the syncing; the face session
+  heads and hair; the raccoon session creatures. A change to a joint name, a unit, an axis or a file's layout is
+  made here first (CH0).
 
   Rule: The standard, and who builds to it
 
@@ -185,6 +218,22 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         ask is logged for CH15
 
     @done
+    Scenario: CH17a. An act no clip plays is done as near as can be and written down as a clip to make
+      # 11-15. sdk/body's stage gained `do` (a line of text). With a clip made for the line (`direct`'s `made`,
+      # keyed by the line in lower case with single spaces) it plays as the sitting captures do, carried on from
+      # where the body stands; without one the character stands for the act's seconds and the line goes on its
+      # `asks`; `toMake` gathers a cast's asks, once each, most asked first: the build step's list for Kimodo
+      # (CH11, CH15). A language model's act outside the vocabulary ({"wave": "ben"}, a bare "shrug") becomes a do
+      # line instead of being dropped, so what a controller wanted and could not get is counted; a known act with
+      # wrong values ({"wait": -1}) is still dropped. Tested with two characters asking for one line spelled two
+      # ways (listed once, asked twice) and with the library's sitting down standing in for a made clip (played,
+      # no frame jump past 6 cm); the body SDK's suite is 37 of 39, the 2 failing being the hand layer's cup grasp
+      # as before (private repo ee61dd1). The made clips themselves wait on Kimodo's text encoder: the user has
+      # sent Meta's licence form; the account still reads 403 while it is reviewed.
+      Then a controller can ask for anything, the character does the nearest it can, and the ask becomes a clip to
+        make
+
+    @done
     Scenario: CH16a. Acts, and controllers that return them, carried out by the matcher on SOMA
       # 11-15. sdk/body's stage module: an act is go (to a point or through several, at a gait), wait, or look
       # (at a point, a named character, or nothing). `direct` plays a cast for some seconds: each character's
@@ -335,8 +384,11 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # in place of the built one, and why the fore paws carry no agreement score.
       Then the raccoon has a walk from anymove, and the numbers say whether it beats the solver's walk
 
-  Rule: Clothes: drawn on the mannequin by an image model, kept as data on SOMA's own skin
+  Rule: Clothes: first drawn on the mannequin by an image model (rejected), now sewing patterns (proposed)
 
+    # Superseded the same day: the user saw these garments on the body and rejected them ("on the body it looks
+    # terrible"; the views "are not consistent at all"). CH47a and CH48a below are the direction now; CH40-CH46
+    # stay as the record of what the picture method could and could not do.
     # The user's direction, 11-15: generative or procedural; perhaps the mannequin as the base input, an image
     # model on top of it, and layers from there. Tried that day on SOMA's body, and it works; what follows is
     # the standard those tests point to. The idea in one line: a garment is not a mesh of its own, it is data
