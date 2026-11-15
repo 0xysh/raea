@@ -195,7 +195,11 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # sit at a switch; the run curve also jolts 23 degrees against 22), slide in the jog curve, the turn of
       # 180 and errands (4 to 9 cm), and the head rolling 18 to 20 degrees on curves against 13 to 16 in the
       # captures. Moving the body at a switch onto the new clip's planted foot (align) is not the pops' cause:
-      # off, it takes away a few and the walk curve slides 15 cm.
+      # off, it takes away a few and the walk curve slides 15 cm. The cause: a switch blended the pose's turns
+      # and the hips' height but not the hips' speed over the floor, so a run handing to a run turn at another
+      # pace jumped it in a frame. Carried into the decaying offset (perform's carry, on unless no foot is down
+      # in both clips, where carrying it slid a run turn's foot 22 cm): pops 36 to 21, at switches 31 to 12,
+      # every other number unchanged.
       Then a body goes where a path says, by the situations the chooser allows, with every switch inertialized
         and every planted foot held
       And the turbo suite's cases pass on a SOMA person at least as well as they do today
