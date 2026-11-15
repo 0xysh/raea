@@ -114,7 +114,7 @@ pub fn fit_copies(mesh: &mut Mesh, v: &Value, own: &[String]) -> Result<(), Stri
             if vals.len() < verts * size {
                 return Err(format!("attribute {name}: {size} numbers for each of {verts} vertices, got {}", vals.len()));
             }
-            let per: Vec<[f32; 4]> = corners.iter().map(|&i| std::array::from_fn(|k| if k < size { vals[i * size + k] } else { 0.0 })).collect();
+            let per: Vec<[f32; 4]> = corners.iter().map(|&i| padded(&vals, i, size)).collect();
             if per.len() != n {
                 return Err(format!("attribute {name}: {} vertices, the mesh has {n}", per.len()));
             }
@@ -137,7 +137,7 @@ pub fn fit_copies(mesh: &mut Mesh, v: &Value, own: &[String]) -> Result<(), Stri
             for (out, o) in a.iter_mut().zip(&owns) {
                 out.push(match o {
                     Own::Copy => [i as f32, 0.0, 0.0, 0.0],
-                    Own::PerCopy(s, vals) => std::array::from_fn(|c| if c < *s { vals[i * s + c] } else { 0.0 }),
+                    Own::PerCopy(s, vals) => padded(vals, i, *s),
                     Own::PerVertex(per) => per[j],
                 });
             }
@@ -160,6 +160,11 @@ pub fn fit_copies(mesh: &mut Mesh, v: &Value, own: &[String]) -> Result<(), Stri
     }
     *mesh = out;
     Ok(())
+}
+
+/// Item `i` of a list of `size`-number items, as a vec4 (zeros after its numbers).
+fn padded(vals: &[f32], i: usize, size: usize) -> [f32; 4] {
+    std::array::from_fn(|k| if k < size { vals[i * size + k] } else { 0.0 })
 }
 
 /// A mesh whose three shader reads a shared buffer isn't culled by its bounds (where the computes put its vertices).

@@ -128,8 +128,7 @@ fn follow_runs(world: &mut World, t: &mut Three, runs: &str) -> Result<(), Strin
         let k = t.kernels.get(&id).ok_or_else(|| format!("run {i}: kernel {id} isn't one it has"))?.clone();
         let workgroups = crate::groups_of(r.get(1)).ok_or_else(|| format!("run {i}: workgroups are [x, y, z], each 1 to 65535"))?;
         let given = r.get(2).and_then(Value::as_object).cloned().unwrap_or_default();
-        let slots = raea_sys_shader::uniform_slots(&k.src, &k.declared, &given, &[]).map_err(|e| format!("run {i}: {e}"))?;
-        let uniforms = k.declared.iter().zip(slots).map(|((name, _), s)| (name.clone(), s.iter().flat_map(|v| v.to_array()).flat_map(f32::to_ne_bytes).collect())).collect();
+        let uniforms = raea_sys_shader::uniform_bytes(&k.src, &k.declared, &given, &[]).map_err(|e| format!("run {i}: {e}"))?;
         let mut buffers = BTreeMap::new();
         for (name, key) in &k.buffers {
             buffers.insert(name.clone(), shared.get(key).ok_or_else(|| format!("run {i}: shared buffer {key} isn't made (the shared column names it)"))?.id());

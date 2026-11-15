@@ -38,7 +38,7 @@ fn buffer(words: Vec<u32>) -> ShaderBuffer {
 /// A buffer's first contents from its spec, {size, f32 | u32 | i32}: `size` bytes (a multiple of 4, at least 4) as
 /// 32-bit words, the numbers given from the start in the kind they're given as and zeros after.
 pub fn first_contents(v: &Value) -> Result<Vec<u32>, String> {
-    let size = v.get("size").and_then(Value::as_u64).filter(|n| *n >= 4 && n % 4 == 0 && *n <= 1 << 30).ok_or_else(|| format!("a shared buffer's size is a number of bytes, a multiple of 4, got {}", v.get("size").unwrap_or(&Value::Null)))?;
+    let size = v.get("size").and_then(Value::as_u64).filter(|n| *n >= 4 && n % 4 == 0 && *n <= 1 << 30).ok_or_else(|| format!("a shared buffer's size is a number of bytes, a multiple of 4, got {}", v["size"]))?;
     let mut words = vec![0u32; size as usize / 4];
     let given = [("f32", 'f'), ("u32", 'u'), ("i32", 'i')].into_iter().filter_map(|(k, c)| v.get(k).map(|x| (k, c, x))).collect::<Vec<_>>();
     if given.len() > 1 {

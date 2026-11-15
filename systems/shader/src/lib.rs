@@ -31,6 +31,12 @@ pub mod bindings;
 use raea_sys_shader_wgsl::{layout, storage_layout};
 /// Uniforms packed in their declared types' WGSL layout (a compute's as written: raea-sys-compute written.rs).
 pub use layout::slots as uniform_slots;
+/// Each uniform's bytes by name, packed in its declared type's WGSL layout (a compute as written's, a frame pass as
+/// written's, three's kernels').
+pub fn uniform_bytes(src: &str, declared: &[(String, String)], given: &serde_json::Map<String, Value>, defs: &[ShaderDefVal]) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
+    let slots = uniform_slots(src, declared, given, defs)?;
+    Ok(declared.iter().zip(slots).map(|((n, _), s)| (n.clone(), s.iter().flat_map(|v| v.to_array()).flat_map(f32::to_ne_bytes).collect())).collect())
+}
 /// A storage buffer's words in its WGSL type's storage layout (a compute as written's own: raea-sys-compute slab.rs).
 pub use storage_layout::words as storage_words;
 pub mod own;
