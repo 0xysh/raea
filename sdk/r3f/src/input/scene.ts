@@ -444,11 +444,12 @@ export function convert(scene: THREE.Scene, camera: THREE.Camera, gl: THREE.WebG
   const fog = fogOf(scene.fog as THREE.Fog | THREE.FogExp2 | null);
   const post = composer.found ? postParts(composer.effects) : { parts: [] as Part[], tone: undefined };
   const tone = composer.found ? post.tone ?? { type: "ToneMapping", props: { mode: "none" } } : toneOf(gl);
-  // what the app drew into render targets itself this frame, drawn on the GPU before the screen (passes.ts, R3F23).
-  // Under a composer raea draws as its own effects, only the passes whose pictures the frame shows: the composer's
-  // own (the scene into its buffer, a bloom's mip chain) are raea's effects now, and would draw the scene again
-  const passes = passesOf(gl, composer.found ? [...sky.parts, ...w.world, ...drawn] : undefined);
   // what the app dispatched with gl.compute since the last frame, run before the cameras draw (tsl-compute.ts, R3F22)
   const computes = dispatchesOf(gl)?.part(time);
+  // what the app drew into render targets itself this frame, drawn on the GPU before the screen (passes.ts, R3F23).
+  // Under a composer raea draws as its own effects, only the passes whose pictures the frame reads (an effect's or a
+  // compute's among them): the composer's own (the scene into its buffer, a bloom's mip chain) are raea's effects now,
+  // and would draw the scene again
+  const passes = passesOf(gl, composer.found ? [...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...drawn] : undefined);
   return { parts: [...(cam ? [cam] : []), tone, ...(fog ? [fog] : []), ...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...passes, ...drawn], background: sky.background };
 }
