@@ -526,8 +526,10 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       # (texture.ts flipsY: scene.ts, shader.ts; tsl.ts's node textures next); a pass is recorded on the renderer that
       # drew it (targets.ts renderInto, its __raea.passes, emptied by step() as session.ts and program.ts step a frame),
       # its parts taken when it's drawn (two passes of one quad with another uniform each keep their own), and cube or
-      # 3D targets stay left out. Next: in-fbo's SSIM on a release build (test/parity/targets.tsx; R3F_CASES="in-fbo:12"
-      # until tools/parity.sh lists it), then R3F23c.
+      # 3D targets stay left out. in-fbo (test/parity/targets.tsx, R3F_CASES="in-fbo:12" until tools/parity.sh lists
+      # it): SSIM 0.9557 against three.js at frame 12. What's left of the gap is the unlit plane showing the target, drawn
+      # without three's ACES 1/0.6 (Bevy's Exposure scales lit shading only; a plain meshBasicMaterial is as far off): the
+      # pass itself matches (a pass camera keeps ev100 9.7, as three's linear pass is lit). Next: R3F23c.
 
     Scenario: R3F24. onBeforeCompile patches
       Given a material patched by onBeforeCompile (drei's MeshWobbleMaterial and MeshDistortMaterial, a patched
