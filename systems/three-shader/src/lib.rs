@@ -176,7 +176,8 @@ pub fn modules(vertex: &str, fragment: &str, layout: &[Uniform], textures: Optio
 }
 
 /// A three shader's spec, as the SDK's ThreeShaderMaterial gives it:
-///   glsl: {vertex, fragment, raw?, vertexColors?}   a ShaderMaterial's (includes expanded, defines in front)
+///   glsl: {vertex, fragment, raw?, vertexColors?, lit?}   a ShaderMaterial's (includes expanded, defines in front);
+///                                         `lit`: its fragment writes a surface Bevy lights (glsl.rs Source)
 ///   wgsl: {vertex, fragment, uniforms: [{name, type, array?}], attributes?: [name], lit?}   the contract's, written
 ///                                         already; `lit`: its fragment stage returns a surface Bevy lights (surface.rs)
 ///   uniforms: {name: number | [numbers]}   each one's value (a matrix column-major, an array's elements in turn)
@@ -214,11 +215,11 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
         }
     }
     let names: Vec<String> = tex.iter().map(|t| t.0.clone()).collect();
-    let lit = o.get("wgsl").and_then(|w| w.get("lit")) == Some(&Value::Bool(true));
+    let lit = [o.get("wgsl"), o.get("glsl")].into_iter().flatten().any(|s| s.get("lit") == Some(&Value::Bool(true)));
     let (vsrc, fsrc, list, bound, attrs, own_textures) = if let Some(g) = o.get("glsl") {
         let s = |k: &str| g.get(k).and_then(Value::as_str).ok_or_else(|| format!("a three shader's glsl needs {k}"));
         let flag = |k: &str| g.get(k) == Some(&Value::Bool(true));
-        let src = glsl::Source { vertex: s("vertex")?, fragment: s("fragment")?, raw: flag("raw"), vertex_colors: flag("vertexColors"), points: flag("points") };
+        let src = glsl::Source { vertex: s("vertex")?, fragment: s("fragment")?, raw: flag("raw"), vertex_colors: flag("vertexColors"), points: flag("points"), lit };
         let t = glsl::translate(&src, &names)?;
         (t.vertex, t.fragment, t.uniforms, t.samplers, t.attributes.into_iter().map(|a| a.0).collect::<Vec<_>>(), false)
     } else if let Some(w) = o.get("wgsl") {
