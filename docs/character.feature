@@ -223,6 +223,17 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         may stray (0 at the scalp), moved by the same follower as clothes
       And hats and glasses are rigid pieces on Head, delivered with the head
 
+    @done
+    Scenario: CH21a. Hair cards ride the head, and a whole person stands on the standard
+      # 11-15. The face session's hair (cards grown from its strand grooms, one mesh skinned to Head, a stray
+      # distance per vertex in a custom attribute, four styles) is drawn as a Character part beside the head
+      # and the glasses. With it a whole person is on the standard for the first time: SOMA's body, the
+      # generated head joined at the neck, hair and glasses, generated clothes in two layers, walking by motion
+      # matching. Not yet: the hair moving (the follower does not read the stray attribute from a part), and
+      # raea's own hair shading on it (that shader wants tangents the cards do not carry, so it is drawn with
+      # its own material).
+      Then a person is a body folder and parts, each made by its own flow
+
   Rule: Creatures
 
     # The creature flow is the raccoon session's, end to end, in docs/creatures.feature (its sandbox is the
