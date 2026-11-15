@@ -225,11 +225,77 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # in place of the built one, and why the fore paws carry no agreement score.
       Then the raccoon has a walk from anymove, and the numbers say whether it beats the solver's walk
 
-  Rule: Clothes, after the motion system is settled
+  Rule: Clothes: drawn on the mannequin by an image model, kept as data on SOMA's own skin
 
-    Scenario: CH40. A way to make clothes for any SOMA body
-      # The user's direction, 11-15: generative or procedural; perhaps the mannequin as the base input, an
-      # image model on top of it, and layers from there. Not designed yet: this is the next job once CH10 to
-      # CH17 are settled. What exists: cloth that follows skin with no collision shapes (sdk/body/src/cloth.ts),
-      # and SOMA's body has three UV sets and a fixed topology, so anything made for it fits every SOMA person.
-      Then a garment is made for the standard body once and fits every person built from it
+    # The user's direction, 11-15: generative or procedural; perhaps the mannequin as the base input, an image
+    # model on top of it, and layers from there. Tried that day on SOMA's body, and it works; what follows is
+    # the standard those tests point to. The idea in one line: a garment is not a mesh of its own, it is data
+    # on the body's own vertices (which are covered, how far the cloth stands off, its colour, how freely it
+    # may swing), so it carries the body's skinning, twist joints included, and fits every SOMA person without
+    # being refitted; only cloth that hangs free of the body (a skirt, a coat's tails, a hood) is its own mesh.
+
+    @done
+    Scenario: CH40a. A picture of the dressed mannequin lies on the mannequin pixel for pixel, one view at a time
+      # 11-15, with an image model that edits a given picture (flux_2_pro through `raea gen image --image`, 5
+      # cents a picture). The mannequin: SOMA's body at rest, flat dark grey on mid grey, no perspective, 2 m
+      # of height in a square frame, from the front, the back and each side (tools/soma_mannequin.py in the
+      # test project writes the pictures and their cameras). Measured by laying each result over its mannequin:
+      # one view, asked to change only the surface where clothing covers it: every limb, the head, the hands
+      # and the feet stay where they were, front, back and both sides alike, and the clothes sit outside the
+      # body's outline. Four views on one sheet in one call: the model lays the sheet out again (two fronts,
+      # one side), so nothing can be laid back. A view given a second picture as the outfit to copy: it draws
+      # a front again, smaller. A layer added to a dressed view ("add exactly one garment and keep everything
+      # else": a jacket over the t-shirt): pose and place hold and the rest is kept. Between views drawn apart
+      # the cut and the kind of garment agree from the words alone; the colour drifts (the jeans' wash).
+      Then each view of a garment is drawn on its own mannequin, a layer at a time, and views agree by their words
+
+    @done
+    Scenario: CH40b. Those pictures become an outfit on SOMA's own vertices, worn through a walk
+      # 11-15, first cut (tools/soma_clothes.py in the test project). Each vertex of the body's skin is looked
+      # up in the views that face it and see it (a ray to the camera meets nothing of the body): where the
+      # picture shows cloth and not the mannequin's grey it is clothed and takes the cloth's colour; the mask
+      # is tidied on the mesh (a bare vertex ringed by cloth is cloth, a small island is not); the clothed
+      # skin, pushed 4 mm out, is the outfit, with the body's own weights. A t-shirt, jeans and shoes made
+      # this way are worn by SOMA's body through the matcher's walk as a Character part (6,519 of 19,830
+      # vertices). What the first cut lacks: the cloth is skin-tight (no silhouette is measured yet), the tops
+      # of the shoulders and the soles are seen by no view, the colour is per vertex (soft), hems are jagged
+      # along the body's own edges, toes show through shoes, and the views' colours are not matched.
+      Then a drawn outfit is worn by a SOMA body in motion with no rigging step
+
+    Scenario: CH41. A garment's shape is measured, not assumed
+      Given each layer's views and the views of the layer under it
+      Then how far the cloth stands off the skin is read where the two outlines differ in each view (a sleeve's
+        width against the arm's, a trouser leg's against the leg's), and spread round each limb between the
+        views that see it, so a loose fit is loose
+      And a view from above and one from below are drawn too, so shoulders and soles are covered
+      And a garment's edge (a hem, a cuff, a collar) is cut where the picture puts it, not along the body's faces
+
+    Scenario: CH42. A garment is kept as data on SOMA's topology
+      Then a garment file holds, per body vertex it covers: that it is covered, its stand-off, and how far it
+        may stray (for the cloth follower); and a texture in the body's own UVs, baked from the views with the
+        views' colours matched to the front's garment by garment
+      And the same file dresses every SOMA person (the shape model moves the vertices, the garment rides them)
+      And a body's skin under a garment is not drawn, so nothing pokes through
+
+    Scenario: CH43. Layers
+      # The raccoon session's finding holds here too: an image edit keeps the outline it is given, so a layer
+      # can be added and never taken away. Outfits are built up from the bare body.
+      Then an outfit is an ordered list of garments, each drawn over the ones under it, each one's stand-off at
+        least the one under it plus its own thickness, so layers never cross
+      And a garment drawn alone on the bare mannequin can be worn under or over others by re-measuring its
+        stand-off against what is under it
+
+    Scenario: CH44. Cloth that hangs free
+      Then a skirt, a coat's tails, a hood, a scarf are meshes of their own, grown from the garment's edge on the
+        body down to the outline the views show, weighted from the body at the edge and free below it
+      And they move by the cloth follower already built (sdk/body/src/cloth.ts: each vertex strays from its
+        skinned place by its own distance, with no collision shapes)
+
+    Scenario: CH45. From words to a wardrobe
+      Then `raea` takes a description of an outfit, draws its layers and views, builds the garments, and writes
+        them beside the body, saying what each picture cost; the pictures are kept with the garment as its source
+      And a garment can also be made by hand or by procedure in the same file format, with no picture at all
+
+    Scenario: CH46. Checked like motion is
+      Then a dressed body is run through the library's captures and measured: skin showing through cloth, cloth
+        through cloth, and edges stretched past a limit, per garment
