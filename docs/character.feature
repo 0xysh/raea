@@ -39,6 +39,21 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         tests) are moved to SOMA's names as one refactor, not through an alias layer (as SK0b did before)
       And the people built on the old rig are retired once a SOMA person renders in each scene that used one
 
+    @done
+    Scenario: CH1a. The old SDK names SOMA's joints
+      # 11-15. sdk/character's bones.ts `B` (the one place the SDK takes joint names from) gives SOMA's names:
+      # Hips, Spine1, Spine2, Chest, Neck1, Head, LeftShoulder, LeftArm, LeftForeArm, LeftHand, LeftLeg,
+      # LeftShin, LeftFoot, LeftToeBase, and a finger's phalanges 1 to 3 as SOMA's 2 to 4 (its 1 is the bone in
+      # the palm; the thumb's are 1 to 3). A body made on the old rig (turbo, teal, the PSX people) still loads:
+      # `joint` finds a SOMA name on it by its old one, the name helpers (side, mirror, finger) read both, and
+      # a BVH map keyed by old names still maps. That fallback is the only place the old names stay, and it goes
+      # with the last old body (CH1's last line). systems/body's `Skeleton::joint` reads a SOMA name on an old
+      # body the same way. A body named as CMU or Mixamo name theirs (LeftUpLeg, with LeftLeg the shin, which is
+      # SOMA's thigh) is refused with a message rather than read wrong; the gitignored local "kid" example is
+      # one. The conformance tests' stick body is on SOMA's names; 27 of the character test's 29 pass, the 2
+      # that fail failing the same way on the code before the change (a buckle on a planted knee, a dropped box).
+      Then the SDK names SOMA's joints, and the bodies on the old rig still play until they are retired
+
     Scenario: CH2. A body folder is the same for a person and a creature
       Given a folder with skeleton.json (name, rig, height, joints by name with parent and rest place, landmarks,
         skin samples per joint), body.glb (skinned to those joints: one skin, or several closed pieces each
@@ -49,7 +64,7 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
 
   Rule: Motion: one clip format, two ways to get clips, one way to play them
 
-    # The position this plan takes, for the user to overrule: motion at run time is always chosen from clips on
+    # The position this plan takes, confirmed by the user 11-15 ("clips at run time"): motion at run time is always chosen from clips on
     # disk by motion matching, on the user's own machine, the same frame for a render and for live play. A model
     # that generates motion (Kimodo for people, anymove for creatures) is a way to MAKE clips, run when a project
     # is authored or built, in the cloud or on an NVIDIA card: Kimodo does not run on a Mac. So a game or a film
@@ -73,8 +88,17 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # claimed). It needs an NVIDIA card and a gated text encoder, so it runs as a cloud step (docs/gen.feature)
       # or on a user's own card. Its inputs, from the examples it ships: one line of text; several lines with
       # durations; full-body keyframes; hand or foot targets; a path for the root; waypoints. Its output is 30
-      # joints' turns and places at 30 frames a second. Not measured yet: seconds and cost per clip, and how
-      # well it holds a keyframe.
+      # joints' turns and places at 30 frames a second (which Kimodo widens to SOMA's 77 by name).
+      # Measured 11-15, with no text (constraints only; an empty prompt zeroes the text features, so a stand-in
+      # encoder of zeros is exact), Kimodo-SOMA-RP-v1 on its own SOMA examples, 100 denoising steps, on a Modal
+      # L40S or A10G: 4.3 s of GPU a 5 s clip, 7.2 s for 10 s, the model loading in 40 s; about 12 cents for the
+      # whole test with the image build. Misses at the constrained frames, raw and after Kimodo's own
+      # post-processing: full-body keyframes 3.2 cm mean (8.2 worst) and 0.5 (6.0); feet 1.0-1.5 and 0; hands
+      # 2.8-3.3 and 2.4-3.0 (6 worst); a root path 12 cm mean (26 worst) raw and 3.1 (4.0, its margin) after;
+      # foot slide on planted frames 0.06-0.26 cm a frame. So post-processing is always on. Text is not
+      # measured: the encoder's base (meta-llama/Meta-Llama-3-8B-Instruct) is gated behind a form that asks for
+      # the account holder's name, birth date, country and affiliation, which only Shane can fill in.
+      # Runner: ~/.cache/raea-kimodo/ours/kimodo_constraints.py (and kimodo_modal.py for text).
       Given a line of text and any of: a start pose, an end pose, keyframes, a root path, hand or foot targets
       Then `raea gen` returns a clip in CH10's format, with its provenance, checked by CH13 before it is kept
       And the cost of a clip and the time it took are logged with it
@@ -115,6 +139,26 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       Then a body goes where a path says, by the situations the chooser allows, with every switch inertialized
         and every planted foot held
       And the turbo suite's cases pass on a SOMA person at least as well as they do today
+
+    @done
+    Scenario: CH15a. Two situations the captures lack, made by Kimodo from two of their poses
+      # 11-15. sdk/body/tools/between.ts writes Kimodo's full-body keyframes from two library frames (the first at
+      # the origin facing +z, the second where and how the body must end); src/kimodo.ts crosses a pose both ways
+      # by its turns (a joint's world turn from bind is Kimodo's turn from the T-pose after the body's `tpose`;
+      # a library pose goes out and back with no measurable change). Kimodo runs with no text (the stand-in
+      # encoder, CH11). tools/fromkimodo.ts brings each motion onto the body, puts it back on the captures'
+      # elbow and knee hinges with the hands and feet where Kimodo put them (src/fix.ts `ontoRig`: Kimodo's elbows
+      # fold about an axis 25 degrees off the captures', which hold to within 3 to 7), and judges it against the
+      # captures it joins, measured on the same body by the same checks: no joint further past a limit and the
+      # body no deeper into itself. Of several seeds the best that passes is kept, with where it came from.
+      # "turn and sit" (stand, then seated on a chair 1.2 m ahead, turned round): 4 of 5 passed.
+      # "rise and walk off" (from the seat to a walking stride 1.6 m on): 2 of 5 passed, the others' hands
+      # 5 to 9 cm into the thigh as they push up (the walking captures it joins: 4.4 cm). 4 s of GPU a clip,
+      # about a cent. Both are in the library under src/library.ts's situations of those names, and play one
+      # after the other on SOMA's body (sheet3d compositions/soma_between.tsx, feed item i-acp-mwi1xhlw-59).
+      # Found on the way: contacts and capsules on a SOMA body were never read (the SOMA index was carried over
+      # from the old rig); a SOMA limb's skin is weighted to its twist joints, now counted as the limb's.
+      Then a situation without a capture gets a clip made from the captures' own poses, judged before it is kept
 
     Scenario: CH15. Between two poses
       Given where a body is and how it stands, and where it must be and how, with no clip that does it
