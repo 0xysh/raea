@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { useFrame } from "@react-three/fiber";
 import { createContext, useContext, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { inflateSync } from "node:zlib";
 import * as THREE from "three";
 import { Clock, useCurrentFrame } from "@raea/app/clock";
 import { convert } from "../src/input/scene";
@@ -217,5 +218,16 @@ describe("textures", () => {
     const img = new THREE.Texture({ src: "media/wood.jpg", width: 4, height: 4 } as unknown as HTMLImageElement);
     expect(srcOf(img)).toBe("media/wood.jpg");
     expect(pngOf(new Uint8Array(4), 1, 1).length).toBeGreaterThan(40);
+  });
+
+  test("a DataTexture's first row is its picture's top: three's v 0 unflipped, Bevy's v 0", () => {
+    const t = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255]), 1, 2);
+    t.needsUpdate = true;
+    const png = Uint8Array.from(atob(srcOf(t)!.split(",")[1]), (c) => c.charCodeAt(0));
+    const at = png.findIndex((_, i) => String.fromCharCode(...png.subarray(i, i + 4)) === "IDAT");
+    const len = new DataView(png.buffer).getUint32(at - 4);
+    const rows = inflateSync(png.subarray(at + 4, at + 4 + len));
+    // each row a filter byte then rgba: red first, blue below it
+    expect([...rows.subarray(1, 4), ...rows.subarray(6, 9)]).toEqual([255, 0, 0, 0, 0, 255]);
   });
 });

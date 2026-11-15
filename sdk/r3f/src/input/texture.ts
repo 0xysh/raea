@@ -244,7 +244,8 @@ export function pngOf(rgba: Uint8Array, width: number, height: number): string {
   return "data:image/png;base64," + base64(all);
 }
 
-/** a DataTexture's pixels as RGBA bytes, top row first (three's flipY puts its first row at the bottom) */
+/** a DataTexture's pixels as RGBA bytes in its own row order: its first row is the image's top, where Bevy's v 0 is,
+ *  as three's v 0 is its first row unflipped; a flipY one is read with v turned over (flipsY), as three turns it over */
 function bytesOf(t: THREE.DataTexture): Uint8Array | undefined {
   const { data, width, height } = t.image as { data: ArrayLike<number> | null; width: number; height: number };
   if (!data || !width || !height) return undefined;
@@ -254,9 +255,8 @@ function bytesOf(t: THREE.DataTexture): Uint8Array | undefined {
   const half = t.type === THREE.HalfFloatType;
   const out = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) {
-    const from = t.flipY ? y : height - 1 - y;
     for (let x = 0; x < width; x++) {
-      const i = (from * width + x) * per, o = (y * width + x) * 4;
+      const i = (y * width + x) * per, o = i / per * 4;
       for (let c = 0; c < 4; c++) {
         let v = c < per ? Number(data[i + c]) : c === 3 ? (float ? 1 : 255) : per === 1 ? Number(data[i]) : 0;
         if (half && c < per) v = THREE.DataUtils.fromHalfFloat(v);
