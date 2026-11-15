@@ -176,10 +176,17 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         it has none, the solver makes the move
 
     Scenario: CH32. anymove tried on the raccoon
-      # In progress 11-15: the raccoon's skin and 36 of its joints set up as an anymove creature; two walk clips
-      # filmed (0.52 dollars, both kept the split screen and limb colours); the joint reader training on a cloud
-      # card. To come: the fit, its cost and pass rate, and the walk measured against the traced reference
-      # (carriage, the share of a stride a foot stands, the order of the feet), foot slide and pops.
+      # 11-15, run end to end; not yet a pass. The raccoon's skin (no fur shells) and 36 bones on its own joints
+      # were set up as an anymove creature in Blender on a Mac (its renderer made to use Metal there); the pose
+      # dataset (2,200) and the joint reader were made on a cloud card in 35 minutes (held-out error 6.9 px
+      # front, 4.8 side, anymove's wolf being 6.9 and 3.8); two five-second walk clips from the video model
+      # both kept the split screen and the limb colours; each was read and fitted in 5.5 minutes and exported
+      # as a GLB. By anymove's own measure, how well the paws' heights agree between the two views, the clips
+      # score 0.23 and 0.56: under 0.5 is a reroll, 0.8 is a keep, so none of 2 passes and one is worth a look
+      # (anymove reports about 7 clips for a usable move). Cost so far about 2.10 dollars: 0.52 for the clips,
+      # the rest cloud time estimated from minutes. To come: the raccoon session's measures of the better clip
+      # against the traced reference (carriage, the share of a stride a foot stands, the order of the feet),
+      # foot slide and pops; more seeds; then the generated raccoon's skin in place of the built one.
       Then the raccoon has a walk from anymove, and the numbers say whether it beats the solver's walk
 
   Rule: Clothes, after the motion system is settled
