@@ -15722,6 +15722,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-sys-grab"
+version = "0.1.0"
+dependencies = [
+ "glam 0.33.12",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-sys-grass"
 version = "0.1.0"
 dependencies = [
