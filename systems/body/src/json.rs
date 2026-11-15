@@ -6,7 +6,8 @@ use serde_json::{Value, json};
 
 use crate::fit::{Mark, fit};
 use crate::prior::{coefficients, oddness, shape};
-use crate::rig::{Side, Skeleton};
+use crate::rig::{Pose, Side, Skeleton};
+use crate::soma::from_soma;
 
 pub fn num(v: &Value, what: &str) -> Result<f32, String> {
     v.as_f64().map(|n| n as f32).ok_or_else(|| format!("character.take: {what} isn't a number"))
@@ -45,8 +46,7 @@ pub fn fit_json(v: &Value) -> Result<Value, String> {
     }
     let passes = v["passes"].as_u64().unwrap_or(8) as usize;
     let (pose, miss) = fit(&skel, &from, &marks, passes);
-    let turns: Vec<[f32; 4]> = pose.turns.iter().map(|q| q.to_array()).collect();
-    Ok(json!({ "pose": { "root": pose.root.to_array(), "turns": turns }, "miss": miss }))
+    Ok(json!({ "pose": posed(&pose), "miss": miss }))
 }
 
 pub const HAND_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; side: \"L\" | \"R\"; z?: number[]; pose?: { root: [number, number, number]; turns: [number, number, number, number][] } }";
@@ -70,6 +70,33 @@ pub fn hand_json(v: &Value) -> Result<Value, String> {
     }
     let (z, _) = coefficients(&skel, &pose, side).ok_or("character.hand: the body has no hand on that side")?;
     let odd = oddness(&skel, &pose, side).unwrap_or(0.0);
+    Ok(json!({ "pose": posed(&pose), "z": z, "odd": odd }))
+}
+
+pub const SOMA_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; names: string[]; at: [number, number, number][]; eyes?: [number, number, number] }";
+pub const SOMA_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] } }";
+
+/// `character.soma`: the pose that has the body's bones pointing as a SOMA body's do (soma.rs).
+pub fn soma_json(v: &Value) -> Result<Value, String> {
+    let skel = Skeleton::from_value(v)?;
+    let mut names = Vec::new();
+    for name in v["names"].as_array().ok_or("character.soma: no names")? {
+        names.push(name.as_str().ok_or("character.soma: a name isn't text")?.to_string());
+    }
+    let mut at = Vec::with_capacity(names.len());
+    for p in v["at"].as_array().ok_or("character.soma: no places")? {
+        at.push(vec3(p, "a SOMA joint's place")?);
+    }
+    if at.len() != names.len() {
+        return Err(format!("character.soma: {} names for {} places", names.len(), at.len()));
+    }
+    let eyes = if v["eyes"].is_null() { None } else { Some(vec3(&v["eyes"], "eyes")?) };
+    let pose = from_soma(&skel, &names, &at, eyes).ok_or("character.soma: the body or the SOMA joints lack the hips or a leg")?;
+    Ok(json!({ "pose": posed(&pose) }))
+}
+
+/// a pose as the calls answer it: the root's place and every joint's turn
+pub fn posed(pose: &Pose) -> Value {
     let turns: Vec<[f32; 4]> = pose.turns.iter().map(|q| q.to_array()).collect();
-    Ok(json!({ "pose": { "root": pose.root.to_array(), "turns": turns }, "z": z, "odd": odd }))
+    json!({ "root": pose.root.to_array(), "turns": turns })
 }

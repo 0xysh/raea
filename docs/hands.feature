@@ -64,7 +64,9 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab | src/take.rs         | 460   | the take's timeline, each hand's part, the frame's solve          |
         | raea-sys-grab | src/grip.rs         | 110   | the hand's lie at its grab, the swivel, an arm past its ranges   |
         | raea-sys-grab | src/json.rs         | 150   | character.take                                                   |
-        | raea-sys-body | src/json.rs         | 90    | character.fit, character.hand, the readers the calls share       |
+        | raea-sys-body | src/json.rs         | 110   | character.fit, character.hand, character.soma, shared readers    |
+        | raea-sys-body | src/soma.rs         | 110   | a pose from a SOMA body's joint places                           |
+        | sdk           | sdk/character/src/soma.ts | 80  | a SOMA animation read from text USD; somaPose                  |
         | raea-sys-grab | tests/grab.rs       | 470   | the hands' measures, on the stand-in body                        |
         | raea-sys-grab | tests/body.rs       | 150   | limits, the body out of solids, the hand prior                   |
         | raea-sys-grab | tests/use.rs        | 230   | passing, sliding, wind-up, a turned body, keeping out of solids  |
@@ -309,6 +311,22 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # are kept within 1 cm; a carry that was clear is unchanged. Not done: the forearm against the thighs in
       # a squat, and the fingers against the body.
       Then a thing is carried against the body, never in it
+
+    @done
+    Scenario: HG12a. Motion on SOMA's skeleton plays on a raea body
+      # 11-15, built, after the user asked what SOMA-X gives that raea lacks. Not its bodies: its skeleton is
+      # the one NVIDIA's motion models and datasets speak (Kimodo, GEM-X, EgoHand, BONES-SEED), and raea had no
+      # way from its 78 joints to raea's 52. raea-sys-body soma.rs `from_soma`: each of raea's bones is pointed
+      # the way SOMA's matching bone points, at raea's own lengths (so proportions and bind poses needn't
+      # agree), the pose fitted to those places, and each arm's and leg's first bone turned so its elbow or
+      # knee flexes about its own axis (arm.rs `settle_hinge`). A posed body 1.3 times the size, in centimetres
+      # and under SOMA's names, is followed with every bone within 2 degrees and no elbow or knee over 25
+      # degrees sideways. raea/character's `readSomaUsda` reads a SOMA animation saved as text USD and
+      # `somaPose` is the native call character.soma. Shown: SOMA-X's own example animation (900 frames, 24 a
+      # second, Apache-2.0) on turbo, through arms crossed, arms overhead, a side bend and a squat. Open:
+      # positions alone leave a limb's turn about itself to the hinge rule, so forearms and wrists may be
+      # turned wrongly; frames are taken whole, not blended; and no model's or dataset's licence has been read.
+      Then a SOMA animation plays on any raea body, bone for bone
 
   Rule: The bar, set by the user 11-14: a complete tool, not scenarios
 

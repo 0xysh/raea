@@ -84,3 +84,60 @@ fn the_hand_prior_shapes_and_reads_hands() {
         assert!(odd > 2.0 * usual, "fingers bent back read {odd}, the rest hand {usual}");
     }
 }
+
+#[test]
+fn soma_names_map_onto_the_rig() {
+    for (soma, raea) in [("Hips", "pelvis"), ("Chest", "spine_03"), ("LeftForeArm", "lowerarm_l"), ("RightShin", "calf_r"), ("LeftToeBase", "ball_l"), ("LeftHandThumb1", "thumb_01_l"), ("RightHandIndex2", "index_01_r"), ("LeftHandPinky4", "pinky_03_l")] {
+        assert_eq!(raea_joint(soma).as_deref(), Some(raea));
+    }
+    // what the rig has no joint for
+    for soma in ["Root", "Neck2", "Jaw", "LeftEye", "LeftHandIndex1", "RightHandMiddleEnd", "LeftToeEnd"] {
+        assert_eq!(raea_joint(soma), None, "{soma}");
+    }
+}
+
+#[test]
+fn a_soma_body_of_other_proportions_is_followed_bone_for_bone() {
+    let s = mannequin();
+    // a "SOMA" body: the rig's own joints under SOMA's names, 1.3 times the size and in centimetres, posed
+    let soma_name = |raea: &str| {
+        ["Hips", "Spine1", "Spine2", "Chest", "Neck1", "Head"].iter().map(|n| n.to_string()).chain(["Left", "Right"].iter().flat_map(|side| {
+            ["Shoulder", "Arm", "ForeArm", "Hand", "Leg", "Shin", "Foot", "ToeBase"].iter().map(move |n| format!("{side}{n}")).chain(["Thumb1", "Thumb2", "Thumb3"].iter().map(move |n| format!("{side}Hand{n}"))).chain(["Index", "Middle", "Ring", "Pinky"].iter().flat_map(move |f| [2, 3, 4].map(move |k| format!("{side}Hand{f}{k}"))))
+        })).find(|n| raea_joint(n).as_deref() == Some(raea))
+    };
+    let mut r = {
+        let mut seed = 5u32;
+        move || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            (seed >> 8) as f32 / 16777216.0
+        }
+    };
+    let mut seen = s.rest();
+    seen.root += Vec3::new(0.4, -0.1, 1.0);
+    for (i, turn) in seen.turns.iter_mut().enumerate() {
+        if s.joints[i].parent.is_some() && !s.joints[i].name.contains("_0") {
+            *turn = Quat::from_axis_angle(Vec3::new(r() - 0.5, r() - 0.5, r() - 0.5).normalize(), r() * 0.7);
+        }
+    }
+    let w = s.fk(&seen);
+    let (mut names, mut at) = (Vec::new(), Vec::new());
+    for (i, joint) in s.joints.iter().enumerate() {
+        names.push(soma_name(&joint.name).unwrap());
+        at.push(w.pos[i] * 130.0);
+    }
+    let pose = from_soma(&s, &names, &at, None).unwrap();
+    let got = s.fk(&pose);
+    // every bone of the body points as the SOMA body's does, and it stands where that body does (to scale)
+    for (i, joint) in s.joints.iter().enumerate() {
+        let Some(parent) = joint.parent else { continue };
+        let (ours, theirs) = ((got.pos[i] - got.pos[parent]).normalize(), (w.pos[i] - w.pos[parent]).normalize());
+        assert!(ours.angle_between(theirs).to_degrees() < 2.0, "{} points {} degrees off", joint.name, ours.angle_between(theirs).to_degrees());
+    }
+    assert!((got.pos[0] - w.pos[0]).length() < 0.01);
+    // and its elbows and knees are not bent sideways
+    for name in ["lowerarm_l", "lowerarm_r", "calf_l", "calf_r"] {
+        let j = s.joint(name).unwrap();
+        let side = angles_of(&s, j, pose.turns[j]).unwrap().side;
+        assert!(side.abs() < 25.0, "{name} bends {side} degrees sideways");
+    }
+}

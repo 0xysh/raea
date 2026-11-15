@@ -3,7 +3,7 @@
 //! grab's, the release's); the answer is the pose to draw and where the thing is.
 
 use glam::Quat;
-use raea_sys_body::json::{num, quat, vec3};
+use raea_sys_body::json::{num, posed, quat, vec3};
 use serde_json::{Value, json};
 
 use crate::trunk::stand_for;
@@ -125,9 +125,8 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
     let (stand, facing) = stand_for(&thing, own(start).root);
     // whether the body can take it from where it stands when it starts to reach: at the grab, every wrist on its hold
     let in_reach = perform(&skel, &own, &take, take.grab).miss < 0.02;
-    let turns: Vec<[f32; 4]> = f.pose.turns.iter().map(|q| q.to_array()).collect();
     Ok(json!({
-        "pose": { "root": f.pose.root.to_array(), "turns": turns },
+        "pose": posed(&f.pose),
         "thing": { "at": f.thing.at.to_array(), "turn": f.thing.turn.to_array() },
         "phase": format!("{:?}", f.phase),
         "hands": if matches!(grip, Grip::One(_)) { 1 } else { 2 },

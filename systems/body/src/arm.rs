@@ -81,23 +81,11 @@ pub fn two_bone(skel: &Skeleton, p: &Pose, limb: [usize; 3], target: Vec3, o: Ar
             turn_a = Quat::from_axis_angle(to, angle) * swing;
         }
     }
-    let mut ra = (turn_a * w.rot[a]).normalize();
+    let ra = (turn_a * w.rot[a]).normalize();
     let rb = (turn_a * flex * w.rot[b]).normalize();
     // the middle joint is a hinge with an axis of its own, the one the rest pose's bend is about (an elbow's, a
-    // knee's). The first bone is turned about itself until that axis is the one the limb is bent about, as an upper
-    // arm turns in its socket: so the middle joint flexes and never bends sideways. A limb at rest nearly straight
-    // has no such axis to read, and a limb posed nearly straight no bend to match: less turn the nearer either is.
-    let (bone_a, bone_b) = (skel.offset(b) / la, skel.offset(c) / lb);
-    let (own, bent) = (bone_a.cross(bone_b), (turn_a * u).cross(turn_a * flex * v));
-    let sure = (own.length() / 0.2).min(1.0) * (bent.length() / 0.2).min(1.0);
-    if sure > 0.0 {
-        let along = (turn_a * u).normalize();
-        let (has, wants) = ((ra * own).reject_from_normalized(along), bent.reject_from_normalized(along));
-        if has.length() > 1e-4 && wants.length() > 1e-4 {
-            let angle = has.cross(wants).dot(along).atan2(has.dot(wants));
-            ra = (Quat::from_axis_angle(along, angle * sure * sure * (3.0 - 2.0 * sure)) * ra).normalize();
-        }
-    }
+    // knee's): the first bone is turned about itself until that axis is the one the limb is bent about (hinge_turn)
+    let ra = (hinge_turn(skel, limb, ra, (turn_a * u).normalize(), (turn_a * u).cross(turn_a * flex * v)) * ra).normalize();
     let rc = o.end.unwrap_or(w.rot[c]);
 
     let mut pose = p.clone();
@@ -195,4 +183,32 @@ pub const TWIST_SHARES: [f32; 4] = [0.05, 1.0 / 3.0, 2.0 / 3.0, 0.95];
 /// near the shoulder or hip, so the skin there doesn't wring, and follows the next joint toward the elbow or knee.
 pub fn twist_joints(axis: Vec3, start: f32, end: f32, upper: bool) -> [Quat; 4] {
     TWIST_SHARES.map(|share| Quat::from_axis_angle(axis, if upper { -(1.0 - share) * start + share * end } else { share * end }))
+}
+
+/// The turn of a limb's first bone about itself (`along`, as posed) that makes the hinge its rest pose bends about
+/// the one the limb is bent about now (`bent`: the first bone crossed with the second, as posed), as an upper arm
+/// turns in its socket: so the middle joint flexes and never bends sideways. `ra` is the first bone's world turn. A
+/// limb at rest nearly straight has no such axis to read, and a limb posed nearly straight no bend to match: less
+/// turn the nearer either is.
+fn hinge_turn(skel: &Skeleton, limb: [usize; 3], ra: Quat, along: Vec3, bent: Vec3) -> Quat {
+    let own = skel.offset(limb[1]).normalize_or_zero().cross(skel.offset(limb[2]).normalize_or_zero());
+    let sure = (own.length() / 0.2).min(1.0) * (bent.length() / 0.2).min(1.0);
+    let (has, wants) = ((ra * own).reject_from_normalized(along), bent.reject_from_normalized(along));
+    if sure <= 0.0 || has.length() < 1e-4 || wants.length() < 1e-4 {
+        return Quat::IDENTITY;
+    }
+    Quat::from_axis_angle(along, has.cross(wants).dot(along).atan2(has.dot(wants)) * sure * sure * (3.0 - 2.0 * sure))
+}
+
+/// A pose with a limb's first bone turned about itself so its middle joint flexes about its own axis, every joint
+/// staying where it is: for a pose that came from places alone (a fit), which leaves that turn open.
+pub fn settle_hinge(skel: &Skeleton, p: &Pose, limb: [usize; 3]) -> Pose {
+    let [a, b, c] = limb;
+    let w = skel.fk(p);
+    let (u, v) = ((w.pos[b] - w.pos[a]).normalize_or_zero(), (w.pos[c] - w.pos[b]).normalize_or_zero());
+    let ra = (hinge_turn(skel, limb, w.rot[a], u, u.cross(v)) * w.rot[a]).normalize();
+    let mut pose = p.clone();
+    pose.turns[a] = skel.local_for(&w, a, ra);
+    pose.turns[b] = (ra.inverse() * w.rot[b]).normalize();
+    pose
 }

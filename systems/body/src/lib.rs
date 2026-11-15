@@ -8,6 +8,7 @@
 //! - `fit`: a pose fitted to points seen (SOMA-X's analytical pose inversion), for motion that arrives as positions.
 //! - `shape`: a solid as a signed distance: ray casts, normals, clearance.
 //! - `json`: character.fit and character.hand, asked for as JSON.
+//! - `soma`: motion on SOMA's 78-joint skeleton played on the rig, by the way its bones point.
 //! - `prior`: SOMA-X's hand pose prior on raea's fingers: a hand's shape from a few numbers, and how odd a hand is.
 
 pub mod arm;
@@ -17,10 +18,12 @@ pub mod limits;
 pub mod prior;
 pub mod rig;
 pub mod shape;
+pub mod soma;
 
-pub use arm::{ArmOptions, IkReport, forearm_twist, reach, twist_joints, two_bone};
+pub use arm::{ArmOptions, IkReport, forearm_twist, reach, settle_hinge, twist_joints, two_bone};
+pub use soma::{from_soma, raea_joint};
 pub use fit::{Mark, fit, marks_of};
-pub use json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, fit_json, hand_json};
+pub use json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, SOMA_ANSWER, SOMA_ARGS, fit_json, hand_json, soma_json};
 pub use limits::{Angles, angles_of, clamp_turn, violations};
 pub use shape::{Hit, Solid, Thing};
 pub use rig::{HandRest, Pose, Posed, Sample, Side, Skeleton, hand_rest, mannequin};

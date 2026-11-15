@@ -1,0 +1,91 @@
+//! Motion on SOMA's skeleton played on raea's rig. SOMA (NVlabs/SOMA-X, Apache-2.0) is the 78-joint skeleton
+//! NVIDIA's motion models and datasets speak (Kimodo, GEM-X, BONES-SEED...); raea's rig is MakeHuman's game_engine,
+//! 52 joints. The bridge is by direction, not by turn: each of raea's bones is pointed the way SOMA's matching bone
+//! points, at raea's own lengths, so the two bodies' proportions and bind poses don't have to agree; the pose is
+//! then fitted to those places (fit.rs). Positions alone leave a limb's turn about itself open: the first bone of
+//! each arm and leg is turned so its elbow or knee flexes about its own axis (arm.rs).
+
+use std::collections::HashMap;
+
+use glam::Vec3;
+
+use crate::arm::settle_hinge;
+use crate::fit::{Mark, fit};
+use crate::rig::{Pose, Side, Skeleton};
+
+/// raea's joint for a SOMA joint: the trunk and head by name, limbs and fingers by side. A SOMA finger's 2, 3, 4 are
+/// raea's 01, 02, 03 (its 1 is the metacarpal, which raea's hand has none of); the thumb's are 1, 2, 3.
+pub fn raea_joint(soma: &str) -> Option<String> {
+    let trunk = [("Hips", "pelvis"), ("Spine1", "spine_01"), ("Spine2", "spine_02"), ("Chest", "spine_03"), ("Neck1", "neck_01"), ("Head", "head")];
+    if let Some(t) = trunk.iter().find(|t| t.0 == soma) {
+        return Some(t.1.to_string());
+    }
+    let (side, rest) = soma.strip_prefix("Left").map(|r| ("l", r)).or_else(|| soma.strip_prefix("Right").map(|r| ("r", r)))?;
+    let limb = [("Shoulder", "clavicle"), ("Arm", "upperarm"), ("ForeArm", "lowerarm"), ("Hand", "hand"), ("Leg", "thigh"), ("Shin", "calf"), ("Foot", "foot"), ("ToeBase", "ball")];
+    if let Some(l) = limb.iter().find(|l| l.0 == rest) {
+        return Some(format!("{}_{side}", l.1));
+    }
+    let finger = rest.strip_prefix("Hand")?;
+    let (name, n) = finger.split_at(finger.len().checked_sub(1)?);
+    let (name, n) = (name.to_lowercase(), n.parse::<usize>().ok()?);
+    let k = if name == "thumb" { n } else { n.checked_sub(1)? };
+    (1..=3).contains(&k).then(|| format!("{name}_0{k}_{side}"))
+}
+
+/// the SOMA joint that ends a raea joint's bone, where raea has no joint of its own there
+fn bone_end(raea: &str) -> Option<String> {
+    let side = if raea.ends_with("_l") { "Left" } else { "Right" };
+    match raea.trim_end_matches("_l").trim_end_matches("_r") {
+        "head" => Some("HeadEnd".into()),
+        "ball" => Some(format!("{side}ToeEnd")),
+        tip => tip.strip_suffix("_03").map(|finger| format!("{side}Hand{}{}End", finger[..1].to_uppercase(), &finger[1..])),
+    }
+}
+
+/// The pose that has raea's bones pointing as a SOMA body's do. `names` and `at` are SOMA's joints and where each is
+/// (any unit, y up); `eyes` is where the point between raea's eyes is at rest, when the body says (it gives the
+/// head its turn about the neck). The body stands where SOMA's hips are, scaled by the two bodies' leg lengths.
+pub fn from_soma(skel: &Skeleton, names: &[String], at: &[Vec3], eyes: Option<Vec3>) -> Option<Pose> {
+    let soma: HashMap<&str, Vec3> = names.iter().map(String::as_str).zip(at.iter().copied()).collect();
+    let seen: HashMap<usize, Vec3> = names.iter().zip(at).filter_map(|(n, p)| Some((skel.joint(&raea_joint(n)?)?, *p))).collect();
+    let pelvis = skel.joint("pelvis")?;
+    // the scale between the bodies: raea's leg (hip to knee to ankle) over SOMA's
+    let leg = |a: Vec3, b: Vec3, c: Vec3| (b - a).length() + (c - b).length();
+    let [thigh, calf, foot] = ["thigh_l", "calf_l", "foot_l"].map(|n| skel.joint(n));
+    let (thigh, calf, foot) = (thigh?, calf?, foot?);
+    let ours = leg(skel.joints[thigh].head, skel.joints[calf].head, skel.joints[foot].head);
+    let scale = ours / leg(*seen.get(&thigh)?, *seen.get(&calf)?, *seen.get(&foot)?).max(1e-6);
+    // each of raea's joints placed from its parent's, the way SOMA's matching joints lie, at raea's own length
+    let mut place: Vec<Option<Vec3>> = vec![None; skel.joints.len()];
+    place[pelvis] = Some(*seen.get(&pelvis)? * scale);
+    let mut marks = vec![Mark { joint: pelvis, offset: Vec3::ZERO, at: place[pelvis]?, weight: 1.0 }];
+    for (i, joint) in skel.joints.iter().enumerate() {
+        let Some(parent) = joint.parent else { continue };
+        let (Some(from), Some(a), Some(b)) = (place[parent], seen.get(&parent), seen.get(&i)) else { continue };
+        let to = from + (*b - *a).normalize_or_zero() * skel.offset(i).length();
+        place[i] = Some(to);
+        marks.push(Mark { joint: i, offset: Vec3::ZERO, at: to, weight: 1.0 });
+        // and a bone's end, where SOMA has a joint for it and raea has none
+        if let Some(end) = bone_end(&joint.name).and_then(|n| soma.get(n.as_str())) {
+            let bone = joint.tail - joint.head;
+            marks.push(Mark { joint: i, offset: bone, at: to + (*end - *b).normalize_or_zero() * bone.length(), weight: 1.0 });
+        }
+    }
+    // the head's turn about the neck, from SOMA's eyes
+    if let (Some(eyes), Some(head), Some(l), Some(r)) = (eyes, skel.joint("head"), soma.get("LeftEye"), soma.get("RightEye")) {
+        if let (Some(to), Some(at)) = (place[head], seen.get(&head)) {
+            let offset = eyes - skel.joints[head].head;
+            marks.push(Mark { joint: head, offset, at: to + ((*l + *r) / 2.0 - *at).normalize_or_zero() * offset.length(), weight: 1.0 });
+        }
+    }
+    let mut pose = fit(skel, &skel.rest(), &marks, 6).0;
+    for side in Side::BOTH {
+        let x = side.sx();
+        for limb in [["upperarm", "lowerarm", "hand"], ["thigh", "calf", "foot"]] {
+            if let [Some(a), Some(b), Some(c)] = limb.map(|n| skel.joint(&format!("{n}_{x}"))) {
+                pose = settle_hinge(skel, &pose, [a, b, c]);
+            }
+        }
+    }
+    Some(pose)
+}
