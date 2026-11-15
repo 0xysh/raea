@@ -15,8 +15,9 @@ const FIRST_LAYER = 64;
 /** the order of the first pass's camera; the screen's is 0 */
 const FIRST_ORDER = -10000;
 
-/** each pass's place by its key (the target's texture and its place among that target's passes a frame), as it was
- *  first drawn: its layer and camera order stay the same frame to frame, so its parts and camera are the same rows */
+/** each pass's place by its key (the target's texture, what was drawn into it and its place among those passes a
+ *  frame), as it was first drawn: its layer and camera order stay the same frame to frame, so its parts and camera are
+ *  the same rows */
 const seen = new Map<string, number>();
 
 function placeOf(key: string): number {
@@ -45,7 +46,7 @@ const QUAD: Part = { type: "OrthographicCamera", props: { position: [0, 0, 1], l
 
 /** a pass as parts: its scene's on its layer and its camera into the target's image */
 function passParts(p: Omit<Pass, "parts">, gl: THREE.WebGLRenderer): Part[] {
-  const key = `${p.target.texture.uuid}#${p.k}`;
+  const key = `${p.target.texture.uuid}#${p.what}#${p.k}`;
   const i = placeOf(key);
   const layer = FIRST_LAYER + i;
   const root = `pass/${key}`;

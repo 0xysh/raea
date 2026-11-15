@@ -8,6 +8,7 @@
 // that includes <tonemapping_fragment> on a tone-mapped material goes as "linear", those includes dropped, and Bevy's
 // tone mapping maps it as three's would.
 import * as THREE from "three";
+import { onGpu } from "./targets";
 import { flipsY, srcOf } from "./texture";
 import type { Part, Props } from "./material";
 
@@ -180,8 +181,10 @@ export function shaderPart(m: THREE.ShaderMaterial, points = false): Part {
       const t = v as THREE.Texture;
       const src = srcOf(t);
       if (!src) warnOnce(`${m.type} texture ${name}`, "has no picture raea can load (a render target's?): drawn as white");
-      // three samples a picture without a colour space raw, an sRGB one decoded (as Bevy's sRGB image is)
-      textures[name] = src && t.colorSpace !== THREE.SRGBColorSpace ? { src, colorSpace: "linear" } : src ?? WHITE;
+      // three samples a picture without a colour space raw, an sRGB one decoded (as Bevy's sRGB image is); a target
+      // raea's engine draws is read as drawn (R3F23: a float image has no sRGB view, and an 8-bit one decodes to the
+      // linear numbers three's target holds), never a raw copy, which would be taken once, before any pass filled it
+      textures[name] = src && t.colorSpace !== THREE.SRGBColorSpace && !onGpu(t) ? { src, colorSpace: "linear" } : src ?? WHITE;
       if (flipsY(t) && src) flipY.push(name);
       continue;
     }

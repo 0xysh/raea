@@ -103,4 +103,63 @@ describe("a render into a target, drawn by raea's engine", () => {
     expect(k((cams[0].props.layers as number[])[0])).toBe(0.25);
     expect(k((cams[1].props.layers as number[])[0])).toBe(0.75);
   });
+
+  test("is the same thing's frame to frame: one quad, its material swapped, keeps a pass for each (GPUComputationRenderer)", () => {
+    // its init draws the quad with its pass-through shader into the target once, then each frame with the variable's:
+    // a later frame's compute pass is frame 0's compute pass again (its rows, its shader), not the init's
+    function Swapped() {
+      const t = useMemo(() => new THREE.WebGLRenderTarget(16, 16, { type: THREE.FloatType }), []);
+      const shader = (k: number) => new THREE.ShaderMaterial({ uniforms: { k: { value: k } }, vertexShader: "void main() { gl_Position = vec4(position, 1.0); }", fragmentShader: "uniform float k; void main() { gl_FragColor = vec4(k); }" });
+      const [through, compute] = useMemo(() => [shader(0.1), shader(0.9)], []);
+      const quad = useMemo(() => new THREE.Mesh(new THREE.PlaneGeometry(2, 2), through), [through]);
+      const cam = useMemo(() => new THREE.Camera(), []);
+      const init = useMemo(() => ({ done: false }), []);
+      useFrame(({ gl }) => {
+        gl.setRenderTarget(t);
+        if (!init.done) {
+          quad.material = through;
+          gl.render(quad, cam);
+          init.done = true;
+        }
+        quad.material = compute;
+        gl.render(quad, cam);
+        gl.setRenderTarget(null);
+      });
+      return null;
+    }
+    const key = `targets${n++}`;
+    const camsAt = (frame: number) => {
+      const st = stepTo(key, frame, 30, 400, 400, {}, () => <Swapped />).state as unknown as { scene: THREE.Scene; camera: THREE.Camera; gl: THREE.WebGLRenderer };
+      return flat(convert(st.scene, st.camera, st.gl, 400).parts).filter((p) => typeof p.props.target === "string");
+    };
+    const first = camsAt(0);
+    const later = camsAt(2);
+    end(key);
+    expect(first.length).toBe(2);
+    expect(later.length).toBe(1);
+    expect(later[0].props.name).toBe(first[1].props.name);
+    expect(later[0].props.layers).toEqual(first[1].props.layers);
+    expect(later[0].props.name).not.toBe(first[0].props.name);
+  });
+
+  test("is read by a ShaderMaterial as its camera draws it: the image itself, v turned over, never a raw copy", () => {
+    // a raw copy ({colorSpace: "linear"}: three-shader's linear::raw) is taken once, before any pass has drawn
+    function Read() {
+      const t = useMemo(() => new THREE.WebGLRenderTarget(32, 32), []);
+      const scene = useMemo(() => Object.assign(new THREE.Scene(), { background: new THREE.Color("#336699") }), []);
+      const cam = useMemo(() => new THREE.PerspectiveCamera(), []);
+      const mat = useMemo(() => new THREE.ShaderMaterial({ uniforms: { tex: { value: t.texture } }, vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }", fragmentShader: "uniform sampler2D tex; varying vec2 vUv; void main() { gl_FragColor = texture2D(tex, vUv); }" }), [t]);
+      useFrame(({ gl }) => {
+        gl.setRenderTarget(t);
+        gl.render(scene, cam);
+        gl.setRenderTarget(null);
+      });
+      return <mesh name="screen" material={mat}><planeGeometry args={[2, 2]} /></mesh>;
+    }
+    const out = partsOf(() => <Read />);
+    const target = out.find((p) => typeof p.props.target === "string")!.props.target as string;
+    const shader = flat(out.find((p) => p.type === "Mesh" && String(p.props.name).includes("screen"))!.children ?? []).find((c) => c.props.textures)!;
+    expect((shader.props.textures as Record<string, unknown>).tex).toBe(target);
+    expect(shader.props.flipY).toContain("tex");
+  });
 });

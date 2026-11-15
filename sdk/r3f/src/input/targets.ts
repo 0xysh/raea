@@ -81,8 +81,20 @@ export interface Pass {
   /** the renderer's clear colour, linear rgba, when the render was asked for */
   clear: [number, number, number, number];
   autoClear: boolean;
+  /** what was drawn (drawnOf), and its place among this frame's passes of the same into the same target */
+  what: string;
   k: number;
   parts: Part[];
+}
+
+/** what a pass draws, by identity: its scene or object, the material a lone mesh is drawn with (GPUComputationRenderer
+ *  swaps one quad's material between its pass-through and each variable's shader) and the scene's override. A pass's
+ *  rows (its camera, its parts) are those of the same thing drawn into the same target, frame to frame */
+function drawnOf(scene: THREE.Object3D): string {
+  const mat = (scene as THREE.Mesh).isMesh ? (scene as THREE.Mesh).material : undefined;
+  const mats = Array.isArray(mat) ? mat.map((m) => m.uuid).join(",") : mat?.uuid;
+  const over = (scene as THREE.Scene).overrideMaterial?.uuid;
+  return [scene.uuid, mats, over].filter(Boolean).join(":");
 }
 
 /** the targets a pass was drawn into on raea's GPU (recordPass), ever, by their texture */
@@ -115,7 +127,8 @@ function recordPass(rt: THREE.RenderTarget, scene: THREE.Object3D, camera: THREE
   // as before, the scene drawn without it (lights.ts skyOf says so for an environment)
   if ((rt as { isWebGLCubeRenderTarget?: boolean }).isWebGLCubeRenderTarget || (rt.texture as { isCubeTexture?: boolean }).isCubeTexture || rt.depth > 1) return;
   const passes = passesFor(gl);
-  const p = { target: rt, scene, camera, clear: [...clear] as Pass["clear"], autoClear: gl.autoClear !== false, k: passes.filter((x) => x.target === rt).length };
+  const p = { target: rt, scene, camera, clear: [...clear] as Pass["clear"], autoClear: gl.autoClear !== false, what: drawnOf(scene), k: 0 };
+  p.k = passes.filter((x) => x.target === rt && x.what === p.what).length;
   onGpuTargets.set(rt.texture, rt);
   passes.push({ ...p, parts: partsOf ? partsOf(p, gl) : [] });
   // a renderer whose frames nobody steps (step() not called) keeps its latest passes, not every one ever drawn
