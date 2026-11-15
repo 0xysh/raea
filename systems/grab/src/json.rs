@@ -13,7 +13,7 @@ use raea_sys_body::rig::{Pose, Side, Skeleton};
 use crate::shape::{Solid, Thing};
 use crate::take::{Key, Release, Take, perform};
 
-pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; holds?: { side: \"L\" | \"R\"; at: [number, number, number]; normal: [number, number, number]; along?: [number, number, number]; shape?: number[] }[]; path?: { t: number; carry: [number, number, number]; tilt?: [number, number, number, number] }[]; weight?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
+pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; holds?: { side: \"L\" | \"R\"; at: [number, number, number]; normal: [number, number, number]; along?: [number, number, number]; shape?: number[] }[]; path?: { t: number; carry: [number, number, number]; tilt?: [number, number, number, number] }[]; weight?: number; pass?: number; slide?: { t: number; at: [number, number, number]; turn?: [number, number, number, number] }[]; leave?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
 pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number; limited: boolean; stand: { at: [number, number, number]; yaw: number } }";
 
 fn num(v: &Value, what: &str) -> Result<f32, String> {
@@ -100,6 +100,16 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
     let mut take = Take::new(thing, grip, start);
     if !v["weight"].is_null() {
         take = take.weighing(num(&v["weight"], "weight")?);
+    }
+    if !v["pass"].is_null() {
+        take = take.passing(num(&v["pass"], "pass")?);
+    }
+    for k in v["slide"].as_array().into_iter().flatten() {
+        let turn = if k["turn"].is_null() { thing.turn } else { quat(&k["turn"], "a slide key's turn")? };
+        take.slide.push((num(&k["t"], "a slide key's t")?, vec3(&k["at"], "a slide key's at")?, turn));
+    }
+    if !v["leave"].is_null() {
+        take.release = Some(Release::Leave { at: num(&v["leave"], "leave")? });
     }
     for k in v["path"].as_array().into_iter().flatten() {
         let tilt = if k["tilt"].is_null() { Quat::IDENTITY } else { quat(&k["tilt"], "a path key's tilt")? };

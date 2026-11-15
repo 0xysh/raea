@@ -102,6 +102,17 @@ impl Thing {
         None
     }
 
+    /// the eight corners of the box round it, where it is
+    pub fn corners(&self) -> [Vec3; 8] {
+        let half = match self.solid {
+            Solid::Ball { r } => Vec3::splat(r),
+            Solid::Box { half } => half,
+            Solid::Capsule { half, r } => Vec3::new(r, half + r, r),
+            Solid::Cylinder { half, r } => Vec3::new(r, half, r),
+        };
+        [0, 1, 2, 3, 4, 5, 6, 7].map(|i: usize| self.world(Vec3::new(if i & 1 == 0 { -half.x } else { half.x }, if i & 2 == 0 { -half.y } else { half.y }, if i & 4 == 0 { -half.z } else { half.z })))
+    }
+
     /// the same thing, moved and turned with a frame it rides in
     pub fn moved(&self, at: Vec3, turn: Quat) -> Thing {
         Thing { solid: self.solid, at, turn }

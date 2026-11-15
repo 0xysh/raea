@@ -12,7 +12,7 @@ use raea_sys_body::arm::{ArmOptions, forearm_twist, reach};
 use crate::trunk::{clear, look, roomy, stoop};
 use raea_sys_body::limits::clamp_turn;
 use raea_sys_body::prior::shape;
-use crate::hand::{Grip, Touch, curl, facing, wrist_for};
+use crate::hand::{Grip, Hold, Touch, curl, facing, wrist_for};
 use raea_sys_body::rig::hand_rest;
 use raea_sys_body::rig::{Pose, Posed, Skeleton};
 use crate::shape::Thing;
@@ -21,8 +21,11 @@ use crate::shape::Thing;
 pub enum Release {
     /// set down: from `at` the thing is moved to `place`, standing there from `down` on, and the hands leave it
     Put { at: f32, down: f32, place: Vec3 },
-    /// let go at `at` with a velocity, metres a second (none: a drop); it falls to `floor`
+    /// let go at `at` with a velocity, metres a second (none: a drop); it falls to `floor`. A throw is wound up:
+    /// the thing drawn back against the throw and brought through, and the hands follow it out
     Throw { at: f32, velocity: Vec3, floor: f32 },
+    /// the hands leave it where it is at `at` (a drawer pushed shut, a door opened)
+    Leave { at: f32 },
 }
 
 #[derive(Clone, Debug)]
@@ -43,6 +46,20 @@ pub struct Take {
     pub path: Vec<Key>,
     /// how heavy it is, kilograms (0: no matter)
     pub weight: f32,
+    /// a thing that isn't carried but moved where it is (a drawer, a door, a lever): where it is at times after the
+    /// grab, in the frame the body is posed in; the hands stay on it
+    pub slide: Vec<(f32, Vec3, Quat)>,
+    /// when a thing held in one hand is passed to the other
+    pub pass: Option<f32>,
+}
+
+/// One hand's part in a take: its hold, when it leaves the body's own motion, when it is on, and when it lets go.
+#[derive(Clone, Copy)]
+struct Part {
+    hold: Hold,
+    start: f32,
+    grab: f32,
+    gone: Option<f32>,
 }
 
 /// Where a carried thing is at a time: off the chest as `carry` is, and tilted from how it is carried (the tilt in
@@ -80,9 +97,11 @@ pub struct Frame {
 
 const GRAVITY: f32 = 9.81;
 /// how long the hands take to go back to the body's own motion after letting go, seconds
-const AWAY: f32 = 0.4;
+const AWAY: f32 = 0.5;
 /// how long the fingers take to shut, ending at the grab, seconds
 const SHUT: f32 = 0.25;
+/// how long a throw's wind-up is, ending at the release, seconds
+const WIND: f32 = 0.4;
 /// how open the hand comes in, in the hand prior's first component (its standard deviations)
 const OPEN: f32 = 1.5;
 
@@ -110,7 +129,7 @@ impl Take {
             // against the belly, the elbows bent: nearer and higher the smaller it is
             Grip::Two(..) => Vec3::new(0.0, -0.1, 0.2 + thing.solid.bound() * 0.5),
         };
-        Take { thing, grip, start, grab: start + 0.6, carried: start + 1.1, carry, release: None, avoid: Vec::new(), path: Vec::new(), weight: 0.0 }
+        Take { thing, grip, start, grab: start + 0.6, carried: start + 1.1, carry, release: None, avoid: Vec::new(), path: Vec::new(), weight: 0.0, slide: Vec::new(), pass: None }
     }
 
     /// The take of a thing that weighs `kg`: held lower and closer, lifted slower, the trunk leaning back against it.
@@ -119,6 +138,31 @@ impl Take {
         self.carry -= Vec3::new(0.0, (0.015 * self.weight).min(0.18), (0.004 * self.weight).min(0.05));
         self.carried = self.grab + (self.carried - self.grab) * (1.0 + self.weight / 8.0);
         self
+    }
+
+    /// The take of a thing in one hand that is passed to the other at `at`: brought to the middle, taken by the
+    /// other hand on its far side, and carried on that side.
+    pub fn passing(mut self, at: f32) -> Self {
+        if matches!(self.grip, Grip::One(_)) {
+            self.pass = Some(at);
+            let (middle, other) = (Vec3::new(0.0, self.carry.y, self.carry.z), Vec3::new(-self.carry.x, self.carry.y, self.carry.z));
+            self.path.push(Key { t: at - 0.15, carry: middle, tilt: Quat::IDENTITY });
+            self.path.push(Key { t: at + 0.3, carry: middle, tilt: Quat::IDENTITY });
+            self.path.push(Key { t: at + 0.9, carry: other, tilt: Quat::IDENTITY });
+        }
+        self
+    }
+
+    /// each hand's part: both hands of a two-handed take together; a pass's second hand from half a second before
+    fn parts(&self) -> Vec<Part> {
+        let end = self.let_go();
+        match (self.grip, self.pass) {
+            (Grip::One(h), Some(pass)) => vec![
+                Part { hold: h, start: self.start, grab: self.grab, gone: Some(pass + 0.1) },
+                Part { hold: h.across(), start: pass - 0.5, grab: pass, gone: end },
+            ],
+            _ => self.grip.holds().map(|hold| Part { hold, start: self.start, grab: self.grab, gone: end }).collect(),
+        }
     }
 
     /// where the carried thing is off the chest at `t`, and its tilt: the carry place, then the path's keys, eased
@@ -154,10 +198,31 @@ impl Take {
             return (self.thing, Phase::Reach);
         }
         let carried = |t: f32| {
+            // a thing moved where it is: from where it stood through its places, eased
+            if !self.slide.is_empty() {
+                let mut from = (self.grab, self.thing.at, self.thing.turn);
+                for key in &self.slide {
+                    if t < key.0 {
+                        let u = smooth(span(t, from.0, key.0));
+                        return self.thing.moved(from.1.lerp(key.1, u), from.2.slerp(key.2, u));
+                    }
+                    from = *key;
+                }
+                return self.thing.moved(from.1, from.2);
+            }
             let (ride, u) = (self.riding(skel, base, t), smooth(span(t, self.grab, self.carried)));
-            // lifted in a low arc, so it leaves what it stood on before it travels
-            let arc = Vec3::Y * 0.04 * (std::f32::consts::PI * span(t, self.grab, self.carried)).sin();
-            self.thing.moved(self.thing.at.lerp(ride.at, u) + arc, self.thing.turn.slerp(ride.turn, u))
+            // lifted in a low arc, so it leaves what it stood on before it travels; and over whatever is in its
+            // way, by how deep its corners would be in it
+            let rise = (std::f32::consts::PI * span(t, self.grab, self.carried)).sin();
+            let mut thing = self.thing.moved(self.thing.at.lerp(ride.at, u) + Vec3::Y * 0.04 * rise, self.thing.turn.slerp(ride.turn, u));
+            let deep = thing.corners().iter().flat_map(|c| self.avoid.iter().map(|s| 0.01 - s.distance(*c))).fold(0.0f32, f32::max);
+            thing.at.y += deep * (rise * 4.0).min(1.0);
+            // a throw is wound up: drawn back against the throw over its last moments, and brought through
+            if let Some(Release::Throw { at, velocity, .. }) = self.release {
+                let wind = (std::f32::consts::PI * span(t, at - WIND, at)).sin() * (velocity.length() / 3.0).min(1.0);
+                thing.at -= velocity.normalize_or_zero() * 0.18 * wind;
+            }
+            thing
         };
         match self.release {
             Some(Release::Put { at, down, place }) if t >= at => {
@@ -176,6 +241,7 @@ impl Take {
                 let land = (velocity.y + (velocity.y * velocity.y + 2.0 * GRAVITY * (from.at.y - rest).max(0.0)).sqrt()) / GRAVITY;
                 (from.moved(fall((t - at).min(land)), from.turn), Phase::After)
             }
+            Some(Release::Leave { at }) if t >= at => (carried(at), Phase::After),
             _ => (carried(t), if t < self.carried { Phase::Lift } else { Phase::Carry }),
         }
     }
@@ -184,7 +250,7 @@ impl Take {
     fn let_go(&self) -> Option<f32> {
         match self.release? {
             Release::Put { down, .. } => Some(down),
-            Release::Throw { at, .. } => Some(at),
+            Release::Throw { at, .. } | Release::Leave { at } => Some(at),
         }
     }
 }
@@ -194,48 +260,58 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     let own = base(t);
     let (thing, phase) = take.thing_at(skel, base, t);
     let mut frame = Frame { pose: own.clone(), thing, phase, miss: 0.0, moved: 0.0, touch: [None, None], limited: false };
-    // how much the hands are the take's and not the body's own: none before, all from the start, none again once away
-    let gone = take.let_go();
-    let away = gone.map_or(0.0, |g| smooth(span(t, g, g + AWAY)));
-    if t < take.start || away >= 1.0 {
+    // each hand's part: how far along its reach it is (`into`), and how far gone once it has let go (`away`)
+    let parts: Vec<(Part, f32, f32)> = take
+        .parts()
+        .into_iter()
+        .map(|p| (p, smooth(span(t, p.start, p.grab)), p.gone.map_or(0.0, |g| smooth(span(t, g, g + AWAY)))))
+        .filter(|(p, _, away)| t >= p.start && *away < 1.0)
+        .collect();
+    if parts.is_empty() {
         return frame;
     }
-    // while letting go the hands ease off the place the thing was let go at, not after a thing in flight
-    let held = match gone {
-        Some(g) if t >= g => take.thing_at(skel, base, g).0,
-        _ => thing,
-    };
+    // how much of the body is the take's: the most any hand is on
+    let busy = parts.iter().map(|(_, into, away)| into * (1.0 - away)).fold(0.0, f32::max);
+    let on = parts.iter().map(|(_, _, away)| 1.0 - away).fold(0.0, f32::max);
     let w0 = skel.fk(&own);
     let face = yaw(&w0) * Vec3::Z;
-    // in: how far along the reach; the hands are fully on the thing from the grab until they let go
-    let into = smooth(span(t, take.start, take.grab));
-    // the fingers point the level way the arm comes: from the shoulder to the hold, with some of the body's facing, so the
-    // wrist is asked for as little bend as the hold allows
-    let holds: Vec<_> = take
-        .grip
-        .holds()
-        .filter_map(|h| {
+    // a hand that has let go eases off the place the thing was let go at, not after a thing in flight; and a throw's
+    // hands follow the thing out a little
+    let follow = match take.release {
+        Some(Release::Throw { velocity, .. }) => velocity.normalize_or_zero() * 0.2 * (velocity.length() / 3.0).min(1.0),
+        _ => Vec3::ZERO,
+    };
+    // the fingers point the level way the arm comes: from the shoulder to the hold, with some of the body's facing
+    let holds: Vec<_> = parts
+        .iter()
+        .filter_map(|&(part, into, away)| {
+            let h = part.hold;
+            let held = match part.gone {
+                Some(g) if t >= g => take.thing_at(skel, base, g).0,
+                _ => thing,
+            };
             let shoulder = w0.pos[skel.arm(h.side)?[0]];
             let from = held.world(h.at) - shoulder;
             let found = Vec3::new(from.x, 0.0, from.z).normalize_or(face).lerp(facing(&held, w0.pos[0]), 0.4).normalize_or(face);
             // a hold that is a way of holding says where the fingers point
             let along = h.along.map_or(found, |a| held.turn * a);
-            Some((h, wrist_for(skel, &held, &h, along)?))
+            Some((part, into, away, held, wrist_for(skel, &held, &h, along)?))
         })
         .collect();
     // a thing lower than the arms reach: the body bends and squats for it, as far as the hands have got
-    let low = holds.iter().map(|h| h.1.0.y).fold(f32::MAX, f32::min);
+    let low = holds.iter().map(|h| h.4.0.y).fold(f32::MAX, f32::min);
     // solved with the bend the body has room for: where bending or leaning would put the head or chest into a
     // solid, less of both and more squat, a step at a time
     let solve = |give: f32, frame: &mut Frame| {
-    let mut pose = stoop(skel, &own, &w0, face, low, into * (1.0 - away), give);
+    let mut pose = stoop(skel, &own, &w0, face, low, busy, give, &take.avoid);
     frame.miss = 0.0;
     // a heavy thing: the trunk leans back against it once it is off what it stood on
     if let (true, Some(waist)) = (take.weight > 0.0, skel.joint("spine_01")) {
-        let back = (0.012 * take.weight).min(0.2) * smooth(span(t, take.grab, take.carried)) * (1.0 - away);
+        let back = (0.012 * take.weight).min(0.2) * smooth(span(t, take.grab, take.carried)) * on;
         pose.turns[waist] = (pose.turns[waist] * Quat::from_rotation_x(-back)).normalize();
     }
-    for &(hold, level) in &holds {
+    for &(part, into, away, held, level) in &holds {
+        let hold = part.hold;
         let (Some(arm), Some(rest)) = (skel.arm(hold.side), hand_rest(skel, hold.side)) else { continue };
         let normal = held.turn * hold.normal;
         // how the hand lies on its hold: the fingers along the forearm as it arrives (found by solving the arm to
@@ -265,7 +341,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         };
         // the wrist's path: from where the body has it, in onto the hold from off the surface and over what is in the
         // way; and when letting go, back off the surface and out to where the body has it
-        let (u, off) = if away > 0.0 { (1.0 - away, normal * 0.08 * (away * 4.0).min(1.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
+        let (u, off) = if away > 0.0 { (1.0 - away, (normal * 0.08 + follow) * (away * 4.0).min(1.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
         let arc = Vec3::Y * 0.06 * (std::f32::consts::PI * u).sin();
         let end = w0.rot[arm[2]].slerp(turn, smooth(span(u, 0.0, 0.8)));
         let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &rest, &take.avoid);
@@ -279,7 +355,13 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
             let swung = Quat::from_axis_angle(line, (step * 10.0).to_radians()) * pole;
             let Some(solved) = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(swung), end: Some(end), soft: 0.02, stiff: give }) else { break };
             let tried = forearm_twist(skel, &solved.pose, hold.side, 1.0);
-            let past: f32 = arm[..2].iter().map(|&joint| clamp_turn(skel, joint, tried.turns[joint]).1).sum();
+            let mut past: f32 = arm[..2].iter().map(|&joint| clamp_turn(skel, joint, tried.turns[joint]).1).sum();
+            // a swing that puts the elbow or the forearm into a solid counts as far past
+            let drawn = skel.fk(&tried);
+            let (elbow, wrist) = (drawn.pos[arm[1]], drawn.pos[arm[2]]);
+            if take.avoid.iter().any(|s| s.distance(elbow) < 0.04 || s.distance(elbow.lerp(wrist, 0.5)) < 0.03) {
+                past += 30.0;
+            }
             if best.as_ref().is_none_or(|b| past < b.0 - 0.01) {
                 best = Some((past, tried));
             }
@@ -292,19 +374,19 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let (wrist, by) = clamp_turn(skel, arm[2], pose.turns[arm[2]]);
         pose.turns[arm[2]] = wrist;
         frame.limited |= past >= 0.5 || by > 0.5;
-        if t >= take.grab && away <= 0.0 {
+        if t >= part.grab && away <= 0.0 {
             frame.miss = frame.miss.max((skel.fk(&pose).pos[arm[2]] - at).length());
         }
         // the hand opens as it comes in, as a hand does before it takes something (the prior's open hand), then
         // the fingers shut over the last moments of the reach, and open again as the hand leaves
         let mut open = pose.turns.clone();
         if shape(skel, &mut open, hold.side, &[OPEN]).is_some() {
-            let wide = smooth(span(t, take.start, take.grab - SHUT));
+            let wide = smooth(span(t, part.start, part.grab - SHUT));
             for (mine, open) in pose.turns.iter_mut().zip(&open) {
                 *mine = mine.slerp(*open, wide);
             }
         }
-        let close = smooth(span(t, take.grab - SHUT, take.grab)) * (1.0 - smooth(span(away, 0.0, 0.5)));
+        let close = smooth(span(t, part.grab - SHUT, part.grab)) * (1.0 - smooth(span(away, 0.0, 0.5)));
         match hold.shape {
             // a way of holding brings its hand's shape; any other hold curls the fingers onto what is there
             Some(z) => {
@@ -320,8 +402,8 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         }
     }
     // the eyes go to the thing as the hands do, and mostly leave it once it is carried
-    let watching = into * (1.0 - away) * (1.0 - 0.7 * smooth(span(t, take.grab, take.carried)));
-    look(skel, &pose, held.at, watching * (1.0 - 0.5 * give))
+    let watching = busy * (1.0 - 0.7 * smooth(span(t, take.grab, take.carried)));
+    look(skel, &pose, thing.at, watching * (1.0 - 0.5 * give))
     };
     let mut pose = solve(0.0, &mut frame);
     for step in 1..=6 {
@@ -330,12 +412,25 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         }
         pose = solve(step as f32 / 6.0, &mut frame);
     }
-    if away > 0.0 {
-        // the last of the way back is a blend of the joints, so the arm ends exactly as the body has it
-        let w = 1.0 - smooth(span(away, 0.5, 1.0));
-        pose.root = own.root.lerp(pose.root, w);
-        for (mine, own) in pose.turns.iter_mut().zip(&own.turns) {
-            *mine = own.slerp(*mine, w);
+    // the first and the last of a hand's part are a blend of the joints, so its arm leaves and ends exactly as the
+    // body has it: each hand's own arm by its own part, the rest of the body by the hand most on
+    let mut most = 0.0f32;
+    // a joint of a side's arm or hand (its legs aren't)
+    let of_arm = |name: &str, side: &str| name.ends_with(side) && !["thigh", "calf", "foot", "ball"].iter().any(|leg| name.starts_with(leg));
+    let sides: Vec<String> = holds.iter().map(|h| format!("_{}", h.0.hold.side.sx())).collect();
+    for (&(part, _, away, ..), side) in holds.iter().zip(&sides) {
+        let w = smooth(span(t, part.start, part.start + 0.15)) * (1.0 - smooth(span(away, 0.25, 1.0)));
+        most = most.max(w);
+        for (i, joint) in skel.joints.iter().enumerate() {
+            if of_arm(&joint.name, side) {
+                pose.turns[i] = own.turns[i].slerp(pose.turns[i], w);
+            }
+        }
+    }
+    pose.root = own.root.lerp(pose.root, most);
+    for (i, joint) in skel.joints.iter().enumerate() {
+        if !sides.iter().any(|side| of_arm(&joint.name, side)) {
+            pose.turns[i] = own.turns[i].slerp(pose.turns[i], most);
         }
     }
     frame.moved = pose.turns.iter().zip(&own.turns).map(|(a, b)| a.angle_between(*b).to_degrees()).fold(0.0, f32::max);

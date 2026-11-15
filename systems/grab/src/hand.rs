@@ -29,6 +29,14 @@ pub enum Grip {
     Two(Hold, Hold),
 }
 
+impl Hold {
+    /// the same hold for the other hand: across the thing, on its far side
+    pub fn across(&self) -> Hold {
+        let flip = |v: Vec3| v - self.normal * (2.0 * v.dot(self.normal));
+        Hold { side: if self.side == Side::L { Side::R } else { Side::L }, at: flip(self.at), normal: -self.normal, along: self.along.map(flip), shape: self.shape }
+    }
+}
+
 impl Grip {
     pub fn holds(&self) -> impl Iterator<Item = Hold> {
         let (a, b) = match *self {

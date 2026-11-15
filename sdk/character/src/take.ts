@@ -50,6 +50,13 @@ export interface TakeSpec {
   path?: { t: number; carry: Vec3; tilt?: Quat }[];
   /** how heavy it is, kilograms: held lower and closer, lifted slower, the trunk leaning back against it */
   weight?: number;
+  /** when a thing held in one hand is passed to the other, seconds */
+  pass?: number;
+  /** a thing that isn't carried but moved where it is (a drawer, a door, a lever): where it is at times after the
+   * grab, in the frame the body is posed in; the hands stay on it */
+  slide?: { t: number; at: Vec3; turn?: Quat }[];
+  /** when the hands leave the thing where it is (after a slide), seconds */
+  leave?: number;
   /** the scene's solids the hands keep out of (a table's top, a shelf) */
   avoid?: TakeThing[];
   /** set down: moved to `place` from `at`, standing there from `down` */

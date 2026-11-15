@@ -13,13 +13,13 @@ use raea_sys_body::rig::{Pose, Posed, Side, Skeleton};
 use crate::shape::Thing;
 
 /// how far below the shoulders, in arm lengths, the hands go before the body bends for them
-const EASY: f32 = 0.7;
+const EASY: f32 = 0.88;
 
 /// The body bent and lowered for hands that must get down to `low` (a height, metres), by `amount` (0 to 1) of what
 /// that needs. `own` drawn is `w`; `face` is the level way the body faces. `give` (0 to 1) trades the bend for more
 /// squat, down to an upright, deep squat at 1: for a body that can't bend forward because something stands there
 /// (`roomy` says when it can).
-pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amount: f32, give: f32) -> Pose {
+pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amount: f32, give: f32, solids: &[Thing]) -> Pose {
     let (Some(l), Some(r)) = (skel.arm(Side::L), skel.arm(Side::R)) else { return own.clone() };
     let shoulders = (w.pos[l[0]].y + w.pos[r[0]].y) / 2.0;
     let arm = skel.offset(l[1]).length() + skel.offset(l[2]).length();
@@ -33,22 +33,31 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
     let (drop, pitch) = ((short * 0.75).min(0.55), (short * 0.8).min(0.85));
     let (drop, pitch) = ((drop + 0.45 * pitch * give).min(0.82) * amount, pitch * (1.0 - give) * amount);
     let left = Vec3::Y.cross(face);
+    let knees: Vec<usize> = ["calf_l", "calf_r"].iter().filter_map(|n| skel.joint(n)).collect();
     let mut pose = own.clone();
-    // the hips go back a little as the trunk goes forward, as a body keeps its balance
-    pose.root = own.root - Vec3::Y * drop - face * (0.12 * pitch);
-    pose.turns[0] = (Quat::from_axis_angle(left, pitch * 0.4) * own.turns[0]).normalize();
-    for name in ["spine_01", "spine_02", "spine_03"] {
-        if let Some(i) = skel.joint(name) {
-            pose.turns[i] = (own.turns[i] * Quat::from_rotation_x(pitch * 0.2)).normalize();
+    // the hips go back a little as the trunk goes forward, as a body keeps its balance; and further back, 4 cm at a
+    // time, while a knee would be in a solid (a squat in front of a table sits back from it)
+    for back in 0..6 {
+        pose = own.clone();
+        pose.root = own.root - Vec3::Y * drop - face * (0.12 * pitch + 0.04 * back as f32);
+        pose.turns[0] = (Quat::from_axis_angle(left, pitch * 0.4) * own.turns[0]).normalize();
+        for name in ["spine_01", "spine_02", "spine_03"] {
+            if let Some(i) = skel.joint(name) {
+                pose.turns[i] = (own.turns[i] * Quat::from_rotation_x(pitch * 0.2)).normalize();
+            }
         }
-    }
-    // the feet stay where they stand, turned as they were, the knees going forward
-    for s in Side::BOTH {
-        let x = s.sx();
-        let leg = [format!("thigh_{x}"), format!("calf_{x}"), format!("foot_{x}")].map(|n| skel.joint(&n));
-        let [Some(a), Some(b), Some(c)] = leg else { continue };
-        let pole = face + left * (0.25 * s.sign());
-        pose = two_bone(skel, &pose, [a, b, c], w.pos[c], ArmOptions { pole: Some(pole), end: Some(w.rot[c]), ..Default::default() }).pose;
+        // the feet stay where they stand, turned as they were, the knees going forward
+        for s in Side::BOTH {
+            let x = s.sx();
+            let leg = [format!("thigh_{x}"), format!("calf_{x}"), format!("foot_{x}")].map(|n| skel.joint(&n));
+            let [Some(a), Some(b), Some(c)] = leg else { continue };
+            let pole = face + left * (0.25 * s.sign());
+            pose = two_bone(skel, &pose, [a, b, c], w.pos[c], ArmOptions { pole: Some(pole), end: Some(w.rot[c]), ..Default::default() }).pose;
+        }
+        let at = skel.fk(&pose);
+        if knees.iter().all(|&k| solids.iter().all(|s| s.distance(at.pos[k]) > 0.07)) {
+            break;
+        }
     }
     pose
 }

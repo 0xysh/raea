@@ -249,13 +249,40 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # it, both palms still on. Seen on teal with 14 kg. Not done: a throw's wind-up and follow-through.
       Then a heavy thing is held low and close, lifted slower, and leant against
 
+    @done
+    Scenario: HG9b. Passing a thing, moving a thing where it is, and a throw's wind-up
+      # 11-14, built. Each hand now has its own part in a take (when it leaves the body's motion, when it is on,
+      # when it lets go), so hands can come and go separately. `passing(at)` (a take's `pass`): a thing held in
+      # one hand is brought to the middle, the other hand takes it on its far side (`Hold::across`), and it is
+      # carried on that side; one palm or the other is within 15 mm of its hold at every frame, both at the
+      # pass, and the thing stays upright. `slide` and `Release::Leave` (a take's `slide`, `leave`): a thing
+      # that isn't carried goes through places where it is, the hands staying on, and is left there; a drawer's
+      # front pulled 18 cm keeps the palm within 3 cm of its handle and never leaves its runners. A throw draws
+      # the thing back 18 cm against the throw over its last 0.4 s and brings it through, and the hands follow
+      # it out 20 cm before coming back. Seen on teal: the cup passed right to left, a drawer pulled open, the
+      # box drawn back before it is thrown. The arm let go swings back in half a second, up to 26 degrees a
+      # frame at 30 a second, which may read as abrupt. Not done: a thing passed to another character.
+      Then a thing changes hands with somebody always holding it, a drawer is pulled and left, a throw winds up
+
+    @done
+    Scenario: HG6c. Forearms, knees and the carried thing out of the scene's solids
+      # 11-14, built. An elbow swing that puts the elbow or the middle of the forearm within 3 to 4 cm of a solid
+      # counts as far past its range, so another swing is chosen. A squat whose knee would be within 7 cm of a
+      # solid sits back from it, 4 cm at a time. A lifted thing rises by how deep its corners would be in a
+      # solid. With a table 38 cm in front, a box lifted from the floor onto it: no knee or elbow is in the
+      # table at any frame, and no corner of the box is over 5 mm into it on the way. The body bends for a
+      # thing only when it is lower than 0.88 of an arm below the shoulders (0.7 squatted for a drawer handle
+      # a hanging arm reaches). Not done: the body's own shape (an arm through the torso, a thing through
+      # the thighs), which sdk/body's shape.ts knows and the Rust does not.
+      Then the limbs and the thing clear a table as the hands, head and chest do
+
   Rule: Next, in order
 
     @needs:HG5
     Scenario: HG6. The whole body out of itself and the scene
-      # HG6a keeps the hands out of solids and HG6b the head and chest; the arms are inside their ranges.
-      Then the forearms, the elbows, the knees and the held thing stay out of the body's own shape (sdk/body's
-        shape.ts and shell.ts) and the scene's solids, by the least move
+      # HG6a, HG6b and HG6c keep the hands, head, chest, forearms, knees and the thing out of the scene's solids.
+      Then the arms and the held thing stay out of the body's own shape (sdk/body's shape.ts and shell.ts), by
+        the least move
       And one copy of the limits serves both the TypeScript and the Rust
 
     @needs:HG5
