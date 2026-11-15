@@ -34,6 +34,7 @@ pieces; then write the file. Each file's example is a complete composition you c
 | water: seas, lakes and pools; waves, reflection, refraction, absorption, caustics, foam | `bevy/water` |
 | ray-traced light (Solari): what it lights and traces, glowing lamps, rooms that don't leak, cuts, metering | `bevy/solari` |
 | bloom, fog, tone mapping, exposure, fisheye and lens distortion, motion blur | `bevy/post` |
+| three.js work: an R3F scene (`<R3F>`, useFrame, drei), a plain three.js page (`<Three program>`), TSL, three's shaders | `bevy/r3f` |
 | how much the scene can hold, what isn't there yet | `bevy/limits` |
 
 ## What exists
@@ -54,7 +55,8 @@ the rest come from `raea`.
 
 1. **Every value from the frame.** Positions, angles, colours and intensities come from `useCurrentFrame()` (through
    `interpolate`, `spring` or plain arithmetic) or from a game's state at the frame. No `useState`, `useEffect`,
-   `useRef` or `useFrame` mutation: there is no render loop to mutate in. `Math.random()` is seeded for each frame, so
+   `useRef` or `useFrame` mutation on raea's components: there is no render loop to mutate in. (three.js work keeps
+   its own: an R3F scene inside `<R3F>`, a plain three.js page in `<Three program>`, stepped from the frame: `bevy/r3f`.) `Math.random()` is seeded for each frame, so
    it draws new numbers every frame: seed a scatter or anything that holds still from an index. `Date` is the frame's
    time.
 2. **Radians and quaternions for rotation**: a Transform turns by `Quat.fromRotationY(Math.PI / 4)` or
