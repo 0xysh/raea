@@ -85,6 +85,8 @@ pub struct ThreeShader {
     /// whether its colour is what three's canvas shows (taken back through Bevy's tone mapping) or scene light
     display: bool,
     layout: Vec<Uniform>,
+    /// its textures' names, as tex0 to tex3 bind them (a frame's `three:uniforms` swaps one by name)
+    bound: Vec<String>,
 }
 
 /// What picks a three shader's pipeline.
@@ -295,18 +297,34 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
         depth_test: o.get("depthTest").and_then(Value::as_bool).unwrap_or(true),
         display,
         layout,
+        bound: bound.clone(),
     };
     Ok((m, attrs))
 }
 
 /// A `three:uniforms` component row: the frame's uniform values ({uniforms: {name: value}, time: [t, delta, frame]})
-/// onto the part's three shader.
+/// onto the part's three shader, and the render images its textures name this frame (textures: {name: "render:..."}).
 pub fn patch(world: &mut World, e: Entity, v: &Value) -> Result<(), String> {
     // a part whose shader didn't build here is drawn in its colour (of_row warned once, naming why): its uniforms have
     // nothing to move, and its frame is never refused for them (docs/r3f.feature R3F16)
     let Some(h) = world.get::<MeshMaterial3d<ThreeShader>>(e).map(|m| m.0.clone()) else { return Ok(()) };
+    // a texture naming the render image an app drew this frame (R3F23c: two targets ping-ponged, the one drawn last)
+    let mut swap: Vec<(String, Handle<Image>)> = vec![];
+    for (k, s) in v.get("textures").and_then(Value::as_object).into_iter().flatten() {
+        swap.push((k.clone(), raea_sys_frame::RenderImages::image(world, s.as_str().unwrap_or_default(), None).map_err(|e| format!("three:uniforms: texture {k}: {e}"))?));
+    }
     let mut mats = world.resource_mut::<Assets<ThreeShader>>();
     let Some(mut m) = mats.get_mut(&h) else { return Err("three:uniforms: its material isn't loaded".into()) };
+    for (k, img) in swap {
+        let slot = match m.bound.iter().position(|b| *b == k) {
+            Some(0) => &mut m.tex0,
+            Some(1) => &mut m.tex1,
+            Some(2) => &mut m.tex2,
+            Some(3) => &mut m.tex3,
+            _ => continue,
+        };
+        *slot = Some(img);
+    }
     let mut slots = m.slots.map(|s| s.to_array());
     if let Some(u) = v.get("uniforms").and_then(Value::as_object) {
         module::pack(&m.layout, u, &mut slots)?;

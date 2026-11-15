@@ -440,12 +440,14 @@ pub fn material_fields(p: &mut Program, id: &str, its: &[Item]) {
     keyed(p, "component", Some(id), "m", each.iter().map(|(f, v)| (*f, v)));
 }
 
-/// A three.js shader's uniforms and time (a <ThreeShaderMaterial>'s, docs/r3f.feature R3F11), sent as keyed
+/// A three.js shader's uniforms, time and render-image textures (a <ThreeShaderMaterial>'s, docs/r3f.feature R3F11), sent as keyed
 /// `three:uniforms` rows from each frame they change, which raea-sys-three-shader's `patch` writes into its slots.
 pub fn three_uniforms(p: &mut Program, id: &str, its: &[Item]) {
     let each: Vec<(usize, Value)> = its.iter().enumerate().filter_map(|(f, it)| {
         let m = it.material.as_ref().filter(|m| &*m.kind == "ThreeShaderMaterial")?;
-        let v = serde_json::json!({ "uniforms": m.props.get("uniforms").cloned().unwrap_or(Value::Null), "time": m.props.get("time").cloned().unwrap_or(Value::Null) });
+        // its textures that name render images: an app ping-ponging two targets reads another each frame (R3F23c)
+        let renders: Map<String, Value> = m.props.get("textures").and_then(Value::as_object).into_iter().flatten().filter(|(_, s)| s.as_str().is_some_and(|s| s.starts_with("render:"))).map(|(k, s)| (k.clone(), s.clone())).collect();
+        let v = serde_json::json!({ "uniforms": m.props.get("uniforms").cloned().unwrap_or(Value::Null), "time": m.props.get("time").cloned().unwrap_or(Value::Null), "textures": renders });
         Some((f, serde_json::json!({ "type": "three:uniforms", "value": v })))
     }).collect();
     if each.is_empty() {
