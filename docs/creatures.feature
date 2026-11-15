@@ -132,8 +132,9 @@ Feature: Creatures: a four-legged body in the character SDK
       Then no move tears more than 0.1% of the skin's edges
 
     Scenario: CR11. A gallop with a back
-      # The gallop's legs and timing are there; the back's flexing, the reach of the hind legs past the fore, and
-      # the moment all four feet are off the ground are rough. 87 of 1,200 leg-frames could not reach their foot.
+      # 11-15: every leg now reaches its foot at a gallop (a stance of 0.29 of the stride, the body 14 to 16% lower
+      # at speed; it was 87 of 1,200 leg-frames short). Still rough: the back's arch following the legs, the hind
+      # legs' reach past the fore, and a real moment with all four feet off the ground.
       Then at a gallop every leg reaches its foot and the back's arch follows the legs
 
     Scenario: CR12. Other animals on the same solver
