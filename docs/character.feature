@@ -335,6 +335,17 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # seen from behind; and a dark garment over the dark mannequin needs a small difference to count.
       Then a jacket is worn over a shirt, each its own garment file
 
+    @done
+    Scenario: CH42b. The same garment files on a body of another build
+      # 11-15. The body's build takes SOMA's own shape model (SOMA_neutral.npz: a component by so many of its
+      # standard deviations); a second body moved along three components (up to 11 cm at a vertex, slimmer and
+      # longer in the neck) wears the t-shirt, jeans, shoes and jacket measured on the template body, from the
+      # same files, with nothing refitted, through the same matched walk beside the first. A shaped body's
+      # vertices are matched to the template's numbers through its template-shaped twin (same export, same
+      # order). Not done: the joints stay where the template has them (SOMA's own layer moves them with the
+      # shape), so only small changes of build are right; and this is HG17's start, not its end.
+      Then a garment made once dresses SOMA bodies of different builds
+
     Scenario: CH42. A garment is kept as data on SOMA's topology
       Then a garment file holds, per body vertex it covers: that it is covered, its stand-off, and how far it
         may stray (for the cloth follower); and a texture in the body's own UVs, baked from the views with the
