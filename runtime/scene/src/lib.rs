@@ -26,8 +26,6 @@ mod fast;
 
 /// Gaussian splats' rows (<Splat>).
 mod splat;
-/// 2D parts' rows (<Sprite>, <Shape2D>).
-/// <Instances>: a mesh or model row's placements (its `inst` column).
 /// Baked simulations' and glitches' rows (<MeshSequence>, <Goo>, glitch props).
 mod meshseq;
 /// Fields of grass' rows (<Grass>).

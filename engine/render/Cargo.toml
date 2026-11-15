@@ -33,6 +33,7 @@ raea-runtime-plugins = { path = "../../runtime/plugins" }
 raea-sys-screen = { path = "../../systems/screen" }
 raea-sys-matchmove = { path = "../../systems/matchmove" }
 raea-sys-grid = { path = "../../systems/grid" }
+raea-sys-rendermap = { path = "../../systems/rendermap" }
 raea-sys-meshseq = { path = "../../systems/meshseq" }
 raea-sys-environment = { path = "../../systems/environment" }
 raea-sys-look = { path = "../../systems/look" }

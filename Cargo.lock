@@ -14845,6 +14845,7 @@ dependencies = [
  "raea-sys-phase",
  "raea-sys-post",
  "raea-sys-procmat",
+ "raea-sys-rendermap",
  "raea-sys-rt",
  "raea-sys-sampler",
  "raea-sys-screen",
@@ -16091,6 +16092,14 @@ dependencies = [
  "raea-core-program",
  "raea-sys-frame",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-rendermap"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-sys-frame",
 ]
 
 [[package]]

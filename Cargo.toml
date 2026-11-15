@@ -119,6 +119,7 @@ members = [
     "systems/screen",
     "systems/matchmove",
     "systems/grid",
+    "systems/rendermap",
     "systems/meshseq",
     "systems/environment",
     "systems/look",
