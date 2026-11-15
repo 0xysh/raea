@@ -88,6 +88,11 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         (walk.rs cloud_only; Progress.cloud, and the CLI says "N only in iCloud, left out"). Reading one downloads its
         original: on this Mac all 3,849 iCloud Drive files were cloud-only, 2,245 of them pictures and videos, and
         switching iCloud Drive on would have pulled every one down
+      Measured 11-15 for the Quick Look path (a Swift probe, QLThumbnailGenerator at 256 px, .thumbnail): 40 cloud-only
+        pictures and videos gave 40 thumbnails in 23 s at once (1.7 a second, iCloud serving them about one at a time)
+        and every file was still dataless after; the same 40 again took 0.02 s (Quick Look's cache). So cloud-only
+        files can go in as a slow second stage after the local ones, about 20 minutes for this Mac's 2,245, with no
+        download
 
     Scenario: IX8. Google Drive
       Then through the Drive connection (raea-api src/connect; Drive is live since 11-11), raea-api lists the Drive's
