@@ -6,7 +6,8 @@
 // What three puts on screen is what raea's engine shows: a ShaderMaterial's colour is the canvas's value unless it
 // includes three's tone mapping, so it goes as "display" (the engine takes it back through Bevy's tone mapping); one
 // that includes <tonemapping_fragment> on a tone-mapped material goes as "linear", those includes dropped, and Bevy's
-// tone mapping maps it as three's would.
+// tone mapping maps it as three's would. Drawn through a composer, every one goes as "linear": three draws it into the
+// composer's float buffer, its colour scene light, and the composer tone-maps and encodes the frame.
 import * as THREE from "three";
 import { onGpu } from "./targets";
 import { flipsY, srcOf } from "./texture";
@@ -119,6 +120,25 @@ export function decideIfdefs(src: string, defines: Set<string> | Map<string, str
 
 /** three's sRGB encoding, which <colorspace_fragment> calls (three declares it in front of every fragment shader) */
 const OUTPUT_TEXEL = "vec4 linearToOutputTexel(vec4 v) { return vec4(mix(pow(v.rgb, vec3(0.41666)) * 1.055 - vec3(0.055), v.rgb * 12.92, vec3(lessThanEqual(v.rgb, vec3(0.0031308)))), v.a); }\n";
+// into a composer's float buffer, three's output colour space is the target's (linear): the colour as it is
+const LINEAR_TEXEL = "vec4 linearToOutputTexel(vec4 v) { return v; }\n";
+
+// whether the scene being converted is drawn through a composer (an <EffectComposer>, three's EffectComposer, a
+// PostProcessing: post.ts composerEffects). three draws it into the composer's float buffer, where it tone-maps and
+// encodes nothing, so a ShaderMaterial's colour there is scene light, which the composer's own tone mapping (or none)
+// and encoding make the frame
+let composed = false;
+
+/** `f` run with the scene drawn through a composer (`on`) or not, as convert walks it */
+export function composing<T>(on: boolean, f: () => T): T {
+  const was = composed;
+  composed = on;
+  try {
+    return f();
+  } finally {
+    composed = was;
+  }
+}
 
 /** a uniform's value as numbers (a texture is listed apart); undefined for one with nothing raea can send */
 function valueOf(v: unknown): number | boolean | number[] | undefined {
@@ -160,8 +180,9 @@ export function shaderPart(m: THREE.ShaderMaterial, points = false): Part {
   const defines = Object.entries(m.defines ?? {}).filter(([, v]) => v !== false).map(([k, v]) => `#define ${k} ${v === true ? "" : v}`).join("\n");
   let vertex = expandIncludes(m.vertexShader);
   let fragment = expandIncludes(m.fragmentShader);
-  // three's tone mapping, when the shader asks for it, is Bevy's here: the shader's colour is then scene light
-  const tones = /#include +<tonemapping_fragment>/.test(m.fragmentShader) && m.toneMapped;
+  // three's tone mapping, when the shader asks for it, is Bevy's here: the shader's colour is then scene light, as it
+  // is in a composer's buffer, where three's tone mapping and colour space includes do nothing
+  const tones = composed || (/#include +<tonemapping_fragment>/.test(m.fragmentShader) && m.toneMapped);
   if (tones) fragment = expandIncludes(m.fragmentShader.replace(/^[ \t]*#include +<(tonemapping_fragment|colorspace_fragment)>/gm, ""));
   else if (/#include +<tonemapping_fragment>/.test(m.fragmentShader)) fragment = expandIncludes(m.fragmentShader.replace(/^[ \t]*#include +<tonemapping_fragment>/gm, ""));
   // three's prefix in front of a ShaderMaterial (not a raw one): no clipping planes (raea cuts the mesh, clip.ts)
@@ -170,7 +191,7 @@ export function shaderPart(m: THREE.ShaderMaterial, points = false): Part {
   // naga's GLSL reads a parameter's `in` but not `const in` (three's <common> declares its helpers so)
   const params = (src: string) => src.replace(/([(,]\s*)const\s+in\s+/g, "$1in ");
   vertex = params(decideIfdefs(front + vertex, on));
-  fragment = params(decideIfdefs(front + (raw ? "" : OUTPUT_TEXEL) + fragment, on));
+  fragment = params(decideIfdefs(front + (raw ? "" : composed ? LINEAR_TEXEL : OUTPUT_TEXEL) + fragment, on));
   const uniforms: Record<string, number | boolean | number[]> = {};
   const textures: Record<string, string | { src: string; colorSpace: "linear" }> = {};
   const flipY: string[] = [];

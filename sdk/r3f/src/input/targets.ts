@@ -278,8 +278,39 @@ export function imageOf(rt: THREE.RenderTarget): string {
   return `render:${t.uuid}@${w}x${h}:${w}x${h}${float ? ":float" : ""}`;
 }
 
-/** the parts of what the app drew into targets on raea's GPU this frame (the stand-in renderer's passes), in order */
-export function passesOf(gl: THREE.WebGLRenderer): Part[] {
+/** the parts of what the app drew into targets on raea's GPU this frame (the stand-in renderer's passes), in order.
+ *  With `seen` (the frame's parts), only the passes whose pictures it reads, or a pass it keeps reads */
+export function passesOf(gl: THREE.WebGLRenderer, seen?: Part[]): Part[] {
   const passes = (gl as unknown as { __raea?: { passes?: Pass[] } }).__raea?.passes;
-  return passes ? passes.flatMap((p) => p.parts) : [];
+  if (!passes?.length) return [];
+  if (!seen) return passes.flatMap((p) => p.parts);
+  const want = readsOf(seen);
+  const keep = new Set<Pass>();
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const p of passes) {
+      if (keep.has(p) || !want.has(p.target.texture.uuid)) continue;
+      keep.add(p);
+      readsOf(p.parts, want);
+      grew = true;
+    }
+  }
+  return passes.filter((p) => keep.has(p)).flatMap((p) => p.parts);
+}
+
+/** the render targets `parts` read, by texture uuid: every image name ("render:UUID@...", imageOf) in their props */
+function readsOf(parts: Part[], out = new Set<string>()): Set<string> {
+  const scan = (v: unknown): void => {
+    if (typeof v === "string") {
+      if (v.includes("render:")) for (const m of v.matchAll(/render:([^@:\s"]+)@/g)) out.add(m[1]);
+    } else if (Array.isArray(v)) {
+      // a geometry's numbers hold no names
+      if (typeof v[0] !== "number") v.forEach(scan);
+    } else if (v && typeof v === "object" && !ArrayBuffer.isView(v)) for (const x of Object.values(v)) scan(x);
+  };
+  for (const p of parts) {
+    scan(p.props);
+    if (p.children) readsOf(p.children, out);
+  }
+  return out;
 }

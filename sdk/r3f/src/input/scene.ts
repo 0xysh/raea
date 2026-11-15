@@ -13,7 +13,7 @@ import { isTroikaText, textParts } from "./text";
 import { clipArrays, clipOf, type Clip } from "./clip";
 import { cameraOf, fogOf, lightsOf, skyOf, toneOf } from "./lights";
 import { materialOf, type Part, type Props } from "./material";
-import { isShader, ownAttributes, shaderPart } from "./shader";
+import { composing, isShader, ownAttributes, shaderPart } from "./shader";
 import { drawsPatched } from "./patched";
 import { composerEffects, postParts } from "./post";
 import { classicOf } from "./tsl";
@@ -429,9 +429,10 @@ export function sceneParts(scene: THREE.Object3D, camera: THREE.Camera, gl: THRE
 
 /** R3F's scene, camera and renderer settings as raea's parts, this frame */
 export function convert(scene: THREE.Scene, camera: THREE.Camera, gl: THREE.WebGLRenderer, height: number, time = 0, delta = 0): Converted {
-  const { w, drawn } = sceneParts(scene, camera, gl, height, "r3f", time, delta);
-  // what the app drew into render targets itself this frame, drawn on the GPU before the screen (passes.ts, R3F23)
-  drawn.unshift(...passesOf(gl));
+  // an <EffectComposer>'s effects (post.ts): its frame is tone-mapped only by a ToneMapping effect in it, and three
+  // draws the scene into its buffer, a ShaderMaterial's colour scene light there (shader.ts composing)
+  const composer = composerEffects(scene);
+  const { w, drawn } = composing(composer.found, () => sceneParts(scene, camera, gl, height, "r3f", time, delta));
   // a node material runs only under three's WebGPURenderer, so a scene with one is drawn by it (whatever gl stands in)
   let webgpu = (gl as { isWebGPURenderer?: boolean }).isWebGPURenderer === true;
   if (!webgpu) scene.traverse((o) => {
@@ -441,11 +442,13 @@ export function convert(scene: THREE.Scene, camera: THREE.Camera, gl: THREE.WebG
   const sky = skyOf(scene, gl, webgpu);
   const cam = cameraOf(camera);
   const fog = fogOf(scene.fog as THREE.Fog | THREE.FogExp2 | null);
-  // an <EffectComposer>'s effects (post.ts): its frame is tone-mapped only by a ToneMapping effect in it
-  const composer = composerEffects(scene);
   const post = composer.found ? postParts(composer.effects) : { parts: [] as Part[], tone: undefined };
   const tone = composer.found ? post.tone ?? { type: "ToneMapping", props: { mode: "none" } } : toneOf(gl);
+  // what the app drew into render targets itself this frame, drawn on the GPU before the screen (passes.ts, R3F23).
+  // Under a composer raea draws as its own effects, only the passes whose pictures the frame shows: the composer's
+  // own (the scene into its buffer, a bloom's mip chain) are raea's effects now, and would draw the scene again
+  const passes = passesOf(gl, composer.found ? [...sky.parts, ...w.world, ...drawn] : undefined);
   // what the app dispatched with gl.compute since the last frame, run before the cameras draw (tsl-compute.ts, R3F22)
   const computes = dispatchesOf(gl)?.part(time);
-  return { parts: [...(cam ? [cam] : []), tone, ...(fog ? [fog] : []), ...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...drawn], background: sky.background };
+  return { parts: [...(cam ? [cam] : []), tone, ...(fog ? [fog] : []), ...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...passes, ...drawn], background: sky.background };
 }

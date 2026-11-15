@@ -610,6 +610,16 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         Viewport. in-tslpost 0.9737 (bloom), in-tslpost2 0.9233 (sepia, chromatic aberration). Left: Outline (selected
         meshes in a composition pass, once scene.ts is free), Texture, Depth, LUT1D, and the background under a
         composer's or a PostProcessing's tone mapping (three maps it, raea shows it as given)
+      Later (11-15): a scene drawn through a composer is drawn into its float buffer by three, where a ShaderMaterial's
+        colour is scene light and its tone mapping and colour space includes do nothing; it went as "display" (the
+        canvas's value), drawn darker and more saturated than three's, the composer's tone mapping and encoding never
+        reaching it. It now goes as "linear" under a composer (shader.ts composing): in-shaderbloom (a ShaderMaterial
+        and a faint bloom, test/parity/post2.tsx) 0.9758 to 0.9848, the ball's mean colour 133,66,33 to 186,135,96
+        against three's 194,145,110. And the composer's own passes into its targets, which R3F23 drew on raea's GPU,
+        aren't drawn under a composer raea draws as its effects (targets.ts passesOf keeps the passes whose pictures
+        the frame reads): one bloom was 17 cameras, the scene drawn again into the composer's buffer and 16 quads for
+        its luminance and mip chain, and is none; a target the frame shows is still drawn (test/composer.test.tsx).
+        in-post's frame is the same to the pixel; the full list of 42 passes
 
     @done
     Scenario: R3F26. <R3F> in a box smaller than the page (#130)
