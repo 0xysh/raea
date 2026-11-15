@@ -215,6 +215,8 @@ raea-sys-layers = true
 raea-sys-material = true
 # a row's mesh from JSON, Bevy's primitives by name (materials and reflected Mesh handles build on it)
 raea-sys-mesh = true
+# the character's rig, poses, forward kinematics, IK and joint limits (what the hands do with things builds on it)
+raea-sys-body = true
 # how a texture is read (materials, shaders and models set it the same way)
 raea-sys-sampler = true
 # a shader's inputs, accessors and registration (surface shaders and frame passes share them)
