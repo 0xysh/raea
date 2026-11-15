@@ -30,8 +30,8 @@ impl Live {
             }
         }
         // played live (a game: timelines play their bake), on raea's live view runtime instead of React: each frame
-        // rendered and only what changed sent (RAEA_LIVE_REACT=1 keeps React)
-        if std::env::var("RAEA_LIVE_REACT").as_deref() != Ok("1") {
+        // rendered and only what changed sent (RAEA_LIVE_REACT=1 keeps React, as an edit drawing R3F does)
+        if std::env::var("RAEA_LIVE_REACT").as_deref() != Ok("1") && !crate::needs_react(&dir) {
             opts.push("--lite".into());
         }
         raea_runtime_react::scene::bundle_composition(&tsx, &js, &raea_runtime_react::scene::comp_opts(&opts)?, None)?;

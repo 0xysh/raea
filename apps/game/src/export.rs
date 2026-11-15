@@ -88,7 +88,10 @@ pub fn export(args: &[String]) -> R<String> {
             opts.push(p.display().to_string());
         }
     }
-    opts.push("--lite".into());
+    // on live play's runtime, or React for an edit drawing R3F (raea_runtime_live::needs_react)
+    if !raea_runtime_live::needs_react(&dir) {
+        opts.push("--lite".into());
+    }
     let js = game.join("bundle.js");
     raea_runtime_react::scene::bundle_composition(&tsx, &js, &raea_runtime_react::scene::comp_opts(&opts)?, Some(&game))?;
 
