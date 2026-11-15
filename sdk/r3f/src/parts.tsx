@@ -3,7 +3,7 @@
 // components.
 import type { ReactNode } from "react";
 import {
-  AmbientOcclusion, AntiAliasing, Bloom, BufferMesh, DepthOfField, Environment, Fog, Gizmo, Grade, Instances, LensDistortion, Look, RichText, ToneMapping,
+  AmbientOcclusion, AntiAliasing, Bloom, BufferMesh, Compute, DepthOfField, Environment, Fog, Gizmo, Grade, Instances, LensDistortion, Look, RichText, ToneMapping,
 } from "raea/3d";
 import {
   AmbientLight, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial,
@@ -16,7 +16,7 @@ export type { Part, Props } from "./input/material";
 /** every component a Part may name */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const COMPONENTS: Record<string, (p: any) => ReactNode> = {
-  AmbientLight, AmbientOcclusion, AntiAliasing, Bloom, BufferMesh, DepthOfField, DirectionalLight, Environment, Fog, Gizmo, Grade, Group, Instances,
+  AmbientLight, AmbientOcclusion, AntiAliasing, Bloom, BufferMesh, Compute, DepthOfField, DirectionalLight, Environment, Fog, Gizmo, Grade, Group, Instances,
   LensDistortion, Look, Mesh, MeshBasicMaterial,
   MeshPhysicalMaterial, MeshStandardMaterial, MeshToonMaterial, OrthographicCamera, PerspectiveCamera, PointLight,
   RectAreaLight, RichText, SpotLight, ThreeShaderMaterial, ToneMapping,

@@ -3,6 +3,7 @@
 // Its own module, so a composition's `import "three"` (vanilla.ts) needs nothing of React Three Fiber's.
 import * as THREE from "three";
 import { renderInto } from "./targets";
+import { Dispatches } from "./tsl-compute";
 
 const warned = new Set<string>();
 export function warnOnce(k: string, why: string) {
@@ -30,17 +31,12 @@ export function standInRenderer(): THREE.WebGLRenderer {
   // state.buffers.depth.setMask): every call does nothing, every flag reads as off (docs/r3f.feature R3F16)
   const inert = (): unknown => new Proxy(noop, { get: (_, k) => (k === "then" || typeof k !== "string" ? undefined : inert()), apply: () => undefined });
   const state = { buffers: { color: inert(), depth: inert(), stencil: inert() }, enable: noop, disable: noop, reset: noop, bindTexture: noop, unbindTexture: noop, activeTexture: noop, setBlending: noop, setFlipSided: noop, setCullFace: noop, viewport: noop, scissor: noop, setScissorTest: noop, useProgram: () => false, bindFramebuffer: () => false, drawBuffers: noop, setPolygonOffset: noop, setLineWidth: noop, setMaterial: noop };
-  // what an app dispatched with gl.compute this frame (TSL's compute nodes), in order: raea runs them as <Compute>s
-  // once they can be (R3F22); until then each is named once and the scene drawn without it
-  const dispatched: unknown[] = [];
-  const compute = (node: unknown) => {
-    dispatched.push(node);
-    if (dispatched.length > 4096) dispatched.splice(0, dispatched.length - 4096);
-    warnOnce("gl.compute", "dispatches a compute raea doesn't run yet: the scene is drawn without what it computes");
-  };
+  // what an app dispatches with gl.compute (TSL's compute nodes), in order: each frame's runs as a <Compute> kernel
+  // each, its storage shared with the materials reading it (tsl-compute.ts, docs/r3f.feature R3F22)
+  const dispatched = new Dispatches(null);
   const own = {
-    compute,
-    computeAsync: async (node: unknown) => compute(node),
+    compute: (nodes: unknown, size?: number | number[] | null) => dispatched.compute(nodes, size),
+    computeAsync: async (nodes: unknown, size?: number | number[] | null) => dispatched.compute(nodes, size),
     __raea: { computes: dispatched },
     // three's WebGL clip space (a CubeCamera asks, drei's <Environment> with children): raea draws in Bevy's anyway
     coordinateSystem: THREE.WebGLCoordinateSystem,

@@ -12,6 +12,8 @@ import { materialOf, type Part, type Props } from "./material";
 import { isShader, ownAttributes, shaderPart } from "./shader";
 import { composerEffects, postParts } from "./post";
 import { classicOf } from "./tsl";
+import { dispatchesOf } from "./tsl-compute";
+import { nodeInstancedParts } from "./tsl-instances";
 
 type V3 = [number, number, number];
 type Q = [number, number, number, number];
@@ -131,6 +133,9 @@ const INSTANCED = new Set(["MeshStandardMaterial", "MeshPhysicalMaterial", "Mesh
 function instancedParts(m: THREE.InstancedMesh, name: string, w: Walk, at: Props): Part[] {
   const material = m.material as THREE.Material;
   const surface = Array.isArray(m.material) || !material.visible ? undefined : materialOf(material, colouredByVertex(material), { object: m, scene: w.scene, camera: w.camera, time: w.time, delta: w.delta });
+  // a node material compiled for copies: one mesh of them, its copies made by the engine (tsl-instances.ts, R3F22)
+  const node = surface?.type === "ThreeShaderMaterial" ? nodeInstancedParts(m, name, surface, w, at) : undefined;
+  if (node) return node;
   if (!surface || !INSTANCED.has(surface.type) || surface.normals || surface.catchShadow || clipOf(material, w.gl, w.clips)) return copyParts(m, name, w, at);
   const arrays = arraysOf(m.geometry, { flipV: flipped(material), colors: colouredByVertex(material) });
   if (!arrays) return [];
@@ -423,5 +428,7 @@ export function convert(scene: THREE.Scene, camera: THREE.Camera, gl: THREE.WebG
   const composer = composerEffects(scene);
   const post = composer.found ? postParts(composer.effects) : { parts: [] as Part[], tone: undefined };
   const tone = composer.found ? post.tone ?? { type: "ToneMapping", props: { mode: "none" } } : toneOf(gl);
-  return { parts: [...(cam ? [cam] : []), tone, ...(fog ? [fog] : []), ...sky.parts, ...post.parts, ...w.world, ...drawn], background: sky.background };
+  // what the app dispatched with gl.compute since the last frame, run before the cameras draw (tsl-compute.ts, R3F22)
+  const computes = dispatchesOf(gl)?.part(time);
+  return { parts: [...(cam ? [cam] : []), tone, ...(fog ? [fog] : []), ...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...drawn], background: sky.background };
 }

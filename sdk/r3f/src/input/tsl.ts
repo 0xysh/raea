@@ -10,14 +10,19 @@
 // three_model(instance), so Bevy's own camera and transform place it (Bevy's projection is reverse-Z). Every other
 // uniform takes the value three's own node updates give it this frame (time from R3F's clock, a light's colour), so a
 // uniform the scene animates in useFrame moves with it. A uniformArray is packed element by element and read as
-// u_NAME(i); a vertex attribute of the mesh's own is one of the contract's a0..a3. A graph this can't carry (more than 4
-// textures or 4 attributes of the mesh's own, a storage buffer, a render target) is refused with the reason, and the
-// material is drawn flat as before.
+// u_NAME(i); a vertex attribute of the mesh's own is one of the contract's a0..a3. A storage buffer it reads
+// (`.element(i)`, `.toAttribute()`) is the engine's shared buffer by its attribute's key (tsl-storage.ts, R3F22). On an
+// InstancedMesh it is compiled for copies (R3F22): three built with no uniform room, so the copies' matrices and
+// colours are attributes; the engine draws one mesh of the copies, instance_index the copy's number (`tsl_copy`, its
+// own attribute a0), the matrices identity (the engine bakes them into the copies) and any other attribute a copy at a
+// time the copy's own. A graph this can't carry (more than 4 textures or 4 attributes of the mesh's own, more than 2
+// storage buffers, a render target) is refused with the reason, and the material is drawn flat as before.
 import * as THREE from "three";
 import { ModelNode, NodeFrame, WebGPURenderer } from "three/webgpu";
 import type { Part, Props } from "./material";
 import { srcOf } from "./texture";
 import { isLit, litBuilder, litStages } from "./tsl-lit";
+import { MaterialStorage, declaration, elementType, isStorage, storageOfAttribute, type SharedBuffer, type StorageAttribute } from "./tsl-storage";
 
 /** what a node material is drawn for this frame: the object it's on, its scene and camera, R3F's clock */
 export interface NodeAt {
@@ -68,6 +73,10 @@ interface Builder {
   updateAfterNodes: AnyNode[];
   build(): void;
   getBindings(): { name: string; bindings: BindingLike[] }[];
+  /** each stage's uniforms, a storage buffer's among them (its WGSL name, type "storageBuffer", its node's attribute) */
+  uniforms?: Record<string, { name: string; type: string; node?: { value?: unknown } }[]>;
+  /** the attributes three made itself (an InstancedMesh's matrices and colours, a `.toAttribute()`), by WGSL name */
+  bufferAttributes?: { name: string; type: string; node?: { value?: unknown; bufferOffset?: number } }[];
 }
 
 /** a refusal: what the graph needs that the engine's contract doesn't carry */
@@ -78,7 +87,7 @@ export class Unsupported extends Error {}
 let renderer: WebGPURenderer | undefined;
 
 /** three's WebGPURenderer, never initialised: WGSLNodeBuilder reads its node library and asks it what the GPU can do */
-function standIn(fresh = false): WebGPURenderer {
+export function standIn(fresh = false): WebGPURenderer {
   if (renderer && !fresh) return renderer;
   const noop = () => {};
   const canvas = { style: {}, width: 1, height: 1, addEventListener: noop, removeEventListener: noop, getContext: () => null };
@@ -109,6 +118,10 @@ interface Compiled {
   textures: { name: string; texture: THREE.Texture }[];
   /** the mesh's own attributes it reads, in order (the contract's a0..a3) */
   attributes: string[];
+  /** the storage buffers it reads (tsl_s0, tsl_s1), and the spec's list of them, made once */
+  storage: ({ name: string; key: string } & SharedBuffer)[];
+  /** compiled for copies (an InstancedMesh): the attributes it reads a copy at a time, each one of its own */
+  copies?: { name: string; attribute: THREE.BufferAttribute }[];
   lit: boolean; // a surface Bevy lights (tsl-lit.ts), not a colour
   frame: NodeFrame;
 }
@@ -118,8 +131,11 @@ const compiled = new WeakMap<THREE.Material, Compiled>();
 /** what a compile depends on beyond the material: the geometry's attributes (a graph reads the ones it has) */
 function keyOf(m: THREE.Material, o: THREE.Object3D): string {
   const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
-  return `${m.version}|${g ? Object.keys(g.attributes).sort().join(",") : ""}|${(o as THREE.InstancedMesh).isInstancedMesh ? "i" : ""}`;
+  return `${m.version}|${g ? Object.keys(g.attributes).sort().join(",") : ""}|${copiesOf(o) ? "c" : ""}|${(o as THREE.InstancedMesh).instanceColor ? "k" : ""}`;
 }
+
+/** whether an object draws its material as copies (R3F22): an InstancedMesh */
+export const copiesOf = (o: THREE.Object3D) => (o as THREE.InstancedMesh).isInstancedMesh === true;
 
 function compile(m: THREE.Material, at: NodeAt): Compiled {
   const key = keyOf(m, at.object);
@@ -128,6 +144,9 @@ function compile(m: THREE.Material, at: NodeAt): Compiled {
   // a renderer of its own: three caches a shared group's binding (render, frame) per renderer, with the uniforms of
   // whichever material built it first
   const r = standIn(true);
+  // copies: no uniform room, so three reads an InstancedMesh's matrices and colours as attributes a copy at a time
+  const copies = copiesOf(at.object);
+  if (copies) ((r as unknown as { backend: { device: { limits: Record<string, number> } } }).backend.device.limits.maxUniformBufferBindingSize = 0);
   const b = (r as unknown as { backend: { createNodeBuilder(o: THREE.Object3D, r: WebGPURenderer): Builder } }).backend.createNodeBuilder(at.object, r);
   b.scene = at.scene;
   b.camera = at.camera;
@@ -147,7 +166,7 @@ function compile(m: THREE.Material, at: NodeAt): Compiled {
   }
   if (errors.length) throw new Unsupported(`three couldn't build its graph: ${errors[0]}`);
   if (b.updateBeforeNodes.length || b.updateAfterNodes.length) throw new Unsupported("it renders the scene again first (a reflector, a render target, a pass): raea draws one scene");
-  const c = rewrite(b);
+  const c = rewrite(b, copies ? (at.object as THREE.InstancedMesh) : undefined);
   const out: Compiled = { key, builder: b, ...c, ...(lit ? litStages(c.vertex, c.fragment) : {}), lit, frame: new NodeFrame() };
   compiled.set(m, out);
   return out;
@@ -240,7 +259,7 @@ const STORED: Record<string, string> = {
   "mat3x3<f32>": "mat3x3<f32>", "mat4x4<f32>": "mat4x4<f32>",
 };
 
-function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"> {
+function rewrite(b: Builder, copies?: THREE.InstancedMesh): Omit<Compiled, "key" | "builder" | "frame" | "lit"> {
   let vertex = b.vertexShader;
   let fragment = b.fragmentShader;
   const groups = b.getBindings();
@@ -255,6 +274,8 @@ function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"
   const flipped = new Set<string>();
   /** a uniformArray's buffer: three's WGSL name for it, and the packed uniform it reads as */
   const buffers: { wgsl: string; name: string }[] = [];
+  /** the storage buffers it reads, by the engine's names for them (tsl_s0, tsl_s1) */
+  const storage = new MaterialStorage();
   let slots = 0;
   for (const g of groups) {
     for (const x of g.bindings) {
@@ -305,11 +326,21 @@ function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"
         uniforms.push({ name, type, array: n.array.length, read: () => n.array, stored: "f32" });
         slots += slotsOf(type, n.array.length);
         buffers.push({ wgsl: `NodeBuffer_${n.id}`, name });
-      } else throw new Unsupported(`binding ${x.name} is a ${x.isStorageBuffer ? "storage buffer" : x.isBuffer ? "uniform array (uniformArray)" : (x as object).constructor.name}, which raea's shaders don't carry`);
+      } else if (x.isStorageBuffer) {
+        // a storage buffer (`.element(i)`): the engine's buffer shared by its attribute's key (R3F22), named below
+        if (!isStorage((x as unknown as { attribute?: unknown }).attribute)) throw new Unsupported(`storage buffer ${x.name} has no storage attribute raea can share`);
+      } else throw new Unsupported(`binding ${x.name} is a ${x.isBuffer ? "uniform array (uniformArray)" : (x as object).constructor.name}, which raea's shaders don't carry`);
     }
   }
   if (slots > SLOTS) throw new Unsupported(`its uniforms take ${slots} vec4 slots, more than raea's ${SLOTS}`);
   if (textures.length > TEXTURES) throw new Unsupported(`it samples ${textures.length} textures, more than raea's ${TEXTURES}`);
+  // each storage buffer's WGSL name (three's NodeBuffer_N, a stage's uniform of type storageBuffer) as the engine's
+  const storageNames = new Map<string, string>();
+  for (const stage of ["vertex", "fragment"]) {
+    for (const u of b.uniforms?.[stage] ?? []) if (u.type === "storageBuffer" && isStorage(u.node?.value)) storageNames.set(u.name, storage.name(u.node!.value as StorageAttribute));
+  }
+  /** the storage buffers each stage declares */
+  const declared = { vertex: new Set<string>(), fragment: new Set<string>() };
 
   const common = (src: string, stage: "vertex" | "fragment") => {
     let s = src.replace(/^\s*diagnostic\s*\([^)]*\)\s*;\s*$/gm, "");
@@ -317,8 +348,15 @@ function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"
     const groupTypes = new Set<string>();
     s = s.replace(/@binding\(\s*\d+\s*\)\s*@group\(\s*\d+\s*\)\s*var(?:<[^>]*>)?\s+(\w+)\s*:\s*([^;]+);/g, (_all, name: string, type: string) => {
       if (members.has(name)) groupTypes.add(type.trim());
+      // a storage buffer stays, read-only and unbound: the engine binds tsl_sN (three-shader storage.rs)
+      const st = storageNames.get(name);
+      if (st && !declared[stage].has(st)) {
+        declared[stage].add(st);
+        return `var<storage, read> ${st} : ${type.trim()};`;
+      }
       return "";
     });
+    for (const [from, to] of storageNames) s = word(s, from, to);
     for (const b of buffers) {
       s = s.replace(new RegExp(`struct\\s+${b.wgsl}Struct\\s*\\{[^}]*\\};?`, "g"), "");
       s = s.replace(new RegExp(`var<uniform>\\s+${b.wgsl}\\s*:[^;]*;`, "g"), "");
@@ -341,17 +379,51 @@ function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"
   if (!ve) throw new Unsupported("three's vertex stage has no main returning its varyings");
   const vlets: string[] = ["\ttsl_instance = v.instance;"];
   const own: string[] = [];
+  /** drawn as copies: the copy's number is its own attribute a0; the attributes it reads a copy at a time */
+  const perCopy: { name: string; attribute: THREE.BufferAttribute }[] = [];
+  if (copies) {
+    own.push("tsl_copy");
+    vlets.push("\tlet tsl_copy = u32(v.a0.x);");
+  }
+  /** the storage buffers the vertex stage reads that three didn't declare in it (`.toAttribute()`) */
+  const extra: string[] = [];
   for (const p of params(ve[1])) {
-    if (p.builtin === "instance_index") vlets.push(`\tlet ${p.name} = v.instance;`);
+    // three's instance: the copy, or 0 for a mesh drawn once (Bevy's instance index is its place in a batch)
+    if (p.builtin === "instance_index") vlets.push(`\tlet ${p.name} = ${copies ? "tsl_copy" : "0u"};`);
     else if (p.location !== undefined) {
       const a = ATTRIBUTES[p.name];
+      const made = b.bufferAttributes?.find((x) => x.name === p.name)?.node;
+      const sa = storageOfAttribute(made);
+      const mv = made?.value as { array?: unknown; isInstancedBufferAttribute?: boolean; isInstancedInterleavedBuffer?: boolean } | undefined;
       if (a) vlets.push(`\tlet ${p.name} = ${fit(`v.${a.field}`, a.type, p.type)};`);
-      else {
-        // an attribute three made itself or one a copy at a time (an InstancedMesh's matrices past a uniform buffer's
-        // worth of copies, `nodeAttribute0`; an InstancedBufferAttribute): the mesh raea draws carries per-vertex
-        // attributes only, so the graph can't run here yet (R3F16; R3F20/R3F22 bring instance data)
+      else if (sa) {
+        // `.toAttribute()` of a storage buffer: the shared buffer read at the copy being drawn
+        if (!sa.isStorageInstancedBufferAttribute) throw new Unsupported(`it reads ${p.name}, a storage buffer a vertex at a time (raea reads one a copy at a time)`);
+        const name = storage.name(sa);
+        if (!declared.vertex.has(name)) {
+          declared.vertex.add(name);
+          extra.push(declaration(name, sa));
+        }
+        vlets.push(`\tlet ${p.name} = ${fit(`${name}.value[${copies ? "tsl_copy" : "0u"}]`, elementType(sa), p.type)};`);
+      } else if (copies && mv && mv.array === copies.instanceMatrix.array) {
+        // a column of the copy's matrix: identity, as the engine bakes each copy's matrix into its vertices
+        const col = Math.round((made?.bufferOffset ?? 0) / 4);
+        vlets.push(`\tlet ${p.name} = vec4<f32>(${[0, 1, 2, 3].map((i) => (i === col ? "1.0" : "0.0")).join(", ")});`);
+      } else if (copies && mv?.isInstancedBufferAttribute) {
+        // instanceColor or another attribute a copy at a time: one of the copy's own, which the engine puts on each of
+        // the copy's vertices
+        const attr = mv as unknown as THREE.BufferAttribute;
+        // (three wraps instanceColor and a geometry's own in attributes of its own over the same array)
+        const name = attr.array === copies.instanceColor?.array ? "instanceColor" : (Object.entries(copies.geometry.attributes).find(([, x]) => (x as THREE.BufferAttribute).array === attr.array)?.[0] ?? `copy_${p.name}`);
+        if (own.length === ATTRIBUTES_OWN) throw new Unsupported(`it reads more than ${ATTRIBUTES_OWN} vertex attributes of the mesh's own (${[...own, name].join(", ")})`);
+        vlets.push(`\tlet ${p.name} = ${fit(`v.a${own.length}`, "vec4<f32>", p.type)};`);
+        own.push(name);
+        perCopy.push({ name, attribute: attr });
+      } else {
+        // an attribute three made itself, or one a copy at a time on a mesh not drawn as copies: the mesh raea draws
+        // carries per-vertex attributes only (R3F16)
         const ga = (b as unknown as { geometry?: THREE.BufferGeometry }).geometry?.getAttribute(p.name) as (THREE.BufferAttribute & { isInstancedBufferAttribute?: boolean; isInterleavedBufferAttribute?: boolean; data?: { isInstancedInterleavedBuffer?: boolean } }) | undefined;
-        if (!ga) throw new Unsupported(`it reads ${p.name}, an attribute three makes for itself (an InstancedMesh's copies past what a uniform buffer holds)`);
+        if (!ga) throw new Unsupported(`it reads ${p.name}, an attribute three makes for itself`);
         if (ga.isInstancedBufferAttribute || ga.data?.isInstancedInterleavedBuffer) throw new Unsupported(`it reads ${p.name}, an attribute a copy at a time`);
         // one of the mesh's own (lettra's layoutX, glyphIndex, cellUv): a0..a3, four floats each
         if (own.length === ATTRIBUTES_OWN) throw new Unsupported(`it reads more than ${ATTRIBUTES_OWN} vertex attributes of the mesh's own (${[...own, p.name].join(", ")})`);
@@ -361,7 +433,7 @@ function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"
     } else throw new Unsupported(`its vertex stage reads the builtin ${p.builtin}`);
   }
   vertex = vertex.replace(ve[0], `fn three_vertex(v: ThreeVertex) -> ThreeVaryings {\n${vlets.join("\n")}\n`);
-  vertex = "var<private> tsl_instance : u32;\n" + (flipped.size ? FLIP : "") + vertex;
+  vertex = "var<private> tsl_instance : u32;\n" + extra.join("") + (flipped.size ? FLIP : "") + vertex;
   const varyings = vertex.match(/struct\s+ThreeVaryings\s*\{[^}]*\};?/)?.[0];
   if (!varyings) throw new Unsupported("three's vertex stage declares no varyings");
 
@@ -383,7 +455,7 @@ function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame" | "lit"
   fragment = fragment.replace(/return\s+(\w+)\s*;/g, (all, v: string) => (fragment.includes(`var<private> ${v} : ${fe[2]}`) ? `return ${v}.${colour};` : all));
   fragment = varyings + "\n" + (flipped.size ? FLIP : "") + fragment;
 
-  return { vertex, fragment, uniforms, textures, attributes: own };
+  return { vertex, fragment, uniforms, textures, attributes: own, storage: storage.spec(), ...(copies ? { copies: perCopy } : {}) };
 }
 
 /** each `name[ EXPR ]` in `src` (EXPR to its own closing bracket) as `to(EXPR)` */
@@ -463,7 +535,7 @@ export function nodeMaterialOf(m: THREE.Material, at: NodeAt): Part | undefined 
     const vals = values(c, m, at);
     const props: Props = {
       // <ThreeShaderMaterial wgsl>: the contract's two stages and its uniforms' types; this frame's values apart
-      wgsl: { vertex: c.vertex, fragment: c.fragment, uniforms: vals.map(({ name, type, array }) => ({ name, type, ...(array ? { array } : {}) })), ...(c.attributes.length ? { attributes: c.attributes } : {}), ...(c.lit ? { lit: true } : {}) },
+      wgsl: { vertex: c.vertex, fragment: c.fragment, uniforms: vals.map(({ name, type, array }) => ({ name, type, ...(array ? { array } : {}) })), ...(c.attributes.length ? { attributes: c.attributes } : {}), ...(c.storage.length ? { storage: c.storage } : {}), ...(c.lit ? { lit: true } : {}) },
       ...(c.lit && (m as { fog?: boolean }).fog === false ? { fog: false } : {}),
       uniforms: Object.fromEntries(vals.map((u) => [u.name, u.value])),
       textures: Object.fromEntries(c.textures.map(({ name, texture }) => [name, { src: srcOf(texture)!, colorSpace: texture.colorSpace === THREE.SRGBColorSpace ? "srgb" : "linear" }])),
@@ -475,7 +547,7 @@ export function nodeMaterialOf(m: THREE.Material, at: NodeAt): Part | undefined 
       blending: m.blending === THREE.AdditiveBlending ? "add" : m.blending === THREE.MultiplyBlending ? "multiply" : m.blending === THREE.NoBlending ? "none" : "normal",
     };
     if (m.alphaTest > 0) props.alphaTest = m.alphaTest;
-    return { type: "ThreeShaderMaterial", props };
+    return { type: "ThreeShaderMaterial", props, ...(c.copies ? { copies: c.copies } : {}) };
   } catch (e) {
     // a graph three itself can't build against the stand-in (what it asks of a GPU raea hasn't answered) is named and drawn
     // flat, as a refused one is: never the whole render refused for one material (docs/r3f.feature R3F16)

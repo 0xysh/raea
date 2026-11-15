@@ -280,6 +280,11 @@ export interface BufferMeshProps {
   /** a mesh's own attributes beyond those, for a three.js shader that reads them (<ThreeShaderMaterial>): each one's
    * size (1 to 4 numbers a vertex) and values, per vertex */
   attributes?: Record<string, { size: number; values: number[] }>;
+  /** the mesh repeated `count` times as one, for a three.js node material drawn as copies (an InstancedMesh's,
+   * docs/r3f.feature R3F22): each copy's number is its own attribute `tsl_copy`, each of `attributes` (size numbers
+   * a copy) is on every vertex of its copy, and `matrices` (16 numbers a copy, column-major) place the copies (none:
+   * each where the mesh is) */
+  copies?: { count: number; attributes?: Record<string, { size: number; values: number[] }>; matrices?: number[] };
 }
 
 /** Each mesh's shape text, checked and written once: React draws a <BufferMesh> every frame with the same arrays, and
@@ -288,7 +293,7 @@ export interface BufferMeshProps {
 const shaped = new WeakMap<object, { of: unknown[]; text: string }>();
 
 function bufferShape(p: BufferMeshProps): string {
-  const of = [p.indices, p.normals, p.uvs, p.colors, p.attributes];
+  const of = [p.indices, p.normals, p.uvs, p.colors, p.attributes, p.copies];
   const had = Array.isArray(p.positions) ? shaped.get(p.positions) : undefined;
   if (had && had.of.every((a, i) => a === of[i])) return had.text;
   const text = writeBufferShape(p);
@@ -318,7 +323,15 @@ function writeBufferShape(p: BufferMeshProps): string {
   for (const [k, a] of Object.entries(p.attributes ?? {})) {
     if (!(a && Number.isInteger(a.size) && a.size >= 1 && a.size <= 4 && Array.isArray(a.values) && a.values.length === n * a.size)) throw new RangeError(`BufferMesh: attribute ${k} is {size: 1 to 4, values: size numbers for each of the ${n} vertices}`);
   }
-  return "buffer:" + JSON.stringify({ positions: p.positions, indices: p.indices, normals: p.normals, uvs: p.uvs, colors: p.colors, attributes: p.attributes });
+  const c = p.copies;
+  if (c !== undefined) {
+    if (!(Number.isInteger(c.count) && c.count >= 1)) throw new RangeError(`BufferMesh: copies.count is a whole number of copies, 1 or more, got ${c.count}`);
+    for (const [k, a] of Object.entries(c.attributes ?? {})) {
+      if (!(a && Number.isInteger(a.size) && a.size >= 1 && a.size <= 4 && Array.isArray(a.values) && a.values.length === c.count * a.size)) throw new RangeError(`BufferMesh: copies attribute ${k} is {size: 1 to 4, values: size numbers for each of the ${c.count} copies}`);
+    }
+    if (c.matrices !== undefined && !(Array.isArray(c.matrices) && c.matrices.length === c.count * 16)) throw new RangeError(`BufferMesh: copies.matrices are 16 numbers for each of the ${c.count} copies`);
+  }
+  return "buffer:" + JSON.stringify({ positions: p.positions, indices: p.indices, normals: p.normals, uvs: p.uvs, colors: p.colors, attributes: p.attributes, copies: c });
 }
 
 /** A mesh from its own vertex buffers, as the geometry of a <Mesh> (Bevy's Mesh built from attributes): a terrain from

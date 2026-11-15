@@ -123,16 +123,16 @@ describe("what the 11-15 audit found refused", () => {
     }
   });
 
-  test("gl.compute in useFrame is taken and named, not thrown", () => {
+  test("gl.compute of a node raea can't run is named, not thrown (a TSL ComputeNode runs: test/compute.test.tsx)", () => {
     const { useFrame } = require("@react-three/fiber") as typeof import("@react-three/fiber");
     const Dispatch = () => {
       useFrame(({ gl }) => (gl as unknown as { compute(n: unknown): void }).compute({ isComputeNode: true }));
       return <Box />;
     };
-    const s = stepTo("compute", 0, 30, 400, 400, {}, () => <Dispatch />);
-    const { warned } = quiet(() => stepTo("compute", 1, 30, 400, 400, {}, () => <Dispatch />));
+    const { out: s, warned } = quiet(() => (stepTo("compute", 0, 30, 400, 400, {}, () => <Dispatch />), stepTo("compute", 1, 30, 400, 400, {}, () => <Dispatch />)));
     const gl = (s.state as unknown as { gl: { __raea: { computes: unknown[] } } }).gl;
-    expect(gl.__raea.computes.length).toBeGreaterThan(0);
+    expect(gl.__raea.computes.length).toBe(0);
+    expect(warned.filter((w) => /gl\.compute dispatches a compute raea can't run/.test(w))).toHaveLength(1);
     expect(warned.every((w) => !/TypeError/.test(w))).toBe(true);
     end("compute");
   });

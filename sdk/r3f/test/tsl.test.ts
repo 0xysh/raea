@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { MeshBasicNodeMaterial, MeshLambertNodeMaterial, MeshStandardNodeMaterial } from "three/webgpu";
 import * as TSLTyped from "three/tsl";
 // untyped: @types/three's chained TSL types make tsc take minutes and gigabytes
-const { attribute, color, float, mix, mx_noise_float, normalLocal, positionLocal, sin, texture, time, uv } = TSLTyped as unknown as Record<string, (...a: unknown[]) => any> & { time: any };
+const { attribute, color, float, mix, mx_noise_float, normalLocal, positionLocal, sin, texture, time, uv } = TSLTyped as unknown as Record<string, any>;
 import { composeEffects, configureFontTexture, createText, parseFont, scramble, wipe } from "lettra/three";
 import { materialOf } from "../src/input/material";
 import { nodeMaterialOf, type NodeAt, type ShaderSpec } from "../src/input/tsl";

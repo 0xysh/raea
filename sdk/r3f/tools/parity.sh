@@ -13,6 +13,8 @@ CASES=(in-basic:24 in-instanced:12 in-lights:0 in-things:0 in-catch:0 in-lettra:
 # R3F_CASES="in-sky:0 in-shader:12": just those (a lane checking its own cases)
 # the TSL cases (test/parity/tsl.tsx): a lit node material (R3F21)
 CASES+=(in-tsl-lit:12)
+# TSL compute: particles a compute moves, drawn by a node material on an InstancedMesh (R3F22)
+CASES+=(in-tsl-particles:12)
 # a plain three.js program (test/parity/programs.ts) through <Three> (R3F19)
 CASES+=(in-vanilla:24)
 # postprocessing's effects as raea <FramePass>es (test/parity/post2.tsx), before and after an ACES tone mapping (R3F25)

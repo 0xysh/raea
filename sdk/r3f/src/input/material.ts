@@ -19,6 +19,9 @@ export interface Part {
   normals?: boolean;
   /** a ShadowMaterial: the mesh shows only the shadows falling on it (raea's shadow="catch") */
   catchShadow?: boolean;
+  /** a node material compiled for copies (an InstancedMesh, docs/r3f.feature R3F22): the attributes it reads a copy
+   *  at a time, each one of its own (tsl-instances.ts puts them on the copies) */
+  copies?: { name: string; attribute: THREE.BufferAttribute }[];
 }
 
 const hex = (c: THREE.Color) => "#" + c.getHexString();

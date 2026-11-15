@@ -316,6 +316,7 @@ type Animate3d = Record<string, TrackSpec | TrackSpec[] | Keys> | Move
 | `uvs` | `number[]` | u, v of each vertex (without them a picture map is projected onto the mesh's bounds) |
 | `colors` | `number[] \| string[]` | each vertex's colour: r, g, b, a (linear, 0 to 1) per vertex, or one "#rrggbb" per vertex; the material's colour is multiplied by it (Bevy's ATTRIBUTE_COLOR), so leave the material white to see them as given |
 | `attributes` | `Record<string, { size: number; values: number[] }>` | a mesh's own attributes beyond those, for a three.js shader that reads them (<ThreeShaderMaterial>): each one's size (1 to 4 numbers a vertex) and values, per vertex |
+| `copies` | `{ count: number; attributes?: Record<string, { size: number; values: number[] }>; matri…` | the mesh repeated `count` times as one, for a three.js node material drawn as copies: each copy's number is its own attribute `tsl_copy`, each of `attributes` (size numbers a copy) is on every vertex of its copy, and `matrices` (16 numbers a copy, column-major) place the copies (none: each where the mesh is) |
 
 ### `Capsule3dProps`
 
