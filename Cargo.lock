@@ -16214,6 +16214,7 @@ dependencies = [
  "naga",
  "raea-sys-material",
  "raea-sys-sampler",
+ "raea-sys-shader",
  "serde_json",
 ]
 

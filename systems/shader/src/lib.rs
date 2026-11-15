@@ -37,6 +37,8 @@ pub mod own;
 pub mod own_array;
 mod own_images;
 pub mod own_live;
+/// Storage buffers shared by key between three's computes and its node materials (docs/r3f.feature R3F22).
+pub mod shared;
 mod failed;
 pub mod ui;
 use raea_sys_shader_wgsl::ui_bind;

@@ -240,7 +240,7 @@ pub fn vertex_entry(attributes: usize) -> String {
 pub fn fragment_entry() -> String {
     let mut m = String::from(TONE);
     m = m.replace("GROUP", GROUP).replace("DISPLAY_SLOT", &DISPLAY_SLOT.to_string());
-    m + "\n@fragment\nfn fragment(in: ThreeVaryings, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {\n    return three_untone(three_fragment(in, front));\n}\n"
+    m + "\n@fragment\nfn fragment(in: ThreeVaryings, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {\n    return three_blend(three_untone(three_fragment(in, front)));\n}\n"
 }
 
 const TONE: &str = include_str!("tone.wesl");

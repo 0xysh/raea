@@ -16,3 +16,5 @@ bevy = { version = "=0.20.0", default-features = false, features = ["std", "defa
 # wgsl-in on; raea-web had nothing that did)
 naga = { version = "=30.0.1", features = ["glsl-in", "wgsl-in", "wgsl-out"] }
 serde_json = "1"
+# the storage buffers a node material reads, the same ones by key the computes write (docs/r3f.feature R3F22)
+raea-sys-shader = { path = "../shader" }

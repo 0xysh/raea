@@ -26,6 +26,7 @@ pub mod scan;
 pub mod linear;
 pub mod module;
 mod row;
+pub mod storage;
 pub mod surface;
 pub use row::{fitted, of_row};
 
@@ -41,7 +42,8 @@ pub const ATTRIBUTE: [MeshVertexAttribute; ATTRIBUTES] = [
 
 pub fn install(app: &mut App) {
     app.add_plugins(MaterialPlugin::<ThreeShader>::default());
-    app.add_systems(PostUpdate, follow_tonemapping);
+    app.init_resource::<raea_sys_shader::shared::SharedBuffers>();
+    app.add_systems(PostUpdate, (follow_tonemapping, storage::unbounded));
     app.add_systems(PreUpdate, linear::sync);
 }
 
@@ -66,6 +68,13 @@ pub struct ThreeShader {
     #[texture(9, dimension = "3d")]
     #[sampler(10)]
     lut: Option<Handle<Image>>,
+    /// the shared buffers a node material reads (storage.rs: tsl_s0, tsl_s1), the empty one where it reads fewer
+    #[storage(11, read_only)]
+    st0: Handle<bevy::render::storage::ShaderBuffer>,
+    #[storage(12, read_only)]
+    st1: Handle<bevy::render::storage::ShaderBuffer>,
+    /// whether it reads one: its vertices are where the computes put them, not inside its mesh's bounds
+    unbounded: bool,
     vertex: u128,
     fragment: u128,
     attributes: u8,
@@ -223,6 +232,9 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
         return Err("a three shader gives glsl {vertex, fragment} or wgsl {vertex, fragment, uniforms}".into());
     };
     let layout = module::layout(&list)?;
+    // a node material's shared buffers (storage.rs), bound in each stage that reads them
+    let (st, stored) = storage::buffers(world, o.get("wgsl"))?;
+    let (vsrc, fsrc) = (storage::bind(&vsrc, &stored), storage::bind(&fsrc, &stored));
     // three's textures with flipY count v from the picture's bottom; Bevy's images from their top
     let flip: Vec<String> = o.get("flipY").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).filter_map(|n| bound.iter().position(|b| b == n)).map(|k| if own_textures { format!("tex_{}", bound[k]) } else { format!("rgt{k}x") }).collect();
     let (vsrc, fsrc) = (module::flip_samples(&vsrc, &flip), module::flip_samples(&fsrc, &flip));
@@ -271,6 +283,9 @@ pub fn build(world: &mut World, v: &Value, mut image: impl FnMut(&mut World, &Va
         tex2: t.next().flatten(),
         tex3: t.next().flatten(),
         lut: None,
+        st0: st[0].clone(),
+        st1: st[1].clone(),
+        unbounded: !stored.is_empty(),
         vertex,
         fragment,
         attributes: attrs.len() as u8,
@@ -319,13 +334,18 @@ pub fn fit_mesh(mesh: &mut Mesh, buffer: Option<&str>, own: &[String]) -> Result
     if mesh.attribute(Mesh::ATTRIBUTE_NORMAL).is_none() {
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0f32, 0.0, 1.0]; n]);
     }
-    if own.is_empty() {
+    let copies = buffer.is_some_and(|b| b.contains("\"copies\""));
+    if own.is_empty() && !copies {
         return Ok(());
     }
     let v: Value = match buffer {
         Some(b) => serde_json::from_str(b).map_err(|e| format!("a buffer mesh isn't JSON: {e}"))?,
         None => return Err(format!("a three shader reads the mesh's own attributes ({}): give the mesh as a BufferMesh with them", own.join(", "))),
     };
+    // an InstancedMesh's copies (docs/r3f.feature R3F22): the geometry repeated, a copy's number and values its own
+    if v.get("copies").is_some() {
+        return storage::fit_copies(mesh, &v, own);
+    }
     let verts = v.get("positions").and_then(Value::as_array).map(|p| p.len() / 3).unwrap_or(0);
     let idx = raea_sys_material::mesh::buffer_corners(&v, verts);
     for (k, name) in own.iter().enumerate() {
@@ -380,7 +400,7 @@ mod tests {
         let l = super::module::layout(&[("tint".into(), super::Ty::Vec(3), None)]).unwrap();
         let (v, f) = super::modules("struct ThreeVaryings { @builtin(position) clip: vec4<f32>, };\nfn three_vertex(v: ThreeVertex) -> ThreeVaryings { var o: ThreeVaryings; o.clip = three_projection() * three_view() * three_model(v.instance) * vec4(v.position, 1.0); return o; }", "struct ThreeVaryings { @builtin(position) clip: vec4<f32>, };\nfn three_fragment(in: ThreeVaryings, front: bool) -> vec4<f32> { return vec4(u_tint(), 1.0); }", &l, Some(&[]), 0, false);
         assert!(v.contains("@vertex\nfn vertex(m: ThreeMeshIn) -> ThreeVaryings"));
-        assert!(f.contains("return three_untone(three_fragment(in, front));"));
+        assert!(f.contains("return three_blend(three_untone(three_fragment(in, front)));"));
         assert!(f.contains("@group(constants::MATERIAL_BIND_GROUP) @binding(9) var three_lut: texture_3d<f32>;"));
     }
 }

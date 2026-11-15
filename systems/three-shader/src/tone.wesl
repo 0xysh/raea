@@ -138,3 +138,13 @@ fn three_untone(c: vec4<f32>) -> vec4<f32> {
     }
     return vec4(x, c.a);
 }
+
+/// the colour as the blend takes it: an additive material's premultiplied with no alpha of its own, since Bevy blends
+/// AlphaMode::Add as premultiplied alpha (src + dst * (1 - src.a)) and three's AdditiveBlending adds src * src.a, so
+/// overlapping particles sum as three sums them (docs/r3f.feature R3F22). The alpha mode is surface.rs's alpha_code.
+fn three_blend(c: vec4<f32>) -> vec4<f32> {
+    if u32(three_slots.s[DISPLAY_SLOT].z + 0.5) == 4u {
+        return vec4(c.rgb * c.a, 0.0);
+    }
+    return c;
+}
