@@ -3,7 +3,8 @@
 # face within CUT metres of the skin or inside it), small crumbs are dropped, and each face is given to the bone it lies
 # nearest, so each piece can ride that bone rigidly.
 #   python -I tools/garments/wear_fit.py IDOL.glb SOMA_BODY.glb SOMA_SKELETON.json OUT.npz [CUT=0.006] [LIFT=0] [KEY=0]
-# KEY=1: the mannequin was drawn magenta (wear_mannequin.py KEY=1), so faces that come back magenta are bare body and go.
+# KEY=1: the mannequin was drawn magenta (wear_mannequin.py KEY=1), so faces that come back magenta are bare body and go,
+# and each piece left rides one bone whole.
 # CUT: faces nearer the skin than this are the body and go (a negative CUT keeps the whole dressed surface: a full suit).
 # LIFT: what is kept and lies nearer the skin than this is set out to it along the skin's normal, so a close-fitting
 # piece covers the body instead of meeting it.
@@ -96,15 +97,30 @@ except Exception:
     cols = np.full((len(Q), 3), 0.6)
 keyed = 0
 if KEY:
-    # magenta: red and blue high, green well under both (a garment's purple or pink keeps more green, or less red)
-    mag = (np.minimum(cols[:, 0], cols[:, 2]) > 0.25) & (cols[:, 1] < 0.55 * np.minimum(cols[:, 0], cols[:, 2])) & (np.abs(cols[:, 0] - cols[:, 2]) < 0.35)
+    # magenta: red and blue over green, green well under both (a garment's purple or pink keeps more green, or less
+    # red), in shadow as well as lit (a hand in shade comes back as dark as 0.2, 0, 0.19)
+    mag = (np.minimum(cols[:, 0], cols[:, 2]) > 0.08) & (cols[:, 1] < 0.55 * np.minimum(cols[:, 0], cols[:, 2])) & (np.abs(cols[:, 0] - cols[:, 2]) < 0.35)
     bare = mag[F].sum(1) >= 2
-    keyed = int((keepf & bare).sum()); keepf &= ~bare
-# crumbs dropped: pieces under 0.5 per cent of what is kept
+    # the colour decides, not the distance: a piece sitting tight on the skin (a helmet's crown on the skull, a hat's
+    # band on the brow) lies within CUT of it and is kept, set out by LIFT; only a face near the skin with any magenta
+    # tint at a corner (the bare edge where the colour bleeds) goes with the keyed ones
+    tint = (cols[:, 1] < 0.8 * np.minimum(cols[:, 0], cols[:, 2]))
+    keyed = int(bare.sum()); keepf = ~bare & ~(~keepf & tint[F].any(1))
+# crumbs dropped: pieces under 0.5 per cent of what is kept, and with KEY a piece mostly magenta (a finger's edge whose
+# corners fell either side of the colour test)
 faces_kept = F[keepf]
 lab = trimesh.graph.connected_component_labels(trimesh.graph.face_adjacency(faces_kept), node_count=len(faces_kept))
 sizes = np.bincount(lab)
-faces_kept = faces_kept[sizes[lab] >= 0.005 * len(faces_kept)]
+good = sizes[lab] >= 0.005 * len(faces_kept)
+if KEY:
+    magf = np.bincount(lab, weights=mag[faces_kept].mean(1), minlength=len(sizes)) / sizes
+    good &= magf[lab] < 0.5
+    # and a piece that hugs the skin all over is skin the drawing never showed (the soles of the feet, grey from Idol),
+    # not something worn: nine tenths of its corners within 1 cm of the skin (the soles come back 4 to 9 mm under it;
+    # a helmet, a breastplate, a belt sit 3 to 10 cm out at the median)
+    hug = np.array([np.quantile(sd[faces_kept[lab == l]], 0.9) < max(2.5 * CUT, 0.01) for l in range(len(sizes))])
+    good &= ~hug[lab]
+faces_kept, lab = faces_kept[good], lab[good]
 used = np.unique(faces_kept)
 remap = -np.ones(len(Q), int); remap[used] = np.arange(len(used))
 V, Fo, C = Q[used], remap[faces_kept], cols[used]
@@ -123,6 +139,21 @@ def seg_d(P, a, b):
     return np.linalg.norm(P - (a + t[:, None] * ab), axis=1)
 D = np.stack([seg_d(V, a, b) for _, a, b in segs], 1)
 bone = np.array([segs[i][0] for i in D.argmin(1)])
+if KEY:
+    # a piece that leaves skin bare is hard and moves as one: each rides the bone nearest its centre (a helmet split
+    # between the head and the neck would shear when the head turns; the bone most of a breastplate lies nearest can
+    # be an arm, under its shoulder plates, and a belt's the leg its thigh plate hangs over). Nothing hard rides a neck
+    # bone alone (a helmet's cheek guards ride the head, a gorget the chest), and a piece across the middle of the body
+    # rides a bone down its middle (a belt the hips, not a leg).
+    vlab = np.zeros(len(V), int); vlab[Fo.ravel()] = np.repeat(lab, 3)
+    tri = V[Fo]; area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    riders = [s for s in segs if not names[s[0]].startswith("Neck")]
+    middle = [s for s in riders if not names[s[0]].startswith(("Left", "Right"))]
+    for l in np.unique(lab):
+        f = lab == l; xs = tri[f][..., 0]
+        c = (tri[f].mean(1) * area[f, None]).sum(0) / max(area[f].sum(), 1e-12)
+        pool = middle if xs.min() < -0.05 and xs.max() > 0.05 else riders
+        bone[vlab == l] = pool[int(np.argmin([seg_d(c[None], a, b)[0] for _, a, b in pool]))][0]
 # a face goes to the bone most of its corners have, so pieces are whole faces
 fb = bone[Fo]
 fbone = np.where(fb[:, 1] == fb[:, 2], fb[:, 1], fb[:, 0])

@@ -15,12 +15,17 @@ BODY=${SOMA_BODY:-$HOME/.local/share/raea-models/soma/body/body.glb}
 RAEA=${RAEA:-raea}
 OUT=${1:?out dir}; N=${2:?count}; SEED=${3:-1}
 [ -f "$DATA/soma_sdf.npz" ] || "$PY" -I "$T/sdf_igl.py" "$BODY" "$DATA/soma_sdf.npz"
-(cd "$T" && "$PY" -I sample_designs.py "$GC" "$T/soma.yaml" "$OUT" "$N" "$SEED") | grep --line-buffered -v rejected
+# run again on the same OUT, it resumes: only the designs short of N are sampled, and draped ones are skipped
+mkdir -p "$OUT"
+HAVE=$(find "$OUT" -mindepth 2 -maxdepth 2 -name design.yaml | wc -l | tr -d ' ')
+[ "$HAVE" -ge "$N" ] || (cd "$T" && "$PY" -I sample_designs.py "$GC" "$T/soma.yaml" "$OUT" "$((N - HAVE))" "$((SEED + HAVE))") | grep --line-buffered -v rejected
 for d in "$OUT"/g*/; do
   n=$(basename "$d")
   [ -f "$d/$n.drape.json" ] && continue
-  (cd "$T" && "$PY" -I drape_mlx.py "$DATA/soma_sdf.npz" "$d/$n.panels.json" "$d" 150 -0.064 "$T/soma.yaml") \
-    | grep --line-buffered -E '^drape: \{|Error|Traceback' || echo "drape: $n failed"
+  [ -f "$d/$n.panels.json" ] || { echo "drape: $n skipped: no panels.json (not a design)"; continue; }
+  # a failed drape is one line (its last), not a traceback: one bad design does not stop the run
+  log=$( (cd "$T" && "$PY" -I drape_mlx.py "$DATA/soma_sdf.npz" "$d/$n.panels.json" "$d" 150 -0.064 "$T/soma.yaml") 2>&1 ) && grep -E '^drape: \{' <<<"$log" \
+    || echo "drape: $n failed: $(grep -vE '^\s*$' <<<"$log" | tail -1 | sed 's/Traceback/trace/')"
   [ "${LEAN:-0}" = 1 ] && [ -f "$d/$n.drape.json" ] && rm -f "${d:?}${n:?}.panels.json"
 done
 [ "${LEAN:-0}" = 1 ] && exit 0

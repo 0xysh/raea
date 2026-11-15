@@ -45,10 +45,13 @@ made 3D by Idol on this machine, laid on SOMA and split by bone:
 
 - `wear_mannequin.py`: SOMA at rest from three-quarters ahead, its camera written down (`KEY=1`: magenta)
 - `wear_fit.py`: Idol's mesh turned, sized and placed onto SOMA (turn searched, then refined against the skin), bare body
-  cut (by distance, or by the magenta key), what is kept lifted off the skin, each face given its nearest bone
+  cut (full: by distance; keyed: by the magenta, so a crown tight on the skull stays), what is kept lifted off the skin.
+  Full: each face goes to its nearest bone. Keyed: each separate piece rides one bone whole, the one nearest its centre
+  (never a neck bone; a midline bone for a piece across the middle), and pieces that hug the skin all over are dropped
 - `wear_bake.py`: each piece weighted wholly to its bone on SOMA's armature, Idol's colours made linear, one glb + a picture
 
-About 5 cents (the picture) and 5 minutes (Idol) a piece. Faults so far: the surface is as lumpy as Idol's 4 mm mesh;
+About 5 cents (the picture) and 5 minutes (Idol) a piece. Faults so far: the back is Idol's guess from the one view;
+the surface is as lumpy as Idol's 4 mm mesh;
 a full suit's hands and feet copy SOMA's bare shape when the drawn gauntlets don't match its hand pose.
 
 For training data at scale, `LEAN=1 tools/garments/engine.sh OUT N SEED` keeps each design's settings, caption, drape

@@ -740,5 +740,16 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # glasses ride Head (CH21). It differs from the rejected picture-measured clothes: those painted cloth onto
       # the skin from four separate pictures that never agreed; here one picture is made 3D whole, and only rigid
       # things are kept, so nothing has to fold.
+      # 11-15, built as tools/garments/wear.sh (README "Worn hard pieces"): a knight's plate armour (full: the
+      # dressed surface kept whole, set 4 mm off the skin) and four keyed pieces across periods and genres, a
+      # futuristic motorcycle helmet, a Victorian top hat, a Roman legionary's helmet and sci-fi armour, about 5
+      # cents and 5 minutes each. Keyed: the mannequin is drawn magenta and the colour decides what is body, not the
+      # distance (a helmet's crown sits within the cut of the skull and was being cut through); a separate piece
+      # that hugs the skin all over (the soles, which the drawing never shows) is dropped; each piece rides one bone
+      # whole, the one nearest its centre, never a neck bone, and a midline bone when it crosses the middle (so the
+      # breastplate rides the chest, not the arm under its shoulder plates, and a belt with thigh plates the hips).
+      # Open: the back is Idol's guess from one front three-quarter view (the sci-fi armour's back comes out dark),
+      # so a back view drawn to match is next; the surface is lumpy at Idol's 4 mm; a full suit's hands and feet
+      # copy SOMA's bare shape.
       Then words make a helmet, a hat or armour that SOMA wears and moves with
       And each piece is its own part on the bone it covers, so pieces mix with sewn garments as layers

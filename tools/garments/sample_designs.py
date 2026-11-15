@@ -48,12 +48,13 @@ while made < N and tries < N * 20:
     tries += 1
     d = sampler.randomize()
     gid = "g" + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    folder = out / gid
     try:
         assert_param_combinations(d)
         garment = MetaGarment(gid, body, d)
         garment.assert_total_length()
         if garment.is_self_intersecting(): raise ValueError("self-intersecting panels")
-        folder = out / gid; folder.mkdir(parents=True, exist_ok=True)
+        folder.mkdir(parents=True, exist_ok=True)
         pattern = garment.assembly()
         pattern.serialize(folder, tag="", to_subfolder=False, with_3d=False, with_text=False, view_ids=False, with_printable=False)
         box = BoxMesh(next(folder.glob(f"{gid}*specification.json")), 1.0); box.load()
@@ -80,5 +81,7 @@ while made < N and tries < N * 20:
         print(f"sample: {gid} {sum(len(p['flat']) for p in pieces)} vertices, {len(pieces)} pieces: {caption(d)}", flush=True)
     except BaseException as e:  # GarmentCode's IncorrectElementConfiguration is a BaseException
         if isinstance(e, KeyboardInterrupt): raise
+        # a design rejected after its pattern was written leaves no folder behind (one with no panels.json is not a design)
+        if folder.is_dir() and not (folder / "design.yaml").exists(): __import__("shutil").rmtree(folder)
         print(f"sample: rejected ({type(e).__name__}: {str(e)[:80]})", flush=True)
 print(f"sample: {made} designs from {tries} tries -> {out}")
