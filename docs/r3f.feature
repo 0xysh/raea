@@ -584,6 +584,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         meshes in a composition pass, once scene.ts is free), Texture, Depth, LUT1D, and the background under a
         composer's or a PostProcessing's tone mapping (three maps it, raea shows it as given)
 
+    @done
     Scenario: R3F26. <R3F> in a box smaller than the page (#130)
       Given an <R3F> in a box of its own inside a larger page
       When raea draws it
