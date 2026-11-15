@@ -57,7 +57,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-body | src/limits.rs       | 260   | joint ranges as anatomical angles, a turn brought inside, violations |
         | raea-sys-body | src/fit.rs          | 120   | a pose fitted to points seen                                     |
         | raea-sys-body | src/prior.rs        | 150   | the hand prior: shapes, coefficients, oddness                    |
-        | raea-sys-grab | src/shape.rs        | 120   | solids as signed distances: casts, normals, clearance            |
+        | raea-sys-body | src/shape.rs        | 130   | solids as signed distances: casts, normals, clearance            |
         | raea-sys-grab | src/hand.rs         | 200   | holds, the wrist that lays a palm on one, the fingers' curl      |
         | raea-sys-grab | src/trunk.rs        | 130   | stoop, look, clearances, where to stand                          |
         | raea-sys-grab | src/interact.rs     | 40    | which thing is taken                                             |
@@ -323,8 +323,15 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # inside the table; a mug held with no finger pad on it; a floor squat with the hips at a fifth of
       # standing height. Since: the elbow's swing, the hand's lie on its hold, the squat's give and the knees'
       # set-back are continuous instead of chosen from steps, and body-joint jumps are down to 400 to 750 in
-      # five of six takes. Not fixed: a wrist flip in the mug take (6,100), finger jumps of 1,500 to 4,000 where
-      # a curl flips between touching and not, and every clipping number above.
+      # five of six takes. Then: a bug in the limits (a turn read the long way round, a wrist of 31 degrees held as
+      # if it were 329) that threw the wrist 100 degrees in a frame; the grip is now the one the hand has at its
+      # grab, kept in the thing's frame, so the hand doesn't shift on what it holds; the fingers curl on the
+      # body's own skin samples, and a finger that misses settles at its nearest approach; a thing in one hand
+      # turns about the vertical with the forearm, up to a quarter turn. Second run: body-joint jumps 311 to 955
+      # (from 3,500 to 6,000), finger jumps 67 to 362 (from up to 4,300), finger skin in a cup 4 to 7 mm (from 14
+      # to 15) with 4 to 5 pads on it (from 0 to 2). Still wrong: a box drawn back 99 mm into the waist for a
+      # throw; the floor take (hand 62 mm into the box, hold 27 mm off); the mug at the mouth (palm up to 5 cm
+      # off, wrist at its limit); fingers 7 to 21 mm in the table; the squat's hips at a quarter of standing.
       Given the six takes of tools/hands-audit on a clean body with real fingers
       Then no skin is in the thing beyond a pad's give (2 mm), none in the scene or the body
       And every finger meant to hold has its pad on the thing, by a grip chosen for the thing's size and shape

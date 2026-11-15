@@ -5,7 +5,7 @@
 
 use glam::Vec3;
 
-use crate::shape::Thing;
+use raea_sys_body::shape::Thing;
 
 /// The thing to take: the nearest of `things` within `radius` of the body at `from` that `eye` sees past `solids`.
 pub fn pick(things: &[Thing], from: Vec3, eye: Vec3, radius: f32, solids: &[Thing]) -> Option<usize> {

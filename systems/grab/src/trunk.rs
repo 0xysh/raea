@@ -10,7 +10,7 @@ use glam::{Quat, Vec3};
 use raea_sys_body::arm::{ArmOptions, two_bone};
 use raea_sys_body::rig::HandRest;
 use raea_sys_body::rig::{Pose, Posed, Side, Skeleton};
-use crate::shape::Thing;
+use raea_sys_body::shape::Thing;
 
 /// how far below the shoulders, in arm lengths, the hands go before the body bends for them
 const EASY: f32 = 0.88;
@@ -133,19 +133,19 @@ pub fn torso(skel: &Skeleton, at: &Posed) -> Option<Thing> {
     let top = at.pos[chest] + at.rot[chest] * (skel.joints[chest].tail - skel.joints[chest].head);
     let up = top - at.pos[0];
     let wide = 0.6 * (skel.joints[shoulder].head.x - skel.joints[chest].head.x).abs();
-    Some(Thing { solid: crate::shape::Solid::Capsule { half: up.length() / 2.0, r: wide }, at: at.pos[0] + up / 2.0, turn: Quat::from_rotation_arc(Vec3::Y, up.normalize_or(Vec3::Y)) })
+    Some(Thing { solid: raea_sys_body::shape::Solid::Capsule { half: up.length() / 2.0, r: wide }, at: at.pos[0] + up / 2.0, turn: Quat::from_rotation_arc(Vec3::Y, up.normalize_or(Vec3::Y)) })
 }
 
 /// The body's own solids where a pose has them: the trunk and both thighs (each a capsule along its bone, a little
 /// under half as wide as the trunk). What a carried thing, and the hands on it, must not pass through.
 pub fn own_solids(skel: &Skeleton, at: &Posed) -> Vec<Thing> {
     let Some(trunk) = torso(skel, at) else { return Vec::new() };
-    let crate::shape::Solid::Capsule { r, .. } = trunk.solid else { return vec![trunk] };
+    let raea_sys_body::shape::Solid::Capsule { r, .. } = trunk.solid else { return vec![trunk] };
     let mut out = vec![trunk];
     for s in Side::BOTH {
         let (Some(thigh), Some(calf)) = (skel.joint(&format!("thigh_{}", s.sx())), skel.joint(&format!("calf_{}", s.sx()))) else { continue };
         let bone = at.pos[calf] - at.pos[thigh];
-        out.push(Thing { solid: crate::shape::Solid::Capsule { half: bone.length() / 2.0, r: r * 0.75 }, at: at.pos[thigh] + bone / 2.0, turn: Quat::from_rotation_arc(Vec3::Y, bone.normalize_or(Vec3::NEG_Y)) });
+        out.push(Thing { solid: raea_sys_body::shape::Solid::Capsule { half: bone.length() / 2.0, r: r * 0.75 }, at: at.pos[thigh] + bone / 2.0, turn: Quat::from_rotation_arc(Vec3::Y, bone.normalize_or(Vec3::NEG_Y)) });
     }
     out
 }

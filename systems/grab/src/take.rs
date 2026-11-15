@@ -15,7 +15,7 @@ use raea_sys_body::prior::shape;
 use crate::hand::{Grip, Hold, Touch, curl, facing, wrist_for};
 use raea_sys_body::rig::hand_rest;
 use raea_sys_body::rig::{Pose, Posed, Skeleton};
-use crate::shape::Thing;
+use raea_sys_body::shape::Thing;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Release {
@@ -271,7 +271,13 @@ impl Take {
 /// The body and the thing at `t`. `base` is the body's own motion: its pose at any time.
 pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32) -> Frame {
     let own = base(t);
-    let (thing, phase) = take.thing_at(skel, base, t);
+    let (mut thing, phase) = take.thing_at(skel, base, t);
+    // a thing carried in one hand turns about the vertical with the forearm (swivel), as it was when let go
+    if let (Grip::One(_), true, None, Some(part)) = (take.grip, take.slide.is_empty(), take.pass, take.parts().first()) {
+        let till = part.gone.map_or(t, |g| t.min(g));
+        let then = if till < t { take.thing_at(skel, base, till).0 } else { thing };
+        thing.turn = (Quat::from_rotation_y(swivel(skel, base, take, part, till, &then)) * thing.turn).normalize();
+    }
     let mut frame = Frame { pose: own.clone(), thing, phase, miss: 0.0, moved: 0.0, touch: [None, None], limited: false };
     // each hand's part: how far along its reach it is (`into`), and how far gone once it has let go (`away`)
     let parts: Vec<(Part, f32, f32)> = take
@@ -294,21 +300,17 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         Some(Release::Throw { velocity, .. }) => velocity.normalize_or_zero() * 0.2 * (velocity.length() / 3.0).min(1.0),
         _ => Vec3::ZERO,
     };
-    // the fingers point the level way the arm comes: from the shoulder to the hold, with some of the body's facing
+    // each hand's lie on its hold is the one it has at its grab (lie_at_grab), kept in the thing's own frame: a hand
+    // doesn't shift on what it holds
     let holds: Vec<_> = parts
         .iter()
         .filter_map(|&(part, into, away)| {
-            let h = part.hold;
             let held = match part.gone {
-                Some(g) if t >= g => take.thing_at(skel, base, g).0,
+                Some(g) if t >= g => take.thing_at(skel, base, g).0.moved(take.thing_at(skel, base, g).0.at, thing.turn),
                 _ => thing,
             };
-            let shoulder = w0.pos[skel.arm(h.side)?[0]];
-            let from = held.world(h.at) - shoulder;
-            let found = Vec3::new(from.x, 0.0, from.z).normalize_or(face).lerp(facing(&held, w0.pos[0]), 0.4).normalize_or(face);
-            // a hold that is a way of holding says where the fingers point
-            let along = h.along.map_or(found, |a| held.turn * a);
-            Some((part, into, away, held, wrist_for(skel, &held, &h, along)?))
+            let (at, turn) = lie_at_grab(skel, base, take, &part)?;
+            Some((part, into, away, held, (held.world(at), (held.turn * turn).normalize())))
         })
         .collect();
     // a thing lower than the arms reach: the body bends and squats for it, as far as the hands have got
@@ -327,27 +329,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let hold = part.hold;
         let (Some(arm), Some(rest)) = (skel.arm(hold.side), hand_rest(skel, hold.side)) else { continue };
         let normal = held.turn * hold.normal;
-        // how the hand lies on its hold: the fingers along the forearm as it arrives (found by solving the arm to
-        // the hold alone), so the wrist is asked for the least bend; where that would tip the fingers into a solid
-        // (a cup on a table, the forearm coming down to it) they are brought level, by halves
-        let (at, turn) = if hold.along.is_some() {
-            level
-        } else {
-            let probe = reach(skel, &pose, hold.side, held.world(hold.at) + normal * 0.04, ArmOptions { stiff: give, ..Default::default() });
-            let forearm = probe.map_or(face, |r| {
-                let w = skel.fk(&r.pose);
-                (w.pos[arm[2]] - w.pos[arm[1]]).normalize_or(face)
-            });
-            // by how far the forearm's lie would have to be pushed off a solid (nothing at none, all of it at 3 cm)
-            let lie = |keep: f32| wrist_for(skel, &held, &hold, Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face));
-            match lie(1.0) {
-                Some(along) => {
-                    let pushed = (clear(along.0, along.1, &rest, &take.avoid) - along.0).length();
-                    lie(1.0 - smooth(pushed / 0.03)).unwrap_or(level)
-                }
-                None => level,
-            }
-        };
+        let (at, turn) = level;
         // the wrist's path: from where the body has it, in onto the hold from off the surface and over what is in the
         // way; and when letting go, back off the surface and out to where the body has it
         let (u, off) = if away > 0.0 { (1.0 - away, (normal * 0.08 + follow) * (away * 4.0).min(1.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
@@ -463,4 +445,64 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
 /// how far past their ranges an arm's shoulder and elbow are in a pose, degrees
 fn past_range(skel: &Skeleton, arm: [usize; 3], pose: &Pose) -> f32 {
     arm[..2].iter().map(|&joint| clamp_turn(skel, joint, pose.turns[joint]).1).sum()
+}
+
+/// How a hand lies on its hold at its grab, in the thing's own frame (the wrist's place and the hand's turn): the
+/// fingers along the forearm as it arrives (found by solving the arm to the hold alone, from the body as it is
+/// then), so the wrist is asked for the least bend; where that would tip the fingers into a solid (a cup on a table,
+/// the forearm coming down to it) they are brought level, by as much as they would be pushed. A hold that is a way
+/// of holding says where the fingers point.
+fn lie_at_grab(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, part: &Part) -> Option<(Vec3, Quat)> {
+    let hold = part.hold;
+    let thing = if part.grab <= take.grab + 1e-4 { take.thing } else { take.thing_at(skel, base, part.grab).0 };
+    let own = base(part.grab);
+    let w = skel.fk(&own);
+    let (face, arm, rest) = (yaw(&w) * Vec3::Z, skel.arm(hold.side)?, hand_rest(skel, hold.side)?);
+    let from = thing.world(hold.at) - w.pos[arm[0]];
+    let found = Vec3::new(from.x, 0.0, from.z).normalize_or(face).lerp(facing(&thing, w.pos[0]), 0.4).normalize_or(face);
+    let level = wrist_for(skel, &thing, &hold, hold.along.map_or(found, |a| thing.turn * a))?;
+    let (at, turn) = if hold.along.is_some() {
+        level
+    } else {
+        let pose = stoop(skel, &own, &w, face, level.0.y, 1.0, 0.0, &take.avoid);
+        let probe = reach(skel, &pose, hold.side, thing.world(hold.at) + thing.turn * hold.normal * 0.04, ArmOptions::default());
+        let forearm = probe.map_or(face, |r| {
+            let drawn = skel.fk(&r.pose);
+            (drawn.pos[arm[2]] - drawn.pos[arm[1]]).normalize_or(face)
+        });
+        let lie = |keep: f32| wrist_for(skel, &thing, &hold, Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face));
+        match lie(1.0) {
+            Some(along) => lie(1.0 - smooth((clear(along.0, along.1, &rest, &take.avoid) - along.0).length() / 0.03)).unwrap_or(level),
+            None => level,
+        }
+    };
+    Some((thing.local(at), (thing.turn.inverse() * turn).normalize()))
+}
+
+/// How far a thing carried in one hand is turned about the vertical at `t`, radians: so the hand that holds it lies
+/// along the forearm as the arm comes to it, up to a quarter turn. A grip doesn't change once taken, so without this a cup raised to the mouth would be
+/// held by a wrist bent past what a wrist does; with it the cup turns in the hand's favour, as a person's does.
+/// None while it stands, all once carried, none again by the time it is set down.
+fn swivel(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, part: &Part, t: f32, thing: &Thing) -> f32 {
+    let down = match take.release {
+        Some(Release::Put { at, down, .. }) => 1.0 - smooth(span(t, at, down)),
+        _ => 1.0,
+    };
+    let weight = smooth(span(t, take.grab, take.carried)) * down;
+    let (Some(arm), Some(rest), Some((_, lie))) = (skel.arm(part.hold.side), hand_rest(skel, part.hold.side), lie_at_grab(skel, base, take, part)) else { return 0.0 };
+    if weight <= 0.0 {
+        return 0.0;
+    }
+    let own = base(t);
+    let level = |v: Vec3| Vec3::new(v.x, 0.0, v.z);
+    // the arm solved to the thing's middle (not the hold, which the turn itself moves): the way the forearm comes
+    let Some(probe) = reach(skel, &own, part.hold.side, thing.at, ArmOptions::default()) else { return 0.0 };
+    let drawn = skel.fk(&probe.pose);
+    let (fingers, forearm) = (level(thing.turn * lie * rest.along), level((drawn.pos[arm[2]] - drawn.pos[arm[1]]).normalize_or_zero()));
+    // a hand or a forearm that points nearly straight up or down says little about which way round: less turn
+    let sure = smooth(fingers.length().min(forearm.length()) / 0.3);
+    // by the sine of the angle between them: up to a quarter turn, none where they are in line or dead against each
+    // other, so it never flips
+    let turned = (fingers.cross(forearm).y / (fingers.length() * forearm.length()).max(1e-6)).clamp(-1.0, 1.0).asin() * sure;
+    turned * weight
 }

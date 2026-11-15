@@ -7,7 +7,7 @@
 use glam::{Mat3, Quat, Vec3};
 
 use raea_sys_body::rig::{Side, Skeleton, hand_rest};
-use crate::shape::Thing;
+use raea_sys_body::shape::Thing;
 
 /// where one hand holds a thing, in the thing's own frame
 #[derive(Clone, Copy, Debug)]
@@ -138,6 +138,8 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
             bone.cross(toward).normalize_or(Vec3::X)
         };
         let base = [turns[js[0]], turns[js[1]], turns[js[2]]];
+        // each bone's own skin, where the body has samples of it (from the bone's head, at rest)
+        let skin = js.map(|j| skel.skin_of(j).map(|x| x.at - skel.joints[j].head).collect::<Vec<Vec3>>());
         // the least clearance of bone k's skin with the finger bent by `bend` (radians a joint)
         let clear = |bend: [f32; 3], k: usize| {
             let (mut pp, mut pr) = wrist;
@@ -146,7 +148,11 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
                 let j = &skel.joints[js[i]];
                 let p = pp + pr * skel.offset(js[i]);
                 let q = (pr * base[i] * Quat::from_axis_angle(axis(i), bend[i])).normalize();
-                if i == k {
+                if i == k && !skin[k].is_empty() {
+                    for o in &skin[k] {
+                        least = least.min(thing.distance(p + q * *o));
+                    }
+                } else if i == k {
                     for along in [0.45, 0.75, 1.0] {
                         least = least.min(thing.distance(p + q * ((j.tail - j.head) * along)) - thick);
                     }
@@ -170,12 +176,18 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
             }
             let step = 3.0f32.to_radians();
             let (mut lo, mut hit) = (open[k], None);
+            // the bend at which the bone comes nearest, for a finger that never meets the thing
+            let mut nearest = (start, open[k]);
             while lo < most {
                 let hi = (lo + step).min(most);
                 bend[k] = hi;
-                if clear(bend, k) < 0.0 {
+                let gap = clear(bend, k);
+                if gap < 0.0 {
                     hit = Some(hi);
                     break;
+                }
+                if gap < nearest.0 {
+                    nearest = (gap, hi);
                 }
                 lo = hi;
             }
@@ -189,7 +201,12 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
                     bend[k] = lo;
                     touch.on[n] = true;
                 }
-                None => bend[k] = most * if touch.on[n] { 1.0 } else { LOOSE },
+                // a finger that never meets it: where it comes nearest when that is near (within 3 cm), easing to a
+                // loose curl the farther off it stays, so a finger at the thing's edge doesn't snap between the two
+                None => {
+                    let near = 1.0 - (nearest.0 / 0.03).clamp(0.0, 1.0);
+                    bend[k] = most * LOOSE + (nearest.1 - most * LOOSE) * near * near * (3.0 - 2.0 * near);
+                }
             }
         }
         for k in 0..3 {

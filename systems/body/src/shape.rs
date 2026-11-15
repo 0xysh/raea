@@ -1,4 +1,4 @@
-//! A thing to hold, as a shape with a distance: a ball, a box, a capsule or a cylinder, placed and turned. One signed
+//! A solid thing (one to hold, or one of the scene's to keep out of), as a shape with a distance: a ball, a box, a capsule or a cylinder, placed and turned. One signed
 //! distance does every job the hands need: where a ray from outside meets the surface (hold points), which way the
 //! surface faces there (how the palm lies), and how near a finger is (where its curl stops).
 

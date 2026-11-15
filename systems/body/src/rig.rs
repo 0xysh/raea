@@ -160,6 +160,11 @@ impl Skeleton {
         Posed { pos, rot }
     }
 
+    /// the samples of the skin a joint carries first (a bone's own skin)
+    pub fn skin_of(&self, joint: usize) -> impl Iterator<Item = &Sample> {
+        self.surface.iter().filter(move |x| x.joints.first().is_some_and(|j| j.0 == joint))
+    }
+
     /// Where every sample of the skin is in a pose drawn: each carried by its joints, by their weights.
     pub fn skin(&self, at: &Posed) -> Vec<Vec3> {
         self.surface.iter().map(|s| s.joints.iter().map(|&(j, w)| (at.pos[j] + at.rot[j] * (s.at - self.joints[j].head)) * w).sum::<Vec3>() / s.joints.iter().map(|j| j.1).sum::<f32>().max(1e-6)).collect()
@@ -190,8 +195,17 @@ pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
     let line = knuckle("index")? - knuckle("pinky")?;
     let across = (line - along * line.dot(along)).normalize();
     let palm = if s == Side::L { along.cross(across) } else { across.cross(along) };
-    // the palm's middle: a little over half way to the knuckles, out to the skin
-    Some(HandRest { along, palm, mid: reach * 0.55 + palm * 0.012 })
+    // the palm's middle: a little over half way to the knuckles, out to the skin (the body's own, where it has
+    // samples: the highest of the palm's skin within 2.5 cm of that middle; else 12 mm)
+    let middle = reach * 0.55;
+    let skin = skel
+        .skin_of(hand)
+        .filter(|x| x.part == "palm" && x.normal.dot(palm) > 0.5)
+        .map(|x| x.at - h)
+        .filter(|o| (*o - middle).reject_from_normalized(palm).length() < 0.025)
+        .map(|o| o.dot(palm))
+        .fold(f32::MIN, f32::max);
+    Some(HandRest { along, palm, mid: middle + palm * if skin > 0.0 { skin } else { 0.012 } })
 }
 
 /// A stand-in body of the rig's joints at an adult's proportions (1.81 m), so the solvers run with no character on

@@ -93,7 +93,7 @@ fn audit(skel: &Skeleton, name: &str, base: &dyn Fn(f32) -> Pose, take: &Take, u
             if name.starts_with(take_name) && t >= from && t <= to {
                 let arm = skel.arm(Side::R).unwrap();
                 let angles = arm.map(|j| angles_of(skel, j, f.pose.turns[j]).map(|a| (a.flex.round(), a.side.round(), a.twist.round())));
-                eprintln!("  {t:.3} {:?} limited {} hand world {:.2?} thing up {:.2?}", angles, f.limited, at.rot[arm[2]].to_array(), (f.thing.turn * Vec3::Y).to_array());
+                eprintln!("  {t:.3} {:?} limited {} hand world {:.2?} thing fwd {:.2?} wrist {:.3?} elbow {:.3?}", angles, f.limited, at.rot[arm[2]].to_array(), (f.thing.turn * Vec3::Z).to_array(), at.pos[arm[2]].to_array(), at.pos[arm[1]].to_array());
             }
         }
         w.limited += f.limited as usize;

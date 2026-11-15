@@ -10,7 +10,7 @@ use raea_sys_body::fit::{Mark, fit};
 use raea_sys_body::prior::{coefficients, oddness, shape};
 use crate::hand::{Grip, Hold, HoldOptions, find_holds};
 use raea_sys_body::rig::{Pose, Side, Skeleton};
-use crate::shape::{Solid, Thing};
+use raea_sys_body::shape::{Solid, Thing};
 use crate::take::{Key, Release, Take, perform};
 
 pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; holds?: { side: \"L\" | \"R\"; at: [number, number, number]; normal: [number, number, number]; along?: [number, number, number]; shape?: number[] }[]; path?: { t: number; carry: [number, number, number]; tilt?: [number, number, number, number] }[]; weight?: number; pass?: number; slide?: { t: number; at: [number, number, number]; turn?: [number, number, number, number] }[]; leave?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
