@@ -192,10 +192,15 @@ Feature: Creatures: a four-legged body in the character SDK
       # fills what opens. The skin still holds in 13 of 13 moves. No teeth or tongue.
       # The lids: each is a small cap of its own, resting under the brow, that turns about an axis lying along the head
       # (the rig's lid_axis; a turn about the head's side-to-side axis does nothing for an eye that faces sideways) and
-      # takes the colour of the skin round the eye. Where the eye is comes from its pixel in the drawing (eye_px and
-      # nose_px in the spec, cast from the mannequin's camera); a strongly coloured eye is then found by its colour.
-      # Rough: the lid lands on the eye for the toy raccoon and about an eye's width off for the raccoon and the
-      # dragon (the model is not laid exactly where the mannequin stood), so placement is not solved.
+      # takes the colour of the skin round the eye. Where the eye is comes from its pixel in the drawing (eye_px in the
+      # spec). The model was made from the drawing, so seen from the drawing's side it is the drawing: that side is
+      # searched for (view, size and shift, scored by how much of the model lies inside the drawing's outline, since a
+      # drawn wing's membrane is not on the model), the pixel is cast along it onto the raw model, and the point it
+      # meets is the same point on the model once laid on the skeleton. A strongly coloured eye is then moved onto
+      # the few points nearby whose colour leans toward the pixel's. Casting from the mannequin's camera instead was
+      # centimetres off (the model is not laid exactly where the mannequin stood).
+      # Rough: the lid shuts over the eye on the toy raccoon and about on it on the raccoon; on the dragon it lands
+      # about an eye and a half away (outlines agree 0.77 against 0.84 and 0.92, and its eye is a handful of points).
       Then a creature's jaw opens a mouth with an inside, and its lids shut over its eyes
 
     Scenario: CR13. In the engine
