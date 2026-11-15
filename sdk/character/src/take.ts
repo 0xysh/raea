@@ -154,3 +154,20 @@ export function walkUp(clip: Pose[], fps: number, seconds: number, stand: Pose, 
   };
   return { at, arrives: last / fps + settle };
 }
+
+/** Fetching: the body takes a thing, walking up to it first when it is out of reach. `stand` is the body's standing
+ * pose where it is; `walk` a walk clip (poses carrying their own root motion) and its rate. When the thing is in
+ * reach the take runs as given; when it is not, the body walks to where the take says to stand (walkUp), and every
+ * time of the take is put off until it arrives. The answer is the take's, with `arrives` (0 when it didn't walk). */
+export function fetch(skel: Skeleton, stand: Pose, walk: { clip: Pose[]; fps: number; seconds?: number }, spec: TakeSpec, t: number): Taken & { arrives: number } {
+  const first = take(skel, () => stand, spec, spec.start);
+  if (first.reach.ok) return { ...take(skel, () => stand, spec, t), arrives: 0 };
+  const up = walkUp(walk.clip, walk.fps, walk.seconds ?? Math.max(1, first.reach.move / 1.2), { root: [0, stand.root[1], 0], turns: stand.turns }, first.stand.at, first.stand.yaw);
+  const later = (x: number | undefined) => (x === undefined ? undefined : x + up.arrives);
+  const put = spec.put && { ...spec.put, at: spec.put.at + up.arrives, down: spec.put.down + up.arrives };
+  const thrown = spec.throw && { ...spec.throw, at: spec.throw.at + up.arrives };
+  const path = spec.path?.map((k) => ({ ...k, t: k.t + up.arrives }));
+  const slide = spec.slide?.map((k) => ({ ...k, t: k.t + up.arrives }));
+  const moved: TakeSpec = { ...spec, start: spec.start + up.arrives, grab: later(spec.grab), carried: later(spec.carried), pass: later(spec.pass), leave: later(spec.leave), put, throw: thrown, path, slide };
+  return { ...take(skel, up.at, moved, t), arrives: up.arrives };
+}

@@ -201,3 +201,25 @@ fn a_carried_thing_and_the_hands_on_it_stay_out_of_the_body() {
     let chest = s.joint("spine_03").unwrap();
     assert!((perform(&s, &|_| s.rest(), &usual, 2.0).thing.at - (rest.pos[chest] + usual.carry)).length() < 1e-4);
 }
+
+#[test]
+fn a_rod_lying_down_is_taken_over_the_top() {
+    let s = mannequin();
+    // a rod 30 cm long and 3 cm thick, lying across in front of the body
+    let rod = Thing { solid: Solid::Capsule { half: 0.135, r: 0.015 }, at: Vec3::new(0.0, 1.0, 0.4), turn: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2) };
+    let Grip::One(hold) = find_holds(&rod, s.rest().root, HoldOptions::default()) else { panic!("one hand") };
+    // on its top, the fingers pointing away from the body across it
+    assert!((rod.world(hold.at) - Vec3::new(0.0, 1.015, 0.4)).length() < 2e-3);
+    assert!((rod.turn * hold.normal).dot(Vec3::Y) > 0.99 && (rod.turn * hold.along.unwrap()).dot(Vec3::Z) > 0.99);
+    // taken, the fingers are round it: on it, not in it
+    let take = Take::new(rod, Grip::One(hold), 0.0);
+    let f = perform(&s, &|_| s.rest(), &take, 1.5);
+    let touch = f.touch[Side::R as usize].unwrap();
+    // (three of five on this body: the index and middle close past so thin a rod without meeting it, not yet right)
+    assert!(touch.on.iter().filter(|on| **on).count() >= 3 && touch.inside < 0.004, "{touch:?}");
+    assert!(palm_off(&s, &f, &hold) < 0.006);
+    // stood on end it is taken by its side, as a bottle is
+    let stood = Thing { turn: Quat::IDENTITY, ..rod };
+    let Grip::One(side) = find_holds(&stood, s.rest().root, HoldOptions::default()) else { panic!("one hand") };
+    assert!(side.along.is_none() && side.normal.y.abs() < 0.01);
+}

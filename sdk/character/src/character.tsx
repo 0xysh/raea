@@ -18,5 +18,5 @@ export type { Quat, Joint, Skeleton, Pose, Posed, Side, Finger, HandShape, Closi
 
 
 // a character takes a thing with its hands, with no capture of the action (docs/hands.feature)
-export { take, fitPose, handShape, placedPose, walkUp } from "./take";
+export { take, fetch, fitPose, handShape, placedPose, walkUp } from "./take";
 export type { TakeThing, TakeSpec, Taken, Mark } from "./take";

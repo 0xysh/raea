@@ -68,7 +68,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab | tests/grab.rs       | 470   | the hands' measures, on the stand-in body                        |
         | raea-sys-grab | tests/body.rs       | 150   | limits, the body out of solids, the hand prior                   |
         | raea-sys-grab | tests/use.rs        | 230   | passing, sliding, wind-up, a turned body, keeping out of solids  |
-        | sdk           | sdk/character/src/take.ts | 170 | take(), fitPose(), handShape(): the calls made, typed          |
+        | sdk           | sdk/character/src/take.ts | 190 | take(), fitPose(), handShape(): the calls made, typed          |
 
     @done
     Scenario: HG1. An arm reaches a target, and says what it cost
@@ -358,6 +358,11 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # that exposed: at the mouth the mug tips up to 50 degrees where 29 was asked, and its rim goes 14 mm into
       # the face; a carried cup tips up to 2 degrees where the wrist is limited; the mug take has a joint jump of
       # 1,378 as the elbow swings out. The floor take is unchanged (hold 69 mm off).
+      # Also since: a grip chosen by the thing's shape for one more case, a rod lying down (taken over the top,
+      # the fingers round it across its length; stood on end it is taken by its side), with three of five
+      # fingers on it on the stand-in body; and raea/character's `fetch`, which takes a thing as asked when it
+      # is in reach and otherwise walks the body to the take's standing place first (walkUp) and puts every
+      # time of the take off until it arrives. `fetch` is written and type-checked by use only: not rendered.
       Given the six takes of tools/hands-audit on a clean body with real fingers
       Then no skin is in the thing beyond a pad's give (2 mm), none in the scene or the body
       And every finger meant to hold has its pad on the thing, by a grip chosen for the thing's size and shape

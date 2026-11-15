@@ -7,7 +7,7 @@
 use glam::{Mat3, Quat, Vec3};
 
 use raea_sys_body::rig::{Side, Skeleton, hand_rest};
-use raea_sys_body::shape::Thing;
+use raea_sys_body::shape::{Solid, Thing};
 
 /// where one hand holds a thing, in the thing's own frame
 #[derive(Clone, Copy, Debug)]
@@ -71,6 +71,19 @@ pub fn facing(thing: &Thing, holder: Vec3) -> Vec3 {
 
 /// The holds a holder standing at `holder` takes on a thing: one on its left and one on its right, or one hand's.
 pub fn find_holds(thing: &Thing, holder: Vec3, o: HoldOptions) -> Grip {
+    // a rod lying down (a capsule or cylinder longer than it is wide, its length near level, thin enough for one
+    // hand) is taken over the top, the fingers round it across its length: not by its ends
+    if let Solid::Capsule { half, r } | Solid::Cylinder { half, r } = thing.solid {
+        let length = thing.turn * Vec3::Y;
+        if half > r * 1.5 && 2.0 * r <= o.span && length.y.abs() < 0.5 {
+            let across = Vec3::Y.cross(length).normalize_or(Vec3::X);
+            // the fingers point away from the holder, across the rod
+            let away = if across.dot(facing(thing, holder)) >= 0.0 { across } else { -across };
+            let top = thing.cast(thing.at + Vec3::Y * (thing.solid.bound() + 0.1), Vec3::NEG_Y, thing.solid.bound() + 0.1).map_or(thing.at + Vec3::Y * r, |h| h.at);
+            let turn = thing.turn.inverse();
+            return Grip::One(Hold { side: o.hand, at: thing.local(top), normal: turn * Vec3::Y, along: Some(turn * away), shape: None });
+        }
+    }
     // the body's left is its up crossed with its facing (y up, facing +z, x left)
     let left = Vec3::Y.cross(facing(thing, holder));
     let far = thing.solid.bound() + 0.1;
