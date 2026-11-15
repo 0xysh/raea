@@ -186,6 +186,16 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
     Scenario: CH14. Locomotion is motion matching over that library
       # Built on the old rig: sdk/body/src/loco (the chooser, the feature database, the matcher, inertialized
       # switches, feet held by their contacts, the head steadied). This scenario is that code on SOMA.
+      # 11-15: the turbo suite's script (tools/motion-check.ts) is in no history, so its eight cases are rebuilt
+      # from docs/locomotion.md as sdk/body/tools/suite.ts, scoring what it scored with bars taken from the
+      # captures where it can (jolts against the captures' 99th percentile, a pop as hips' acceleration over
+      # their 99.9th, head roll against the captures' own at that gait; slide by feet.ts footSlide, the old
+      # suite's measure). First run on SOMA, 0 of 8 strictly: walking is good (slide 0.2 to 0.9 cm, arrive
+      # within 18 cm, follow within 25), the failures are hip pops at switches in jogs and runs (31 of 36 pops
+      # sit at a switch; the run curve also jolts 23 degrees against 22), slide in the jog curve, the turn of
+      # 180 and errands (4 to 9 cm), and the head rolling 18 to 20 degrees on curves against 13 to 16 in the
+      # captures. Moving the body at a switch onto the new clip's planted foot (align) is not the pops' cause:
+      # off, it takes away a few and the walk curve slides 15 cm.
       Then a body goes where a path says, by the situations the chooser allows, with every switch inertialized
         and every planted foot held
       And the turbo suite's cases pass on a SOMA person at least as well as they do today
@@ -217,6 +227,7 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And while a scene plays live and there is no such clip, the matcher's nearest is played and the gap is
         written down as a clip to make, never papered over
 
+    @done
     Scenario: CH15b. A line of text made into a clip between two standing poses
       # 11-15, the first run of Kimodo's text path (the account's access to the gated Llama 3 model was granted that
       # morning). Two standing poses from the captures as keyframes, in place, 4 s, and the line "A person waves at
