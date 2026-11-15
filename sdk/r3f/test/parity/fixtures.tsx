@@ -12,6 +12,7 @@ import { composeEffects, configureFontTexture, createText, parseFont, scramble, 
 import inter from "./fonts/Inter-400.json";
 
 export { OUTPUTS } from "./outputs";
+import { TSL_INPUTS } from "./tsl";
 
 export const SIZE = { width: 640, height: 360, fps: 24 };
 
@@ -332,6 +333,8 @@ export const INPUTS: Record<string, InputCase> = {
       </>
     ),
   },
+  // TSL node materials lit by the scene and moved by compute (R3F21, R3F22): test/parity/tsl.tsx
+  ...TSL_INPUTS,
 };
 
 const WAVE_VERTEX = /* glsl */ `
