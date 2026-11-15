@@ -156,10 +156,15 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # guide's reach at once, and a stop that overshot on SOMA moved the hips 19 cm in one frame; the return
       # is now limited a frame, and the worst hip step in the scene is a walking pace's (4.8 cm). 31 of the
       # body SDK's 35 tests pass, the four left being the hand layer.
-      # Not in the vocabulary yet: take, put, throw, hand over, use (the Rust takes are not called from here),
-      # and do (a line of text made into a clip, which waits on CH11). A controller's unmet ask is not logged
-      # yet (CH15). A standing character sometimes plays a capture with its arms raised: the library's stand
-      # clips want curating for SOMA.
+      # Then take: the act reserves a stretch of standing and says which frame it starts at; the scene applies
+      # the engine's take (raea/character `take`: reach, grab, carry, put down or throw, a hand-over, a thing's
+      # own path) over the staged pose, so put, throw, hand over and use are the same act with another spec.
+      # Shown: a controller walks a character to a table and, once she stands there, has her move a cup along
+      # it; she walks off after. Faults seen: she stops 25 cm past her mark, into the table's edge (the stop's
+      # overshoot again); and the other character stood with raised arms, which was two turning captures
+      # whose actor holds his hands up throughout: dropped from locomotion.
+      # Not in the vocabulary yet: do (a line of text made into a clip, which waits on CH11). A controller's unmet ask is not logged
+      # yet (CH15).
       Then a script and a controller give acts in one vocabulary and the matcher carries them out
 
     @done
