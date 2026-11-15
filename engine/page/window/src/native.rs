@@ -8,6 +8,8 @@
 //!   dock.badge {text}             the Dock icon's badge, on Windows the taskbar button's overlay ("" clears it)
 //!   app.urls -> string[]          raea:// links opened since the last ask, the app brought to the front for each
 //!   app.drops -> {over, dropped}  files dragged from the Finder: whether some are over the window, the paths dropped since the last ask
+//!   app.share {paths, x, y}       macOS's share sheet for those files (absolute paths), beside the point (x, y) in the
+//!                                 window from its top left (Shane 11-14: right-click any image or video to share it)
 //!   native.log -> {...}           what was done, for tests
 //!
 //! Live only on screen (--window) and without RAEA_NO_OPEN=1: otherwise every call is recorded and answered as if done,
@@ -35,6 +37,7 @@ struct Log {
     notified: Vec<Value>,
     badge: String,
     urls: Vec<String>,
+    shared: Vec<String>,
 }
 
 static LOG: Mutex<Option<Log>> = Mutex::new(None);
@@ -66,7 +69,7 @@ impl Plugin for NativePlugin {
 }
 
 fn calls(mut calls: ResMut<HostCalls>) {
-    for name in ["clipboard.write", "clipboard.read", "app.open", "notify", "notify.permission", "dock.badge", "app.urls", "app.drops", "native.log"] {
+    for name in ["clipboard.write", "clipboard.read", "app.open", "notify", "notify.permission", "dock.badge", "app.urls", "app.drops", "app.share", "native.log"] {
         calls.on(name, move |w, args, answer| w.resource::<Queue>().0.lock().unwrap().push(Job(name.to_string(), args, answer)));
     }
 }
@@ -175,7 +178,19 @@ fn run(live: bool, name: &str, a: &Value, answer: Answer) {
             let dropped = std::mem::take(&mut d.1);
             answer.ok(json!({"over": d.0, "dropped": dropped}))
         }
-        "native.log" => answer.ok(log(|l| json!({"live": live, "clipboard": l.clipboard, "opened": l.opened, "notified": l.notified, "badge": l.badge, "urls": l.urls}))),
+        "app.share" => {
+            let paths: Vec<String> = a.get("paths").and_then(Value::as_array).map(|v| v.iter().filter_map(|p| p.as_str().map(String::from)).collect()).unwrap_or_default();
+            if paths.is_empty() || paths.iter().any(|p| !std::path::Path::new(p).is_absolute()) {
+                return answer.err("app.share: paths are the files' absolute paths");
+            }
+            let at = |k: &str| a.get(k).and_then(Value::as_f64).unwrap_or(0.0);
+            if live && let Err(e) = mac::share(&paths, at("x"), at("y")) {
+                return answer.err(e);
+            }
+            log(|l| l.shared.extend(paths));
+            answer.ok(json!(true))
+        }
+        "native.log" => answer.ok(log(|l| json!({"live": live, "clipboard": l.clipboard, "opened": l.opened, "notified": l.notified, "badge": l.badge, "urls": l.urls, "shared": l.shared}))),
         _ => answer.err(format!("no native call {name}")),
     }
 }
@@ -187,7 +202,7 @@ mod mac {
     use objc2::rc::Retained;
     use objc2::runtime::{AnyClass, AnyObject, Bool, NSObject};
     use objc2::{ClassType, define_class, msg_send};
-    use objc2_foundation::NSString;
+    use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
     use serde_json::json;
     use std::ffi::CString;
     use std::sync::Mutex;
@@ -258,6 +273,44 @@ mod mac {
             let ws: *mut AnyObject = msg_send![class("NSWorkspace").unwrap(), sharedWorkspace];
             let _: Bool = msg_send![ws, openURL: u];
         }
+    }
+
+    /// NSSharingServicePicker for the files, shown beside the point (x, y), from the top left of the window's content
+    /// in points (the page's own pixels). The picker stays up after this returns; it isn't released (one small object
+    /// a share).
+    pub fn share(paths: &[String], x: f64, y: f64) -> Result<(), String> {
+        unsafe {
+            let a = app();
+            let mut win: *mut AnyObject = msg_send![a, keyWindow];
+            if win.is_null() {
+                win = msg_send![a, mainWindow];
+            }
+            if win.is_null() {
+                return Err("raea's window isn't open".into());
+            }
+            let view: *mut AnyObject = msg_send![win, contentView];
+            if view.is_null() {
+                return Err("raea's window has no view to show the share sheet from".into());
+            }
+            let items: *mut AnyObject = msg_send![class("NSMutableArray").unwrap(), array];
+            for p in paths {
+                let url: *mut AnyObject = msg_send![class("NSURL").unwrap(), fileURLWithPath: &*NSString::from_str(p)];
+                if !url.is_null() {
+                    let _: () = msg_send![items, addObject: url];
+                }
+            }
+            let picker: *mut AnyObject = msg_send![class("NSSharingServicePicker").ok_or("AppKit's share sheet isn't here")?, alloc];
+            let picker: *mut AnyObject = msg_send![picker, initWithItems: items];
+            if picker.is_null() {
+                return Err("the share sheet didn't open".into());
+            }
+            let bounds: NSRect = msg_send![view, bounds];
+            let flipped: Bool = msg_send![view, isFlipped];
+            let at = NSRect::new(NSPoint::new(x, if flipped.as_bool() { y } else { bounds.size.height - y }), NSSize::new(1.0, 1.0));
+            // NSRectEdgeMinY
+            let _: () = msg_send![picker, showRelativeToRect: at, ofView: view, preferredEdge: 1usize];
+        }
+        Ok(())
     }
 
     pub fn badge(t: &str) {
@@ -377,6 +430,9 @@ mod mac {
         a.err("notifications need raea's window on a Mac")
     }
     pub fn listen_for_urls() {}
+    pub fn share(paths: &[String], _: f64, _: f64) -> Result<(), String> {
+        Err(format!("sharing {} files needs raea's window on a Mac", paths.len()))
+    }
 }
 
 #[cfg(all(test, target_os = "macos", feature = "window"))]
