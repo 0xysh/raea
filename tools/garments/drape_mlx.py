@@ -160,11 +160,14 @@ Xd = np.array(Xm)
 # stayed: a top still hangs from the shoulders (SOMA's are at 1.45 m), anything else from the waist (1.05 m)
 has_top = any("torso" in p["name"] for p in P["pieces"])
 top_y = float(Xd[:, 1].max()); stayed = top_y > (1.38 if has_top else 0.95)
-ok = bool(np.isfinite(Xd).all() and np.percentile(gap, 95) < 15 and inside < 0.01 * n and stayed)
+# closed: no seam left open more than 2 cm anywhere (a cuff whose side seam never closed hangs open below the elbow,
+# and passed on the 95th percentile alone: 23 of the first 139 lean drapes, 12 of them with cuffs)
+closed = bool(gap.max() < 20)
+ok = bool(np.isfinite(Xd).all() and np.percentile(gap, 95) < 15 and inside < 0.01 * n and stayed and closed)
 np.savez_compressed(os.path.join(out_dir, NAME + ".draped.npz"), X=Xd, F=F, FLAT=FLAT, seams=seams, start=np.array(start))
 if snaps: np.savez_compressed(os.path.join(out_dir, NAME + ".snaps.npz"), start=np.array(start), **snaps)
 report = {"name": NAME, "frames": FRAMES, "vertices": n, "seconds": round(time.time() - t0, 1), "ok": ok,
-          "stayed": bool(stayed), "top_y": round(top_y, 3),
+          "stayed": bool(stayed), "closed": closed, "top_y": round(top_y, 3),
           "seam_gap_mm": {"median": float(np.median(gap)), "p95": float(np.percentile(gap, 95)), "max": float(gap.max())},
           "edge_strain": {"p5": float(np.percentile(strain, 5)), "p95": float(np.percentile(strain, 95))},
           "cloth_vertices_inside_skin": inside}

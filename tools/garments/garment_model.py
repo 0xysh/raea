@@ -39,9 +39,19 @@ PROBES = [
 def unit(x): return x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-9)
 
 
+def hung_right(data, n):
+    """a design whose drape passed and left no seam open over 2 cm (an open cuff would teach the look of a fault)"""
+    try: r = json.load(open(f"{data}/{n}/{n}.drape.json"))
+    except OSError: return False
+    return r["ok"] and r["seam_gap_mm"]["max"] < 20
+
+
 def load(data):
-    Z = np.load(f"{data}/embeds.npz")
-    names = sorted({str(n) for n in Z["names"]})
+    Z = dict(np.load(f"{data}/embeds.npz"))
+    good = {n for n in {str(n) for n in Z["names"]} if hung_right(data, n)}
+    keep = np.array([str(n) in good for n in Z["names"]])
+    Z = {k: v[keep] for k, v in Z.items()}
+    names = sorted(good)
     designs = {n: yaml.safe_load(open(f"{data}/{n}/design.yaml"))["design"] for n in names}
     captions = [open(f"{data}/{n}/caption.txt").read().strip() for n in names if os.path.exists(f"{data}/{n}/caption.txt")]
     return Z, names, designs, captions

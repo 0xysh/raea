@@ -746,8 +746,14 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # the nearest training picture's design, where a random design passes one or two; nonsense ("a bowl of
       # soup") falls back to a fitted top and trousers. words.sh makes each line a design, cuts it to SOMA and
       # drapes it, about 20 s and $0: seven of seven were valid patterns and hung right, six read as asked.
-      # Faults: "long-sleeved" comes out at the elbow, a turtleneck's collar collapses in the drape, unasked parts
-      # come along (trousers with a turtleneck), and "a long dress" is not known as a top joined to a skirt.
+      # Faults: the long-sleeved shirt's sleeve was long but its cuff, a tube about 18 cm round reaching from wrist
+      # to elbow, is narrower than SOMA's forearm and slid off to hang open (one pair 8 cm apart); the drape's
+      # check looked only at the 95th percentile of seam gaps and passed it. A drape now fails with any seam open
+      # over 2 cm ("closed"), which 23 of the first 139 lean drapes do, mostly at sleeve-to-cuff corners, and the
+      # model trains only on drapes that pass. Drawing a gathered edge in to its partner's length (a gathering
+      # thread) was tried and changed none of the eight worst. Also: a turtleneck's collar collapses in the drape,
+      # unasked parts come along (trousers with a turtleneck), and "a long dress" is not known as a top joined to
+      # a skirt.
       Then a line of words becomes a sewing pattern cut to SOMA and draped, with no caption written to train it
       And its eval says how it compares with the nearest picture and with chance, on held-out designs and lines
 
