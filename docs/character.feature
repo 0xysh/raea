@@ -303,6 +303,27 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And a view from above and one from below are drawn too, so shoulders and soles are covered
       And a garment's edge (a hem, a cuff, a collar) is cut where the picture puts it, not along the body's faces
 
+    @done
+    Scenario: CH42a. A garment file on SOMA's template vertices, worn with the skin under it left out
+      # 11-15 (tools/soma_clothes.py in the test project: `measure` and `wear`). A garment is a JSON file: its
+      # name and layer, the template vertices it covers (by SOMA's own numbering of its 18,056, found from
+      # the body's vertices by their rest places), each one's stand-off, colour and how far it may stray, and
+      # the pictures it came from. `wear` builds each garment's mesh from the file on a body (the covered skin
+      # pushed out by the stand-off, the body's own weights) and writes the body with the skin that is wholly
+      # under cloth left out (13,368 of 26,116 faces under a t-shirt, jeans, shoes and a jacket). Not yet: a
+      # texture in the body's UVs (colour is per vertex), and a second SOMA shape to prove the fit carries.
+      Then a garment is a file of numbers on SOMA's vertices, and a dressed body draws no skin under its clothes
+
+    @done
+    Scenario: CH43a. A second layer over the first
+      # 11-15. A bomber jacket drawn over the t-shirt view by view ("add exactly one garment and keep
+      # everything else"). It is the vertices where its picture differs from the picture of the layer under
+      # it, and it stands off at least that layer's distance plus 3 mm (measured: 20 mm at the tenth of its
+      # vertices, 42 at the middle, 73 at nine tenths), so the layers do not cross. Learnt: an added layer on
+      # the back view came out as the garment's front (a zip and an open front) until the words said what is
+      # seen from behind; and a dark garment over the dark mannequin needs a small difference to count.
+      Then a jacket is worn over a shirt, each its own garment file
+
     Scenario: CH42. A garment is kept as data on SOMA's topology
       Then a garment file holds, per body vertex it covers: that it is covered, its stand-off, and how far it
         may stray (for the cloth follower); and a texture in the body's own UVs, baked from the views with the
@@ -323,6 +344,17 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         body down to the outline the views show, weighted from the body at the edge and free below it
       And they move by the cloth follower already built (sdk/body/src/cloth.ts: each vertex strays from its
         skinned place by its own distance, with no collision shapes)
+
+    @done
+    Scenario: CH45a. One command from words to a garment
+      # 11-15 (tools/wardrobe.sh NAME "what it is" [UNDER] in the test project). It writes each view's prompt
+      # (what is seen from that side, what to keep), asks for the four pictures at once, says what they cost,
+      # and measures the garment; with UNDER it adds a layer over a garment already made. Run once on a new
+      # outfit (a red hoodie, black joggers, black shoes): 20 cents and 36 seconds to the garment file, then
+      # worn through the walk. Learnt: black cloth reads as the mannequin unless the mannequin's grey is told
+      # apart from black; the hood was drawn up though asked down. It is a script in the test project, not
+      # yet a `raea` verb, and it makes no garment by hand or by procedure.
+      Then a line of words becomes a garment file with its cost said
 
     Scenario: CH45. From words to a wardrobe
       Then `raea` takes a description of an outfit, draws its layers and views, builds the garments, and writes
