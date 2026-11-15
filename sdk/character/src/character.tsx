@@ -21,5 +21,5 @@ export type { Quat, Joint, Skeleton, Pose, Posed, Side, Finger, HandShape, Closi
 export { take, fetch, fitPose, handShape, placedPose, walkUp } from "./take";
 export type { TakeThing, TakeSpec, Taken, Mark } from "./take";
 // motion on SOMA's skeleton (NVIDIA's motion models and datasets) played on a raea body
-export { readSomaUsda, somaPose, turnsPose } from "./soma";
+export { readSomaUsda, somaPose, turnsPose, withTwists } from "./soma";
 export type { SomaClip, TurnsClip } from "./soma";

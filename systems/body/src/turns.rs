@@ -57,6 +57,18 @@ pub fn from_turns(skel: &Skeleton, tpose: &HashMap<String, Quat>, names: &[Strin
         };
     }
     set_twists(skel, &mut world);
-    let turns = skel.joints.iter().enumerate().map(|(i, j)| j.parent.map_or(world[i], |p| (world[p].inverse() * world[i]).normalize())).collect();
-    Pose { root, turns }
+    Pose { root, turns: locals(skel, &world) }
+}
+
+/// each joint's turn against its parent, from every joint's world turn
+fn locals(skel: &Skeleton, world: &[Quat]) -> Vec<Quat> {
+    skel.joints.iter().enumerate().map(|(i, j)| j.parent.map_or(world[i], |p| (world[p].inverse() * world[i]).normalize())).collect()
+}
+
+/// A pose of a SOMA body with its twist joints set from the joints at each limb segment's ends: for a pose that
+/// came from a clip or a solver, which turn the named joints only.
+pub fn with_twists(skel: &Skeleton, pose: &Pose) -> Pose {
+    let mut world = skel.fk(pose).rot;
+    set_twists(skel, &mut world);
+    Pose { root: pose.root, turns: locals(skel, &world) }
 }

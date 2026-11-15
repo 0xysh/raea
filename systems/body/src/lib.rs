@@ -23,9 +23,9 @@ pub mod turns;
 
 pub use arm::{ArmOptions, IkReport, forearm_twist, reach, settle_hinge, twist_joints, two_bone};
 pub use soma::{from_soma, raea_joint};
-pub use turns::{from_turns, set_twists};
+pub use turns::{from_turns, set_twists, with_twists};
 pub use fit::{Mark, fit, marks_of};
-pub use json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, SOMA_ANSWER, SOMA_ARGS, TURNS_ANSWER, TURNS_ARGS, fit_json, hand_json, soma_json, turns_json};
+pub use json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, SOMA_ANSWER, SOMA_ARGS, TURNS_ANSWER, TURNS_ARGS, TWISTS_ARGS, fit_json, hand_json, soma_json, turns_json, twists_json};
 pub use limits::{Angles, angles_of, clamp_turn, violations};
 pub use shape::{Hit, Solid, Thing};
 pub use rig::{HandRest, Pose, Posed, Sample, Side, Skeleton, hand_rest, mannequin};

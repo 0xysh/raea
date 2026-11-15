@@ -179,6 +179,7 @@ pub fn call(name: &str, v: &Value) -> R<Value> {
             "character.hand" => raea_sys_grab::hand_json(v),
             "character.soma" => raea_sys_grab::soma_json(v),
             "character.turns" => raea_sys_grab::turns_json(v),
+            "character.twists" => raea_sys_grab::twists_json(v),
             "fonts.families" => Ok(families().into()),
             "fonts.google" => {
                 let family = s(v, "family")?;
@@ -232,6 +233,7 @@ pub fn register() {
             ("character.hand", raea_sys_grab::HAND_ARGS, raea_sys_grab::HAND_ANSWER, "a hand shaped by a few numbers of a model of real hand poses (none: the average relaxed hand; the first opens it, positive, and closes it), on a pose; and that hand read back: its numbers and how odd it is (0: the average hand)"),
             ("character.soma", raea_sys_grab::SOMA_ARGS, raea_sys_grab::SOMA_ANSWER, "the pose that has a body's bones pointing as a SOMA body's do (SOMA: the 78-joint skeleton of NVIDIA's motion models and datasets), from SOMA's joint names and where each joint is"),
             ("character.turns", raea_sys_grab::TURNS_ARGS, raea_sys_grab::TURNS_ANSWER, "a SOMA body's pose from a motion given as turns (each named joint's world turn from SOMA's T-pose, as Kimodo writes them, and where the hips are), with the body's twist joints set"),
+            ("character.twists", raea_sys_grab::TWISTS_ARGS, raea_sys_grab::TURNS_ANSWER, "a SOMA body's pose with its twist joints set from its limbs' turns: for a pose from a clip or a solver, which turn the named joints only"),
             ("fonts.families", "{}", "string[]", "the system's font families by name, sorted, as fontique (bevy_text's FontCx) lists them"),
             ("fonts.google", "{ family: string }", "{ family: string }", "a Google Fonts family the page loads (its Latin faces, every weight and style, fetched once through raea's URL cache), as a stylesheet link loads it in Chrome (raea/text loadFont)"),
             ("fonts.atlases", "{ font: string; size: number; text: string }", "{ width: number; height: number; src: string }[]", "bevy_text's glyph atlases for a text in a font file at a size px, each page a PNG data: URL, as Bevy's FontAtlasSet holds them"),

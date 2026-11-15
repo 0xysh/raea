@@ -81,3 +81,10 @@ export function turnsPose(skel: Skeleton & { tpose?: Record<string, Quat> }, cli
   const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
   return native("character.turns", { joints, tpose: skel.tpose ?? {}, names: clip.names, turns: clip.turns[f], root: clip.root[f] }).pose;
 }
+
+/** A SOMA body's pose with its twist joints set from its limbs' turns (the native call character.twists): for a
+ * pose from a clip or a solver, which turn the named joints only. A body without twist joints comes back as it is. */
+export function withTwists(skel: Skeleton, pose: Pose): Pose {
+  const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
+  return native("character.twists", { joints, pose }).pose;
+}

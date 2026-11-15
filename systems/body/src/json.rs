@@ -8,7 +8,7 @@ use crate::fit::{Mark, fit};
 use crate::prior::{coefficients, oddness, shape};
 use crate::rig::{Pose, Side, Skeleton};
 use crate::soma::from_soma;
-use crate::turns::from_turns;
+use crate::turns::{from_turns, with_twists};
 
 pub fn num(v: &Value, what: &str) -> Result<f32, String> {
     v.as_f64().map(|n| n as f32).ok_or_else(|| format!("character.take: {what} isn't a number"))
@@ -115,6 +115,19 @@ pub fn turns_json(v: &Value) -> Result<Value, String> {
         return Err(format!("character.turns: {} names for {} turns", names.len(), turns.len()));
     }
     Ok(json!({ "pose": posed(&from_turns(&skel, &tpose, &names, &turns, vec3(&v["root"], "root")?)) }))
+}
+
+pub const TWISTS_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; pose: { root: [number, number, number]; turns: [number, number, number, number][] } }";
+
+/// `character.twists`: a SOMA body's pose with its twist joints set from its limbs' turns (turns.rs).
+pub fn twists_json(v: &Value) -> Result<Value, String> {
+    let skel = Skeleton::from_value(v)?;
+    let mut pose = skel.rest();
+    pose.root = vec3(&v["pose"]["root"], "pose.root")?;
+    for (slot, turn) in pose.turns.iter_mut().zip(v["pose"]["turns"].as_array().into_iter().flatten()) {
+        *slot = quat(turn, "the pose's turn")?;
+    }
+    Ok(json!({ "pose": posed(&with_twists(&skel, &pose)) }))
 }
 
 /// a pose as the calls answer it: the root's place and every joint's turn
