@@ -284,6 +284,17 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # along the body's own edges, toes show through shoes, and the views' colours are not matched.
       Then a drawn outfit is worn by a SOMA body in motion with no rigging step
 
+    @done
+    Scenario: CH41a. The cloth's stand-off read at the outlines
+      # 11-15. Where a view sees a clothed vertex on the body's outline (its normal across the view), the
+      # picture is walked outward along the normal until the cloth ends and the backdrop begins: that distance
+      # is how far the cloth stands off there. Read at 3,585 outline vertices of the t-shirt, jeans and shoes
+      # (2 mm at the tenth of them, 4 at the middle, 16 at three quarters, 35 at nine tenths), spread over each
+      # garment through the mesh, never under 4 mm nor over 8 cm. The jeans now hang as trousers and the shirt
+      # stands off the trunk. Wrong still: the shoes are lumpy (the toes' own shape reads as outline), the tops
+      # of the shoulders are bare, and a reading is one distance per vertex, so a fold is not a fold.
+      Then a garment's looseness comes from its picture
+
     Scenario: CH41. A garment's shape is measured, not assumed
       Given each layer's views and the views of the layer under it
       Then how far the cloth stands off the skin is read where the two outlines differ in each view (a sleeve's
