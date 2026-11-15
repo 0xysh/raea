@@ -7,11 +7,14 @@
 
 use std::collections::HashMap;
 
-use glam::Vec3;
+use glam::{Mat3, Quat, Vec3};
 
 use crate::arm::settle_hinge;
 use crate::fit::{Mark, fit};
 use crate::rig::{Pose, Side, Skeleton};
+
+/// where the middle of SOMA's eyes is from its head joint in its bind pose (somaskel's T-pose), centimetres
+const SOMA_EYES: Vec3 = Vec3::new(0.0, 5.371, 7.573);
 
 /// raea's joint for a SOMA joint: the trunk and head by name, limbs and fingers by side. A SOMA finger's 2, 3, 4 are
 /// raea's 01, 02, 03 (its 1 is the metacarpal, which raea's hand has none of); the thumb's are 1, 2, 3.
@@ -38,6 +41,8 @@ fn bone_end(raea: &str) -> Option<String> {
     match raea.trim_end_matches("_l").trim_end_matches("_r") {
         "head" => Some("HeadEnd".into()),
         "ball" => Some(format!("{side}ToeEnd")),
+        // (the 30-joint SOMA has no fingers: the hand points at its middle finger's end)
+        "hand" => Some(format!("{side}HandMiddleEnd")),
         tip => tip.strip_suffix("_03").map(|finger| format!("{side}Hand{}{}End", finger[..1].to_uppercase(), &finger[1..])),
     }
 }
@@ -71,11 +76,23 @@ pub fn from_soma(skel: &Skeleton, names: &[String], at: &[Vec3], eyes: Option<Ve
             marks.push(Mark { joint: i, offset: bone, at: to + (*end - *b).normalize_or_zero() * bone.length(), weight: 1.0 });
         }
     }
-    // the head's turn about the neck, from SOMA's eyes
-    if let (Some(eyes), Some(head), Some(l), Some(r)) = (eyes, skel.joint("head"), soma.get("LeftEye"), soma.get("RightEye")) {
+    // the head's turn, from SOMA's head and eyes, which are rigid with each other: the turn that takes them from
+    // where SOMA's bind pose has them (eyes level across, their middle 35 degrees above straight ahead of the head
+    // joint) to where they are. raea's head, its eyes and its top are carried by that same turn, so the two rigs'
+    // head joints sitting at different places in the skull doesn't tip the head
+    if let (Some(head), Some(l), Some(r)) = (skel.joint("head"), soma.get("LeftEye"), soma.get("RightEye")) {
         if let (Some(to), Some(at)) = (place[head], seen.get(&head)) {
-            let offset = eyes - skel.joints[head].head;
-            marks.push(Mark { joint: head, offset, at: to + ((*l + *r) / 2.0 - *at).normalize_or_zero() * offset.length(), weight: 1.0 });
+            let frame = |across: Vec3, ahead: Vec3| {
+                let x = across.normalize_or(Vec3::X);
+                let z = ahead.reject_from_normalized(x).normalize_or(Vec3::Z);
+                Mat3::from_cols(x, z, x.cross(z))
+            };
+            let turn = Quat::from_mat3(&(frame(*l - *r, (*l + *r) / 2.0 - *at) * frame(Vec3::X, SOMA_EYES).transpose())).normalize();
+            let top = skel.joints[head].tail - skel.joints[head].head;
+            marks.retain(|m| m.joint != head || m.offset == Vec3::ZERO);
+            marks.push(Mark { joint: head, offset: top, at: to + turn * top, weight: 1.0 });
+            let ahead = eyes.map_or(Vec3::new(0.0, 0.04, 0.09), |e| e - skel.joints[head].head);
+            marks.push(Mark { joint: head, offset: ahead, at: to + turn * ahead, weight: 1.0 });
         }
     }
     let mut pose = fit(skel, &skel.rest(), &marks, 6).0;
