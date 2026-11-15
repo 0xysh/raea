@@ -38,21 +38,27 @@ fn skipped(name: &str, depth: usize) -> bool {
 }
 
 /// Whether a file's bytes are only in the cloud (iCloud Drive with Optimise Mac Storage, or another File Provider):
-/// it lists at its full size, but reading it downloads the original, so the fast pass leaves it until it's on this Mac
+/// it lists at its full size, but reading it downloads the original
 #[cfg(target_os = "macos")]
-fn cloud_only(m: &std::fs::Metadata) -> bool {
+pub fn cloud_only(m: &std::fs::Metadata) -> bool {
     use std::os::macos::fs::MetadataExt;
     const SF_DATALESS: u32 = 0x4000_0000;
     m.st_flags() & SF_DATALESS != 0
 }
 
 #[cfg(not(target_os = "macos"))]
-fn cloud_only(_: &std::fs::Metadata) -> bool {
+pub fn cloud_only(_: &std::fs::Metadata) -> bool {
     false
 }
 
+/// Whether a file lives in iCloud Drive (a link is followed to where it lives): its cloud-only files go in from Quick
+/// Look's thumbnail (cloud.rs) without a download
+pub fn in_icloud(path: &Path) -> bool {
+    cfg!(target_os = "macos") && std::fs::canonicalize(path).is_ok_and(|p| p.to_string_lossy().contains("/Library/Mobile Documents/"))
+}
+
 /// Every picture and video under `root`, `on` called with each batch of `every` as they're found; says how many it
-/// found and how many it left out as only in the cloud (cloud_only)
+/// found and how many it left out as only in a cloud other than iCloud (cloud_only: reading one downloads it)
 pub fn walk(root: &Path, every: usize, on: &mut dyn FnMut(Vec<Found>)) -> (u64, u64) {
     let mut batch = Vec::with_capacity(every);
     let (mut n, mut cloud) = (0u64, 0u64);
@@ -71,7 +77,7 @@ pub fn walk(root: &Path, every: usize, on: &mut dyn FnMut(Vec<Found>)) -> (u64, 
         if m.len() < 1024 {
             continue;
         }
-        if cloud_only(&m) {
+        if cloud_only(&m) && !in_icloud(e.path()) {
             cloud += 1;
             continue;
         }

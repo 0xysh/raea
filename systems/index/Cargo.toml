@@ -36,3 +36,5 @@ objc2-core-media = "0.3"
 objc2-photos = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "objc2-app-kit", "PHAsset", "PHFetchResult", "PHFetchOptions", "PHImageManager", "PHPhotoLibrary", "PHAssetResource", "PhotosTypes", "PHObject"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSImage", "NSImageRep", "NSGraphicsContext", "objc2-core-graphics"] }
 block2 = "0.6"
+# a file kept only in iCloud (cloud.rs): its picture from Quick Look, without downloading the original
+objc2-quick-look-thumbnailing = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "objc2-core-graphics", "QLThumbnailGenerator", "QLThumbnailGenerationRequest", "QLThumbnailRepresentation"] }

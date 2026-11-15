@@ -93,6 +93,13 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         and every file was still dataless after; the same 40 again took 0.02 s (Quick Look's cache). So cloud-only
         files can go in as a slow second stage after the local ones, about 20 minutes for this Mac's 2,245, with no
         download
+      Built 11-15 (cloud.rs): a folder's cloud-only files in iCloud Drive are listed and go in after its local files,
+        from Quick Look's thumbnail, eight asked for at once; a batch waiting on them is written after a second, so
+        each lands as it comes. Measured: 40 fresh cloud-only pictures and videos searchable in 17.9 s (2 a second),
+        all 40 still dataless after; a mixed folder (3 in iCloud, 2 local) searchable whole, and words found one of the
+        iCloud ones. Cloud-only files of other providers (Google Drive, Dropbox under ~/Library/CloudStorage) stay out
+        and counted until each is shown to answer Quick Look without a download. Not yet: marked "in iCloud" on the
+        page, and downloaded only when opened (the original isn't opened from the Index yet)
 
     Scenario: IX8. Google Drive
       Then through the Drive connection (raea-api src/connect; Drive is live since 11-11), raea-api lists the Drive's
