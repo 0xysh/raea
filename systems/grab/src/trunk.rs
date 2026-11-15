@@ -19,7 +19,7 @@ const EASY: f32 = 0.88;
 /// that needs. `own` drawn is `w`; `face` is the level way the body faces. `give` (0 to 1) trades the bend for more
 /// squat, down to an upright, deep squat at 1: for a body that can't bend forward because something stands there
 /// (`roomy` says when it can).
-pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amount: f32, give: f32, solids: &[Thing]) -> Pose {
+pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amount: f32, give: f32, spread: f32, solids: &[Thing]) -> Pose {
     let (Some(l), Some(r)) = (skel.arm(Side::L), skel.arm(Side::R)) else { return own.clone() };
     let shoulders = (w.pos[l[0]].y + w.pos[r[0]].y) / 2.0;
     let arm = skel.offset(l[1]).length() + skel.offset(l[2]).length();
@@ -52,7 +52,8 @@ pub fn stoop(skel: &Skeleton, own: &Pose, w: &Posed, face: Vec3, low: f32, amoun
             let x = s.sx();
             let leg = [format!("thigh_{x}"), format!("calf_{x}"), format!("foot_{x}")].map(|n| skel.joint(&n));
             let [Some(a), Some(b), Some(c)] = leg else { continue };
-            let pole = face + left * (0.25 * s.sign());
+            // the knees a little out, as they bend; well out when a low thing sits between the feet (`spread`)
+            let pole = face + left * ((0.25 + 1.2 * spread.clamp(0.0, 1.0)) * s.sign());
             pose = two_bone(skel, &pose, [a, b, c], w.pos[c], ArmOptions { pole: Some(pole), end: Some(w.rot[c]), ..Default::default() }).pose;
         }
         pose
@@ -166,4 +167,14 @@ pub fn own_solids(skel: &Skeleton, at: &Posed) -> Vec<Thing> {
         out.push(Thing { solid: raea_sys_body::shape::Solid::Capsule { half: bone.length() / 2.0, r: r * 0.75 }, at: at.pos[thigh] + bone / 2.0, turn: Quat::from_rotation_arc(Vec3::Y, bone.normalize_or(Vec3::NEG_Y)) });
     }
     out
+}
+
+/// How far the knees open for a thing (0 to 1): all the way for one that is low (under half the hips' height) and
+/// close in front of the feet, so it comes up between the knees; none for one higher or farther off.
+pub fn spread_for(skel: &Skeleton, own: &Posed, thing: &Thing) -> f32 {
+    let ease = |u: f32| { let u = u.clamp(0.0, 1.0); u * u * (3.0 - 2.0 * u) };
+    let hips = own.pos[0];
+    let floor = ["foot_l", "foot_r"].iter().filter_map(|n| skel.joint(n)).map(|i| own.pos[i].y).fold(hips.y, f32::min);
+    let (height, off) = ((thing.at.y - floor) / (hips.y - floor).max(0.1), Vec3::new(thing.at.x - hips.x, 0.0, thing.at.z - hips.z).length());
+    ease((0.6 - height) / 0.25) * ease((0.55 - off) / 0.2)
 }

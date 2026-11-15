@@ -9,7 +9,7 @@ use raea_sys_body::shape::Thing;
 
 use crate::hand::{facing, wrist_for};
 use crate::take::{Part, Release, Take, smooth, span, yaw};
-use crate::trunk::{clear, hand_points, roomy, stoop};
+use crate::trunk::{clear, hand_points, roomy, spread_for, stoop};
 
 /// how far past their ranges an arm's shoulder and elbow are in a pose, degrees
 pub(crate) fn past_range(skel: &Skeleton, arm: [usize; 3], pose: &Pose) -> f32 {
@@ -34,7 +34,7 @@ pub(crate) fn lie_at_grab(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Ta
         level
     } else {
         // the body as it will be at the grab: bent for a low thing, with the give its head and chest need there
-        let bent = |give: f32| stoop(skel, &own, &w, face, level.0.y, 1.0, give, &take.avoid);
+        let bent = |give: f32| stoop(skel, &own, &w, face, level.0.y, 1.0, give, spread_for(skel, &w, &thing), &take.avoid);
         let (mut lo, mut hi) = (0.0f32, if roomy(skel, &bent(0.0), &take.avoid) { 0.0 } else { 1.0 });
         for _ in 0..6 {
             if hi <= 0.0 {

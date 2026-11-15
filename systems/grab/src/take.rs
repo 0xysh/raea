@@ -10,7 +10,7 @@ use glam::{Quat, Vec3};
 
 use raea_sys_body::arm::{ArmOptions, forearm_twist, reach};
 use crate::grip::{lie_at_grab, past_range, swivel};
-use crate::trunk::{clear, hand_points, look, of_the_arm, own_solids, roomy, stoop, torso};
+use crate::trunk::{clear, hand_points, look, of_the_arm, own_solids, roomy, spread_for, stoop, torso};
 use raea_sys_body::limits::clamp_turn;
 use raea_sys_body::prior::shape;
 use crate::hand::{Grip, Hold, Touch, curl};
@@ -231,7 +231,7 @@ impl Take {
             // (its skin as the body will be for a thing this low: squatting, its knees sat back from the thing)
             let mut around = self.avoid.clone();
             around.push(thing);
-            let low = skel.fk(&stoop(skel, &base(t), &body, ahead, thing.at.y, 1.0, 0.0, &around));
+            let low = skel.fk(&stoop(skel, &base(t), &body, ahead, thing.at.y, 1.0, 0.0, spread_for(skel, &body, &thing), &around));
             let skin: Vec<Vec3> = skel.skin(&low).into_iter().zip(&skel.surface).filter(|(_, x)| !of_the_arm(&x.part)).map(|(p, _)| p).collect();
             let stood = thing.at;
             for _ in 0..10 {
@@ -327,6 +327,8 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         .collect();
     // a thing lower than the arms reach: the body bends and squats for it, as far as the hands have got
     let low = holds.iter().map(|h| h.4.0.y).fold(f32::MAX, f32::min);
+    // a low thing close in front comes up between the knees: they open for it
+    let spread = spread_for(skel, &w0, &thing) * busy;
     // what the knees keep out of: the scene's solids, and the thing itself while it stands (a squat sits back from a
     // box on the floor instead of putting its shins through it)
     let mut around = take.avoid.clone();
@@ -335,8 +337,11 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     }
     // solved with the bend the body has room for: where bending or leaning would put the head or chest into a
     // solid, less of both and more squat, a step at a time
-    let solve = |give: f32, frame: &mut Frame| {
-    let mut pose = stoop(skel, &own, &w0, face, low, busy, give, &around);
+    // (`lower`: how much further down the body goes than the hands' height alone asks; `short`, how far the worst
+    // wrist ended from where it was sent)
+    let attempt = |give: f32, lower: f32, frame: &mut Frame| {
+    let mut pose = stoop(skel, &own, &w0, face, low - lower, busy, give, spread, &around);
+    let mut short = 0.0f32;
     frame.miss = 0.0;
     // a heavy thing: the trunk leans back against it once it is off what it stood on
     if let (true, Some(waist)) = (take.weight > 0.0, skel.joint("spine_01")) {
@@ -393,6 +398,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let Some(solved) = solve_at(if weights > 0.0 { sum / weights } else { 0.0 }) else { continue };
         let past = past_range(skel, arm, &solved);
         pose = solved;
+        short = short.max((skel.fk(&pose).pos[arm[2]] - target).length());
         let (wrist, by) = clamp_turn(skel, arm[2], pose.turns[arm[2]]);
         pose.turns[arm[2]] = wrist;
         frame.limited |= past >= 0.5 || by > 0.5;
@@ -434,7 +440,14 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     }
     // the eyes go to the thing as the hands do, and mostly leave it once it is carried
     let watching = busy * (1.0 - 0.7 * smooth(span(t, take.grab, take.carried)));
-    look(skel, &pose, thing.at, watching * (1.0 - 0.5 * give))
+    (look(skel, &pose, thing.at, watching * (1.0 - 0.5 * give)), short)
+    };
+    // the body follows the hands: where the arms fall short of where they are sent (a thing low and out in front),
+    // the body goes down by that much more, twice over, the same every frame so it stays smooth
+    let solve = |give: f32, frame: &mut Frame| {
+        let first = attempt(give, 0.0, frame).1 * 1.3;
+        let second = attempt(give, first, frame).1 * 1.3;
+        attempt(give, first + second, frame).0
     };
     let mut pose = solve(0.0, &mut frame);
     if !roomy(skel, &pose, &take.avoid) {
