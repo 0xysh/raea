@@ -68,7 +68,7 @@ pub fn sync_instances(
     stds: Res<Assets<StandardMaterial>>,
     mut changed: MessageReader<AssetEvent<StandardMaterial>>,
 ) {
-    let recoloured: Vec<AssetId<StandardMaterial>> = changed.read().filter_map(|ev| if let AssetEvent::Modified { id } = ev { Some(*id) } else { None }).collect();
+    let recoloured: Vec<AssetId<StandardMaterial>> = changed.read().filter_map(|ev| match ev { AssetEvent::Modified { id } => Some(*id), _ => None }).collect();
     for (e, mut pl, kids, std) in &mut q {
         // a tinted set's surface follows its row's standard material (sync_meshes recolours that one)
         if let (Some(tn), Some(std)) = (pl.tint.as_mut(), std) {

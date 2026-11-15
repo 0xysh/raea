@@ -112,7 +112,7 @@ pub fn apply_rows(world: &mut World, dir: &Path, rows: &[Tup]) -> Result<bool, S
             None => {
                 let e = store::spawn(world, t);
                 // a camera first seen here is a plain App's (SceneTarget); an Engine's comes with its load
-                match raea_sys_frame::camera::image_of(world, &t.vals)?.or_else(|| world.get_resource::<SceneTarget>().map(|s| (s.size, s.target.clone()))) {
+                match raea_sys_frame::camera::image_of(world, &t.vals)?.or_else(|| world.get_resource::<SceneTarget>().map(|SceneTarget { target, size }| (*size, target.clone()))) {
                     Some(on) if matches!(t.kind.as_str(), "camera" | "rendercam") => spawn_camera(world, e, &t.vals, rows, dir, on, true)?,
                     _ => spawn_3d(world, e, t, &media, dir)?,
                 }

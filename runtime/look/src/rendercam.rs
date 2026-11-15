@@ -37,12 +37,9 @@ pub fn render_cameras(all: &[Vec<Item>], tracks: &[(String, Vec<Option<Item>>)],
 /// keyed) and the first one's colour. Any such light sends the column, so one of brightness 0 turns the ambient off as
 /// Bevy's does; with none, the camera keeps Bevy's default 80.
 pub(crate) fn ambient_columns(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, id: &str, layers: &[u64]) {
-    let lit_by = |i: &&Item| i.kind == "ambient" && sees(layers, i);
-    if !all.iter().flatten().any(|i| lit_by(&i)) {
-        return;
-    }
+    let Some(first) = ambients(all.iter().flatten(), layers).next() else { return };
     column(p, row, id, "ambient", &all.iter().map(|its| ambient_on(its, layers)).collect::<Vec<_>>());
-    if let Some(c) = all.iter().flatten().find(lit_by).and_then(|i| hex(i.props.get("color"))).filter(|c| c != "#ffffff") {
+    if let Some(c) = hex(first.props.get("color")).filter(|c| c != "#ffffff") {
         row.insert("ambient_color".into(), V::S(c));
     }
 }
@@ -62,7 +59,12 @@ pub fn sees(layers: &[u64], i: &Item) -> bool {
 
 /// A frame's ambient light on `layers`: the brightness of every AmbientLight a camera on them sees, summed.
 pub fn ambient_on(frame: &[Item], layers: &[u64]) -> f64 {
-    frame.iter().filter(|i| i.kind == "ambient" && sees(layers, i)).map(|i| light_power("ambient", &i.props)).sum()
+    ambients(frame, layers).map(|i| light_power("ambient", &i.props)).sum()
+}
+
+/// The AmbientLights among `its` that a camera on `layers` sees.
+fn ambients<'a>(its: impl IntoIterator<Item = &'a Item>, layers: &'a [u64]) -> impl Iterator<Item = &'a Item> {
+    its.into_iter().filter(move |i| i.kind == "ambient" && sees(layers, i))
 }
 
 #[cfg(test)]
