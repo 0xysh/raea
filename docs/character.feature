@@ -41,7 +41,8 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
 
     Scenario: CH2. A body folder is the same for a person and a creature
       Given a folder with skeleton.json (name, rig, height, joints by name with parent and rest place, landmarks,
-        skin samples per joint), body.glb (one skin on those joints), and optional head.glb, clothes and clips
+        skin samples per joint), body.glb (skinned to those joints: one skin, or several closed pieces each
+        weighted to its own joints, as the raccoon's trunk and legs are), and optional head.glb, clothes and clips
       Then `rig` says which skeleton the joints are: "soma" for people, the creature's own name for an animal
       And helper joints (twist joints, a belly, ears, eye joints) are listed as helpers: the engine or a part's
         own layer sets them, and no pose, clip or call has to name them
@@ -57,7 +58,8 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
 
     Scenario: CH10. One clip format, on the body's own skeleton
       Then a clip is each joint's turn and the root's place per frame, at its own frame rate, with its contacts
-        (feet, hands, seat), its situation tags, and where it came from (a capture and its licence; a model, its
+        (a list by joint name, each planted or not and where, so four legs or six fit as two do; hands and a
+        seat the same way), its situation tags, and where it came from (a capture and its licence; a model, its
         prompt, seed and constraints; a procedure)
       And a capture, a generated motion and a baked procedure are the same file, so the library, the matcher and
         the checks read one thing
@@ -135,7 +137,8 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And the body's motion drives the neck and head; the face layer adds expression and the eyes on top; the
         eyes take a look target in the world and cover what the head has not turned
       And the face's skin colour is carried onto the body's skin at the seam
-      And `<Character>` takes the face's weights and look target (it passes no morph weights today)
+      And `<Character>` passes the face's weights to the head's morph targets by name (its `morphs` prop does this
+        for a body's own morphs today) and takes a look target
 
     Scenario: CH21. Hair
       # Agreed with the face session 11-15. sdk/body/src/cloth.ts already moves hair and clothes that follow
@@ -147,9 +150,16 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
 
   Rule: Creatures
 
+    # The creature flow is the raccoon session's, end to end, in docs/creatures.feature (its sandbox is the
+    # trashpanda project; done when it works on the raccoon and a second, more complex creature). These three
+    # scenarios say only where it meets the rest. Kimodo is no part of it: its models are for human skeletons
+    # only (SOMA, a humanoid robot, SMPL-X).
+
     Scenario: CH30. A creature is its own skeleton, set down first
-      # docs/creatures.feature. A creature's joints are placed by measure before its model is made, and its
-      # folder is CH2's with its own rig name.
+      # A creature's joints are placed by measure before its model is made, and its folder is CH2's with its
+      # own rig name. Its model may be built, or generated the way the raccoon's now is: a grey mannequin of
+      # the skeleton, an image model drawing the animal on it with the pose and view kept, that image made 3D,
+      # and the mesh laid back on the skeleton and weighted there.
       Then a creature's rig is read from its joints (CR1), and its helper joints are named as helpers
 
     Scenario: CH31. A creature moves by its solver, and by clips where it has them
