@@ -111,8 +111,13 @@ impl Skeleton {
 
     /// A joint by its name, or by its role: the roles are spelt as the game_engine rig named its joints ("thigh_l",
     /// "spine_03", "index_02_r"), and on a SOMA body a role finds SOMA's joint for it (docs/character.feature CH1).
+    /// A SOMA name finds the joint on a body named the old way too, as the TypeScript SDK now names joints by SOMA.
     pub fn joint(&self, name: &str) -> Option<usize> {
-        self.index.get(name).copied().or_else(|| self.index.get(soma_name(name)?.as_str()).copied())
+        self.index
+            .get(name)
+            .copied()
+            .or_else(|| self.index.get(soma_name(name)?.as_str()).copied())
+            .or_else(|| self.index.get(rename(name, false)?.as_str()).copied())
     }
 
     fn three(&self, names: [String; 3]) -> Option<[usize; 3]> {
