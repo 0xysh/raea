@@ -329,6 +329,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       And 20,000 moving copies at 640x360 take at most 100 ms a frame (0.1.4: 1,220 ms), 2,000 at most 40 ms (0.1.4: 94)
       And in-instanced (2,000 moving copies with colours): SSIM at least 0.92 against three.js
 
+    @done
     Scenario: R3F21. A lit TSL node material is lit by the scene's lights
       Given the plan
         | crate                 | file                                | lines | job                                                    |
@@ -347,6 +348,12 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       And a Lambert surface is fully rough and Phong's shininess a roughness, neither metal; a basic, shadow or volume
         node material, or one with a fragmentNode, keeps three's own output
       And in-tsl-lit (a noise-displaced, noise-coloured icosahedron under a directional light): SSIM at least 0.92
+      And the status, 2026-11-15: built as planned. in-tsl-lit SSIM 0.9906 against three.js (WebGPURenderer, its WebGL 2
+        backend) in Chrome at frame 12, where 0.1.4 drew the same blob black (the 11-15 audit's tsl-displace). Proof:
+        sdk/r3f test/tsl.test.ts (the lit contract: three_surface returns base, normal, emissive and world, no three
+        light code in the graph, the instance carried flat; a Lambert surface rough and unmetallic) and
+        raea-sys-three-shader's surface test; tools/parity.sh runs in-tsl-lit. A displaced mesh's shadow is still its
+        undisplaced shape (three-shader's shadow pass is the standard one), and a fragmentNode keeps three's output
 
     Scenario: R3F22. TSL compute and storage buffers
       Given TSL storage (`instancedArray`, `storage`, `attributeArray`), compute nodes (`Fn(...)().compute(n)`) run with

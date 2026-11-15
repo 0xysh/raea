@@ -157,8 +157,8 @@ pub fn modules(vertex: &str, fragment: &str, layout: &[Uniform], textures: Optio
     if lit {
         ve = ve.replace("    return three_vertex(v);\n", surface::VERTEX_TAIL);
     }
-    let fe = if lit { surface::fragment_entry() } else { module::fragment_entry() };
-    (format!("{pre}{vertex}\n{ve}"), format!("{pre}{fragment}\n{fe}"))
+    let (fi, fe) = if lit { (surface::IMPORTS, surface::fragment_entry()) } else { ("", module::fragment_entry()) };
+    (format!("{pre}{vertex}\n{ve}"), format!("{fi}{pre}{fragment}\n{fe}"))
 }
 
 /// A three shader's spec, as the SDK's ThreeShaderMaterial gives it:

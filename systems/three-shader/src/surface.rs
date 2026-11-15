@@ -15,13 +15,15 @@ use bevy::prelude::AlphaMode;
 /// The vertex entry's last line for a lit material: the varyings carry the instance to the fragment stage.
 pub const VERTEX_TAIL: &str = "    var o = three_vertex(v);\n    o.three_instance = v.instance;\n    return o;\n";
 
-/// The fragment entry of a lit material.
+/// What the lit fragment entry imports, in front of the module (WESL takes imports only at its top).
+pub const IMPORTS: &str = "import bevy_pbr::render::pbr_types::{pbr_input_new, STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT};\n\
+    import bevy_pbr::render::pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing, calculate_view};\n\
+    import bevy_pbr::render::mesh_bindings::mesh;\n";
+
+/// The fragment entry of a lit material (its module starts with IMPORTS).
 pub fn fragment_entry() -> String {
     format!(
-        "import bevy_pbr::render::pbr_types::{{pbr_input_new, STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT}};\n\
-         import bevy_pbr::render::pbr_functions::{{apply_pbr_lighting, main_pass_post_lighting_processing, calculate_view}};\n\
-         import bevy_pbr::render::mesh_bindings::mesh;\n\n\
-         @fragment\n\
+        "@fragment\n\
          fn fragment(in: ThreeVaryings, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {{\n\
          \x20   let s = three_surface(in, front);\n\
          \x20   var pbr = pbr_input_new();\n\
@@ -70,5 +72,9 @@ mod tests {
         assert!(f.contains("pbr.flags = mesh[in.three_instance].flags;"));
         assert!(f.contains(&format!("three_slots.s[{}]", super::DISPLAY_SLOT)));
         assert_eq!(super::alpha_code(bevy::prelude::AlphaMode::Add), 4.0);
+        // WESL takes imports only at a module's top: a lit fragment module starts with the entry's
+        let (v, m) = crate::modules("fn three_vertex(v: ThreeVertex) -> ThreeVaryings { var o: ThreeVaryings; return o; }", "fn three_surface(in: ThreeVaryings, front: bool) -> ThreeSurface { var s: ThreeSurface; return s; }", &[], Some(&[]), 0, true);
+        assert!(m.starts_with(super::IMPORTS), "{m}");
+        assert!(v.contains("o.three_instance = v.instance;"));
     }
 }

@@ -11,6 +11,8 @@ URL=${R3F_PARITY_URL:-serve}
 MIN=${MIN:-0.92}
 CASES=(in-basic:24 in-lights:0 in-things:0 in-catch:0 in-lettra:12 in-lettrafx:12 in-shader:12 in-post:0 in-drei:12 in-approx:0 in-glass:0 in-sky:0 out-basic:24 out-tony:24 out-lights:0 out-bloom:0 out-grade:0 out-lens:0 out-catch:0 out-entities:10 src-basic:24 src-tony:24 src-lights:0 src-bloom:0 src-grade:0 src-lens:0 src-catch:0 src-entities:10)
 # R3F_CASES="in-sky:0 in-shader:12": just those (a lane checking its own cases)
+# the TSL cases (test/parity/tsl.tsx): a lit node material (R3F21)
+CASES+=(in-tsl-lit:12)
 [ -z "${R3F_CASES:-}" ] || read -ra CASES <<<"$R3F_CASES"
 mkdir -p "$OUT"
 for c in "${CASES[@]}"; do
