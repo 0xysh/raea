@@ -7,6 +7,8 @@
 #[cfg(target_vendor = "apple")]
 pub mod apple;
 pub mod cli;
+#[cfg(target_vendor = "apple")]
+pub mod frames;
 pub mod search;
 pub mod serve;
 pub mod store;
@@ -101,16 +103,17 @@ pub fn list_folder(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)
     Ok(l)
 }
 
-/// The fast pass over a source's pictures that wait for it: decoded on every core but two, embedded 32 at a time on
-/// the Neural Engine, each batch's rows written as it finishes. Videos wait for their frames (IX2).
+/// The fast pass over a source's pictures and videos that wait for it: decoded on every core but two (a video as a few
+/// keyframes, frames.rs), embedded about 32 frames at a time on the Neural Engine, each batch's rows written as it
+/// finishes. An item's frames go in one batch, so an item counts as searchable once all of its rows are written.
 #[cfg(target_vendor = "apple")]
 pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, stop: &std::sync::Arc<std::sync::atomic::AtomicBool>, on: &mut dyn FnMut(&Progress)) -> Result<Progress> {
     use std::sync::atomic::Ordering;
     use rayon::prelude::*;
     const BATCH: usize = 32;
-    let all: Vec<store::Pending> = store.pending(source, usize::MAX)?.into_iter().filter(|p| p.kind == "picture").collect();
+    let all: Vec<store::Pending> = store.pending(source, usize::MAX)?;
     let base = store.counts(Some(source))?;
-    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<apple::Ready, (i64, String)>>(BATCH * 8);
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<apple::Ready>, (i64, String)>>(BATCH * 8);
     let thumbs: Vec<PathBuf> = all.iter().map(|p| store.thumb(p.id)).collect();
     let threads = std::thread::available_parallelism().map(|n| n.get().saturating_sub(2).max(2)).unwrap_or(4);
     let halt = stop.clone();
@@ -121,7 +124,13 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, sto
                 if halt.load(Ordering::Relaxed) {
                     return;
                 }
-                let r = apple::picture(Path::new(&p.locator), Some(thumb)).map(|(px, w, h)| apple::Ready { item: p.id, t: 0.0, px, w, h }).map_err(|e| (p.id, e));
+                let file = Path::new(&p.locator);
+                let r = if p.kind == "video" {
+                    frames::video(file, Some(thumb)).map(|f| f.px.into_iter().map(|(px, t)| apple::Ready { item: p.id, t, px, w: f.w, h: f.h }).collect())
+                } else {
+                    apple::picture(file, Some(thumb)).map(|(px, w, h)| vec![apple::Ready { item: p.id, t: 0.0, px, w, h }])
+                };
+                let r = r.map_err(|e| (p.id, e));
                 let _ = tx.send(r);
             })
         })
@@ -129,19 +138,21 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, sto
     let started = Instant::now();
     let mut last = Instant::now();
     let mut prog = Progress { source: source.into(), found: base.found, done: base.done, failed: base.failed, stage: "embedding", ..Progress::default() };
-    let mut batch: Vec<apple::Ready> = Vec::with_capacity(BATCH);
-    let mut embedded = 0u64;
+    let mut batch: Vec<apple::Ready> = Vec::with_capacity(BATCH + frames::FRAMES);
     let flush = |batch: &mut Vec<apple::Ready>, prog: &mut Progress, store: &mut Store| -> Result<()> {
         if batch.is_empty() {
             return Ok(());
         }
         let pxs: Vec<&objc2_core_video::CVPixelBuffer> = batch.iter().map(|r| &*r.px).collect();
         let vs = model.embed(&pxs).map_err(|e| anyhow::anyhow!(e))?;
-        // each picture's row and its size, in one pass
+        // each frame's row and its item's size, in one pass
         let (rows, dims): (Vec<(i64, f64, Vec<f32>)>, Vec<(i64, u32, u32)>) = batch.iter().zip(vs).map(|(r, v)| ((r.item, r.t, v), (r.item, r.w, r.h))).unzip();
         store.append(MODEL, &rows, &dims)?;
-        prog.done += batch.len() as u64;
-        prog.newest.extend(batch.iter().map(|r| r.item));
+        // an item's frames sit together: one count and one tile each
+        let mut items: Vec<i64> = batch.iter().map(|r| r.item).collect();
+        items.dedup();
+        prog.done += items.len() as u64;
+        prog.newest.extend(items);
         batch.clear();
         Ok(())
     };
@@ -151,10 +162,9 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, sto
             break;
         }
         match r {
-            Ok(ready) => {
-                batch.push(ready);
-                if batch.len() == BATCH {
-                    embedded += BATCH as u64;
+            Ok(item) => {
+                batch.extend(item);
+                if batch.len() >= BATCH {
                     flush(&mut batch, &mut prog, store)?;
                 }
             }
@@ -165,17 +175,16 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, sto
         }
         if last.elapsed().as_millis() >= 250 {
             prog.seconds = started.elapsed().as_secs_f64();
-            prog.per_sec = embedded as f64 / prog.seconds.max(1e-3);
+            prog.per_sec = (prog.done - base.done) as f64 / prog.seconds.max(1e-3);
             on(&prog);
             prog.newest.clear();
             last = Instant::now();
         }
     }
-    embedded += batch.len() as u64;
     flush(&mut batch, &mut prog, store)?;
     let _ = decoder.join();
     prog.seconds = started.elapsed().as_secs_f64();
-    prog.per_sec = embedded as f64 / prog.seconds.max(1e-3);
+    prog.per_sec = (prog.done - base.done) as f64 / prog.seconds.max(1e-3);
     if prog.stage != "stopped" {
         prog.stage = "done";
     }

@@ -29,3 +29,6 @@ objc2-core-ml = { version = "0.3", features = ["MLModel", "MLModelConfiguration"
 objc2-core-video = { version = "0.3", features = ["CVPixelBuffer", "CVImageBuffer", "CVBuffer", "CVReturn"] }
 objc2-core-graphics = { version = "0.3", features = ["CGImage", "CGColorSpace", "CGContext", "CGBitmapContext"] }
 objc2-image-io = { version = "0.3", features = ["CGImageSource", "CGImageDestination", "CGImageProperties"] }
+# a video's keyframes (frames.rs)
+objc2-av-foundation = { version = "0.3", features = ["objc2-core-media", "objc2-core-graphics"] }
+objc2-core-media = "0.3"
