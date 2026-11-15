@@ -85,7 +85,7 @@ fn a_throw_is_wound_up_and_followed_through() {
     // the hand goes out after it before coming back
     let hand = s.arm(Side::R).unwrap()[2];
     let reach = |t: f32| s.fk(&perform(&s, &base, &take, t).pose).pos[hand].dot(velocity.normalize());
-    assert!(reach(2.12) > reach(2.0) + 0.03, "the hand follows through {} m", reach(2.12) - reach(2.0));
+    assert!(reach(2.2) > reach(2.0) + 0.03, "the hand follows through {} m", reach(2.2) - reach(2.0));
     assert_eq!(perform(&s, &base, &take, 2.6).pose, s.rest());
 }
 

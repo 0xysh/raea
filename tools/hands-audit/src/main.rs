@@ -108,7 +108,7 @@ fn audit(skel: &Skeleton, name: &str, base: &dyn Fn(f32) -> Pose, take: &Take, u
                 let k = (j >= fingers_from) as usize;
                 w.speed[k] = w.speed[k].max(speed);
                 if i > 1 {
-                    if (speed - rate[j]).abs() > 600.0 && std::env::var("POPS").is_ok() {
+                    if (speed - rate[j]).abs() > std::env::var("POPS").ok().and_then(|x| x.parse::<f32>().ok()).unwrap_or(f32::MAX) {
                         eprintln!("  pop {name}: {} at {t:.3} s: {:.0} to {speed:.0} deg/s ({:?})", skel.joints[j].name, rate[j], f.phase);
                     }
                     w.jump[k] = w.jump[k].max((speed - rate[j]).abs());

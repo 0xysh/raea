@@ -107,7 +107,8 @@ pub fn clear(wrist: Vec3, turn: Quat, hand: &(Vec<Vec3>, f32), solids: &[Thing])
             }
         }
         let Some((d, normal)) = worst else { break };
-        at -= normal * d;
+        // (eased in over the first centimetre, so the hand is turned aside without a kink)
+        at += normal * (d * d / (0.01 - d));
     }
     at
 }

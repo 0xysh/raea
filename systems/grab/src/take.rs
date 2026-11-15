@@ -355,7 +355,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let (at, turn) = level;
         // the wrist's path: from where the body has it, in onto the hold from off the surface and over what is in the
         // way; and when letting go, back off the surface and out to where the body has it
-        let (u, off) = if away > 0.0 { (1.0 - away, (normal * 0.08 + follow) * (away * 4.0).min(1.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
+        let (u, off) = if away > 0.0 { (1.0 - away, (normal * 0.08 + follow) * smooth(away * 4.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
         let arc = Vec3::Y * 0.06 * (std::f32::consts::PI * u).sin();
         let end = w0.rot[arm[2]].slerp(turn, smooth(span(u, 0.0, 0.8)));
         // (the hand's skin keeps 2 cm off solids while it travels, its fingers opening; on its hold, 4 mm)
