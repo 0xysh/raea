@@ -328,6 +328,20 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # turned wrongly; frames are taken whole, not blended; and no model's or dataset's licence has been read.
       Then a SOMA animation plays on any raea body, bone for bone
 
+    @done
+    Scenario: HG12b. Generated motion plays on a raea body, its head as the model made it
+      # 11-15. Licences read first. Kimodo: code Apache-2.0; weights under NVIDIA's Open Model License, which
+      # allows commercial use and claims no ownership of outputs. BONES-SEED: granted only to academic users and
+      # companies under a revenue limit, with no redistribution, so raea uses none of it. Kimodo's text encoder
+      # needs a gated Llama model and an NVIDIA card, so nothing was generated here: the four example motions
+      # its repository ships (slow walk, walk then sneak, run and leap, a zombie walk; 30 joints, 30 frames a
+      # second) play on turbo through `somaPose`. The head was tipped back, since one bone direction says
+      # nothing of where a face points: `from_soma` now sets the head's frame from SOMA's head joint and two
+      # eyes, and a hand points at SOMA's middle finger end. The head's pitch on turbo is the source's (15
+      # degrees up at 2 s of the slow walk in both). Open: generating new motion (a cloud step), and judging
+      # it against captures.
+      Then a motion a model generated on SOMA's skeleton plays on a raea body with its head the source's way
+
   Rule: The bar, set by the user 11-14: a complete tool, not scenarios
 
     Scenario: HG14. Measured on the body's own skin, the takes are seamless and clip nothing
@@ -450,6 +464,17 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # turns out to allow it.
       Then a situation the library has no capture of is filled by generated motion on the rig, retargeted from
         SOMA's skeleton once, and judged against the captures by the same detectors
+
+    Scenario: HG15. Twist joints, so a turned limb keeps its thickness
+      # 11-15, measured, not built: a decision for the user, since it adds joints to every body. On turbo's
+      # skin a hand turned 90 degrees thins the wrist to 71 per cent of its radius at the thinnest ring (26 per
+      # cent at 150 degrees); moving the turn to the elbow (forearm_twist, what a take does today) moves the
+      # same pinch to the elbow. The same turn spread over four twist joints along the forearm (arm.rs
+      # `twist_joints`, SOMA-X's shares) keeps 97 to 99 per cent everywhere, and the upper arm reads the same
+      # (71 against 98). The joints would be helpers a body's build adds and the engine drives: no pose,
+      # capture or call names them, so the 52 joints stay the standard.
+      Given a body built with four helper joints along each forearm, upper arm, thigh and shin
+      Then the engine sets them from the limb's two ends each frame, and a turned hand pinches no skin
 
     Scenario: HG13. A body that reacts
       Then a pushed or struck character gives way and recovers (the ragdoll looked at again, with a physics
