@@ -6,6 +6,10 @@ import { createPortal, useFrame } from "@react-three/fiber";
 import { useMemo, type ReactNode } from "react";
 import * as THREE from "three";
 import { GPUComputationRenderer } from "three/examples/jsm/misc/GPUComputationRenderer.js";
+import { MeshBasicNodeMaterial } from "three/webgpu";
+import * as TSLTyped from "three/tsl";
+// untyped: @types/three's chained TSL types make tsc take minutes and gigabytes
+const { texture, uv } = TSLTyped as unknown as Record<string, any>;
 import { convert } from "../src/input/scene";
 import { end, stepTo } from "../src/input/session";
 import type { Part } from "../src/parts";
@@ -141,6 +145,27 @@ describe("a render into a target, drawn by raea's engine", () => {
     expect(later[0].props.name).toBe(first[1].props.name);
     expect(later[0].props.layers).toEqual(first[1].props.layers);
     expect(later[0].props.name).not.toBe(first[0].props.name);
+  });
+
+  test("is read by a TSL node material as its camera draws it: the image itself, v turned over, as sRGB", () => {
+    function Read() {
+      const t = useMemo(() => new THREE.WebGLRenderTarget(32, 32), []);
+      const scene = useMemo(() => Object.assign(new THREE.Scene(), { background: new THREE.Color("#336699") }), []);
+      const cam = useMemo(() => new THREE.PerspectiveCamera(), []);
+      const mat = useMemo(() => Object.assign(new MeshBasicNodeMaterial(), { colorNode: texture(t.texture, uv()) }), [t]);
+      useFrame(({ gl }) => {
+        gl.setRenderTarget(t);
+        gl.render(scene, cam);
+        gl.setRenderTarget(null);
+      });
+      return <mesh name="screen" material={mat}><planeGeometry args={[2, 2]} /></mesh>;
+    }
+    const out = partsOf(() => <Read />);
+    const target = out.find((p) => typeof p.props.target === "string")!.props.target as string;
+    const shader = flat(out.find((p) => p.type === "Mesh" && String(p.props.name).includes("screen"))!.children ?? []).find((c) => c.props.wgsl)!;
+    const textures = Object.values(shader.props.textures as Record<string, { src: string; colorSpace: string }>);
+    expect(textures).toEqual([{ src: target, colorSpace: "srgb" }]);
+    expect((shader.props.wgsl as { fragment: string }).fragment).toMatch(/textureSample\( tex_\w+, samp_\w+, tsl_flip_v\(/);
   });
 
   test("is read by a ShaderMaterial as its camera draws it: the image itself, v turned over, never a raw copy", () => {
