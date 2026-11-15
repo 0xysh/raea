@@ -311,6 +311,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         and do inside <R3F>
       And SKILL.md's router sends an agent with three.js or R3F code to 3d/r3f.md
 
+    @done
     Scenario: R3F19. Plain three.js with its own renderer
       Given a composition whose three.js code makes its own renderer, as single-file demos do: `new
         THREE.WebGLRenderer({ canvas })` or three/webgpu's `WebGPURenderer`, a scene and camera, `renderer.render(scene,
@@ -320,6 +321,19 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         that scene is drawn by raea's engine as <R3F>'s scene is, in the canvas's box
       And its animation loop steps 1/fps a frame from the composition's frame (render equals play)
       And in-vanilla (a plain three.js page): SSIM at least 0.92 against the same page in Chrome
+      Status (11-15): `<Three program={fn}>` (raea/r3f, src/input/Three.tsx, program.ts): fn is the page's script as a
+        function given a canvas. engine/bundle edit.rs resolves `three` and `three/webgpu` imported by the edit's own
+        code (src/, ext/ of the work folder; never the SDK's copies, so the playable host keeps three's real renderer) to
+        the r3f copy's vanilla.ts and vanilla-webgpu.ts: three re-exported, its renderer a class whose constructor
+        returns R3F's stand-in (renderer.ts, moved out of session.ts with the seeded random in seed.ts, so a
+        composition's three needs nothing of React Three Fiber's) wrapped to record a render to the screen and the
+        animation loop into the program running it. Each frame steps its loops and requestAnimationFrame callbacks at
+        i*1000/fps ms with performance.now() at that time and Math.random seeded by the <Three>'s key; a frame before
+        the last runs it again; an async program (await renderer.init()) holds raea's frame and steps from 0 once ready;
+        a full-screen pass to the screen (EffectComposer's quad) draws the scene it rendered. test/program.test.ts 7/7,
+        edit.rs's own-code test; in-vanilla (test/parity/programs.ts: a knot, a ring of boxes, a sun and shadows, turned
+        by the loop's time and by += a call) SSIM 0.9921, and the R3F cases whose `three` is now the stand-in unchanged
+        (in-basic 0.9917, in-shader 0.9935, in-drei 0.9932, in-tsl-lit 0.9906, in-instanced 0.9819, in-sky 0.9986).
 
     @done
     Scenario: R3F20. An InstancedMesh's moving copies are one instance buffer a frame

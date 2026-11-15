@@ -13,6 +13,8 @@ CASES=(in-basic:24 in-instanced:12 in-lights:0 in-things:0 in-catch:0 in-lettra:
 # R3F_CASES="in-sky:0 in-shader:12": just those (a lane checking its own cases)
 # the TSL cases (test/parity/tsl.tsx): a lit node material (R3F21)
 CASES+=(in-tsl-lit:12)
+# a plain three.js program (test/parity/programs.ts) through <Three> (R3F19)
+CASES+=(in-vanilla:24)
 [ -z "${R3F_CASES:-}" ] || read -ra CASES <<<"$R3F_CASES"
 mkdir -p "$OUT"
 for c in "${CASES[@]}"; do
