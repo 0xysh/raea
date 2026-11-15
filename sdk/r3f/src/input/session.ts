@@ -10,6 +10,13 @@ import { renderInto } from "./targets";
 
 extend(THREE as unknown as Parameters<typeof extend>[0]);
 
+const warned = new Set<string>();
+function warnOnce(k: string, why: string) {
+  if (warned.has(k)) return;
+  warned.add(k);
+  console.warn(`raea/r3f: ${k} ${why}`);
+}
+
 /** the renderer R3F configures and never draws with: what it sets on it (shadows, tone mapping) is read back */
 export function standInRenderer(): THREE.WebGLRenderer {
   const noop = () => {};
@@ -25,7 +32,26 @@ export function standInRenderer(): THREE.WebGLRenderer {
   // a pass an app draws into a render target itself (drei's <ContactShadows>) is done on the CPU (targets.ts)
   let target: THREE.RenderTarget | null = null;
   const clear: [number, number, number, number] = [0, 0, 0, 0];
+  // WebGLRenderer's GL state, which a pass an app draws itself sets as it goes (drei's <MeshReflectorMaterial>:
+  // state.buffers.depth.setMask): every call does nothing, every flag reads as off (docs/r3f.feature R3F16)
+  const inert = (): unknown => new Proxy(noop, { get: (_, k) => (k === "then" || typeof k !== "string" ? undefined : inert()), apply: () => undefined });
+  const state = { buffers: { color: inert(), depth: inert(), stencil: inert() }, enable: noop, disable: noop, reset: noop, bindTexture: noop, unbindTexture: noop, activeTexture: noop, setBlending: noop, setFlipSided: noop, setCullFace: noop, viewport: noop, scissor: noop, setScissorTest: noop, useProgram: () => false, bindFramebuffer: () => false, drawBuffers: noop, setPolygonOffset: noop, setLineWidth: noop, setMaterial: noop };
+  // what an app dispatched with gl.compute this frame (TSL's compute nodes), in order: raea runs them as <Compute>s
+  // once they can be (R3F22); until then each is named once and the scene drawn without it
+  const dispatched: unknown[] = [];
+  const compute = (node: unknown) => {
+    dispatched.push(node);
+    if (dispatched.length > 4096) dispatched.splice(0, dispatched.length - 4096);
+    warnOnce("gl.compute", "dispatches a compute raea doesn't run yet: the scene is drawn without what it computes");
+  };
   const own = {
+    compute,
+    computeAsync: async (node: unknown) => compute(node),
+    __raea: { computes: dispatched },
+    // three's WebGL clip space (a CubeCamera asks, drei's <Environment> with children): raea draws in Bevy's anyway
+    coordinateSystem: THREE.WebGLCoordinateSystem,
+    state,
+    extensions: { has: () => false, get: () => null, init: noop },
     render: (scene: THREE.Object3D, camera: THREE.Camera) => {
       if (target) renderInto(target, scene, camera, clear);
     },
@@ -45,7 +71,7 @@ export function standInRenderer(): THREE.WebGLRenderer {
     xr: { enabled: false, isPresenting: false, addEventListener: noop, removeEventListener: noop, setAnimationLoop: noop },
     shadowMap: { enabled: false, type: THREE.PCFShadowMap },
     outputColorSpace: THREE.SRGBColorSpace, toneMapping: THREE.NoToneMapping, toneMappingExposure: 1,
-    capabilities: { isWebGL2: true, maxTextureSize: 16384, maxSamples: 4, logarithmicDepthBuffer: false }, info: { autoReset: true, reset: noop }, properties: { get: () => ({}) },
+    capabilities: { isWebGL2: true, maxTextureSize: 16384, maxSamples: 4, logarithmicDepthBuffer: false }, info: { autoReset: true, reset: noop, render: { calls: 0, triangles: 0, points: 0, lines: 0, frame: 0 }, memory: { geometries: 0, textures: 0 }, programs: [] }, properties: { get: () => ({}) },
   } as Record<string | symbol, unknown>;
   // any other of WebGLRenderer's methods (setRenderTarget, clear, readRenderTargetPixels ...) does nothing: raea draws
   // (verbs only: a catch-all would answer `then`, and the renderer would read as a promise)

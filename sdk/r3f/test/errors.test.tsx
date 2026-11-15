@@ -85,3 +85,72 @@ describe("three's PMREMGenerator", () => {
     expect(env?.props.src).toBe("media/studio.hdr");
   });
 });
+
+// docs/r3f.feature R3F16: what three asks of a renderer raea's stand-ins answer, so these draw (named where raea can't
+// do all of it yet) instead of refusing the render; R3F17: a sky at three's far plane goes to reverse-Z's
+describe("what the 11-15 audit found refused", () => {
+  const quiet = <T,>(fn: () => T): { out: T; warned: string[] } => {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (m: string) => void warned.push(String(m));
+    try {
+      return { out: fn(), warned };
+    } finally {
+      console.warn = warn;
+    }
+  };
+
+  test("drei's <MeshReflectorMaterial> (it sets gl.state.buffers.depth) draws its plane", async () => {
+    const { MeshReflectorMaterial } = await import("@react-three/drei");
+    const { out } = quiet(() => partsOf(() => (<><Box /><mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[4, 4]} /><MeshReflectorMaterial resolution={64} mirror={0.8} /></mesh></>)));
+    expect(out.filter((p) => p.type === "Mesh").length).toBe(2);
+  });
+
+  test("drei's <Environment> with Lightformers (a CubeCamera reads the renderer's coordinate system) draws the scene", async () => {
+    const { Environment, Lightformer } = await import("@react-three/drei");
+    const { out } = quiet(() => partsOf(() => (<><Box /><Environment resolution={16}><Lightformer intensity={4} position={[0, 3, -3]} /></Environment></>)));
+    expect(out.some((p) => p.type === "Mesh")).toBe(true);
+  });
+
+  test("a TSL node material on an InstancedMesh (three asks the backend's device for its limits) draws, flat past a uniform buffer", async () => {
+    const { MeshBasicNodeMaterial } = await import("three/webgpu");
+    const { color } = await import("three/tsl");
+    for (const count of [100, 2000]) {
+      const m = new MeshBasicNodeMaterial();
+      m.colorNode = color(0.4, 0.8, 1);
+      const { out } = quiet(() => partsOf(() => <instancedMesh args={[new THREE.BoxGeometry(0.1, 0.1, 0.1), m, count]} />));
+      expect(out.some((p) => p.type === "Mesh" || p.type === "Instances")).toBe(true);
+    }
+  });
+
+  test("gl.compute in useFrame is taken and named, not thrown", () => {
+    const { useFrame } = require("@react-three/fiber") as typeof import("@react-three/fiber");
+    const Dispatch = () => {
+      useFrame(({ gl }) => (gl as unknown as { compute(n: unknown): void }).compute({ isComputeNode: true }));
+      return <Box />;
+    };
+    const s = stepTo("compute", 0, 30, 400, 400, {}, () => <Dispatch />);
+    const { warned } = quiet(() => stepTo("compute", 1, 30, 400, 400, {}, () => <Dispatch />));
+    const gl = (s.state as unknown as { gl: { __raea: { computes: unknown[] } } }).gl;
+    expect(gl.__raea.computes.length).toBeGreaterThan(0);
+    expect(warned.every((w) => !/TypeError/.test(w))).toBe(true);
+    end("compute");
+  });
+
+  test("drei's <Stars> (a ShaderMaterial on Points with a sampler it never sets) has that sampler read as opaque black", async () => {
+    const { Stars } = await import("@react-three/drei");
+    const { out } = quiet(() => partsOf(() => <Stars count={50} />));
+    const shader = out.find((p) => p.type === "ThreeShaderMaterial");
+    expect(shader).toBeDefined();
+    expect(String((shader!.props.textures as Record<string, string>).pointTexture)).toMatch(/^data:image\/png;base64,/);
+  });
+
+  test("three's <Sky> writes its far plane as reverse-Z's (z = 0), not z = w, which Bevy's projection puts on the near plane", async () => {
+    const { Sky } = await import("@react-three/drei");
+    const { out } = quiet(() => partsOf(() => <Sky sunPosition={[100, 10, 100]} />));
+    const shader = out.find((p) => p.type === "ThreeShaderMaterial");
+    const vertex = String((shader!.props.glsl as { vertex: string }).vertex);
+    expect(vertex).toContain("gl_Position.z = 0.0;");
+    expect(vertex).not.toMatch(/gl_Position\.z\s*=\s*gl_Position\.w/);
+  });
+});

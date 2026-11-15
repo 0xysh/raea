@@ -3,7 +3,7 @@
 // `out-*` are raea compositions, drawn in React Three Fiber by <Raea> (outputs.tsx).
 import { useFrame } from "@react-three/fiber";
 import * as PP from "@react-three/postprocessing";
-import { ContactShadows, Environment, Float, Text, useGLTF } from "@react-three/drei";
+import { ContactShadows, Environment, Float, Sky, Text, useGLTF } from "@react-three/drei";
 import { useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { MeshBasicNodeMaterial } from "three/webgpu";
@@ -280,6 +280,23 @@ export const INPUTS: Record<string, InputCase> = {
           raea drei
         </Text>
         <ContactShadows position={[0, -0.85, 0]} opacity={0.7} blur={2.2} scale={5} far={2} />
+      </>
+    ),
+  },
+  // three's <Sky> (a ShaderMaterial that puts its box on the far plane, `gl_Position.z = gl_Position.w`) behind a box: raea writes
+  // it on reverse-Z's far plane, so the box shows in front (R3F17; 0.1.4 drew the sky over everything)
+  sky: {
+    canvas: { camera: { position: [0, 1.2, 4], fov: 45 } },
+    frame: 0,
+    scene: () => (
+      <>
+        <Sky sunPosition={[100, 10, 100]} />
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[3, 5, 2]} intensity={2.5} />
+        <mesh position={[0, 0.2, 0]}>
+          <boxGeometry />
+          <meshStandardMaterial color="#4ea1ff" roughness={0.5} />
+        </mesh>
       </>
     ),
   },

@@ -87,6 +87,9 @@ function standIn(fresh = false): WebGPURenderer {
   own._initialized = true;
   own.hasFeature = () => false;
   own.hasCompatibility = () => true;
+  // what three's WebGPU backend reads from its device while it builds: the uniform buffer size that decides whether an
+  // InstancedMesh's matrices are a uniform array or attributes (wgpu's defaults), and compute's workgroup limits
+  (own.backend as { device?: unknown }).device = { limits: { maxUniformBufferBindingSize: 65536, maxStorageBufferBindingSize: 134217728, maxComputeWorkgroupsPerDimension: 65535, maxComputeInvocationsPerWorkgroup: 256, maxComputeWorkgroupSizeX: 256, maxComputeWorkgroupSizeY: 256, maxComputeWorkgroupSizeZ: 64, maxBindGroups: 4, maxSampledTexturesPerShaderStage: 16, maxStorageBuffersPerShaderStage: 8 }, features: new Set<string>() };
   // no shadow maps: a shadow in three's graph would be a depth texture raea doesn't fill (raea's own lights cast)
   r.shadowMap.enabled = false;
   if (fresh) return r;
@@ -340,6 +343,12 @@ function rewrite(b: Builder): Omit<Compiled, "key" | "builder" | "frame"> {
       const a = ATTRIBUTES[p.name];
       if (a) vlets.push(`\tlet ${p.name} = ${fit(`v.${a.field}`, a.type, p.type)};`);
       else {
+        // an attribute three made itself or one a copy at a time (an InstancedMesh's matrices past a uniform buffer's
+        // worth of copies, `nodeAttribute0`; an InstancedBufferAttribute): the mesh raea draws carries per-vertex
+        // attributes only, so the graph can't run here yet (R3F16; R3F20/R3F22 bring instance data)
+        const ga = (b as unknown as { geometry?: THREE.BufferGeometry }).geometry?.getAttribute(p.name) as (THREE.BufferAttribute & { isInstancedBufferAttribute?: boolean; isInterleavedBufferAttribute?: boolean; data?: { isInstancedInterleavedBuffer?: boolean } }) | undefined;
+        if (!ga) throw new Unsupported(`it reads ${p.name}, an attribute three makes for itself (an InstancedMesh's copies past what a uniform buffer holds)`);
+        if (ga.isInstancedBufferAttribute || ga.data?.isInstancedInterleavedBuffer) throw new Unsupported(`it reads ${p.name}, an attribute a copy at a time`);
         // one of the mesh's own (lettra's layoutX, glyphIndex, cellUv): a0..a3, four floats each
         if (own.length === ATTRIBUTES_OWN) throw new Unsupported(`it reads more than ${ATTRIBUTES_OWN} vertex attributes of the mesh's own (${[...own, p.name].join(", ")})`);
         vlets.push(`\tlet ${p.name} = ${fit(`v.a${own.length}`, "vec4<f32>", p.type)};`);
@@ -463,7 +472,9 @@ export function nodeMaterialOf(m: THREE.Material, at: NodeAt): Part | undefined 
     if (m.alphaTest > 0) props.alphaTest = m.alphaTest;
     return { type: "ThreeShaderMaterial", props };
   } catch (e) {
-    if (!(e instanceof Unsupported)) throw e;
+    // a graph three itself can't build against the stand-in (what it asks of a GPU raea hasn't answered) is named and drawn
+    // flat, as a refused one is: never the whole render refused for one material (docs/r3f.feature R3F16)
+    if (!(e instanceof Error)) throw e;
     const k = `${m.type}:${e.message}`;
     if (!warned.has(k)) {
       warned.add(k);

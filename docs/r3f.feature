@@ -269,6 +269,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
     mesh a copy, and the raea skill told agents R3F doesn't exist here. Each scenario below is one of those, held by a
     case in test/parity (SSIM against three.js in Chrome, R3F8) or a test that refuses the old behaviour.
 
+    @done
     Scenario: R3F16. What three can't draw in raea is named and drawn, never refused
       Given an <R3F> scene with any of: a TSL node material on an InstancedMesh, a compute dispatched through `gl.compute`,
         drei's <MeshReflectorMaterial>, drei's <Environment> with children (Lightformers), drei's <Stars>, drei's <Clouds>
@@ -280,13 +281,26 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       And a ShaderMaterial on Points (drei's <Stars>) draws its points with its shader
       And a texture three loads from an http(s) URL is fetched through raea's cache, never read as a path in the project
       And test/errors.test.tsx renders each of the six without a refusal
+      Status (11-15): session.ts's stand-in WebGLRenderer answers coordinateSystem (WebGL's), `state` (an inert GL state:
+        every call does nothing), `extensions`, a full `info`, and takes `compute`/`computeAsync` into gl.__raea.computes
+        (warned once: R3F22 runs them); tsl.ts's stand-in WebGPURenderer has a backend device with wgpu's limits, any Error
+        building a graph is named and the material drawn flat, and a graph reading an attribute the drawn mesh can't carry
+        (an InstancedMesh's matrices past 1,024 copies, an InstancedBufferAttribute) is refused there, not by the engine;
+        shader.ts gives a sampler2D the material never sets a 1x1 opaque black picture (WebGL's unbound read); texture.ts
+        fetches an http(s) picture through raea's cache (`asset.load`). The six probes from the audit render (stars, clouds with the CDN's cloud.png, the
+        reflector's plane as its base material, Environment+Lightformer without the cube map, TSL on 100 and 2,000
+        copies, gl.compute), each named; test/errors.test.tsx 10/10
 
+    @done
     Scenario: R3F17. A sky at three's far plane is drawn behind the scene
       Given a shader that puts its vertices on the far plane as three does (`gl_Position.z = gl_Position.w`, drei's and
         three's <Sky>, any skybox ShaderMaterial), or a node material's WGSL doing the same
       When raea translates it (Bevy's projection is reverse-Z: the far plane is z = 0)
       Then it is written onto reverse-Z's far plane, so the scene in front of it shows
       And in-sky (three's Sky behind a box): SSIM at least 0.92 against three.js
+      Status (11-15): shader.ts farPlane() rewrites `X.z = X.w;` and `gl_Position = X.xyww;` to z = 0 in a ShaderMaterial's
+        vertex GLSL and in a node material's vertex WGSL (material.ts, on the part tsl.ts makes); in-sky SSIM 0.9986 (in-shader 0.9935, in-drei 0.9932,
+        in-approx 0.9848 unchanged); test/errors.test.tsx holds the rewrite
 
     Scenario: R3F18. Agents are taught <R3F>
       Given the raea skill (raea-skills skills/raea) and its source guides (sdk/guides/craft/bevy)

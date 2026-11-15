@@ -142,6 +142,8 @@ function valueOf(v: unknown): number | boolean | number[] | undefined {
 
 /** a picture three has no file for (a render target's): one white pixel, so the shader still runs */
 const WHITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+// a 1x1 opaque black PNG: what WebGL reads from a sampler with no texture bound
+const BLACK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYGD4DwABBAEApOCsMQAAAABJRU5ErkJggg==";
 
 const warned = new Set<string>();
 function warnOnce(k: string, why: string) {
@@ -191,6 +193,12 @@ export function shaderPart(m: THREE.ShaderMaterial, points = false): Part {
     }
     uniforms[name] = n;
   }
+  // a sampler the shader declares and the material never gives (drei's <Stars> declares pointTexture): three binds no
+  // texture there, and WebGL reads an unbound one as opaque black (R3F16)
+  for (const [, name] of `${vertex}\n${fragment}`.matchAll(/^\s*uniform\s+(?:(?:lowp|mediump|highp)\s+)?sampler2D\s+(\w+)\s*;/gm)) {
+    if (!(name in textures)) textures[name] = BLACK;
+  }
+  vertex = farPlane(vertex);
   const props: Props = {
     glsl: { vertex, fragment, raw, vertexColors: m.vertexColors === true, ...(points ? { points: true } : {}) },
     ...(flipY.length ? { flipY } : {}),
@@ -207,6 +215,18 @@ export function shaderPart(m: THREE.ShaderMaterial, points = false): Part {
   else if (m.blending === THREE.MultiplyBlending) props.blending = "multiply";
   if (m.alphaTest > 0) props.alphaTest = m.alphaTest;
   return { type: "ThreeShaderMaterial", props };
+}
+
+/**
+ * A vertex put on three's far plane as three puts it, `p.z = p.w` (three's <Sky>, its cube and backgroundCube
+ * programs, a TSL SkyMesh's `position.z.assign(position.w)` in WGSL), on reverse-Z's far plane instead: Bevy's
+ * projection maps the far plane (at infinity) to z = 0, so z = w there is the NEAR plane and the sky would cover the
+ * scene (docs/r3f.feature R3F17). `gl_Position = p.xyww` is the same trick written whole.
+ */
+export function farPlane(src: string): string {
+  return src
+    .replace(/(\b[A-Za-z_][\w.]*)\.z\s*=\s*\1\.w\s*;/g, "$1.z = 0.0;")
+    .replace(/\bgl_Position\s*=\s*([A-Za-z_][\w.]*)\.xyww\s*;/g, "gl_Position = vec4($1.xy, 0.0, $1.w);");
 }
 
 /** whether a material is a ShaderMaterial (or Raw), which shaderPart draws */

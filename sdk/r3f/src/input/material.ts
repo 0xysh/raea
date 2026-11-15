@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { placementOf, srcOf } from "./texture";
 import { classicOf, nodeMaterialOf, type NodeAt } from "./tsl";
-import { builtinPart, isShader, shaderPart } from "./shader";
+import { builtinPart, farPlane, isShader, shaderPart } from "./shader";
 
 export type Props = Record<string, unknown>;
 export interface Part {
@@ -189,7 +189,12 @@ export function materialOf(m: THREE.Material, vertexColors: boolean, at?: NodeAt
         // (its `type` is three's accessor: defined on a view of it, not assigned)
         if (classic) return materialOf(Object.defineProperties(Object.create(m) as THREE.Material, { type: { value: classic }, isNodeMaterial: { value: false } }), vertexColors, at);
         const shader = at && nodeMaterialOf(m, at);
-        if (shader) return shader;
+        if (shader) {
+          // a TSL SkyMesh's `position.z.assign(position.w)` onto reverse-Z's far plane, as a GLSL sky's is (R3F17)
+          const wgsl = shader.props.wgsl as { vertex?: string } | undefined;
+          if (wgsl?.vertex) wgsl.vertex = farPlane(wgsl.vertex);
+          return shader;
+        }
       }
       // a ShaderMaterial or RawShaderMaterial: its GLSL run by raea's engine as three would run it (shader.ts)
       if (isShader(m)) return shaderPart(m);

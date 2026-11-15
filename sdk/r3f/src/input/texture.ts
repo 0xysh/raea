@@ -7,14 +7,32 @@ import { targetPixels } from "./targets";
 
 const urls = new WeakMap<object, string>();
 
+// a picture three loads from an http(s) URL (drei's <Clouds> fetches its cloud.png from a CDN): raea's engine reads paths,
+// so the URL is fetched once through raea's cache and the cached file is the source (docs/r3f.feature R3F16). With no host
+// to fetch with (a test, a browser) the URL itself.
+const remote = new Map<string, string | undefined>();
+function fetched(src: string): string | undefined {
+  if (!/^https?:\/\//i.test(src) || typeof (globalThis as { __raea_call?: unknown }).__raea_call !== "function") return src;
+  if (!remote.has(src)) {
+    let path: string | undefined;
+    try {
+      path = native<{ path: string }>("asset.load", { path: src })?.path;
+    } catch (e) {
+      console.warn(`raea/r3f: texture ${src} couldn't be fetched (${(e as Error).message ?? e}): drawn without it`);
+    }
+    remote.set(src, path);
+  }
+  return remote.get(src);
+}
+
 /** three's ImageLoader without a DOM: the image is a stand-in carrying its url (raea loads the file) */
 export function standInImages() {
   const doc = (globalThis as { document?: { createElementNS?: unknown } }).document;
   if (doc && typeof doc.createElementNS === "function") return;
   const load = function (this: THREE.ImageLoader, url: string, onLoad?: (img: HTMLImageElement) => void) {
     const src = this.manager.resolveURL((this.path ?? "") + url);
-    const img = { src, width: 1, height: 1, naturalWidth: 1, naturalHeight: 1, complete: true } as unknown as HTMLImageElement;
-    urls.set(img, src);
+    const img = { src: fetched(src) ?? src, width: 1, height: 1, naturalWidth: 1, naturalHeight: 1, complete: true } as unknown as HTMLImageElement;
+    urls.set(img, fetched(src) ?? src);
     this.manager.itemStart(src);
     // at once: raea reads a frame's scene in the same turn its components render, so a picture handed over later
     // is missing from the frame (lettra's atlas, any TextureLoader.load). A callback that reads the variable its own
@@ -265,7 +283,7 @@ export function srcOf(t: THREE.Texture | null | undefined): string | undefined {
   const img = t.image as { src?: string; toDataURL?: () => string; data?: unknown } | undefined;
   if (!img) return undefined;
   if (urls.has(img)) return urls.get(img);
-  if (typeof img.src === "string" && img.src !== "") return img.src;
+  if (typeof img.src === "string" && img.src !== "") return fetched(img.src);
   if (typeof img.toDataURL === "function") {
     const s = img.toDataURL();
     urls.set(img, s);
