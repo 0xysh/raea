@@ -147,11 +147,18 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         version; a model's vectors can be dropped and made again; a newer model makes its rows beside the old ones
         and search moves over once it is done
       And where it all lives (~/.raea/library), and a button that shows it in Finder
+      Status 11-15 (raea-feed #38): the Index page says its rows, its bytes on this Mac (database, vectors,
+        thumbnails), its model and its folder, which opens in Finder; a hit shows its file in Finder through the Index's
+        own reveal (only inside one of its folders). Not yet: pause and resume, index again, a model's rows dropped
+        and made again, bytes in the cloud
 
     Scenario: IX12. The wow: the counter
       Then turning a source on starts the fast pass at once and shows it: items found, items searchable, pictures a
         second, and the newest thumbnails landing as a wall; search works from the first batch
       And the first run on a library of 10,000 photos is searchable in about a minute on an M-series Mac
+      Status 11-15 (raea-feed #39): the counter, the rate and the wall move in raea's own window, not only in Chrome:
+        the window has no EventSource, so /host/index/events also answers its long poll (?after=N). The Index spec
+        runs whole on raea's window (npm run e2e:blitz -- e2e/index.spec.ts, 4 of 4)
 
   Rule: How it ships
 
