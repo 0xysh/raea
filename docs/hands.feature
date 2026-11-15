@@ -130,25 +130,57 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
         | raea-sys-grab    | src/json.rs               | 120   | a frame of a take asked for as JSON             |
         | sdk              | sdk/character/src/take.ts | 80    | take(): the call made, typed                    |
 
+    @done
+    Scenario: HG6a. Hands stay out of the scene's solids
+      # 11-14, built: body.rs `clear`, a take's `avoid` list. A wrist's place is moved the least that keeps the
+      # wrist, the palm and the fingers' reach 2 cm clear of every solid named; the wrist's path arcs up 6 cm and
+      # leaves a hold backing off its surface. With a table under a cup, no point of the hand is in the table at
+      # any frame of the take, and keeping clear costs the hold under 6 mm. Seen on turbo: the hand comes over the
+      # table's edge onto the cup and leaves it without passing through the top.
+      Given a take with the solids round it named (a table, a shelf)
+      Then no frame has the hand inside one, and the hold is still kept
+
+    @done
+    Scenario: HG7a. A low thing is taken by bending, the feet planted; and the body is told where to stand
+      # 11-14, built: body.rs `stoop` and `stand_for`. For hands that must go lower than 0.7 of an arm below the
+      # shoulders, the hips come down (to 0.5 m) and the trunk bends at the hips and along the spine (to 57
+      # degrees), by as much as the hands have got along their reach, so the body rises again as the thing is
+      # lifted. Leg IK keeps both ankles where they stood within 5 mm and the feet's turn. A box on the floor is
+      # held within 2 cm; the hips come down over 30 cm and are back up with the box carried. `stand_for` gives
+      # the place a forearm's length off the thing's near face, facing it; standing there both hands reach.
+      # character.take answers it as `stand`. Seen on turbo: a box lifted from the floor onto a table. Not right
+      # yet: the squat folds the head down to the knees, and the body itself keeps out of nothing (the head went
+      # into the table that stood 38 cm in front).
+      Given a thing lower than the arms reach, or out of reach
+      Then the body bends and squats for a low one with its feet where they stand
+      And for a far one the take says where to stand and which way to face
+
+    @done
+    Scenario: HG4a. The carry is against the body
+      # 11-14: a two-handed thing rides 10 cm under the chest joint, 20 cm plus half its size in front, so the
+      # elbows bend and the lift shows (it was carried at arm's length, hardly lifted).
+      Then a carried box is held against the belly with the elbows bent
+
   Rule: Next, in order
 
     @needs:HG5
     Scenario: HG6. The rig's real limits and the body's real shape
       # sdk/body has both in TypeScript (limits.ts: ranges checked against 26,288 captured frames; shape.ts,
-      # shell.ts: the skin). systems/grab has caps on the trunk's lean and finger ranges only.
+      # shell.ts: the skin). systems/grab has caps on the trunk's lean and finger ranges, and HG6a for the hands.
       Given a solved arm
       Then every joint is inside the range sdk/body's limits give, the elbow and wrist first
-      And the arm, the hand and the held thing stay out of the body and off a table's top, by the least move
+      And the forearm, the elbow, the trunk, the head and the held thing stay out of the body and the scene's
+        solids, by the least move
       And one copy of the limits serves both the TypeScript and the Rust
 
     @needs:HG5
-    Scenario: HG7. The body goes to the thing
-      # A take starts only when the body is where it can reach (docs/character.md, principle 6). Today a thing
-      # out of reach is missed and reported.
-      Given a thing out of reach, on the floor, a table or a shelf
-      Then locomotion is asked to arrive where both holds are in reach, facing it
-      And a low thing is taken from a crouch or a bend chosen from the library's pick-low and lift captures,
-        with the hands' holds laid over it
+    Scenario: HG7. The body walks to the thing
+      # HG7a says where to stand; nothing walks there yet.
+      Given a thing out of reach
+      Then locomotion (sdk/body's) is asked to arrive at the take's standing place, facing it, and the take
+        starts when it has
+      And a low thing's bend is checked against the library's pick-low and lift captures, and takes its shape
+        from them where they fit (the back straighter, the head up)
 
     @needs:HG5
     Scenario: HG8. Things with a way to be held

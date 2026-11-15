@@ -217,6 +217,76 @@ fn a_box_is_taken_carried_and_thrown() {
 }
 
 #[test]
+fn a_box_on_the_floor_is_taken_by_bending_with_the_feet_planted() {
+    let s = mannequin();
+    let thing = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(0.0, 0.1, 0.38));
+    let take = Take::new(thing, find_holds(&thing, s.rest().root, HoldOptions::default()), 0.0);
+    let base = stand(&s);
+    let rest = s.fk(&s.rest());
+    let feet = ["foot_l", "foot_r"].map(|n| s.joint(n).unwrap());
+    let (mut t, mut lowest) = (0.0, f32::MAX);
+    while t < 2.0 {
+        let f = perform(&s, &base, &take, t);
+        let w = s.fk(&f.pose);
+        for foot in feet {
+            assert!((w.pos[foot] - rest.pos[foot]).length() < 5e-3, "t {t}: a foot moved");
+            assert!(w.rot[foot].dot(rest.rot[foot]).abs() > 0.9999, "t {t}: a foot turned");
+        }
+        lowest = lowest.min(f.pose.root.y);
+        if t >= take.grab {
+            assert!(f.miss < 0.02, "t {t}: a wrist {} m off its hold on the floor", f.miss);
+        }
+        t += 1.0 / 30.0;
+    }
+    // the hips came down for it, and are back up with the box carried
+    assert!(lowest < s.rest().root.y - 0.3, "the hips came down to {lowest}");
+    assert!(perform(&s, &base, &take, 1.9).pose.root.y > s.rest().root.y - 0.02);
+}
+
+#[test]
+fn hands_stay_out_of_a_table() {
+    let s = mannequin();
+    let top = 0.95;
+    let table = Thing::new(Solid::Box { half: Vec3::new(0.6, top / 2.0, 0.34) }, Vec3::new(0.0, top / 2.0, 0.66));
+    let cup = Thing::new(Solid::Cylinder { half: 0.05, r: 0.035 }, Vec3::new(-0.2, top + 0.05, 0.42));
+    let mut take = Take::new(cup, find_holds(&cup, s.rest().root, HoldOptions::default()), 0.0);
+    take.release = Some(Release::Put { at: 1.7, down: 2.3, place: Vec3::new(0.0, top + 0.05, 0.44) });
+    take.avoid = vec![table];
+    let base = stand(&s);
+    let hand = s.arm(Side::R).unwrap()[2];
+    let rest = hand_rest(&s, Side::R).unwrap();
+    let mut t = 0.0;
+    while t < 3.0 {
+        let f = perform(&s, &base, &take, t);
+        let w = s.fk(&f.pose);
+        for p in [Vec3::ZERO, rest.mid, rest.along * 0.17] {
+            let d = table.distance(w.pos[hand] + w.rot[hand] * p);
+            assert!(d > 0.0, "t {t}: the hand is {} m into the table", -d);
+        }
+        if t >= take.grab && t < 2.3 {
+            assert!(f.miss < 6e-3, "t {t}: keeping clear cost the hold {} m", f.miss);
+        }
+        t += 1.0 / 30.0;
+    }
+}
+
+#[test]
+fn the_body_is_told_where_to_stand() {
+    let thing = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(2.0, 1.0, 3.0));
+    let (at, yaw) = stand_for(&thing, Vec3::new(2.0, 1.0, 0.0));
+    // a forearm's length off the face nearest it, facing the thing
+    assert!((at - Vec3::new(2.0, 1.0, 3.0 - 0.12 - 0.3)).length() < 2e-3, "{at}");
+    assert!(yaw.abs() < 1e-3);
+    // and standing there the thing is in reach of both hands
+    let s = mannequin();
+    let mut p = s.rest();
+    p.root += at - Vec3::new(0.0, 1.0, 0.0);
+    let here = move |_: f32| p.clone();
+    let take = Take::new(thing, find_holds(&thing, at, HoldOptions::default()), 0.0);
+    assert!(perform(&s, &here, &take, 1.0).miss < 5e-3);
+}
+
+#[test]
 fn a_cup_is_put_down_somewhere_else_upright_while_the_body_turns() {
     let s = mannequin();
     let cup = Thing::new(Solid::Cylinder { half: 0.05, r: 0.035 }, Vec3::new(-0.2, 1.0, 0.38));

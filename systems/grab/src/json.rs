@@ -5,13 +5,14 @@
 use glam::{Quat, Vec3};
 use serde_json::{Value, json};
 
+use crate::body::stand_for;
 use crate::hand::{Grip, HoldOptions, find_holds};
 use crate::rig::{Pose, Side, Skeleton};
 use crate::shape::{Solid, Thing};
 use crate::take::{Release, Take, perform};
 
-pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
-pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number }";
+pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
+pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number; stand: { at: [number, number, number]; yaw: number } }";
 
 fn num(v: &Value, what: &str) -> Result<f32, String> {
     v.as_f64().map(|n| n as f32).ok_or_else(|| format!("character.take: {what} isn't a number"))
@@ -59,9 +60,11 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
     // the body's own motion at a time: the pose given nearest it
     let own = |t: f32| base.iter().min_by(|a, b| (a.0 - t).abs().total_cmp(&(b.0 - t).abs())).map(|b| b.1.clone()).unwrap_or_else(|| skel.rest());
 
-    let shape = &v["thing"];
-    let turn = if shape["turn"].is_null() { Quat::IDENTITY } else { quat(&shape["turn"], "thing.turn")? };
-    let thing = Thing { solid: solid(shape)?, at: vec3(&shape["at"], "thing.at")?, turn };
+    let placed = |shape: &Value| -> Result<Thing, String> {
+        let turn = if shape["turn"].is_null() { Quat::IDENTITY } else { quat(&shape["turn"], "a thing's turn")? };
+        Ok(Thing { solid: solid(shape)?, at: vec3(&shape["at"], "a thing's at")?, turn })
+    };
+    let thing = placed(&v["thing"])?;
     let start = num(&v["start"], "start")?;
     let mut options = HoldOptions::default();
     if v["hand"] == "L" {
@@ -83,6 +86,9 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
     if !v["carry"].is_null() {
         take.carry = vec3(&v["carry"], "carry")?;
     }
+    for solid in v["avoid"].as_array().into_iter().flatten() {
+        take.avoid.push(placed(solid)?);
+    }
     if let Some(p) = v.get("put").filter(|p| !p.is_null()) {
         take.release = Some(Release::Put { at: num(&p["at"], "put.at")?, down: num(&p["down"], "put.down")?, place: vec3(&p["place"], "put.place")? });
     } else if let Some(t) = v.get("throw").filter(|t| !t.is_null()) {
@@ -91,6 +97,8 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
     }
 
     let f = perform(&skel, &own, &take, num(&v["t"], "t")?);
+    // where the body would stand to take it, for a scene that walks it there first
+    let (stand, facing) = stand_for(&thing, own(start).root);
     let turns: Vec<[f32; 4]> = f.pose.turns.iter().map(|q| q.to_array()).collect();
     Ok(json!({
         "pose": { "root": f.pose.root.to_array(), "turns": turns },
@@ -99,5 +107,6 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
         "hands": if matches!(grip, Grip::One(_)) { 1 } else { 2 },
         "miss": f.miss,
         "moved": f.moved,
+        "stand": { "at": stand.to_array(), "yaw": facing },
     }))
 }

@@ -10,7 +10,8 @@
 //
 // `base` is the body's own motion, its pose at any time (a clip, a walk, a stand): the take only moves what the hands
 // need and says how much (`moved`, degrees) and how far a wrist ended from its hold (`miss`, metres). A thing out of
-// reach is missed and said so; walk the body to it first. Frame-pure: any frame can be asked for.
+// reach is missed and said so: `stand` is where to walk the body to first. A low thing (on the floor) is taken by
+// bending and squatting, the feet staying where they stand. Frame-pure: any frame can be asked for.
 import { native } from "@raea/app/native";
 import type { Pose, Quat, Skeleton } from "./character/core";
 
@@ -40,6 +41,8 @@ export interface TakeSpec {
   hand?: "L" | "R";
   /** how far below the thing's middle the hands go, metres */
   lower?: number;
+  /** the scene's solids the hands keep out of (a table's top, a shelf) */
+  avoid?: TakeThing[];
   /** set down: moved to `place` from `at`, standing there from `down` */
   put?: { at: number; down: number; place: Vec3 };
   /** let go at `at` with a velocity, metres a second; it falls to `floor` (0) */
@@ -55,6 +58,9 @@ export interface Taken {
   miss: number;
   /** the most any joint was turned from the body's own motion, degrees */
   moved: number;
+  /** where the body would stand to take the thing, and the turn about the vertical that faces it: walk it there first
+   * when the thing is out of reach */
+  stand: { at: Vec3; yaw: number };
 }
 
 /** The body and the thing at `t` seconds of a take. */
