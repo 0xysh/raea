@@ -16,6 +16,11 @@ pub struct Hold {
     pub at: Vec3,
     /// the way the surface faces there, outward
     pub normal: Vec3,
+    /// the way the fingers point, for a thing held one way (a handle, a grip); found from the arm when none
+    pub along: Option<Vec3>,
+    /// the hand's shape, as the hand prior's first numbers, for a hold that is a way of holding (a pinch, a fist
+    /// round a handle); the fingers curl onto the surface when none
+    pub shape: Option<[f32; 3]>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -66,7 +71,7 @@ pub fn find_holds(thing: &Thing, holder: Vec3, o: HoldOptions) -> Grip {
         let from = thing.at + out * far - Vec3::Y * o.lower;
         // no surface on that line (the lowered ray passes under a ball): the thing's edge that way, as the original does
         let (at, normal) = thing.cast(from, -out, far).map_or((thing.at + out * thing.solid.bound(), out), |h| (h.at, h.normal));
-        Hold { side, at: thing.local(at), normal: thing.turn.inverse() * normal }
+        Hold { side, at: thing.local(at), normal: thing.turn.inverse() * normal, along: None, shape: None }
     };
     let (l, r) = (hold(Side::L), hold(Side::R));
     if (l.at - r.at).length() <= o.span { Grip::One(if o.hand == Side::L { l } else { r }) } else { Grip::Two(l, r) }

@@ -218,6 +218,37 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # and a 78-joint rig on PyTorch and Warp), and the vertex-fitting refinements of its pose inversion.
       Then a hand can be given a natural shape by number, and any hand can be scored against real ones
 
+    @done
+    Scenario: HG8a. A thing held one way brings its holds
+      # 11-14, built. A hold can come with the thing (`holds`, in its own frame: where the palm goes, the way the
+      # surface faces, optionally the way the fingers point and the hand's shape as the hand prior's numbers); any
+      # other thing has its holds found (HG2). A hold with a shape takes that shape instead of the curl. Where a
+      # hold doesn't say, the fingers lie along the forearm as it arrives (the arm solved to the hold alone
+      # first), brought level by halves where that would tip them into a solid; and the elbow's swing is chosen,
+      # 10 degrees at a time, as the nearest that keeps the shoulder and the elbow inside their ranges. A mug
+      # held by its side in a loose fist keeps the palm within 15 mm of its hold from the table to the mouth and
+      # back with no joint at a limit; with the fingers forced to point forward the same take reports the arm at
+      # its limits and the palm up to 18 cm off, which is the report doing its job.
+      Then a mug, a grip or a handle is held the way it says, and a hold no arm can make is said, not faked
+
+    @done
+    Scenario: HG9a. Using what is held: a path the hands follow
+      # 11-14, built. A take's `path`: where the carried thing is at times, off the chest, and how it is tipped;
+      # eased from the carry place through each key. A drink is one key at the mouth, tipped 29 degrees. The
+      # thing is exactly at each key at its time, and upright again after. A lift and a put-down now arc 4 cm so
+      # the thing leaves what it stood on before it travels. Seen on teal: a mug to the mouth and back to its
+      # place. Not done: passing a thing from hand to hand or to another character, and pushes, pulls and turns
+      # of things that stay where they are (a door, a drawer).
+      Then a held thing can be raised, tipped, aimed or swung by giving where it goes
+
+    @done
+    Scenario: HG10a. Weight
+      # 11-14, built. `weighing(kg)` (a take's `weight`): the carry place 1.5 cm lower a kilogram (to 18 cm) and
+      # a little closer, the lift an eighth longer a kilogram, the waist leaning back 0.7 degrees a kilogram (to
+      # 11). 12 kg: carried over 10 cm lower, the lift 0.75 s longer, the chest behind where a light take has
+      # it, both palms still on. Seen on teal with 14 kg. Not done: a throw's wind-up and follow-through.
+      Then a heavy thing is held low and close, lifted slower, and leant against
+
   Rule: Next, in order
 
     @needs:HG5

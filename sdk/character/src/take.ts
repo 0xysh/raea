@@ -41,6 +41,15 @@ export interface TakeSpec {
   hand?: "L" | "R";
   /** how far below the thing's middle the hands go, metres */
   lower?: number;
+  /** a thing held one way brings its holds, in its own frame: where a palm goes (`at`, on its surface), the way the
+   * surface faces there (`normal`), optionally the way the fingers point (`along`) and the hand's shape as
+   * handShape's first numbers (`shape`: about -1.2 is a loose fist round a handle). None: holds are found on its shape */
+  holds?: { side: "L" | "R"; at: Vec3; normal: Vec3; along?: Vec3; shape?: number[] }[];
+  /** what is done with the thing once carried: where it is at times (`carry`, from the chest as above) and how it
+   * is tipped from how it is carried (`tilt`, in the body's axes); the hands follow. A drink is a key at the mouth */
+  path?: { t: number; carry: Vec3; tilt?: Quat }[];
+  /** how heavy it is, kilograms: held lower and closer, lifted slower, the trunk leaning back against it */
+  weight?: number;
   /** the scene's solids the hands keep out of (a table's top, a shelf) */
   avoid?: TakeThing[];
   /** set down: moved to `place` from `at`, standing there from `down` */

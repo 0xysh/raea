@@ -129,3 +129,56 @@ fn the_hand_prior_shapes_and_reads_hands() {
         assert!(odd > 2.0 * usual, "fingers bent back read {odd}, the rest hand {usual}");
     }
 }
+
+#[test]
+fn a_mug_is_taken_by_its_own_hold_and_drunk_from() {
+    use raea_sys_body::prior::shape;
+    let s = mannequin();
+    let mug = Thing::new(Solid::Cylinder { half: 0.05, r: 0.04 }, Vec3::new(-0.2, 1.0, 0.38));
+    // held one way: the right hand on its right side, the hand a loose fist; the fingers point as the arm comes
+    let hold = Hold { side: Side::R, at: Vec3::new(-0.04, 0.0, 0.0), normal: Vec3::NEG_X, along: None, shape: Some([-1.2, 0.0, 0.0]) };
+    let mut take = Take::new(mug, Grip::One(hold), 0.0);
+    // to the mouth and tipped toward the face at 2 s, back down by 3 s
+    let up = Vec3::new(-0.02, 0.36, 0.24);
+    take.path = vec![Key { t: 2.0, carry: up, tilt: Quat::from_rotation_x(-0.5) }, Key { t: 3.0, carry: take.carry, tilt: Quat::IDENTITY }];
+    let base = |_: f32| s.rest();
+    let chest = s.joint("spine_03").unwrap();
+    let hand = s.arm(Side::R).unwrap()[2];
+    let rest = hand_rest(&s, Side::R).unwrap();
+    let mut t = take.grab;
+    while t < 3.2 {
+        let f = perform(&s, &base, &take, t);
+        let w = s.fk(&f.pose);
+        // the palm stays on the mug's own hold the whole way
+        let off = (w.pos[hand] + w.rot[hand] * rest.mid - f.thing.world(hold.at)).length();
+        assert!(off < 0.015 && !f.limited, "t {t}: the palm is {off} m off the mug's hold, limited {}", f.limited);
+        t += 1.0 / 30.0;
+    }
+    let f = perform(&s, &base, &take, 2.0);
+    assert!((f.thing.at - (s.fk(&s.rest()).pos[chest] + up)).length() < 1e-4);
+    assert!(((f.thing.turn * Vec3::Y).angle_between(Vec3::Y) - 0.5).abs() < 1e-3, "tipped 29 degrees at the mouth");
+    assert!((perform(&s, &base, &take, 3.1).thing.turn * Vec3::Y).dot(Vec3::Y) > 0.9999);
+    // the fingers are the hold's shape, not a curl
+    let mut shaped = s.rest();
+    shape(&s, &mut shaped.turns, Side::R, &[-1.2, 0.0, 0.0]).unwrap();
+    let index = s.finger("index", Side::R).unwrap()[1];
+    assert!(f.pose.turns[index].dot(shaped.turns[index]).abs() > 0.9999);
+}
+
+#[test]
+fn a_heavy_thing_is_held_lower_lifted_slower_and_leant_against() {
+    let s = mannequin();
+    let thing = Thing::new(Solid::Box { half: Vec3::new(0.16, 0.1, 0.12) }, Vec3::new(0.0, 1.05, 0.42));
+    let grip = find_holds(&thing, s.rest().root, HoldOptions::default());
+    let (light, heavy) = (Take::new(thing, grip, 0.0), Take::new(thing, grip, 0.0).weighing(12.0));
+    assert!(heavy.carried > light.carried + 0.5 && heavy.carry.y < light.carry.y - 0.1);
+    let base = |_: f32| s.rest();
+    let (a, b) = (perform(&s, &base, &light, 3.0), perform(&s, &base, &heavy, 3.0));
+    assert!(b.thing.at.y < a.thing.at.y - 0.1);
+    // the chest is behind where the light take has it, and both palms are still on
+    let chest = s.joint("spine_03").unwrap();
+    assert!(s.fk(&b.pose).pos[chest].z < s.fk(&a.pose).pos[chest].z - 0.005);
+    assert!(b.miss < 6e-3, "{}", b.miss);
+    // no weight changes nothing
+    assert_eq!(perform(&s, &base, &Take::new(thing, grip, 0.0).weighing(0.0), 3.0).pose, a.pose);
+}

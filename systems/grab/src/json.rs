@@ -8,12 +8,12 @@ use serde_json::{Value, json};
 use crate::trunk::stand_for;
 use raea_sys_body::fit::{Mark, fit};
 use raea_sys_body::prior::{coefficients, oddness, shape};
-use crate::hand::{Grip, HoldOptions, find_holds};
+use crate::hand::{Grip, Hold, HoldOptions, find_holds};
 use raea_sys_body::rig::{Pose, Side, Skeleton};
 use crate::shape::{Solid, Thing};
-use crate::take::{Release, Take, perform};
+use crate::take::{Key, Release, Take, perform};
 
-pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
+pub const TAKE_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; t: number; base: { t: number; root: [number, number, number]; turns: [number, number, number, number][] }[]; thing: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }; start: number; grab?: number; carried?: number; carry?: [number, number, number]; hand?: \"L\" | \"R\"; lower?: number; holds?: { side: \"L\" | \"R\"; at: [number, number, number]; normal: [number, number, number]; along?: [number, number, number]; shape?: number[] }[]; path?: { t: number; carry: [number, number, number]; tilt?: [number, number, number, number] }[]; weight?: number; avoid?: { ball?: number; box?: [number, number, number]; capsule?: [number, number]; cylinder?: [number, number]; at: [number, number, number]; turn?: [number, number, number, number] }[]; put?: { at: number; down: number; place: [number, number, number] }; throw?: { at: number; velocity: [number, number, number]; floor?: number } }";
 pub const TAKE_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] }; thing: { at: [number, number, number]; turn: [number, number, number, number] }; phase: \"Before\" | \"Reach\" | \"Lift\" | \"Carry\" | \"Release\" | \"After\"; hands: 1 | 2; miss: number; moved: number; limited: boolean; stand: { at: [number, number, number]; yaw: number } }";
 
 fn num(v: &Value, what: &str) -> Result<f32, String> {
@@ -75,9 +75,36 @@ pub fn take_json(v: &Value) -> Result<Value, String> {
     if !v["lower"].is_null() {
         options.lower = num(&v["lower"], "lower")?;
     }
-    // the holds are found from where the body stands when it starts to reach
-    let grip = find_holds(&thing, own(start).root, options);
+    // a thing held one way brings its holds (in its own frame); any other has them found from where the body
+    // stands when it starts to reach
+    let mut own_holds = Vec::new();
+    for h in v["holds"].as_array().into_iter().flatten() {
+        let along = if h["along"].is_null() { None } else { Some(vec3(&h["along"], "a hold's along")?.normalize_or_zero()) };
+        // a shape's first three numbers (the ones left out are 0)
+        let mut shape = None;
+        if let Some(z) = h["shape"].as_array() {
+            let mut first = [0.0f32; 3];
+            for (slot, n) in first.iter_mut().zip(z) {
+                *slot = num(n, "a number of a hold's shape")?;
+            }
+            shape = Some(first);
+        }
+        let side = if h["side"] == "L" { Side::L } else { Side::R };
+        own_holds.push(Hold { side, at: vec3(&h["at"], "a hold's at")?, normal: vec3(&h["normal"], "a hold's normal")?.normalize_or_zero(), along, shape });
+    }
+    let grip = match own_holds[..] {
+        [one] => Grip::One(one),
+        [a, b, ..] => if a.side == Side::L { Grip::Two(a, b) } else { Grip::Two(b, a) },
+        [] => find_holds(&thing, own(start).root, options),
+    };
     let mut take = Take::new(thing, grip, start);
+    if !v["weight"].is_null() {
+        take = take.weighing(num(&v["weight"], "weight")?);
+    }
+    for k in v["path"].as_array().into_iter().flatten() {
+        let tilt = if k["tilt"].is_null() { Quat::IDENTITY } else { quat(&k["tilt"], "a path key's tilt")? };
+        take.path.push(Key { t: num(&k["t"], "a path key's t")?, carry: vec3(&k["carry"], "a path key's carry")?, tilt });
+    }
     if !v["grab"].is_null() {
         take.grab = num(&v["grab"], "grab")?;
         take.carried = take.grab + 0.5;

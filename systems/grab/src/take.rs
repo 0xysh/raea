@@ -39,6 +39,19 @@ pub struct Take {
     pub release: Option<Release>,
     /// the scene's solids the hands keep out of (a table, a shelf)
     pub avoid: Vec<Thing>,
+    /// what is done with the thing once it is carried: places for it to be at times, the hands following
+    pub path: Vec<Key>,
+    /// how heavy it is, kilograms (0: no matter)
+    pub weight: f32,
+}
+
+/// Where a carried thing is at a time: off the chest as `carry` is, and tilted from how it is carried (the tilt in
+/// the body's own axes: about x it tips toward the body or away).
+#[derive(Clone, Copy, Debug)]
+pub struct Key {
+    pub t: f32,
+    pub carry: Vec3,
+    pub tilt: Quat,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,16 +110,39 @@ impl Take {
             // against the belly, the elbows bent: nearer and higher the smaller it is
             Grip::Two(..) => Vec3::new(0.0, -0.1, 0.2 + thing.solid.bound() * 0.5),
         };
-        Take { thing, grip, start, grab: start + 0.6, carried: start + 1.1, carry, release: None, avoid: Vec::new() }
+        Take { thing, grip, start, grab: start + 0.6, carried: start + 1.1, carry, release: None, avoid: Vec::new(), path: Vec::new(), weight: 0.0 }
     }
 
-    /// where the thing rides at a moment of the body's motion: off the chest, turned only with the body's facing, so
-    /// what stood upright is carried upright
+    /// The take of a thing that weighs `kg`: held lower and closer, lifted slower, the trunk leaning back against it.
+    pub fn weighing(mut self, kg: f32) -> Self {
+        self.weight = kg.max(0.0);
+        self.carry -= Vec3::new(0.0, (0.015 * self.weight).min(0.18), (0.004 * self.weight).min(0.05));
+        self.carried = self.grab + (self.carried - self.grab) * (1.0 + self.weight / 8.0);
+        self
+    }
+
+    /// where the carried thing is off the chest at `t`, and its tilt: the carry place, then the path's keys, eased
+    /// from each to the next
+    fn held_at(&self, t: f32) -> (Vec3, Quat) {
+        let mut from = Key { t: self.carried, carry: self.carry, tilt: Quat::IDENTITY };
+        for key in &self.path {
+            if t < key.t {
+                let u = smooth(span(t, from.t, key.t));
+                return (from.carry.lerp(key.carry, u), from.tilt.slerp(key.tilt, u));
+            }
+            from = *key;
+        }
+        (from.carry, from.tilt)
+    }
+
+    /// where the thing rides at a moment of the body's motion: off the chest, turned only with the body's facing (and
+    /// the path's tilt), so what stood upright is carried upright
     fn riding(&self, skel: &Skeleton, base: &dyn Fn(f32) -> Pose, t: f32) -> Thing {
         let (now, then) = (skel.fk(&base(t)), skel.fk(&base(self.grab)));
         let chest = skel.joint("spine_03").unwrap_or(0);
         let (y, y0) = (yaw(&now), yaw(&then));
-        self.thing.moved(now.pos[chest] + y * self.carry, (y * y0.inverse() * self.thing.turn).normalize())
+        let (carry, tilt) = self.held_at(t);
+        self.thing.moved(now.pos[chest] + y * carry, (y * tilt * y0.inverse() * self.thing.turn).normalize())
     }
 
     /// where the thing is at `t`, and whether the hands are on it
@@ -119,14 +155,17 @@ impl Take {
         }
         let carried = |t: f32| {
             let (ride, u) = (self.riding(skel, base, t), smooth(span(t, self.grab, self.carried)));
-            self.thing.moved(self.thing.at.lerp(ride.at, u), self.thing.turn.slerp(ride.turn, u))
+            // lifted in a low arc, so it leaves what it stood on before it travels
+            let arc = Vec3::Y * 0.04 * (std::f32::consts::PI * span(t, self.grab, self.carried)).sin();
+            self.thing.moved(self.thing.at.lerp(ride.at, u) + arc, self.thing.turn.slerp(ride.turn, u))
         };
         match self.release {
             Some(Release::Put { at, down, place }) if t >= at => {
                 let from = carried(at);
                 let u = smooth(span(t, at, down));
                 // set down level with where it stood: its own turn about the vertical kept
-                let thing = from.moved(from.at.lerp(place, u), from.turn);
+                let arc = Vec3::Y * 0.04 * (std::f32::consts::PI * span(t, at, down)).sin();
+                let thing = from.moved(from.at.lerp(place, u) + arc, from.turn);
                 (thing, if t < down { Phase::Release } else { Phase::After })
             }
             Some(Release::Throw { at, velocity, floor }) if t >= at => {
@@ -178,7 +217,9 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         .filter_map(|h| {
             let shoulder = w0.pos[skel.arm(h.side)?[0]];
             let from = held.world(h.at) - shoulder;
-            let along = Vec3::new(from.x, 0.0, from.z).normalize_or(face).lerp(facing(&held, w0.pos[0]), 0.4).normalize_or(face);
+            let found = Vec3::new(from.x, 0.0, from.z).normalize_or(face).lerp(facing(&held, w0.pos[0]), 0.4).normalize_or(face);
+            // a hold that is a way of holding says where the fingers point
+            let along = h.along.map_or(found, |a| held.turn * a);
             Some((h, wrist_for(skel, &held, &h, along)?))
         })
         .collect();
@@ -189,28 +230,68 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     let solve = |give: f32, frame: &mut Frame| {
     let mut pose = stoop(skel, &own, &w0, face, low, into * (1.0 - away), give);
     frame.miss = 0.0;
-    for &(hold, (at, turn)) in &holds {
+    // a heavy thing: the trunk leans back against it once it is off what it stood on
+    if let (true, Some(waist)) = (take.weight > 0.0, skel.joint("spine_01")) {
+        let back = (0.012 * take.weight).min(0.2) * smooth(span(t, take.grab, take.carried)) * (1.0 - away);
+        pose.turns[waist] = (pose.turns[waist] * Quat::from_rotation_x(-back)).normalize();
+    }
+    for &(hold, level) in &holds {
         let (Some(arm), Some(rest)) = (skel.arm(hold.side), hand_rest(skel, hold.side)) else { continue };
         let normal = held.turn * hold.normal;
+        // how the hand lies on its hold: the fingers along the forearm as it arrives (found by solving the arm to
+        // the hold alone), so the wrist is asked for the least bend; where that would tip the fingers into a solid
+        // (a cup on a table, the forearm coming down to it) they are brought level, by halves
+        let (at, turn) = if hold.along.is_some() {
+            level
+        } else {
+            let probe = reach(skel, &pose, hold.side, held.world(hold.at) + normal * 0.04, ArmOptions { stiff: give, ..Default::default() });
+            let forearm = probe.map_or(face, |r| {
+                let w = skel.fk(&r.pose);
+                (w.pos[arm[2]] - w.pos[arm[1]]).normalize_or(face)
+            });
+            let mut best = (f32::MAX, level);
+            for keep in [1.0, 0.5, 0.0] {
+                let along = Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face);
+                let Some(lie) = wrist_for(skel, &held, &hold, along) else { continue };
+                let pushed = (clear(lie.0, lie.1, &rest, &take.avoid) - lie.0).length();
+                if pushed < best.0 - 1e-4 {
+                    best = (pushed, lie);
+                }
+                if pushed < 0.004 {
+                    break;
+                }
+            }
+            best.1
+        };
         // the wrist's path: from where the body has it, in onto the hold from off the surface and over what is in the
         // way; and when letting go, back off the surface and out to where the body has it
         let (u, off) = if away > 0.0 { (1.0 - away, normal * 0.08 * (away * 4.0).min(1.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
         let arc = Vec3::Y * 0.06 * (std::f32::consts::PI * u).sin();
         let end = w0.rot[arm[2]].slerp(turn, smooth(span(u, 0.0, 0.8)));
         let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &rest, &take.avoid);
-        // elbows out and down, the way arms hang
+        // elbows out and down, the way arms hang; where that puts the shoulder or the elbow past its range, the
+        // elbow is swung about the line from shoulder to hand, 10 degrees at a time, to the nearest swing that
+        // doesn't (the wrist is then held to its own range, and a frame that had to says so)
         let pole = yaw(&w0) * Vec3::new(0.7 * hold.side.sign(), -1.0, -0.4);
-        let Some(solved) = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(pole), end: Some(end), soft: 0.02, stiff: give }) else { continue };
-        pose = forearm_twist(skel, &solved.pose, hold.side, 0.7);
-        // each joint of the arm kept inside its range (limits.rs): a wrist bends so far and no further, and a
-        // frame that needed more says so
-        for joint in arm {
-            let (turn, by) = clamp_turn(skel, joint, pose.turns[joint]);
-            if by > 0.5 {
-                pose.turns[joint] = turn;
-                frame.limited = true;
+        let line = (target - skel.fk(&pose).pos[arm[0]]).normalize_or(face);
+        let mut best: Option<(f32, Pose)> = None;
+        for step in [0.0f32, 1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 4.0, -4.0, 5.0, -5.0, 6.0, -6.0] {
+            let swung = Quat::from_axis_angle(line, (step * 10.0).to_radians()) * pole;
+            let Some(solved) = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(swung), end: Some(end), soft: 0.02, stiff: give }) else { break };
+            let tried = forearm_twist(skel, &solved.pose, hold.side, 1.0);
+            let past: f32 = arm[..2].iter().map(|&joint| clamp_turn(skel, joint, tried.turns[joint]).1).sum();
+            if best.as_ref().is_none_or(|b| past < b.0 - 0.01) {
+                best = Some((past, tried));
+            }
+            if past < 0.5 {
+                break;
             }
         }
+        let Some((past, solved)) = best else { continue };
+        pose = solved;
+        let (wrist, by) = clamp_turn(skel, arm[2], pose.turns[arm[2]]);
+        pose.turns[arm[2]] = wrist;
+        frame.limited |= past >= 0.5 || by > 0.5;
         if t >= take.grab && away <= 0.0 {
             frame.miss = frame.miss.max((skel.fk(&pose).pos[arm[2]] - at).length());
         }
@@ -224,8 +305,18 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
             }
         }
         let close = smooth(span(t, take.grab - SHUT, take.grab)) * (1.0 - smooth(span(away, 0.0, 0.5)));
-        if close > 0.0 {
-            frame.touch[hold.side as usize] = curl(skel, &mut pose.turns, (at, turn), hold.side, &held, close);
+        match hold.shape {
+            // a way of holding brings its hand's shape; any other hold curls the fingers onto what is there
+            Some(z) => {
+                let mut shaped = pose.turns.clone();
+                if shape(skel, &mut shaped, hold.side, &z).is_some() {
+                    for (mine, shaped) in pose.turns.iter_mut().zip(&shaped) {
+                        *mine = mine.slerp(*shaped, close);
+                    }
+                }
+            }
+            None if close > 0.0 => frame.touch[hold.side as usize] = curl(skel, &mut pose.turns, (at, turn), hold.side, &held, close),
+            None => {}
         }
     }
     // the eyes go to the thing as the hands do, and mostly leave it once it is carried
