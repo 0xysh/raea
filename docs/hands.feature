@@ -502,6 +502,19 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # posed by the engine each frame; its shape model; its correctives; any surface but plain grey.
       Then a Kimodo motion plays on SOMA's body as the model made it
 
+    @done
+    Scenario: HG16b. `<Character>` poses SOMA's body from a generated motion's own joint turns
+      # 11-15. A body folder made from SOMA's template rig: body.glb skinned to flat joints under SOMA's names,
+      # skeleton.json with rig "soma" (the 77 named joints, then the 32 twist joints marked as helpers; SOMA's
+      # fixed Root frame is left out, so the hips are the root as in every raea body), each joint's turn from
+      # bind to SOMA's T-pose, and 2,024 skin samples by part. A pose is then arithmetic: a joint's world turn
+      # is Kimodo's turn after the turn to the T-pose, a joint Kimodo does not name follows its parent, the
+      # twist joints take SOMA's shares, and each joint's turn is taken relative to its parent. `<Character
+      # body="soma">` drew the run and leap with no change to the SDK. The body's build and the clip's
+      # conversion are scripts in the test project for now (tools/soma_body.py for Blender,
+      # tools/kimodo_clip.py), and the pose is worked out in the composition: HG16 moves them into the SDK.
+      Then SOMA's body is posed by `<Character>`, its twist joints included
+
     Scenario: HG16. A SOMA body is a raea body
       Given SOMA's rig as a body folder (its 78 joints by SOMA's names, metres, with the twist joints as helpers)
       Then `<Character>` poses it, raea-sys-body knows its joints' roles and limits, and the engine sets its twist
