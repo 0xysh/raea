@@ -131,9 +131,13 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         and raea-api needed no change. A picture Drive has no thumbnail of is fetched once and made small with sips; a
         video Drive hasn't pictured, a folder, a document is left out and said. A hit carries the file's Drive name
         and opens its page in Drive. Measured on the real indexer with a fake Google: 4 picks searchable in 25 ms of
-        fetching plus one batch, each found by words under its Drive name. Not yet: tried on a real Drive account, the
-        Picker showing only pictures and videos (the page is raea-api's, shared with Libraries), and a whole Drive
-        without picking (the scope question above)
+        fetching plus one batch, each found by words under its Drive name. Tried 11-15 on a real Drive account: a video
+        picked in Google's Picker went in from Drive's thumbnail in 1.2 s, came first for words describing its picture
+        (0.20 against 0.06 for the next), and opened its page in Drive. The Picker's API key must list
+        https://docs.google.com/* among its websites beside raea-api's: the Picker runs in a frame there and shows "The
+        API developer key is invalid" without it (Google's web-picker guide). Not yet: the Picker showing only pictures
+        and videos (the page is raea-api's, shared with Libraries), and a whole Drive without picking (the scope
+        question above)
 
     Scenario: IX9. The phone itself, later
       Then 0.1.5 reaches the phone's library through iCloud Photos on the Mac. Indexing on the iPhone in raea's iOS app
