@@ -23,11 +23,19 @@ export interface R3FProps extends Config {
   children?: ReactNode;
   /** a name of its own when one composition has more than one R3F scene that come and go */
   name?: string;
+  /** the box's width and height in frame pixels, when the <R3F> sits in a box smaller than the frame: R3F's size
+   *  (useThree's size and viewport), its camera's aspect and an orthographic camera's frame are the box's. raea draws
+   *  the scene in the box it sits in either way (#130); by default R3F's size is the frame's */
+  width?: number;
+  height?: number;
 }
 
-function Inner({ fiber, children, name, ...config }: R3FProps & { fiber: Parameters<typeof useBridge>[0] }) {
+function Inner({ fiber, children, name, width: boxW, height: boxH, ...config }: R3FProps & { fiber: Parameters<typeof useBridge>[0] }) {
   const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
+  const video = useVideoConfig();
+  const { fps } = video;
+  for (const [k, v] of [["width", boxW], ["height", boxH]] as const) if (v !== undefined && !(v > 0 && Number.isFinite(v))) throw new RangeError(`<R3F>: ${k} is the box's size in frame pixels, above 0, got ${v}`);
+  const [width, height] = [boxW ?? video.width, boxH ?? video.height];
   const clock = useContext(ClockContext);
   const local = useContext(LocalTimeContext);
   const bridge = useBridge(fiber);
