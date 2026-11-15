@@ -379,9 +379,10 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let (mut sum, mut weights, mut least) = (0.0f32, 0.0f32, f32::MAX);
         let mut costs = Vec::with_capacity(13);
         for step in -6..=6 {
-            let swing = step as f32 * 10.0;
+            let swing = step as f32 * 15.0;
             let Some(tried) = solve_at(swing) else { continue };
-            let mut cost = past_range(skel, arm, &tried);
+            // (the wrist's too: an elbow lifted out to the side can spare a wrist a bend it can't make)
+            let mut cost = past_range(skel, arm, &tried) + clamp_turn(skel, arm[2], tried.turns[arm[2]]).1;
             let drawn = skel.fk(&tried);
             let (elbow, wrist) = (drawn.pos[arm[1]], drawn.pos[arm[2]]);
             let depth = |solid: &Thing, margin: f32| (margin - solid.distance(elbow)).max(margin - 0.01 - solid.distance(elbow.lerp(wrist, 0.5))).max(0.0);
@@ -391,7 +392,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
             costs.push((swing, cost));
         }
         for (swing, cost) in costs {
-            let w = (-(cost - least) / 4.0).exp() * (-(swing / 45.0).powi(2)).exp();
+            let w = (-(cost - least) / 12.0).exp() * (-(swing / 60.0).powi(2)).exp();
             sum += swing * w;
             weights += w;
         }
@@ -458,6 +459,15 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
             if roomy(skel, &solve(mid, &mut frame), &take.avoid) { hi = mid } else { lo = mid }
         }
         pose = solve(hi, &mut frame);
+    }
+    // a thing held in one hand is where that hand has it: if the wrist was held at its limit, the thing turns with
+    // the hand it is in (a cup tips less than asked) and nothing of the hand passes into it
+    if let ([(part, _, away, _, (at, turn))], true) = (&holds[..], take.slide.is_empty()) {
+        if let (true, Some(arm)) = (t >= part.grab && *away <= 0.0, skel.arm(part.hold.side)) {
+            let drawn = skel.fk(&pose);
+            let off = (drawn.rot[arm[2]] * turn.inverse()).normalize();
+            frame.thing = thing.moved(drawn.pos[arm[2]] + off * (thing.at - *at), (off * thing.turn).normalize());
+        }
     }
     // the first and the last of a hand's part are a blend of the joints, so its arm leaves and ends exactly as the
     // body has it: each hand's own arm by its own part, the rest of the body by the hand most on

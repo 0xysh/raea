@@ -352,6 +352,12 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # the floor take (hold 69 mm off, fingers 26 mm in the box, thighs 11 mm); the mug (fingers 26 mm in it);
       # body-joint jumps of 360 to 640. Shown on turbo in the Character SDK project (compositions/take_turbo.tsx),
       # rendered before this run.
+      # Fifth run, after: a thing held in one hand is where that hand has it (if the wrist is at its limit the
+      # thing turns with the hand instead of passing through it), and the elbow's swing also counts what the wrist
+      # can't do. The mug: finger skin in it 26 to 1 mm, five pads on it (from 2); a moved cup 5 to 2 mm. What
+      # that exposed: at the mouth the mug tips up to 50 degrees where 29 was asked, and its rim goes 14 mm into
+      # the face; a carried cup tips up to 2 degrees where the wrist is limited; the mug take has a joint jump of
+      # 1,378 as the elbow swings out. The floor take is unchanged (hold 69 mm off).
       Given the six takes of tools/hands-audit on a clean body with real fingers
       Then no skin is in the thing beyond a pad's give (2 mm), none in the scene or the body
       And every finger meant to hold has its pad on the thing, by a grip chosen for the thing's size and shape
