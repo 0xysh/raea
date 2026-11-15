@@ -217,6 +217,35 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And while a scene plays live and there is no such clip, the matcher's nearest is played and the gap is
         written down as a clip to make, never papered over
 
+    Scenario: CH15b. A line of text made into a clip between two standing poses
+      # 11-15, the first run of Kimodo's text path (the account's access to the gated Llama 3 model was granted that
+      # morning). Two standing poses from the captures as keyframes, in place, 4 s, and the line "A person waves at
+      # the camera with their right hand", three seeds: in each the right wrist is above its shoulder for 48 to 59 of
+      # 120 frames, reaching the head's height, while the left never leaves the hip, and the hips stay within 3 cm.
+      # All three pass the bar of the 19 captures that end standing (sdk/body/tools/fromkimodo.ts with a "do:"
+      # name); the kept one is written to the project's made clips (made.json, read by stage.ts `madeClips`). On
+      # Modal: 1.6 s a clip on the GPU after 130 s loading the model, and 26 minutes queued behind the workspace's
+      # other GPU jobs. Kimodo's code has nothing tied to NVIDIA (no custom kernels; its text encoder takes Apple's
+      # `mps` device), so the earlier line that it does not run on a Mac is untested, not true.
+      Then a stage `do` line gets a clip made from its words, checked, and kept in the project
+
+    Scenario: CH15c. Kimodo on the user's own machine, in MLX (planned)
+      # The user, 11-15: "lets plan that if kimodo works well we port it mlx weights or go find some". Gated on
+      # an eval first: about ten lines (wave, point, shrug, clap, nod, bow, look at a watch, cross the arms,
+      # scratch the head, stretch), each with a check of its own (which hand rises, where the head turns) and a look
+      # by the user. If they hold, Kimodo moves to MLX, the general backend on Apple silicon already in raea
+      # (raea-sys-mlx), in two halves. The text encoder (LLM2Vec: Llama 3 8B made bidirectional, with its
+      # trained adapters): MLX copies of Llama 3 8B Instruct exist (mlx-community, 4-bit about 4.5 GB), so the
+      # work is LLM2Vec's bidirectional mask and adapters merged onto them, checked against PyTorch's features
+      # for the same lines; a line's features are kept once made, so the encoder runs once a line. The motion
+      # model (a small diffusion transformer): its weights converted and run in MLX, checked against the PyTorch
+      # motion for the same line, constraints, seed and noise. Before anything ships to users: the licences of
+      # converted weights (NVIDIA's Open Model License for Kimodo, Meta's Llama 3 licence for the encoder).
+      Given the eval's lines pass
+      Then a do line's clip is made on a Mac with no GPU in the cloud, matching the cloud's within a stated
+        tolerance
+      And its cost is a one-off download and seconds a line
+
     Scenario: CH16. Staging: a performance is a list of steps
       # Built on the old rig: matching.ts `perform(lib, {at, facing, steps})` with walk, face, wait; course.ts;
       # the take (docs/hands.feature). This is the one vocabulary for all of them.
