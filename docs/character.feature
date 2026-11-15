@@ -368,6 +368,18 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # shape), so only small changes of build are right; and this is HG17's start, not its end.
       Then a garment made once dresses SOMA bodies of different builds
 
+    @done
+    Scenario: CH42c. A garment's colour is a picture in the body's own UVs
+      # 11-15. `wear` bakes each garment's colour as a 2048 px picture in the body's first UV set (spread to
+      # fill it): every texel of a covered triangle is a point of the body, looked up in the view that faces
+      # its triangle most among the views that see all three corners. The jeans now show their fly, pockets
+      # and wash and the jacket its zip and ribbing, where a colour per vertex gave a blur. Also: a small bare
+      # patch walled in by cloth is counted as cloth, which closed the t-shirt's shoulder tops (the jacket's
+      # still gape: their gap runs into the collar). Seen now that the detail is there: the views' colours
+      # differ (the back of the jeans is paler than the front), so a seam shows where one view hands over to
+      # the next; matching them garment by garment is not done.
+      Then a garment carries its own picture, and its detail is the drawing's
+
     Scenario: CH42. A garment is kept as data on SOMA's topology
       Then a garment file holds, per body vertex it covers: that it is covered, its stand-off, and how far it
         may stray (for the cloth follower); and a texture in the body's own UVs, baked from the views with the
