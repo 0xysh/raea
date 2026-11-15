@@ -200,10 +200,10 @@ fn bevy_parts(n: &Node3, it: &mut Item) {
     }
 }
 
-/// A scene with a <Compute> whose state carries from frame to frame (a file's images, or buffers of its own), so a
-/// still steps every frame before it (raea-runtime-export's scene_frames).
+/// A scene with a <Compute> whose state carries from frame to frame (a file's images, or buffers of its own), or a camera
+/// into a render image (R3F23c: what it drew lasts, a ping-pong's start drawn at frame 0), so a still steps every frame before it (raea-runtime-export's scene_frames).
 pub fn carries_state(scene: &[Node3]) -> bool {
-    scene.iter().any(|n| (&*n.kind == "Compute" && n.props.get("shader").is_some_and(|s| s.get("file").is_some() || s.get("buffers").and_then(Value::as_object).is_some_and(|b| !b.is_empty()))) || carries_state(&n.kids))
+    scene.iter().any(|n| (&*n.kind == "Compute" && n.props.get("shader").is_some_and(|s| s.get("file").is_some() || s.get("buffers").and_then(Value::as_object).is_some_and(|b| !b.is_empty()))) || (&*n.kind == "PerspectiveCamera" && n.props.get("target").is_some_and(Value::is_string)) || carries_state(&n.kids))
 }
 
 /// A frame's scene walked into its parts, each placed in the world.
