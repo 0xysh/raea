@@ -81,8 +81,23 @@ pub fn two_bone(skel: &Skeleton, p: &Pose, limb: [usize; 3], target: Vec3, o: Ar
             turn_a = Quat::from_axis_angle(to, angle) * swing;
         }
     }
-    let ra = (turn_a * w.rot[a]).normalize();
+    let mut ra = (turn_a * w.rot[a]).normalize();
     let rb = (turn_a * flex * w.rot[b]).normalize();
+    // the middle joint is a hinge with an axis of its own, the one the rest pose's bend is about (an elbow's, a
+    // knee's). The first bone is turned about itself until that axis is the one the limb is bent about, as an upper
+    // arm turns in its socket: so the middle joint flexes and never bends sideways. A limb at rest nearly straight
+    // has no such axis to read, and a limb posed nearly straight no bend to match: less turn the nearer either is.
+    let (bone_a, bone_b) = (skel.offset(b) / la, skel.offset(c) / lb);
+    let (own, bent) = (bone_a.cross(bone_b), (turn_a * u).cross(turn_a * flex * v));
+    let sure = (own.length() / 0.2).min(1.0) * (bent.length() / 0.2).min(1.0);
+    if sure > 0.0 {
+        let along = (turn_a * u).normalize();
+        let (has, wants) = ((ra * own).reject_from_normalized(along), bent.reject_from_normalized(along));
+        if has.length() > 1e-4 && wants.length() > 1e-4 {
+            let angle = has.cross(wants).dot(along).atan2(has.dot(wants));
+            ra = (Quat::from_axis_angle(along, angle * sure * sure * (3.0 - 2.0 * sure)) * ra).normalize();
+        }
+    }
     let rc = o.end.unwrap_or(w.rot[c]);
 
     let mut pose = p.clone();
