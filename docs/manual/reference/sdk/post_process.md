@@ -221,6 +221,7 @@ A shader over the whole frame. Its source defines
 | `temperature` | `number` | warmer (+) or cooler (-): a shift of the CIE x chromaticity, about -0.3 to 0.3 |
 | `tint` | `number` | magenta (+) or green (-) |
 | `saturation` | `number` | the whole frame's saturation after tone mapping (1 keeps it) |
+| `exposure` | `number` | stops of exposure on every pixel just before tone mapping, unlit colours and emission included (0 keeps it): <ToneMapping exposure> is the camera's, which brightens only what lights shade |
 | `shadows` | `GradeSection` | the grade on the shadows: saturation, contrast, gamma, gain, lift |
 | `midtones` | `GradeSection` | the grade on the midtones |
 | `highlights` | `GradeSection` | the grade on the highlights |
