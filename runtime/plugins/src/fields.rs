@@ -33,7 +33,7 @@ pub fn row_names(world: &mut World, v: &Value) -> Result<Option<Entity>, String>
 
 /// A picture as a Handle<Image> field gives it (a path in the edit, an inline {width, height, pixels}, "render:NAME"),
 /// for a material built outside the component rows (raea-sys-material's shader_ext.rs: a surface shader's textures).
-/// Called once the rows are applied (apply_rows), so a "render:NAME" meets the camera that draws into it.
+/// A "render:NAME" is the image every row of the load naming it shares (the engine's load empties them before its rows spawn).
 pub fn image(world: &mut World, v: &Value) -> Result<Handle<Image>, String> {
     let refs = world.remove_resource::<Refs>().unwrap_or_default();
     let reg = world.resource::<AppTypeRegistry>().clone();

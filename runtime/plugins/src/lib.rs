@@ -310,7 +310,6 @@ pub fn apply_rows(world: &mut World, inserted: &[Tup], ents: &[Entity], dir: &Pa
     world.insert_resource(Refs { dir: dir.to_path_buf(), names: by_name, media });
     world.insert_resource(raea_bevy_world::EntityNames(row_names));
     world.insert_resource(Loading::default());
-    world.insert_resource(RenderImages::default());
     if active(world) {
         let mut c = world.resource_mut::<PluginClock>();
         c.stepped = 0;

@@ -32,6 +32,7 @@ impl Engine {
         }
         // the rows go through the store; what else the last load spawned (overlay, tag, raea's leftovers) goes too
         store::clear(world);
+        world.insert_resource(raea_sys_frame::RenderImages::default()); // its render images: this load's are made as its rows spawn
         world.despawn_all::<With<Mirror>>();
         let ents = store::load(world, inserted);
         #[cfg(feature = "native")]
