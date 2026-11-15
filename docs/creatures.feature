@@ -143,10 +143,46 @@ Feature: Creatures: a four-legged body in the character SDK
       Then at a gallop every leg reaches its foot and the back's arch follows the legs
 
     Scenario: CR12. Other animals on the same solver
-      # The solver reads only the rig's names and measures. A cat and a dog (an earlier game's rigs carry the same
-      # leg joints, without digits) should need their gait's numbers and nothing else.
-      Given a cat's and a dog's rig
-      Then both pass CR2 to CR5 with their own stride and standing shares
+      # 11-15: done on a dragon (four legs, two wings, four neck joints, eight tail joints, horns, scales): the same
+      # solver, sized by the legs' reach beside a raccoon's (k: every stride, speed and length in the solver is a
+      # raccoon's times k; 1.74 for the dragon). Feet slide 0 mm in every move; the skin holds in 13 of 13. What it
+      # needed that a raccoon did not: any number of neck joints sharing the head's turn, optional ears, lids, digits
+      # and belly, wings (CR17), a body on nearly straight legs carried a little lower so it has slack to step with,
+      # and how it carries itself as four numbers in its rig (head low, heel down, tail's hang, wings' fold).
+      Given a dragon's rig
+      Then it passes CR2 to CR5 and CR10 on the raccoon's solver with no line of the solver naming it
+
+    Scenario: CR15. A creature is a spec, and one flow makes it
+      # In the project (blender/creatures.py, tools/creature.sh). A creature is data: its joints by measure on the
+      # names' convention (root, spine1..N, chest, neck1..N, head, jaw, ear_/lid_, tail1..N, fl/fr/hl/hr legs, wl/wr
+      # wings, belly), the marks that end a bone, how thick its flesh is round each joint, its webs and horns, what
+      # its skin is, the words it is drawn from, and its carriage. The flow:
+      #   mannequin  the skeleton clothed in grey flesh (tubes by the radii, sheets for webs, cones for horns)
+      #   art        the image model draws the animal on the mannequin, same pose and view (flux_2_pro, 3 cents)
+      #   idol       the drawing made 3D on this Mac (Idol, about 3.5 minutes), carved to one closed mesh
+      #   build      the mesh laid on the skeleton by its feet and nose (its long axis found), thinned, painted from
+      #              its own colour; the joints refitted to it (back, a standing neck by the middle of its flesh, legs,
+      #              the tail along its own line, ear and horn tips, wing tips and wrists); weights by bone heat on a
+      #              stand-in, the trunk given to the back by place; each leg and wing cut into its own closed piece
+      #   check      the reel posed by the solver and the skin measured (CR10)
+      Given a spec for a raccoon, the same skeleton as a vinyl toy, and a dragon
+      Then each command makes each of the three, and all three pass CR10 with no change between them
+
+    Scenario: CR16. The coat is the spec's
+      # fur: the generated surface is the coat's outside; the skin is set in by the fur's length for each part and 16
+      # shells grow back out to it (CR0's finding). scales, plain: the surface as it is, no shells, the picture opaque.
+      # A second style is a second spec with other words and another skin: the toy raccoon passed on its first run.
+      # Not done: a fur length read from the drawing (clipping the coat in the drawing keeps the outline, so the gap
+      # measures nothing), lids that close over painted eyes, a mouth with an inside.
+      Then a creature's skin is fur shells or the bare surface by its spec, and a restyle changes no code
+
+    Scenario: CR17. Wings
+      # A wing is a limb (wl/wr: shoulder, elbow, wrist, the tip a mark) and its own piece of skin. Its membrane is
+      # too thin for the 3D model to keep (Idol gave the arm and fingers and dropped the sheet), so the build makes it:
+      # a sheet between the refitted joints, each point following the joints at its corners. The solver raises a wing
+      # about the body's line and folds it in its own plane joint by joint (which way round each joint folds is read
+      # from the rest pose). Rough: the membrane is one flat colour and does not follow the finger bones; no flight.
+      Then a winged creature folds its wings as it walks, opens and beats them as it runs, and no web point is unbound
 
     Scenario: CR13. In the engine
       # As docs/hands.feature moved the hands to Rust (raea-sys-body), a creature's solver belongs beside it once
