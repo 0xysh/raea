@@ -109,6 +109,14 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
         (LB6's job media route) only when opened or deep-indexed
       And Google Drive for desktop's own folder (~/Library/CloudStorage/GoogleDrive-*), when it is there, is a folder
         source like any other
+      Status 11-15: the folder route is built (raea-feed #36: Google Drive, Dropbox, OneDrive and Box are Index
+        switches when their app mounts them; their local files go in at full speed, online-only ones are left out and
+        counted until each provider is shown to answer Quick Look without a download). The API route is blocked on a
+        scope: raea-api's Drive connection asks drive.file, which reaches only files picked in Google's Picker, and a
+        picked folder shares the folder alone, never its contents (Google's docs; checked against developer reports
+        through 2026-10). Listing a whole Drive needs drive.readonly or drive.metadata.readonly, restricted scopes that
+        need Google's restricted-scope verification and a yearly security assessment (CASA) before a public app may
+        ask for them. Shane's call (open question 3)
 
     Scenario: IX9. The phone itself, later
       Then 0.1.5 reaches the phone's library through iCloud Photos on the Mac. Indexing on the iPhone in raea's iOS app
@@ -160,3 +168,5 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
       Then 1. What Pro and Team include for the cloud index (items or bytes), and what past it costs
       And 2. Whether Photos' "include photos only in iCloud" is on by default (it fetches each one's small copy over
         the network)
+      And 3. Whether raea-api asks Google for drive.readonly (restricted: verification and a yearly CASA assessment) so
+        a whole Drive indexes without Drive for desktop, or Drive stays the desktop app's folder plus picked files
