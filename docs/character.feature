@@ -575,3 +575,47 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         shape at build, and kept as a skinned mesh with its flat cut as its UVs
       And words become settings (a language model picks components and values), never pictures of the body
       And layers drape in order, each over the one beneath, and creatures get their own pattern blocks
+
+    Scenario: CH48. A garment model that dresses SOMA in anything (proposed)
+      # The user's answer to CH47, 11-15: "clothing or what you wear could realistically be anything. I wonder
+      # what we could do if we trained a small model like kimodo did or idol did, build off some existing
+      # weights we ship and create something that builds more intelligently". Patterns make only what is cut
+      # and sewn; armour, shoes, hats, a backpack or a costume are not patterns. Kimodo is good because it
+      # learned in one fixed frame (SOMA's skeleton), so what it makes plays on our body unchanged: the garment
+      # model would make garments in SOMA's rest pose and frame, so fit, skinning and layers come free. The data
+      # comes from CH47a's tools run as an engine (GarmentCode's design sampler across SOMA's shapes, draped by
+      # our cloth on the GPU, rendered from the mannequin's cameras, each example labelled exactly: its design,
+      # its pattern, its 3D on the body, its pictures), plus hard-surface things drawn and made 3D by Idol and
+      # cut from the body. GarmentCodeData itself is not used (draped on SMPL bodies, its licence unconfirmed).
+      # The base weights would be Idol's (Apache-2.0, shipped): one picture of the mannequin dressed in anything
+      # in, the garment alone out, in 3D on SOMA. Idol ships no training code, so its fine-tune is ours to write.
+      Then a garment is made by a model from words or a picture, on SOMA's body, as a layer
+      And the training data is ours, made by our own tools on SOMA, with where each example came from
+      And its cost is said before any training is paid for
+
+    @done
+    Scenario: CH48a. The garment data engine: random designs cut to SOMA, draped on the GPU, pictured, labelled
+      # 11-15, CH48's data half (tools/garments/engine.sh OUT N SEED). GarmentCode's sampler draws a design and
+      # its own checks refuse about 60 per cent; each kept one is cut to SOMA and draped by CH47a's cloth on the
+      # GPU (MLX): the body as a 7 mm signed distance grid signed by winding number (the nearest face's normal
+      # put patches of "inside" in the air above the shoulders), every link solved at once, compiled. The
+      # T-shirt that took 125 s on the CPU takes 7 s with the same seams (0.83 mm median) and stretch. Three
+      # things threw garments off, each found from snapshots of the drape: the cloth was too soft under gravity
+      # (+18 per cent stretch at the 95th percentile with 10 solver passes a substep: armholes opened over the
+      # shoulders; 60 passes give +5); SOMA's bust had been read at the chest's most forward level (81 cm), not
+      # the fullest girth under the arms (89.9), so fitted tops were cut too small; and GarmentCode's own drapes
+      # pin labelled edges to planes (a waistband's top at the waist, a neckline inside the neck's sides, a
+      # strapless top's edge at the armpit), without which gathered waistbands (up to 1.9 times the waist) and
+      # strapless tops fall. Ours are one-sided planes kept on, as elastic, boning or the neck holds them, a
+      # low-rise band pinned between waist and hips by its rise. Then 24 designs from 61 draws all hang right,
+      # 4 to 33 s each (about 7,000 a day on this Mac, $0). Rendered properly, the cloth first looked pebbled:
+      # the bake left it flat-shaded, so its glb had three vertices for every triangle (198,881 for 66,305) and
+      # shaded as facets everywhere it was drawn; smooth, it is one surface. The fabric is also stiffer than
+      # CH47a's (bending 0.3, squash 0.6 against 0.05 and 0.25), which buckled at the mesh's own scale; folds
+      # stay and stretch is +6 per cent at the 95th percentile. An example is its design's settings (the labels), a
+      # caption, the pattern, the flat pieces with seams and edge labels, the draped mesh, a skinned glb, four
+      # pictures on the mannequin and the drape's numbers. Faults: GarmentCode's space is mostly dresses and
+      # skirts (no open-front shirts, jackets, pockets, shoes or hats); one body shape so far; no collision
+      # between the layers of one design; the captions are written from the settings, not seen.
+      Then one command makes N random garments, each worn on SOMA and labelled with its design
+      And a garment that slides off is caught by the drape's own check, not by eye
