@@ -2,7 +2,7 @@
 // draws from three's own WGSL (src/input/tsl.ts, tsl-lit.ts). A graph's motion comes from a uniform R3F's clock sets in
 // useFrame, never TSL's `time` (three's renderer counts that from performance.now(), so Chrome's frame would differ).
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from "three/webgpu";
 import * as TSLTyped from "three/tsl";
@@ -10,7 +10,7 @@ import type { InputCase } from "./fixtures";
 
 // untyped: @types/three's chained TSL types make tsc take minutes and gigabytes
 const { color, mix, mx_noise_float, normalLocal, positionLocal, uniform } = TSLTyped as unknown as Record<string, (...a: unknown[]) => any> & { normalLocal: any; positionLocal: any };
-const { Fn, cos, float, fract, hash, instanceIndex, instancedArray, length, sin, step, vec3 } = TSLTyped as unknown as Record<string, any>;
+const { Fn, cos, float, fract, hash, instanceIndex, instancedArray, length, sin, step, texture, uv, vec3 } = TSLTyped as unknown as Record<string, any>;
 
 /** three's WebGPURenderer for a TSL scene: its WebGL 2 backend (headless Chrome may have no WebGPU) */
 async function nodeRenderer(props: object) {
@@ -83,6 +83,35 @@ function Swirl() {
   return <instancedMesh args={[swirl.geo, swirl.m, PARTICLES]} frustumCulled={false} />;
 }
 
+/** in-fbo's knot (test/parity/targets.tsx) drawn into a target every frame, shown by a node material's texture node: a
+ *  target raea draws on its GPU read the way three reads it (turned over in v, its colour as drawn) */
+function FboNode() {
+  const fbo = useMemo(() => new THREE.RenderTarget(256, 256), []);
+  const inner = useMemo(() => {
+    const s = new THREE.Scene();
+    s.background = new THREE.Color("#ff3366");
+    const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.6, 0.2, 128, 16), new THREE.MeshStandardMaterial({ color: "#f2c14e", roughness: 0.35 }));
+    const sun = new THREE.DirectionalLight("#ffffff", 2.5);
+    sun.position.set(2, 3, 2);
+    s.add(knot, sun, new THREE.AmbientLight("#ffffff", 0.4));
+    const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
+    cam.position.z = 3;
+    return { s, knot, cam };
+  }, []);
+  const m = useMemo(() => Object.assign(new MeshBasicNodeMaterial(), { colorNode: texture(fbo.texture, uv()) }), [fbo]);
+  useFrame(({ gl, clock }) => {
+    inner.knot.rotation.set(0.4, clock.elapsedTime * 1.5, 0);
+    gl.setRenderTarget(fbo as unknown as THREE.WebGLRenderTarget);
+    gl.render(inner.s, inner.cam);
+    gl.setRenderTarget(null);
+  });
+  return (
+    <mesh rotation={[0, -0.3, 0]} material={m}>
+      <planeGeometry args={[3, 3]} />
+    </mesh>
+  );
+}
+
 export const TSL_INPUTS: Record<string, InputCase> = {
   "tsl-lit": {
     canvas: { camera: { position: [0, 0.4, 4], fov: 45 }, gl: nodeRenderer },
@@ -103,6 +132,16 @@ export const TSL_INPUTS: Record<string, InputCase> = {
       <>
         <color attach="background" args={["#0b0d12"]} />
         <Swirl />
+      </>
+    ),
+  },
+  "tsl-fbo": {
+    canvas: { camera: { position: [0, 0, 4], fov: 45 }, gl: nodeRenderer },
+    frame: 12,
+    scene: () => (
+      <>
+        <color attach="background" args={["#222222"]} />
+        <FboNode />
       </>
     ),
   },

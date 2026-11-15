@@ -15,6 +15,8 @@ CASES=(in-basic:24 in-instanced:12 in-lights:0 in-things:0 in-catch:0 in-lettra:
 CASES+=(in-tsl-lit:12)
 # TSL compute: particles a compute moves, drawn by a node material on an InstancedMesh (R3F22)
 CASES+=(in-tsl-particles:12)
+# R3F22: a node material reading a target raea draws on its GPU (test/parity/tsl.tsx)
+CASES+=(in-tsl-fbo:12)
 # a plain three.js program (test/parity/programs.ts) through <Three> (R3F19)
 CASES+=(in-vanilla:24)
 # postprocessing's effects as raea <FramePass>es (test/parity/post2.tsx), before and after an ACES tone mapping (R3F25)
