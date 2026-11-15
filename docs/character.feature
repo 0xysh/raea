@@ -150,8 +150,16 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # looking at it), and `actsFrom`, which reads acts from outside data (a language model's JSON) and keeps
       # only those in the vocabulary. Shown with two SOMA bodies: one follows a script, the other's controller
       # was asked 16 times in 26 seconds and kept him near her. The same cast and seconds give the same frames.
-      # Not in the vocabulary yet: face, take, put, throw, hand over, sit, rise, use, and do (a line of text
-      # made into a clip, which waits on CH11). A controller's unmet ask is not logged yet (CH15).
+      # Added the same day: face (a step toward a point or a character) and sit (the library's captures of
+      # sitting down, sitting and rising, played from where the body stands and eased at each join; the scene
+      # is told where to put the seat). Found while adding sit: the matcher set the body back inside its
+      # guide's reach at once, and a stop that overshot on SOMA moved the hips 19 cm in one frame; the return
+      # is now limited a frame, and the worst hip step in the scene is a walking pace's (4.8 cm). 31 of the
+      # body SDK's 35 tests pass, the four left being the hand layer.
+      # Not in the vocabulary yet: take, put, throw, hand over, use (the Rust takes are not called from here),
+      # and do (a line of text made into a clip, which waits on CH11). A controller's unmet ask is not logged
+      # yet (CH15). A standing character sometimes plays a capture with its arms raised: the library's stand
+      # clips want curating for SOMA.
       Then a script and a controller give acts in one vocabulary and the matcher carries them out
 
     @done
@@ -160,6 +168,9 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # grab, carry and throw run on SOMA with no second copy. The audit's six takes on SOMA's skin: holds
       # within 2 to 8 mm and no body skin in a carried thing, as on the old rig; the fingers are not tuned to
       # SOMA's hand (hand skin 22 mm into a box, no pads on a cup, 41 to 47 mm into the table as a hand leaves).
+      # The joint limits have a SOMA table (the body SDK's, measured over the library on SOMA). The fingers'
+      # rest curl is close to the old rig's (the thumb's first bone lies 31 degrees off the hand against 69),
+      # so the misses are not a matter of rest pose alone: not found yet.
       Then a take runs on SOMA, its fingers still to be fitted to SOMA's hand
 
     Scenario: CH18. What a clip cannot know is added on top, and measured
