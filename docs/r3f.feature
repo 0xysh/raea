@@ -248,6 +248,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         irradiance is (0.886, where 0.282 made it a third as bright)
       And in-approx: SSIM 0.9848 (Phong's F0 is held at Bevy's highest, 0.16, so its orange highlight glints less)
 
+    @done
     Scenario: R3F15. What an R3F scene throws is the composition's error (#131)
       Given an <R3F> whose scene throws: rendering a component, in an effect, in a ref
       Then the frame throws it out of the <R3F> drawing it (src/input/session.ts: the scene under raea's own error
@@ -259,3 +260,115 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         raea loads is that panorama, lighting the scene as scene.environment does; fromScene (RoomEnvironment) and
         fromCubemap are left out with a warning naming them, the scene drawn without them
       And test/errors.test.tsx holds it
+
+  Rule: What three.js work online is made of draws in raea (0.1.5)
+
+    Goal, 2026-11-15: "ship all of this in 0.1.5". An audit that day rendered 25 probes of what people post online made
+    with three.js and R3F (TSL compute particles, render targets, plain three.js with its own renderer, drei's showpiece
+    helpers, postprocessing) through 0.1.4's <R3F>: six refused the render, five drew wrong, moving instances cost a
+    mesh a copy, and the raea skill told agents R3F doesn't exist here. Each scenario below is one of those, held by a
+    case in test/parity (SSIM against three.js in Chrome, R3F8) or a test that refuses the old behaviour.
+
+    Scenario: R3F16. What three can't draw in raea is named and drawn, never refused
+      Given an <R3F> scene with any of: a TSL node material on an InstancedMesh, a compute dispatched through `gl.compute`,
+        drei's <MeshReflectorMaterial>, drei's <Environment> with children (Lightformers), drei's <Stars>, drei's <Clouds>
+      When raea renders it
+      Then the render isn't refused for what raea's stand-in renderer lacks: it answers what three's renderers ask as they
+        draw (a WebGPU backend's device limits, WebGLRenderer's `state`, `compute`, a CubeCamera's coordinate system)
+      And what raea can't draw yet is named once in a warning and drawn as the documented fallback (flat, or its base
+        material), the rest of the scene drawn as three would
+      And a ShaderMaterial on Points (drei's <Stars>) draws its points with its shader
+      And a texture three loads from an http(s) URL is fetched through raea's cache, never read as a path in the project
+      And test/errors.test.tsx renders each of the six without a refusal
+
+    Scenario: R3F17. A sky at three's far plane is drawn behind the scene
+      Given a shader that puts its vertices on the far plane as three does (`gl_Position.z = gl_Position.w`, drei's and
+        three's <Sky>, any skybox ShaderMaterial), or a node material's WGSL doing the same
+      When raea translates it (Bevy's projection is reverse-Z: the far plane is z = 0)
+      Then it is written onto reverse-Z's far plane, so the scene in front of it shows
+      And in-sky (three's Sky behind a box): SSIM at least 0.92 against three.js
+
+    Scenario: R3F18. Agents are taught <R3F>
+      Given the raea skill (raea-skills skills/raea) and its source guides (sdk/guides/craft/bevy)
+      When an agent reads what 3D in raea can be written with
+      Then 3d/r3f.md says when to use <R3F> (an R3F or three.js scene, drei, postprocessing, GLSL or TSL shaders), how to
+        set up a project for it, what draws exactly, what differs, and what raea's own parts do better
+      And the lines saying useFrame, refs and drei "don't exist" say instead that they don't exist in raea's own 3D parts
+        and do inside <R3F>
+      And SKILL.md's router sends an agent with three.js or R3F code to 3d/r3f.md
+
+    Scenario: R3F19. Plain three.js with its own renderer
+      Given a composition whose three.js code makes its own renderer, as single-file demos do: `new
+        THREE.WebGLRenderer({ canvas })` or three/webgpu's `WebGPURenderer`, a scene and camera, `renderer.render(scene,
+        camera)` from `setAnimationLoop` or requestAnimationFrame, `document.body.appendChild(renderer.domElement)`
+      When raea renders or plays it
+      Then raea's bundler gives it a renderer that draws nothing and records what it was asked to render, and each frame
+        that scene is drawn by raea's engine as <R3F>'s scene is, in the canvas's box
+      And its animation loop steps 1/fps a frame from the composition's frame (render equals play)
+      And in-vanilla (a plain three.js page): SSIM at least 0.92 against the same page in Chrome
+
+    Scenario: R3F20. An InstancedMesh's moving copies are one instance buffer a frame
+      Given an InstancedMesh whose matrices or colours change every frame (a field of 20,000 copies moved in useFrame)
+      When raea draws it
+      Then its copies are one row drawn by Bevy's instancing, their transforms and colours that frame's buffer, never a
+        mesh a copy
+      And 20,000 moving copies at 640x360 take at most 100 ms a frame (0.1.4: 1,220 ms), 2,000 at most 40 ms (0.1.4: 94)
+      And in-instanced (2,000 moving copies with colours): SSIM at least 0.92 against three.js
+
+    Scenario: R3F21. A lit TSL node material is lit by the scene's lights
+      Given a MeshStandardNodeMaterial or MeshPhysicalNodeMaterial with nodes of its own (colorNode, positionNode,
+        normalNode, roughnessNode, metalnessNode, emissiveNode, opacityNode)
+      When raea draws it
+      Then its nodes become a surface shader over Bevy's standard material (docs/shaders.feature SH1): the colour,
+        normal, roughness, metalness, emission and opacity its nodes give, the position its positionNode moves a vertex
+        to, lit by Bevy's lights and shadows
+      And in-tsl-lit (a noise-displaced, noise-coloured icosahedron under a directional light): SSIM at least 0.92
+
+    Scenario: R3F22. TSL compute and storage buffers
+      Given TSL storage (`instancedArray`, `storage`, `attributeArray`), compute nodes (`Fn(...)().compute(n)`) run with
+        `gl.compute` / `computeAsync` in useFrame, and a material reading the buffers (`.element(instanceIndex)`,
+        `.toAttribute()`) on an InstancedMesh, Points or Sprite
+      When raea renders it
+      Then each compute's WGSL (three's WGSLNodeBuilder) runs as a raea <Compute> once each frame it was dispatched, in
+        the order dispatched, its storage buffers kept from frame to frame and shared with the materials that read them
+      And a render that starts past frame 0 steps every compute from frame 0, so a render equals its play
+      And in-tsl-particles (65,536 particles orbited by a compute): SSIM at least 0.92 against three.js on WebGPU
+
+    Scenario: R3F23. Render targets are drawn on the GPU
+      Given what an app draws into a render target itself (`gl.setRenderTarget(t); gl.render(scene, camera)`, drei's
+        useFBO, <RenderTexture>, <MeshReflectorMaterial>, <MeshPortalMaterial>, three's GPUComputationRenderer, a
+        ping-pong between two targets, a feedback or trail effect)
+      When raea draws it
+      Then that render is a camera of raea's engine drawing that scene into an image the frame's materials read the
+        target's texture as, before the cameras that read it, in the order the app drew them
+      And a fullscreen quad drawn into a target (a GPGPU pass, a blur) is that quad's shader run into the image
+      And in-fbo, in-pingpong (a GPUComputationRenderer wave) and in-reflector: SSIM at least 0.92 against three.js
+
+    Scenario: R3F24. onBeforeCompile patches
+      Given a material patched by onBeforeCompile (drei's MeshWobbleMaterial and MeshDistortMaterial, a patched
+        MeshStandardMaterial's vertex displacement)
+      When raea draws it
+      Then the patched GLSL is what runs: three's program for that material with the patch applied, translated as R3F11's
+      And in-patched: SSIM at least 0.92 against three.js
+
+    Scenario: R3F25. Post-processing: three's TSL passes and postprocessing's other effects
+      Given three/webgpu's PostProcessing (`pass(scene, camera)` with bloom, GTAO, SSR, TRAA, DOF, film, ... nodes) or
+        any effect @react-three/postprocessing exports
+      When raea renders it
+      Then each becomes raea's effect that does the same (Bloom, AmbientOcclusion, DepthOfField, AntiAliasing, the
+        ray-traced reflections) or a <FramePass> raea ships for it: Noise, Scanline, Sepia, DotScreen, ColorAverage,
+        ColorDepth, Grid, Glitch, ShockWave, TiltShift, ASCII, LUT, GodRays, Outline
+      And none is left out without a warning; in-post2 and in-tslpost: SSIM at least 0.92 against three.js
+
+    Scenario: R3F26. <R3F> in a box smaller than the page (#130)
+      Given an <R3F> in a box of its own inside a larger page
+      When raea draws it
+      Then its camera's aspect and projection are the box's, centred on the box, as R3F's <Canvas> is in a browser
+      And #130's five cases each draw the plane at its expected size and place
+
+    Scenario: R3F27. R3F's pointer events and controls in a live play
+      Given an <R3F> in a game played live: meshes with onClick, onPointerOver, onPointerMove; drei's <OrbitControls>
+      When the player moves and clicks the pointer over the 3D
+      Then R3F's events fire on the mesh the pointer is over (raycast from raea's pointer through the <R3F>'s camera), and
+        controls move the camera, while a render (no pointer) is unchanged
+      And a recorded input log replays to the same frames
