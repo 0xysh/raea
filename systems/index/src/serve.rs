@@ -68,9 +68,10 @@ pub fn serve(dir: &Path) -> Result<()> {
         let (sh, dir) = (sh.clone(), dir.to_path_buf());
         std::thread::spawn(move || find(&sh, &dir, frx))
     };
-    // what was there before: each folder listed again (new files in, changed ones redone) and its waiting pictures embedded
+    // what was there before: each folder (and Photos) listed again (new files in, changed ones redone) and its waiting
+    // pictures embedded
     for s in store.sources()? {
-        if s.kind == "folder" && Path::new(&s.root).is_dir() {
+        if (s.kind == "folder" && Path::new(&s.root).is_dir()) || s.kind == "photos" {
             sh.waiting.lock().unwrap().push(s.root.clone());
             let _ = jobs.send(PathBuf::from(&s.root));
         }
@@ -114,10 +115,7 @@ fn answer(sh: &Shared, store: &mut Store, jobs: &mpsc::Sender<PathBuf>, finds: &
     match ask.get("op").and_then(Value::as_str).unwrap_or("") {
         "add" => {
             let path = s("path").ok_or_else(|| anyhow!("add needs a path"))?;
-            let root = std::fs::canonicalize(&path).map_err(|e| anyhow!("{path}: {e}"))?;
-            if !root.is_dir() {
-                anyhow::bail!("{path} isn't a folder");
-            }
+            let root = crate::root_of(&path)?;
             let r = root.to_string_lossy().into_owned();
             let going = sh.running.lock().unwrap().as_ref().is_some_and(|(x, _)| *x == r);
             let mut w = sh.waiting.lock().unwrap();
@@ -186,7 +184,7 @@ fn work(sh: &Shared, dir: &Path, jobs: mpsc::Receiver<PathBuf>) {
             sh.stop.store(false, Ordering::Relaxed);
         }
         let done = (|| -> Result<()> {
-            let l = crate::list_folder(&mut store, &root, &mut |p| sh.progress(p))?;
+            let l = crate::list_root(&mut store, &root, &mut |p| sh.progress(p))?;
             if l.changed > 0 {
                 sh.epoch.fetch_add(1, Ordering::Relaxed);
             }

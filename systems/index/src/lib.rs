@@ -9,6 +9,8 @@ pub mod apple;
 pub mod cli;
 #[cfg(target_vendor = "apple")]
 pub mod frames;
+#[cfg(target_vendor = "apple")]
+pub mod photos;
 pub mod search;
 pub mod serve;
 pub mod store;
@@ -52,6 +54,28 @@ pub struct Progress {
     pub stage: &'static str,
 }
 
+/// What an add names for Apple Photos (photos.rs), and the root its source keeps
+pub const PHOTOS: &str = "photos:";
+
+/// What an add names: Apple Photos (`photos:`), or a folder or a drive, made absolute
+pub fn root_of(path: &str) -> Result<PathBuf> {
+    if path == PHOTOS {
+        return Ok(PathBuf::from(PHOTOS));
+    }
+    let root = std::fs::canonicalize(path).map_err(|e| anyhow::anyhow!("{path}: {e}"))?;
+    anyhow::ensure!(root.is_dir(), "{path} isn't a folder");
+    Ok(root)
+}
+
+/// Lists the source an add named (root_of)
+pub fn list_root(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
+    #[cfg(target_vendor = "apple")]
+    if root == Path::new(PHOTOS) {
+        return list_photos(store, on);
+    }
+    list_folder(store, root, on)
+}
+
 pub fn normalise(v: &mut [f32]) {
     let n = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-12);
     v.iter_mut().for_each(|x| *x /= n);
@@ -80,11 +104,26 @@ pub struct Listed {
 /// Lists a folder or a drive into the index: new files added, changed ones put back in line
 pub fn list_folder(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
     let label = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| root.display().to_string());
-    let source = store.source("folder", &root.to_string_lossy(), &label)?;
+    let each = |f: &mut dyn FnMut(Vec<Found>)| {
+        walk::walk(root, 2000, f);
+        Ok(())
+    };
+    list_source(store, ("folder", &root.to_string_lossy(), &label), each, on)
+}
+
+/// Lists Apple Photos into the index (photos.rs): its root is `photos:`, each item an asset
+#[cfg(target_vendor = "apple")]
+pub fn list_photos(store: &mut Store, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
+    list_source(store, ("photos", PHOTOS, "Apple Photos"), |f| photos::list(2000, f).map_err(anyhow::Error::msg), on)
+}
+
+/// Lists a source (its kind, root and label) as `each` hands its items over a batch at a time
+fn list_source(store: &mut Store, (kind, root, label): (&str, &str, &str), each: impl FnOnce(&mut dyn FnMut(Vec<Found>)) -> Result<()>, on: &mut dyn FnMut(&Progress)) -> Result<Listed> {
+    let source = store.source(kind, root, label)?;
     let started = Instant::now();
     let mut l = Listed { source: source.clone(), ..Listed::default() };
     let mut err = None;
-    walk::walk(root, 2000, &mut |batch| {
+    each(&mut |batch| {
         l.found += batch.len() as u64;
         match store.list(&source, &batch) {
             Ok((a, c)) => {
@@ -96,7 +135,7 @@ pub fn list_folder(store: &mut Store, root: &Path, on: &mut dyn FnMut(&Progress)
             }
         }
         on(&Progress { source: source.clone(), found: l.found, stage: "listing", seconds: started.elapsed().as_secs_f64(), ..Progress::default() });
-    });
+    })?;
     if let Some(e) = err {
         return Err(e);
     }
@@ -125,10 +164,15 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, sto
                     return;
                 }
                 let file = Path::new(&p.locator);
-                let r = if p.kind == "video" {
-                    frames::video(file, Some(thumb)).map(|f| f.px.into_iter().map(|(px, t)| apple::Ready { item: p.id, t, px, w: f.w, h: f.h }).collect())
-                } else {
-                    apple::picture(file, Some(thumb)).map(|(px, w, h)| vec![apple::Ready { item: p.id, t: 0.0, px, w, h }])
+                // a Photos asset or a picture file gives one small copy; a video file its keyframes
+                let one = match p.locator.strip_prefix(PHOTOS) {
+                    Some(id) => Some(photos::picture(id, Some(thumb))),
+                    None if p.kind == "video" => None,
+                    None => Some(apple::picture(file, Some(thumb))),
+                };
+                let r = match one {
+                    Some(r) => r.map(|(px, w, h)| vec![apple::Ready { item: p.id, t: 0.0, px, w, h }]),
+                    None => frames::video(file, Some(thumb)).map(|f| f.px.into_iter().map(|(px, t)| apple::Ready { item: p.id, t, px, w: f.w, h: f.h }).collect()),
                 };
                 let r = r.map_err(|e| (p.id, e));
                 let _ = tx.send(r);

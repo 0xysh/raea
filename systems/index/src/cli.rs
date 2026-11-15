@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-pub const USAGE: &str = "raea index add FOLDER... [--json] | raea index search WORDS... [--k N] [--source ID|FOLDER] [--json] | raea index status [--json] | raea index remove ID|FOLDER | raea index serve   [--home DIR]   (every picture on a folder or a drive made searchable by words on this Mac, fast: add lists it and embeds each picture's small copy with SigLIP 2 on the Neural Engine, a counter as it goes, JSON lines with --json; search gives the best for the words; status lists the sources and what each holds; remove takes one out; serve keeps the index open for the raea app, one JSON ask a line on stdin; the index lives in ~/.raea/library/fast, or --home / RAEA_INDEX_HOME)";
+pub const USAGE: &str = "raea index add FOLDER|photos:... [--json] | raea index search WORDS... [--k N] [--source ID|FOLDER] [--json] | raea index status [--json] | raea index remove ID|FOLDER | raea index serve   [--home DIR]   (every picture and video on a folder, a drive or Apple Photos (photos:) made searchable by words on this Mac, fast: add lists it and embeds each picture's small copy with SigLIP 2 on the Neural Engine, a counter as it goes, JSON lines with --json; search gives the best for the words; status lists the sources and what each holds; remove takes one out; serve keeps the index open for the raea app, one JSON ask a line on stdin; the index lives in ~/.raea/library/fast, or --home / RAEA_INDEX_HOME)";
 
 /// The exit code: 0, or 1 with the reason said
 pub fn cli(args: &[String]) -> i32 {
@@ -82,11 +82,8 @@ fn add(f: &Flags, home: &std::path::Path) -> Result<()> {
     #[cfg(target_vendor = "apple")]
     let mut model: Option<crate::apple::Model> = None;
     for path in &f.rest {
-        let root = std::fs::canonicalize(path).map_err(|e| anyhow!("{path}: {e}"))?;
-        if !root.is_dir() {
-            anyhow::bail!("{path} isn't a folder");
-        }
-        let l = crate::list_folder(&mut store, &root, &mut |p| say(p))?;
+        let root = crate::root_of(path)?;
+        let l = crate::list_root(&mut store, &root, &mut |p| say(p))?;
         #[cfg(target_vendor = "apple")]
         {
             if model.is_none() {
