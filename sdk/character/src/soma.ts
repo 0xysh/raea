@@ -63,3 +63,21 @@ export function somaPose(skel: Skeleton, clip: SomaClip, frame: number): Pose {
   const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
   return native("character.soma", { joints, names: clip.names, at, eyes: skel.landmarks?.eyes }).pose;
 }
+
+/** A motion on SOMA's skeleton given as turns, as Kimodo writes one: per frame where the hips are (metres) and each
+ * named joint's world turn from SOMA's T-pose. */
+export interface TurnsClip {
+  fps: number;
+  names: string[];
+  root: Vec3[];
+  turns: Quat[][];
+}
+
+/** A SOMA body (a skeleton whose rig is "soma", with each joint's turn from bind to the T-pose in `tpose`) posed by
+ * a motion's turns at a frame, its twist joints set (the native call character.turns): nothing is fitted, since the
+ * body and the motion share a skeleton. */
+export function turnsPose(skel: Skeleton & { tpose?: Record<string, Quat> }, clip: TurnsClip, frame: number): Pose {
+  const f = Math.max(0, Math.min(clip.turns.length - 1, Math.round(frame)));
+  const joints = skel.joints.map((j) => ({ name: j.name, parent: j.parent, head: j.head, tail: j.tail }));
+  return native("character.turns", { joints, tpose: skel.tpose ?? {}, names: clip.names, turns: clip.turns[f], root: clip.root[f] }).pose;
+}

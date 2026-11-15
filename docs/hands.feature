@@ -512,7 +512,9 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # twist joints take SOMA's shares, and each joint's turn is taken relative to its parent. `<Character
       # body="soma">` drew the run and leap with no change to the SDK. The body's build and the clip's
       # conversion are scripts in the test project for now (tools/soma_body.py for Blender,
-      # tools/kimodo_clip.py), and the pose is worked out in the composition: HG16 moves them into the SDK.
+      # tools/kimodo_clip.py): HG16 moves them into the SDK. The pose itself is in the SDK: raea-sys-body
+      # turns.rs `from_turns` and `set_twists`, the native call character.turns, raea/character's `turnsPose`;
+      # the same frame drawn through it matches the composition's own arithmetic (SSIM 0.999996).
       Then SOMA's body is posed by `<Character>`, its twist joints included
 
     Scenario: HG16. A SOMA body is a raea body

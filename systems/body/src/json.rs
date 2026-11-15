@@ -8,6 +8,7 @@ use crate::fit::{Mark, fit};
 use crate::prior::{coefficients, oddness, shape};
 use crate::rig::{Pose, Side, Skeleton};
 use crate::soma::from_soma;
+use crate::turns::from_turns;
 
 pub fn num(v: &Value, what: &str) -> Result<f32, String> {
     v.as_f64().map(|n| n as f32).ok_or_else(|| format!("character.take: {what} isn't a number"))
@@ -93,6 +94,27 @@ pub fn soma_json(v: &Value) -> Result<Value, String> {
     let eyes = if v["eyes"].is_null() { None } else { Some(vec3(&v["eyes"], "eyes")?) };
     let pose = from_soma(&skel, &names, &at, eyes).ok_or("character.soma: the body or the SOMA joints lack the hips or a leg")?;
     Ok(json!({ "pose": posed(&pose) }))
+}
+
+pub const TURNS_ARGS: &str = "{ joints: { name: string; parent: number; head: [number, number, number]; tail: [number, number, number] }[]; tpose?: Record<string, [number, number, number, number]>; names: string[]; turns: [number, number, number, number][]; root: [number, number, number] }";
+pub const TURNS_ANSWER: &str = "{ pose: { root: [number, number, number]; turns: [number, number, number, number][] } }";
+
+/// `character.turns`: a SOMA body's pose from a motion's turns, its twist joints set (turns.rs).
+pub fn turns_json(v: &Value) -> Result<Value, String> {
+    let skel = Skeleton::from_value(v)?;
+    let mut tpose = std::collections::HashMap::new();
+    for (name, turn) in v["tpose"].as_object().into_iter().flatten() {
+        tpose.insert(name.clone(), quat(turn, "a joint's turn to the T-pose")?);
+    }
+    let names: Vec<String> = v["names"].as_array().ok_or("character.turns: no names")?.iter().filter_map(|n| n.as_str().map(String::from)).collect();
+    let mut turns = Vec::with_capacity(names.len());
+    for turn in v["turns"].as_array().ok_or("character.turns: no turns")? {
+        turns.push(quat(turn, "a joint's turn")?);
+    }
+    if turns.len() != names.len() {
+        return Err(format!("character.turns: {} names for {} turns", names.len(), turns.len()));
+    }
+    Ok(json!({ "pose": posed(&from_turns(&skel, &tpose, &names, &turns, vec3(&v["root"], "root")?)) }))
 }
 
 /// a pose as the calls answer it: the root's place and every joint's turn

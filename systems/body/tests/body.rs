@@ -141,3 +141,41 @@ fn a_soma_body_of_other_proportions_is_followed_bone_for_bone() {
         assert!(side.abs() < 25.0, "{name} bends {side} degrees sideways");
     }
 }
+
+#[test]
+fn a_soma_body_takes_a_motions_turns_and_spreads_twist_along_its_limbs() {
+    use raea_sys_body::rig::Joint;
+    // one arm of a SOMA body: a chest, an upper arm and forearm along +x, each with four twist joints, and a hand
+    let j = |name: &str, parent: Option<usize>, x: f32| Joint { name: name.into(), parent, head: Vec3::new(x, 1.4, 0.0), tail: Vec3::new(x + 0.05, 1.4, 0.0) };
+    let mut joints = vec![j("Chest", None, 0.0), j("LeftArm", Some(0), 0.2), j("LeftForeArm", Some(1), 0.5), j("LeftHand", Some(2), 0.75)];
+    for k in 0..4 {
+        joints.push(j(&format!("LeftArmTwist{}", k + 1), Some(1), 0.2 + 0.06 * k as f32));
+        joints.push(j(&format!("LeftForeArmTwist{}", k + 1), Some(2), 0.5 + 0.05 * k as f32));
+    }
+    let s = Skeleton::new(joints);
+    let names: Vec<String> = ["Chest", "LeftArm", "LeftForeArm", "LeftHand"].map(String::from).to_vec();
+    let about_x = |q: Quat| 2.0 * q.x.atan2(q.w);
+    // the hand turned 1.2 about the forearm: the forearm's twist joints take 5 per cent to 95 per cent of it
+    let turn = Quat::from_axis_angle(Vec3::X, 1.2);
+    let p = from_turns(&s, &Default::default(), &names, &[Quat::IDENTITY, Quat::IDENTITY, Quat::IDENTITY, turn], Vec3::new(0.0, 1.4, 0.0));
+    let w = s.fk(&p);
+    for (k, share) in [0.05, 1.0 / 3.0, 2.0 / 3.0, 0.95].into_iter().enumerate() {
+        let t = s.joint(&format!("LeftForeArmTwist{}", k + 1)).unwrap();
+        assert!((about_x(w.rot[t]) - 1.2 * share).abs() < 1e-3, "forearm twist {k}: {}", about_x(w.rot[t]));
+        assert!(about_x(w.rot[s.joint(&format!("LeftArmTwist{}", k + 1)).unwrap()]).abs() < 1e-3);
+    }
+    assert!((about_x(w.rot[3]) - 1.2).abs() < 1e-3 && w.pos[3].distance(Vec3::new(0.75, 1.4, 0.0)) < 1e-5);
+    // the whole arm turned 0.8 about itself at the shoulder: the skin near the shoulder stays with the chest
+    let p = from_turns(&s, &Default::default(), &names, &[Quat::IDENTITY, Quat::from_axis_angle(Vec3::X, 0.8), Quat::from_axis_angle(Vec3::X, 0.8), Quat::from_axis_angle(Vec3::X, 0.8)], Vec3::ZERO);
+    let w = s.fk(&p);
+    for (k, share) in [0.05, 1.0 / 3.0, 2.0 / 3.0, 0.95].into_iter().enumerate() {
+        let t = s.joint(&format!("LeftArmTwist{}", k + 1)).unwrap();
+        assert!((about_x(w.rot[t]) - 0.8 * share).abs() < 1e-3, "upper twist {k}: {}", about_x(w.rot[t]));
+    }
+    // a joint's turn to the T-pose comes before the motion's turn, and a joint the motion doesn't name rides its parent
+    let tpose = std::collections::HashMap::from([("LeftArm".to_string(), Quat::from_axis_angle(Vec3::Z, 0.5))]);
+    let p = from_turns(&s, &tpose, &names[..2].to_vec(), &[Quat::IDENTITY, Quat::from_axis_angle(Vec3::Y, 0.3)], Vec3::new(0.0, 0.1, 0.0));
+    let w = s.fk(&p);
+    let want = Quat::from_axis_angle(Vec3::Y, 0.3) * Quat::from_axis_angle(Vec3::Z, 0.5);
+    assert!(w.rot[1].dot(want).abs() > 0.99999 && w.rot[2].dot(want).abs() > 0.99999 && p.root == Vec3::new(0.0, 0.1, 0.0));
+}
