@@ -93,6 +93,22 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         captures
       And what fails is kept out and counted, so the pass rate of each source is a number
 
+    @done
+    Scenario: CH14a. The rebuilt body SDK, its library and its matcher run on SOMA
+      # 11-15. sdk/body (the rebuilt SDK of docs/character.md) names SOMA's joints: its roles keep the keys of
+      # its tables, its limits are re-measured over the library on SOMA (8,848 frames), and the elbow's fold
+      # axis is read from the captures, SOMA's rest elbow being nearly straight. The library's 60 clips (ACCAD,
+      # Quaternius) were moved from the old rig joint for joint (sdk/body/tools/resoma.ts: a joint's world turn
+      # after the turn that lays SOMA's rest bone on the source's, hands by their knuckles, the wrist's turn
+      # about the forearm given to the forearm, contacts carried). On it the matcher follows a path (stand,
+      # walk, turn, stand, walk back, stop): 449 frames over 10 clips with 20 switches, planted feet sliding
+      # 17 mm at worst (8 mm on the old rig's own suite), no joint past a limit, drawn on SOMA's body with the
+      # twist joints set (raea/character `withTwists`). 23 of the SDK's 27 tests pass; the four that don't are
+      # the hand layer (the cup grasp, hands in the lap, finger IK), which needs SOMA's fingers and a shell.
+      # Not moved yet: the old SDK (sdk/character: its matcher, items, ragdoll), the arms and hands in Rust
+      # (systems/grab's takes name the old joints), and the turbo suite's cases as checks.
+      Then a body on SOMA walks where a path says from the library's captures
+
     Scenario: CH14. Locomotion is motion matching over that library
       # Built on the old rig: sdk/body/src/loco (the chooser, the feature database, the matcher, inertialized
       # switches, feet held by their contacts, the head steadied). This scenario is that code on SOMA.
@@ -143,6 +159,17 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And the face's skin colour is carried onto the body's skin at the seam
       And `<Character>` passes the face's weights to the head's morph targets by name (its `morphs` prop does this
         for a body's own morphs today) and takes a look target
+
+    @done
+    Scenario: CH20a. The first generated head rides SOMA's body
+      # 11-15. The body is built without its head (cut level through mid-neck at 1.515 m; its open edge written
+      # as a ring of its own 80 vertices with their normals and weights); the face session's head ends on that
+      # ring with those weights, so the neck is closed with no weld at run time. A Character part may name the
+      # body's joints it has (`joints`), since the engine refuses a part that lacks a joint it is handed. The
+      # head rides the matcher's walk, its expressions driven by name, glasses on as a one-joint part. Left: the
+      # body is one flat colour against the head's baked skin (a step shows at the seam), the eyes' look target,
+      # and the head's ears, which the face session is rebuilding.
+      Then a generated head is drawn on SOMA's body as a part, joined at the collar
 
     Scenario: CH21. Hair
       # Agreed with the face session 11-15. sdk/body/src/cloth.ts already moves hair and clothes that follow
