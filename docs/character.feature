@@ -389,6 +389,20 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         them beside the body, saying what each picture cost; the pictures are kept with the garment as its source
       And a garment can also be made by hand or by procedure in the same file format, with no picture at all
 
+    @done
+    Scenario: CH46a. A dressed body measured through a walk
+      # 11-15, first cut (tools/clothes_check.py in the test project; skins the body and each garment as the
+      # engine does, twist joints included, every 15th frame of a performance). Per garment: how deep its cloth
+      # goes under the skin, how deep under the layer beneath, and how far its edges stretch from rest, with
+      # the joints that carry the stretched edges. On the two-layer outfit through the matched walk: the
+      # t-shirt, jeans and shoes 17 mm under the skin at worst, 1.7 per cent of edges over 1.5 of their rest
+      # length (at the armpits, the crotch and the feet); the jacket 40 mm under the skin and 29 mm under the
+      # shirt at worst, 6 per cent of edges over 1.5 (the chest, the forearms, the armpits). The depth is read
+      # against the nearest vertex of the surface beneath, which at an armpit or the crotch can be another
+      # limb's, so those two numbers overstate; the stretch is exact. Nothing is fixed by it yet: a garment's
+      # mesh bridges arm and trunk where the body's does, and the rest pose's spread arms close in a walk.
+      Then a garment's faults in motion are numbers, by joint
+
     Scenario: CH46. Checked like motion is
       Then a dressed body is run through the library's captures and measured: skin showing through cloth, cloth
         through cloth, and edges stretched past a limit, per garment
