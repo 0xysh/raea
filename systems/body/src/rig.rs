@@ -109,8 +109,10 @@ impl Skeleton {
         Ok(skel)
     }
 
+    /// A joint by its name, or by its role: the roles are spelt as the game_engine rig named its joints ("thigh_l",
+    /// "spine_03", "index_02_r"), and on a SOMA body a role finds SOMA's joint for it (docs/character.feature CH1).
     pub fn joint(&self, name: &str) -> Option<usize> {
-        self.index.get(name).copied()
+        self.index.get(name).copied().or_else(|| self.index.get(soma_name(name)?.as_str()).copied())
     }
 
     fn three(&self, names: [String; 3]) -> Option<[usize; 3]> {
@@ -206,6 +208,29 @@ pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
         .map(|o| o.dot(palm))
         .fold(f32::MIN, f32::max);
     Some(HandRest { along, palm, mid: middle + palm * if skin > 0.0 { skin } else { 0.012 } })
+}
+
+/// SOMA's name for a joint named by its role: the trunk by name, limbs and fingers by side. A finger's 01, 02, 03
+/// are SOMA's 2, 3, 4 (its 1 is the bone in the palm); the thumb's are 1, 2, 3. The other way is soma.rs `raea_joint`.
+pub fn soma_name(role: &str) -> Option<String> {
+    let trunk = [("pelvis", "Hips"), ("spine_01", "Spine1"), ("spine_02", "Spine2"), ("spine_03", "Chest"), ("neck_01", "Neck1"), ("head", "Head")];
+    if let Some(t) = trunk.iter().find(|t| t.0 == role) {
+        return Some(t.1.to_string());
+    }
+    let (base, side) = role.strip_suffix("_l").map(|b| (b, "Left")).or_else(|| role.strip_suffix("_r").map(|b| (b, "Right")))?;
+    let limb = [("clavicle", "Shoulder"), ("upperarm", "Arm"), ("lowerarm", "ForeArm"), ("hand", "Hand"), ("thigh", "Leg"), ("calf", "Shin"), ("foot", "Foot"), ("ball", "ToeBase")];
+    if let Some(l) = limb.iter().find(|l| l.0 == base) {
+        return Some(format!("{side}{}", l.1));
+    }
+    let (finger, k) = base.split_once("_0")?;
+    let k: usize = k.parse().ok()?;
+    let name = format!("{}{}", finger[..1].to_uppercase(), &finger[1..]);
+    ["Thumb", "Index", "Middle", "Ring", "Pinky"].contains(&name.as_str()).then(|| format!("{side}Hand{name}{}", if name == "Thumb" { k } else { k + 1 }))
+}
+
+/// a joint's role (as `Skeleton::joint` takes one) from its name on either rig
+pub fn role_name(name: &str) -> String {
+    crate::soma::raea_joint(name).unwrap_or_else(|| name.to_string())
 }
 
 /// A stand-in body of the rig's joints at an adult's proportions (1.81 m), so the solvers run with no character on

@@ -140,6 +140,28 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And a controller may ask for a step the library cannot play; the character does the nearest it can, and the
         ask is logged for CH15
 
+    @done
+    Scenario: CH16a. Acts, and controllers that return them, carried out by the matcher on SOMA
+      # 11-15. sdk/body's stage module: an act is go (to a point or through several, at a gait), wait, or look
+      # (at a point, a named character, or nothing). `direct` plays a cast for some seconds: each character's
+      # controller is asked when its acts run out (and at the start), told where it and every other character
+      # is and the time; go and wait become the matcher's steps, look is laid on the pose by the look solver.
+      # Controllers so far: `script` (a fixed list), `keepNear` (stay within a reach of another character,
+      # looking at it), and `actsFrom`, which reads acts from outside data (a language model's JSON) and keeps
+      # only those in the vocabulary. Shown with two SOMA bodies: one follows a script, the other's controller
+      # was asked 16 times in 26 seconds and kept him near her. The same cast and seconds give the same frames.
+      # Not in the vocabulary yet: face, take, put, throw, hand over, sit, rise, use, and do (a line of text
+      # made into a clip, which waits on CH11). A controller's unmet ask is not logged yet (CH15).
+      Then a script and a controller give acts in one vocabulary and the matcher carries them out
+
+    @done
+    Scenario: CH18a. The takes run on a SOMA body
+      # 11-15. The Rust arms and hands (docs/hands.feature) find a joint by its role on either rig, so reach,
+      # grab, carry and throw run on SOMA with no second copy. The audit's six takes on SOMA's skin: holds
+      # within 2 to 8 mm and no body skin in a carried thing, as on the old rig; the fingers are not tuned to
+      # SOMA's hand (hand skin 22 mm into a box, no pads on a cup, 41 to 47 mm into the table as a hand leaves).
+      Then a take runs on SOMA, its fingers still to be fitted to SOMA's hand
+
     Scenario: CH18. What a clip cannot know is added on top, and measured
       # docs/hands.feature (reach, grab, carry, throw, look), feet and seat contacts (character.md layer 4).
       Then hands, eyes and contacts are laid over the matched pose by IK, each reporting how far it moved the pose

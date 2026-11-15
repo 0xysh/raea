@@ -147,8 +147,9 @@ struct Axes {
 
 fn axes(skel: &Skeleton, i: usize) -> Option<Axes> {
     let j = &skel.joints[i];
-    let right = j.name.ends_with("_r");
-    let role = j.name.trim_end_matches("_l").trim_end_matches("_r");
+    let named = crate::rig::role_name(&j.name);
+    let right = named.ends_with("_r");
+    let role = named.trim_end_matches("_l").trim_end_matches("_r");
     let row = LIMITS.iter().find(|r| r.0 == role)?;
     let mirror = |v: Vec3| if right { Vec3::new(-v.x, v.y, v.z) } else { v };
     let dir = |k: usize| (skel.joints[k].tail - skel.joints[k].head).normalize();

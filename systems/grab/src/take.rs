@@ -470,7 +470,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
     // body has it: each hand's own arm by its own part, the rest of the body by the hand most on
     let mut most = 0.0f32;
     // a joint of a side's arm or hand (its legs aren't)
-    let of_arm = |name: &str, side: &str| name.ends_with(side) && !["thigh", "calf", "foot", "ball"].iter().any(|leg| name.starts_with(leg));
+    let of_arm = |name: &str, side: &str| raea_sys_body::rig::role_name(name).ends_with(side) && !["thigh", "calf", "foot", "ball"].iter().any(|leg| raea_sys_body::rig::role_name(name).starts_with(leg));
     let sides: Vec<String> = holds.iter().map(|h| format!("_{}", h.0.hold.side.sx())).collect();
     for (&(part, _, away, ..), side) in holds.iter().zip(&sides) {
         let w = smooth(span(t, part.start, part.start + 0.15)) * (1.0 - smooth(span(away, 0.45, 1.0)));
