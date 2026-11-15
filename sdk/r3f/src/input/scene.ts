@@ -14,6 +14,7 @@ import { clipArrays, clipOf, type Clip } from "./clip";
 import { cameraOf, fogOf, lightsOf, skyOf, toneOf } from "./lights";
 import { materialOf, type Part, type Props } from "./material";
 import { isShader, ownAttributes, shaderPart } from "./shader";
+import { drawsPatched } from "./patched";
 import { composerEffects, postParts } from "./post";
 import { classicOf } from "./tsl";
 import { dispatchesOf } from "./tsl-compute";
@@ -62,8 +63,9 @@ function flipped(m: THREE.Material | THREE.Material[]): boolean {
   // a node material's graph reads its uvs as three gives them, and flips where it samples a flipped picture (tsl.ts)
   const one = Array.isArray(m) ? m[0] : m;
   if ((one as { isNodeMaterial?: boolean } | undefined)?.isNodeMaterial && !classicOf(one)) return false;
-  // a ShaderMaterial reads its uvs as three gives them; the engine flips where it samples a flipped picture
-  if (one && isShader(one)) return false;
+  // a ShaderMaterial (or a patched program) reads its uvs as three gives them; the engine flips where it samples a
+  // flipped picture
+  if (one && (isShader(one) || drawsPatched(one))) return false;
   const map = ((Array.isArray(m) ? m[0] : m) as THREE.MeshBasicMaterial | undefined)?.map;
   return map ? flipsY(map) : true;
 }

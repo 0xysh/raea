@@ -43,8 +43,8 @@ export const CLASSES: Record<string, { status: InputStatus; raea: string; note?:
   Audio: { status: "none", raea: "sound: raea/tone" },
   PositionalAudio: { status: "none", raea: "sound: <Sound3D>" },
   // materials
-  MeshStandardMaterial: { status: "drawn", raea: "MeshStandardMaterial (maps, alpha test and blending, sides, uv placement, samplers)" },
-  MeshPhysicalMaterial: { status: "drawn", raea: "MeshPhysicalMaterial (clearcoat, transmission, ior, thickness, attenuation, anisotropy, specular)", note: "sheen and iridescence are three's" },
+  MeshStandardMaterial: { status: "drawn", raea: "MeshStandardMaterial (maps, alpha test and blending, sides, uv placement, samplers)", note: "patched by onBeforeCompile: three's own program with the patch, its surface lit by raea (patched.ts); a patch past three's lighting is left out" },
+  MeshPhysicalMaterial: { status: "drawn", raea: "MeshPhysicalMaterial (clearcoat, transmission, ior, thickness, attenuation, anisotropy, specular)", note: "sheen and iridescence are three's; patched by onBeforeCompile: three's own program with the patch, lit by raea (sheen, clearcoat and transmission then left out)" },
   MeshBasicMaterial: { status: "drawn", raea: "MeshBasicMaterial" },
   MeshLambertMaterial: { status: "drawn", raea: "MeshStandardMaterial, roughness 1, metalness 0" },
   MeshPhongMaterial: { status: "near", raea: "MeshPhysicalMaterial: its shininess as a roughness, its specular colour as F0 (reflectance and specular tint)", note: "GGX's highlight, not Blinn-Phong's; an F0 above 0.16 (Bevy's highest reflectance) is held there, so a bright specular colour glints less" },
@@ -58,8 +58,8 @@ export const CLASSES: Record<string, { status: InputStatus; raea: string; note?:
   PointsMaterial: { status: "drawn", raea: "MeshBasicMaterial on the points' quads" },
   LineBasicMaterial: { status: "drawn", raea: "the Gizmo's colours" },
   LineDashedMaterial: { status: "drawn", raea: "the Gizmo's colours, the line cut into its dashes by its line distances" },
-  ShaderMaterial: { status: "drawn", raea: "ThreeShaderMaterial: its GLSL translated by naga and run with three's built-ins", note: "at most 4 textures, 254 vec4s of uniforms and 4 attributes of its own; a render target's texture is white; onBeforeCompile isn't read" },
-  RawShaderMaterial: { status: "drawn", raea: "ThreeShaderMaterial: its GLSL translated by naga and run with three's built-ins", note: "at most 4 textures, 254 vec4s of uniforms and 4 attributes of its own; a render target's texture is white; onBeforeCompile isn't read" },
+  ShaderMaterial: { status: "drawn", raea: "ThreeShaderMaterial: its GLSL translated by naga and run with three's built-ins", note: "at most 4 textures, 254 vec4s of uniforms and 4 attributes of its own; a render target's texture is the image raea draws it into on its GPU, a depth texture white; onBeforeCompile isn't read" },
+  RawShaderMaterial: { status: "drawn", raea: "ThreeShaderMaterial: its GLSL translated by naga and run with three's built-ins", note: "at most 4 textures, 254 vec4s of uniforms and 4 attributes of its own; a render target's texture is the image raea draws it into on its GPU, a depth texture white; onBeforeCompile isn't read" },
   Material: { status: "none", raea: "the base class" },
   // three/webgpu's node materials (TSL): one with no node of its own is the classic material it extends, drawn natively;
   // one with a graph (colorNode, positionNode, ...) on a mesh is compiled to WGSL by three's own WGSLNodeBuilder and run

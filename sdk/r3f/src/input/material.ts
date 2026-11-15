@@ -1,13 +1,14 @@
 // A three.js material as raea's: the component that draws it the same way and its props. Standard and physical are
 // Bevy's StandardMaterial on both sides; basic is unlit; Lambert is the standard surface with no gloss; Phong's
 // shininess becomes a roughness (Blinn-Phong's exponent as a GGX roughness); toon is raea's toon surface with a band per
-// step of its gradient map; normal, matcap, depth and distance materials are drawn as the unlit colour each puts on
-// screen most (their per-pixel looks need three's shaders). A ShaderMaterial's GLSL doesn't run in Bevy: it is drawn
-// with its `color` (or diffuse) uniform, unlit, and named once, with raea's <SurfaceShader> (WESL) as its port.
+// step of its gradient map; normal and matcap run three's own programs; depth and distance materials are drawn as the
+// unlit grey of three's passes. A ShaderMaterial's GLSL runs in raea's engine (shader.ts), and a standard or physical
+// material patched by onBeforeCompile runs its patched program, lit by Bevy (patched.ts).
 import * as THREE from "three";
 import { placementOf, srcOf } from "./texture";
 import { classicOf, nodeMaterialOf, type NodeAt } from "./tsl";
 import { builtinPart, farPlane, isShader, shaderPart } from "./shader";
+import { drawsPatched, patchedPart } from "./patched";
 
 export type Props = Record<string, unknown>;
 export interface Part {
@@ -122,6 +123,8 @@ function warnOnce(type: string, why: string) {
 export function materialOf(m: THREE.Material, vertexColors: boolean, at?: NodeAt): Part {
   const p: Props = {};
   const t = m.type;
+  // a lit material patched by onBeforeCompile: three's own program with the patch applied (R3F24)
+  if (drawsPatched(m)) return patchedPart(m as THREE.MeshStandardMaterial);
   switch (t) {
     case "MeshPhysicalMaterial":
       physical(m as THREE.MeshPhysicalMaterial, p);
