@@ -26,6 +26,7 @@ mod text;
 use text::*;
 pub mod quick;
 pub mod hook;
+pub use raea_app_check_inbox as inbox;
 #[cfg(test)]
 mod tests;
 

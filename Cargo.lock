@@ -13732,6 +13732,7 @@ name = "raea-app-check"
 version = "0.1.0"
 dependencies = [
  "raea-app-check-flash",
+ "raea-app-check-inbox",
  "raea-core-brief",
  "raea-core-facts",
  "raea-io-ffmpeg",
@@ -13743,6 +13744,14 @@ dependencies = [
 [[package]]
 name = "raea-app-check-flash"
 version = "0.1.0"
+
+[[package]]
+name = "raea-app-check-inbox"
+version = "0.1.0"
+dependencies = [
+ "raea-io-home",
+ "serde_json",
+]
 
 [[package]]
 name = "raea-app-ci"

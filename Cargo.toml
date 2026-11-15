@@ -172,6 +172,7 @@ members = [
     "runtime/shared",
     "apps/check",
     "apps/check/flash",
+    "apps/check/inbox",
     "apps/direction",
     "apps/notes",
     "apps/fingerprint",
