@@ -15,7 +15,7 @@ open for the raea app, one JSON ask a line on stdin. Nothing leaves the machine.
 ## Usage
 
 ```sh
-raea index add FOLDER... [--json] | raea index search WORDS... [--k N] [--source ID|FOLDER] [--json] | raea index status [--json] | raea index remove ID|FOLDER | raea index serve   [--home DIR]   (every picture on a folder or a drive made searchable by words on this Mac, fast: add lists it and embeds each picture's small copy with SigLIP 2 on the Neural Engine, a counter as it goes, JSON lines with --json; search gives the best for the words; status lists the sources and what each holds; remove takes one out; serve keeps the index open for the raea app, one JSON ask a line on stdin; the index lives in ~/.raea/library/fast, or --home / RAEA_INDEX_HOME)
+raea index add FOLDER|photos:... [--json] | raea index search WORDS... [--k N] [--source ID|FOLDER] [--json] | raea index status [--json] | raea index remove ID|FOLDER | raea index serve   [--home DIR]   (every picture and video on a folder, a drive or Apple Photos (photos:) made searchable by words on this Mac, fast: add lists it and embeds each picture's small copy with SigLIP 2 on the Neural Engine, a counter as it goes, JSON lines with --json; search gives the best for the words; status lists the sources and what each holds; remove takes one out; serve keeps the index open for the raea app, one JSON ask a line on stdin; the index lives in ~/.raea/library/fast, or --home / RAEA_INDEX_HOME)
 ```
 
 Headless: it needs nothing running and opens no window. Takes any number of arguments besides its flags.
