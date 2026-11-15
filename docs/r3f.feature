@@ -321,6 +321,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       And its animation loop steps 1/fps a frame from the composition's frame (render equals play)
       And in-vanilla (a plain three.js page): SSIM at least 0.92 against the same page in Chrome
 
+    @done
     Scenario: R3F20. An InstancedMesh's moving copies are one instance buffer a frame
       Given an InstancedMesh whose matrices or colours change every frame (a field of 20,000 copies moved in useFrame)
       When raea draws it
@@ -335,7 +336,7 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       # not keyed columns per copy. What it lacks is a colour a copy, and a list that isn't text parsed every frame.
       #   R3F20a. raea/3d <Instances>: an Instance takes `color` (a hex string, or linear [r, g, b]), multiplied with the
       #     material's as three's instanceColor is; a set with colours packs 12 numbers a copy, written as data-at
-      #     {"stride":12,"at":[...]}; runtime/look's inst column is then 14 numbers a copy (placement, linear rgba) with
+      #     {"stride":12,"at":[...]}; runtime/look's inst column is then 13 numbers a copy (placement, linear rgb) with
       #     inst_tint 1. scene3d: a tinted set's copies share one TintMaterial (raea-sys-material tint.rs: the standard
       #     material extended by a storage buffer of the copies' colours, read by the copy's MeshTag above the two bits
       #     compose's pass keeps), the buffer rewritten when the frame's list changes; the parent's standard material
@@ -349,6 +350,19 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
       #     look packs without reformatting text where it can. Measured before and after on 2k and 20k (probes
       #     inst-2k-48f, inst-20k-48f), with RAEA_FRAME_LOG's react/sync/draw split.
       #   R3F20d. in-instanced in test/parity (2,000 moving copies with colours under a directional light), SSIM >= 0.92.
+      Status (11-15): built as planned, the coloured list 13 numbers a copy (placement, linear rgb). scene.ts sends
+        every InstancedMesh with a standard surface as one <Instances>; raea/3d's Instance takes `color`; runtime/look
+        reads data-at as plain numbers; scene3d's copies of a coloured set share one TintMaterial (raea-sys-material
+        tint.rs) whose ShaderBuffer of colours is written in place each frame, each copy's MeshTag its number above
+        compose's pass bits (sync_passes keeps them). A list is still text parsed once each frame it shows (R3F20c's
+        parse-once gave nothing for a list that changes every frame). Measured on this Mac with test/parity/speed.tsx,
+        48 frames at 640x360 (0.1.4 in brackets): 2,000 moving copies 25.5 ms a frame (94), 20,000 41.9 ms (1,220);
+        coloured every frame, 43.7 and 74.6 ms, of which the TintMaterial's pipeline is 0.5 to 0.7 s on the first
+        frame (steady frames 10.5 and 46.8 ms). in-instanced SSIM 0.9819; in-things and in-basic unchanged (0.9917);
+        a plain <Instances> scene (bench/rerender shot-1, shot-2) the same as 0.1.4's (SSIM 0.99999, 1). Tests:
+        conformance instances (12 numbers a copy), runtime/look a_colour_a_copy, tint's tag bits, test/input.test.tsx
+        (moving and coloured copies stay one Instances; a ShaderMaterial is a mesh a copy), test/instances.test.tsx (the
+        three.js host's instanceColor).
 
     @done
     Scenario: R3F21. A lit TSL node material is lit by the scene's lights
