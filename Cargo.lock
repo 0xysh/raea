@@ -15799,6 +15799,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-image-io",
  "ort",
+ "raea-io-home",
  "raea-sys-ml",
  "rayon",
  "rusqlite",

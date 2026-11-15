@@ -58,6 +58,8 @@ raea-sys-mlx = "systems"
 raea-sys-speech = "systems"
 raea-sys-layout = "systems"
 raea-sys-vision = "systems"
+# Index's fast pass (docs/index.feature): pictures embedded on the Neural Engine, searched by words
+raea-sys-index = "systems"
 # Fingerprint (docs/fingerprint.feature): the columns its heads read, and the heads
 raea-sys-columns = "systems"
 raea-sys-fingerprint = "systems"

@@ -72,8 +72,9 @@ impl Store {
         Ok(Store { dir: dir.to_path_buf(), db })
     }
 
+    /// $RAEA_INDEX_HOME, else ~/.raea/library/fast
     pub fn default_dir() -> PathBuf {
-        std::env::var_os("RAEA_INDEX_HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".raea/library/fast"))
+        raea_io_home::env_path("RAEA_INDEX_HOME", ".raea/library/fast")
     }
 
     pub fn vectors(&self, model: &str) -> PathBuf {

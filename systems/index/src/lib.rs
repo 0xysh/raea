@@ -55,18 +55,14 @@ pub fn normalise(v: &mut [f32]) {
     v.iter_mut().for_each(|x| *x /= n);
 }
 
-/// Where SigLIP 2 B/16-256's files are: $RAEA_MODELS, else ~/.local/share/raea-models
-pub fn models_dir() -> PathBuf {
-    std::env::var_os("RAEA_MODELS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/raea-models"))
+/// SigLIP 2 B/16-256's folder in the models folder ($RAEA_MODELS, else ~/.local/share/raea-models, as perception's):
+/// the image tower's Core ML package, the text tower's ONNX and the tokenizer
+pub fn siglip_dir() -> PathBuf {
+    raea_io_home::env_path("RAEA_MODELS", ".local/share/raea-models").join("siglip2-base-p16-256")
 }
 
 pub fn image_package() -> PathBuf {
-    models_dir().join("siglip2-base-p16-256/SigLIP2Image.mlpackage")
-}
-
-pub fn text_files() -> (PathBuf, PathBuf) {
-    let d = models_dir().join("siglip2-base-p16-256");
-    (d.join("onnx/text_model.onnx"), d.join("tokenizer.json"))
+    siglip_dir().join("SigLIP2Image.mlpackage")
 }
 
 /// What listing a source found
@@ -141,8 +137,8 @@ pub fn embed_pictures(store: &mut Store, model: &apple::Model, source: &str, sto
         }
         let pxs: Vec<&objc2_core_video::CVPixelBuffer> = batch.iter().map(|r| &*r.px).collect();
         let vs = model.embed(&pxs).map_err(|e| anyhow::anyhow!(e))?;
-        let rows: Vec<(i64, f64, Vec<f32>)> = batch.iter().zip(vs).map(|(r, v)| (r.item, r.t, v)).collect();
-        let dims: Vec<(i64, u32, u32)> = batch.iter().map(|r| (r.item, r.w, r.h)).collect();
+        // each picture's row and its size, in one pass
+        let (rows, dims): (Vec<(i64, f64, Vec<f32>)>, Vec<(i64, u32, u32)>) = batch.iter().zip(vs).map(|(r, v)| ((r.item, r.t, v), (r.item, r.w, r.h))).unzip();
         store.append(MODEL, &rows, &dims)?;
         prog.done += batch.len() as u64;
         prog.newest.extend(batch.iter().map(|r| r.item));

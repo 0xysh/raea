@@ -119,20 +119,14 @@ pub fn write_jpeg(img: &CGImage, to: &Path) -> Result<(), String> {
 pub struct Model(Retained<MLModel>);
 unsafe impl Send for Model {}
 
-fn modified(p: &Path) -> std::time::SystemTime {
-    fn walk(p: &Path, best: &mut std::time::SystemTime) {
-        if let Ok(m) = std::fs::metadata(p).and_then(|m| m.modified()) {
-            *best = (*best).max(m);
-        }
-        if let Ok(rd) = std::fs::read_dir(p) {
-            for e in rd.flatten() {
-                walk(&e.path(), best);
-            }
-        }
+/// Whether the compiled copy is older than the package: a package's Manifest.json is written whenever it is saved or
+/// copied in, and the compiled folder when it was compiled. No compiled copy, or no time to read, compiles again.
+fn stale(compiled: &Path, package: &Path) -> bool {
+    let (Ok(c), Ok(p)) = (std::fs::metadata(compiled), std::fs::metadata(package.join("Manifest.json"))) else { return true };
+    match (c.modified(), p.modified()) {
+        (Ok(c), Ok(p)) => c < p,
+        _ => true,
     }
-    let mut best = std::time::UNIX_EPOCH;
-    walk(p, &mut best);
-    best
 }
 
 impl Model {
@@ -145,7 +139,7 @@ impl Model {
         std::fs::create_dir_all(&caches).map_err(|e| e.to_string())?;
         let name = package.file_stem().and_then(|s| s.to_str()).unwrap_or("model");
         let compiled = caches.join(format!("{name}.mlmodelc"));
-        if !compiled.exists() || modified(&compiled) < modified(package) {
+        if stale(&compiled, package) {
             let url = NSURL::from_directory_path(package).ok_or("bad package path")?;
             #[allow(deprecated)]
             let fresh = unsafe { MLModel::compileModelAtURL_error(&url) }.map_err(|e| format!("compiling {name}: {}", e.localizedDescription()))?;

@@ -15,10 +15,11 @@ pub struct Text {
 }
 
 impl Text {
-    pub fn load(model: &Path, tokenizer: &Path) -> Result<Text> {
-        let tok = tokenizers::Tokenizer::from_file(tokenizer).map_err(|e| anyhow!("SigLIP 2's tokenizer: {e}"))?;
-        let pad = tok.token_to_id("<pad>").unwrap_or(0) as i64;
-        Ok(Text { s: raea_sys_ml::session(model).context("SigLIP 2's text tower")?, tok, pad })
+    /// From SigLIP 2's folder: onnx/text_model.onnx and tokenizer.json
+    pub fn load(dir: &Path) -> Result<Text> {
+        let s = raea_sys_ml::session(&dir.join("onnx/text_model.onnx")).context("SigLIP 2's text tower")?;
+        let tok = tokenizers::Tokenizer::from_file(dir.join("tokenizer.json")).map_err(|e| anyhow!("SigLIP 2's tokenizer: {e}"))?;
+        Ok(Text { pad: tok.token_to_id("<pad>").map_or(0, i64::from), s, tok })
     }
 
     /// The words' vector, L2-normalised

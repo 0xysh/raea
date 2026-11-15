@@ -109,7 +109,7 @@ pub fn serve(dir: &Path) -> Result<()> {
 }
 
 fn answer(sh: &Shared, store: &mut Store, jobs: &mpsc::Sender<PathBuf>, finds: &mpsc::Sender<Find>, ask: &Value, id: Value) -> Result<Option<Value>> {
-    let s = |k: &str| ask.get(k).and_then(Value::as_str).map(str::to_string);
+    let s = |k: &str| ask[k].as_str().map(String::from);
     let k = ask.get("k").and_then(Value::as_u64).unwrap_or(60).clamp(1, 2000) as usize;
     match ask.get("op").and_then(Value::as_str).unwrap_or("") {
         "add" => {
@@ -226,8 +226,7 @@ fn find(sh: &Shared, dir: &Path, finds: mpsc::Receiver<Find>) {
             return Ok(0.0);
         }
         let t = Instant::now();
-        let (m, tok) = crate::text_files();
-        *text = Some(Text::load(&m, &tok)?);
+        *text = Some(Text::load(&crate::siglip_dir())?);
         Ok(t.elapsed().as_secs_f64() * 1e3)
     };
     for f in finds {

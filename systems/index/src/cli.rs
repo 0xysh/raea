@@ -11,14 +11,11 @@ use std::sync::atomic::AtomicBool;
 
 pub const USAGE: &str = "raea index add FOLDER... [--json] | raea index search WORDS... [--k N] [--source ID|FOLDER] [--json] | raea index status [--json] | raea index remove ID|FOLDER | raea index serve   [--home DIR]   (every picture on a folder or a drive made searchable by words on this Mac, fast: add lists it and embeds each picture's small copy with SigLIP 2 on the Neural Engine, a counter as it goes, JSON lines with --json; search gives the best for the words; status lists the sources and what each holds; remove takes one out; serve keeps the index open for the raea app, one JSON ask a line on stdin; the index lives in ~/.raea/library/fast, or --home / RAEA_INDEX_HOME)";
 
+/// The exit code: 0, or 1 with the reason said
 pub fn cli(args: &[String]) -> i32 {
-    match run(args) {
-        Ok(()) => 0,
-        Err(e) => {
-            eprintln!("raea index: {e:#}");
-            1
-        }
-    }
+    let Err(e) = run(args) else { return 0 };
+    eprintln!("raea index: {e:#}");
+    1
 }
 
 struct Flags {
@@ -127,8 +124,7 @@ fn find(f: &Flags, home: &std::path::Path) -> Result<()> {
         }
         None => None,
     };
-    let (m, tok) = crate::text_files();
-    let mut text = Text::load(&m, &tok)?;
+    let mut text = Text::load(&crate::siglip_dir())?;
     let rows = Rows::load(&store, MODEL)?;
     let q = text.embed(&words)?;
     let hits = search::search(&store, &rows, &q, f.k, source.as_deref())?;
