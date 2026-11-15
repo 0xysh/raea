@@ -328,6 +328,27 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         mesh a copy
       And 20,000 moving copies at 640x360 take at most 100 ms a frame (0.1.4: 1,220 ms), 2,000 at most 40 ms (0.1.4: 94)
       And in-instanced (2,000 moving copies with colours): SSIM at least 0.92 against three.js
+      # The plan (r3f-gpu, 11-15). 0.1.4's cost is each copy a Mesh with its own BufferMesh: 20,000 copies of a box's
+      # arrays as JSON a frame. raea's <Instances> already moves a set frame by frame (its data-at list a frame, the
+      # row's inst_all/inst_k, scene3d's sync_instances: one entity a copy sharing the mesh and material, which Bevy's
+      # automatic batching draws as one instanced call), so the frame's buffer is one column holding that frame's list,
+      # not keyed columns per copy. What it lacks is a colour a copy, and a list that isn't text parsed every frame.
+      #   R3F20a. raea/3d <Instances>: an Instance takes `color` (a hex string, or linear [r, g, b]), multiplied with the
+      #     material's as three's instanceColor is; a set with colours packs 12 numbers a copy, written as data-at
+      #     {"stride":12,"at":[...]}; runtime/look's inst column is then 14 numbers a copy (placement, linear rgba) with
+      #     inst_tint 1. scene3d: a tinted set's copies share one TintMaterial (raea-sys-material tint.rs: the standard
+      #     material extended by a storage buffer of the copies' colours, read by the copy's MeshTag above the two bits
+      #     compose's pass keeps), the buffer rewritten when the frame's list changes; the parent's standard material
+      #     copied into its base when it changes (sync_meshes recolours the set as before). compose's sync_passes keeps
+      #     a tag's high bits.
+      #   R3F20b. sdk/r3f scene.ts: an InstancedMesh with a standard surface is always one <Instances>, still or moving,
+      #     coloured or not: its copies from the instance matrices (instanceMatrix.count of them, those past `count` at
+      #     scale 1e-6 so the count holds), instanceColor as each copy's colour. A ShaderMaterial or several materials
+      #     keep the mesh-a-copy path.
+      #   R3F20c. Speed: each render list parsed once into transforms (scene3d Placements), not each frame it shows;
+      #     look packs without reformatting text where it can. Measured before and after on 2k and 20k (probes
+      #     inst-2k-48f, inst-20k-48f), with RAEA_FRAME_LOG's react/sync/draw split.
+      #   R3F20d. in-instanced in test/parity (2,000 moving copies with colours under a directional light), SSIM >= 0.92.
 
     @done
     Scenario: R3F21. A lit TSL node material is lit by the scene's lights
