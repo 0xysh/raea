@@ -180,6 +180,8 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
       Then turning a source on starts the fast pass at once and shows it: items found, items searchable, pictures a
         second, and the newest thumbnails landing as a wall; search works from the first batch
       And the first run on a library of 10,000 photos is searchable in about a minute on an M-series Mac
+      Measured 11-15 (IX14, bench/index on v0.1.5-rc4): 10,000 pictures searchable 55.7 to 57.1 s after `raea index
+        add` started, the first at 0.4 s, on an M5 Pro
       Status 11-15 (raea-feed #39): the counter, the rate and the wall move in raea's own window, not only in Chrome:
         the window has no EventSource, so /host/index/events also answers its long poll (?after=N). The Index spec
         runs whole on raea's window (npm run e2e:blitz -- e2e/index.spec.ts, 4 of 4)
@@ -198,6 +200,22 @@ Feature: Index: every picture and video you have, searchable in minutes (0.1.5)
       Then bench/index runs the fast pass on a fixed public set (pictures and clips under permissive licences) and
         prints pictures a second, video minutes a second, peak memory and recall@5 for a fixed list of queries; a
         release doesn't regress it
+      Status 11-15: bench/index/run.sh [RAEA] [N]. Pictures: the first N of Open Images V4's validation set by id (CC BY
+        2.0, 1024 px JPEGs with no embedded preview; labels CC BY 4.0), downloaded once to ~/.cache/raea-bench/index.
+        Videos: Elephants Dream and Tears of Steel (CC BY, 720p H.264) cut once into 47 clips of 30 s. Each run indexes
+        into a new home. Unsplash's Lite set was read and dropped: its terms forbid publishing any of it and grant use
+        only for training. Each label has many pictures, so recall@5 is precision@5 here ("a photo of a dog": how many
+        of the five carry Open Images' verified Dog label), a floor since the labels aren't exhaustive. First numbers,
+        v0.1.5-rc4's Mac build on this Mac (M5 Pro), other sessions' jobs running:
+          | measure                                   | 10,000 pictures | 1,000 pictures |
+          | searchable, from the command's start      | 55.7-57.1 s     | 8.2 s          |
+          | pictures a second, as the indexer counts  | 177-181         | 167            |
+          | the first pictures searchable             | 0.35-0.42 s     | 0.37 s         |
+          | peak memory (raea's own process)          | 244-266 MB      | 195 MB         |
+          | warm search, words to ranked hits         | 12.8-18.8 ms    | 19.4 ms        |
+          | precision@5                               | 0.879 (38)      | 0.733 (12)     |
+        Videos: 47 clips (23.2 min) searchable in 2.2 s, 10.5 video minutes a second, 371 frames each at its moment.
+        Not yet a release gate: nothing compares a release's numbers with these
 
   Rule: Open questions for Shane
     Scenario: To decide
