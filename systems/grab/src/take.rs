@@ -348,8 +348,10 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let back = (0.012 * take.weight).min(0.2) * smooth(span(t, take.grab, take.carried)) * on;
         pose.turns[waist] = (pose.turns[waist] * Quat::from_rotation_x(-back)).normalize();
     }
-    for &(part, into, away, held, level) in &holds {
-        let hold = part.hold;
+    // (each hand, then every hand but the last again with the trunk left where it is: a reach leans the chest, and
+    // the second hand's lean carried the first 6 cm off its hold, its fingers still shaped for the hold)
+    for (n, &(part, into, away, held, level)) in holds.iter().chain(&holds[..holds.len().saturating_sub(1)]).enumerate() {
+        let (hold, again) = (part.hold, n >= holds.len());
         let (Some(arm), Some(rest)) = (skel.arm(hold.side), hand_rest(skel, hold.side)) else { continue };
         let normal = held.turn * hold.normal;
         let (at, turn) = level;
@@ -358,8 +360,41 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         let (u, off) = if away > 0.0 { (1.0 - away, (normal * 0.08 + follow) * smooth(away * 4.0)) } else { (into, normal * 0.1 * (1.0 - into)) };
         let arc = Vec3::Y * 0.06 * (std::f32::consts::PI * u).sin();
         let end = w0.rot[arm[2]].slerp(turn, smooth(span(u, 0.0, 0.8)));
-        // (the hand's skin keeps 2 cm off solids while it travels, its fingers opening; on its hold, 4 mm)
-        let mut skin = hand_points(skel, hold.side, &rest);
+        // the hand opens as it comes in, as a hand does before it takes something (the prior's open hand), then
+        // the fingers shut over the last moments of the reach, and open again as the hand leaves
+        let mut open = pose.turns.clone();
+        if !again && shape(skel, &mut open, hold.side, &[OPEN]).is_some() {
+            let wide = smooth(span(t, part.start, part.grab - SHUT));
+            for (mine, open) in pose.turns.iter_mut().zip(&open) {
+                *mine = mine.slerp(*open, wide);
+            }
+        }
+        let close = if again { 0.0 } else { smooth(span(t, part.grab - SHUT, part.grab)) * (1.0 - smooth(span(away, 0.0, 0.5))) };
+        match hold.shape {
+            // a way of holding brings its hand's shape
+            // for the fingers that don't meet the thing; the ones that do are curled onto it as on any hold, so none
+            // sinks in
+            Some(z) => {
+                let (mut fitted, mut shaped) = (pose.turns.clone(), pose.turns.clone());
+                let touch = curl(skel, &mut fitted, (at, turn), hold.side, &held, 1.0);
+                if let (Some(touch), Some(())) = (touch, shape(skel, &mut shaped, hold.side, &z)) {
+                    for (n, name) in raea_sys_body::rig::FINGERS.iter().enumerate() {
+                        for j in skel.finger(name, hold.side).into_iter().flatten().filter(|_| !touch.on[n]) {
+                            fitted[j] = shaped[j];
+                        }
+                    }
+                }
+                frame.touch[hold.side as usize] = touch;
+                for (mine, fitted) in pose.turns.iter_mut().zip(&fitted) {
+                    *mine = mine.slerp(*fitted, close);
+                }
+            }
+            None if close > 0.0 => frame.touch[hold.side as usize] = curl(skel, &mut pose.turns, (at, turn), hold.side, &held, close),
+            None => {}
+        }
+        // (the hand's skin, its fingers as they are this frame, keeps 2 cm off solids while it travels; on its hold,
+        // 4 mm. Read with the fingers at rest, a hand opened for a box on a table put its little finger 34 mm in.)
+        let mut skin = hand_points(skel, hold.side, &rest, Some(&skel.fk(&pose)));
         skin.1 = 0.004 + (skin.1 - 0.004).max(0.0) * (1.0 - u);
         let target = clear(w0.pos[arm[2]].lerp(at + off, u) + arc, end, &skin, &take.avoid);
         // elbows out and down, the way arms hang; where that puts the shoulder or the elbow past its range, the
@@ -373,7 +408,7 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         // from frame to frame where a first-that-passes choice jumped
         let solve_at = |swing: f32| {
             let swung = Quat::from_axis_angle(line, swing.to_radians()) * pole;
-            let solved = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(swung), end: Some(end), soft: 0.02, stiff: give })?;
+            let solved = reach(skel, &pose, hold.side, target, ArmOptions { pole: Some(swung), end: Some(end), soft: 0.02, stiff: if again { 1.0 } else { give } })?;
             Some(forearm_twist(skel, &solved.pose, hold.side, 1.0))
         };
         let (mut sum, mut weights, mut least) = (0.0f32, 0.0f32, f32::MAX);
@@ -405,38 +440,6 @@ pub fn perform(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Take, t: f32)
         frame.limited |= past >= 0.5 || by > 0.5;
         if t >= part.grab && away <= 0.0 {
             frame.miss = frame.miss.max((skel.fk(&pose).pos[arm[2]] - at).length());
-        }
-        // the hand opens as it comes in, as a hand does before it takes something (the prior's open hand), then
-        // the fingers shut over the last moments of the reach, and open again as the hand leaves
-        let mut open = pose.turns.clone();
-        if shape(skel, &mut open, hold.side, &[OPEN]).is_some() {
-            let wide = smooth(span(t, part.start, part.grab - SHUT));
-            for (mine, open) in pose.turns.iter_mut().zip(&open) {
-                *mine = mine.slerp(*open, wide);
-            }
-        }
-        let close = smooth(span(t, part.grab - SHUT, part.grab)) * (1.0 - smooth(span(away, 0.0, 0.5)));
-        match hold.shape {
-            // a way of holding brings its hand's shape
-            // for the fingers that don't meet the thing; the ones that do are curled onto it as on any hold, so none
-            // sinks in
-            Some(z) => {
-                let (mut fitted, mut shaped) = (pose.turns.clone(), pose.turns.clone());
-                let touch = curl(skel, &mut fitted, (at, turn), hold.side, &held, 1.0);
-                if let (Some(touch), Some(())) = (touch, shape(skel, &mut shaped, hold.side, &z)) {
-                    for (n, name) in raea_sys_body::rig::FINGERS.iter().enumerate() {
-                        for j in skel.finger(name, hold.side).into_iter().flatten().filter(|_| !touch.on[n]) {
-                            fitted[j] = shaped[j];
-                        }
-                    }
-                }
-                frame.touch[hold.side as usize] = touch;
-                for (mine, fitted) in pose.turns.iter_mut().zip(&fitted) {
-                    *mine = mine.slerp(*fitted, close);
-                }
-            }
-            None if close > 0.0 => frame.touch[hold.side as usize] = curl(skel, &mut pose.turns, (at, turn), hold.side, &held, close),
-            None => {}
         }
     }
     // the eyes go to the thing as the hands do, and mostly leave it once it is carried

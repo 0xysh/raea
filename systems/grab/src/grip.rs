@@ -57,7 +57,7 @@ pub(crate) fn lie_at_grab(skel: &Skeleton, base: &dyn Fn(f32) -> Pose, take: &Ta
         }
         let lie = |keep: f32| wrist_for(skel, &thing, &hold, Vec3::new(forearm.x, forearm.y * keep, forearm.z).normalize_or(face));
         match lie(1.0) {
-            Some(along) => lie(1.0 - smooth((clear(along.0, along.1, &hand_points(skel, hold.side, &rest), &take.avoid) - along.0).length() / 0.03)).unwrap_or(level),
+            Some(along) => lie(1.0 - smooth((clear(along.0, along.1, &hand_points(skel, hold.side, &rest, None), &take.avoid) - along.0).length() / 0.03)).unwrap_or(level),
             None => level,
         }
     };

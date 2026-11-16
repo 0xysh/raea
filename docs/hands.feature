@@ -452,7 +452,7 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       And a throw's wind-up and follow-through scale with it
 
     @done
-    Scenario: HG17. On SOMA's own skin a held thing has no skin of the hand in it
+    Scenario: HG19. On SOMA's own skin a held thing has no skin of the hand in it
       # 11-15, the audit (tools/hands-audit) on SOMA's body: fingers stood 17 to 36 mm inside a held box and cup.
       # Three causes, each in the system. A joint bent until its own bone met the surface, and carried the bones
       # past it in (a knuckle 60 degrees onto a box's face, the next two bones 24 and 35 mm inside): it now stops
@@ -460,11 +460,19 @@ Feature: Procedural arms and hands: a character reaches for, takes, holds, carri
       # carried by several joints' weights (the ball of the thumb is half the hand's): it reads it as drawn. And
       # the ball of the thumb is the palm's: the hand's frame sets the palm's height on it too, and only on skin
       # the hand mostly carries itself (the web to the thumb stood 13 mm proud). Now, worst over each take: 0 to
-      # 1 mm in the thing (3 mm passing a cup hand to hand), 4 to 5 pads on, the palm 1 to 6 mm off. Not this:
-      # fingers 20 to 37 mm into the table on the way to a box, and into the body's own thigh.
+      # 1 mm in the thing (3 mm passing a cup hand to hand), 4 to 5 pads on, the palm 1 to 6 mm off.
+      # Then the table (fingers 20 to 37 mm into it at a box's grab) and the body's own thighs. A reach leans the
+      # chest, and the second hand's lean carried the first hand 6 cm off its hold with its fingers still shaped
+      # for the hold: every hand but the last is solved again with the trunk left where it is. A travelling hand is
+      # kept off solids by its skin as its fingers are that frame (opened, they go further than at rest). The
+      # audit's own standing pose hung SOMA's fingers 31 mm inside the thighs before any take began: it now hangs
+      # the arms as near the sides as keeps them out. Five of the six takes now: 0 to 2 mm of hand in the thing,
+      # none in the scene, 0 to 6 mm in the body's own solids, every holding hand's five pads on. The sixth (a
+      # box from the floor to a table, squatting) still has 8 mm in the box, 20 in the table and 50 in the thighs.
       Given SOMA's body, its skin samples on the joints that carry them
       Then through each of the audit's six takes no skin of a hand is more than 3 mm inside the thing it holds
       And every hand that holds has four pads or more on it, its palm within 6 mm
+      And no skin of a hand or forearm is in the scene's solids, nor more than 6 mm in the body's own
 
   Rule: Wider, for the character SDK
 

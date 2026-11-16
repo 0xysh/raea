@@ -30,8 +30,12 @@ struct Worst {
     where_worst: String,
 }
 
+/// whether a part of the skin (a sample's name) is a hand's
+fn hands_part(part: &str) -> bool {
+    part == "palm" || ["thumb", "index", "middle", "ring", "pinky"].iter().any(|f| part.starts_with(f))
+}
+
 fn audit(skel: &Skeleton, name: &str, base: &dyn Fn(f32) -> Pose, take: &Take, until: f32) {
-    let hands_part = |part: &str| part == "palm" || ["thumb", "index", "middle", "ring", "pinky"].iter().any(|f| part.starts_with(f));
     let arm_part = |part: &str| hands_part(part) || part == "foreArm";
     let fingers_from = skel.joint("thumb_01_l").unwrap_or(usize::MAX);
     let chest = skel.joint("spine_03").unwrap_or(0);
@@ -142,15 +146,25 @@ fn main() {
     let path = std::env::args().nth(1).expect("a character's skeleton.json");
     let skel = Skeleton::from_json(&std::fs::read_to_string(&path).expect("the skeleton read")).expect("a skeleton");
     println!("{} joints, {} skin samples; every number is the worst over the take, 60 frames a second", skel.joints.len(), skel.surface.len());
-    // the body's own motion: standing, arms hanging (the rest pose holds them out)
-    let mut stand = skel.rest();
-    for side in Side::BOTH {
-        if let Some([upper, fore, _]) = skel.arm(side) {
-            let down = |i: usize, to: Vec3| Quat::from_rotation_arc((skel.joints[i].tail - skel.joints[i].head).normalize(), to.normalize());
-            stand.turns[upper] = down(upper, Vec3::new(0.12 * side.sign(), -1.0, 0.0));
-            stand.turns[fore] = (stand.turns[upper].inverse() * down(fore, Vec3::new(0.05 * side.sign(), -1.0, 0.12))).normalize();
+    // the body's own motion: standing, arms hanging (the rest pose holds them out), as near the sides as keeps the
+    // hands' skin out of the thighs (at a fixed 0.12 SOMA's fingers hung 31 mm inside them before any take began)
+    let hang = |out: f32| {
+        let mut stand = skel.rest();
+        for side in Side::BOTH {
+            if let Some([upper, fore, _]) = skel.arm(side) {
+                let down = |i: usize, to: Vec3| Quat::from_rotation_arc((skel.joints[i].tail - skel.joints[i].head).normalize(), to.normalize());
+                stand.turns[upper] = down(upper, Vec3::new(out * side.sign(), -1.0, 0.0));
+                stand.turns[fore] = (stand.turns[upper].inverse() * down(fore, Vec3::new(0.05 * side.sign(), -1.0, 0.12))).normalize();
+            }
         }
-    }
+        stand
+    };
+    let inside = |pose: &Pose| {
+        let at = skel.fk(pose);
+        let own = own_solids(&skel, &at);
+        skel.surface.iter().zip(skel.skin(&at)).filter(|(x, _)| hands_part(&x.part) || x.part == "foreArm").any(|(_, p)| own.iter().any(|s| s.distance(p) < 0.005))
+    };
+    let stand = (3..=12).map(|k| hang(k as f32 * 0.04)).find(|p| !inside(p)).unwrap_or_else(|| hang(0.48));
     let base = move |_: f32| stand.clone();
     let root = base(0.0).root;
     let top = 0.95;
