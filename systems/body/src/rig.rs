@@ -174,7 +174,13 @@ impl Skeleton {
 
     /// Where every sample of the skin is in a pose drawn: each carried by its joints, by their weights.
     pub fn skin(&self, at: &Posed) -> Vec<Vec3> {
-        self.surface.iter().map(|s| s.joints.iter().map(|&(j, w)| (at.pos[j] + at.rot[j] * (s.at - self.joints[j].head)) * w).sum::<Vec3>() / s.joints.iter().map(|j| j.1).sum::<f32>().max(1e-6)).collect()
+        self.surface.iter().map(|s| self.carried(s, |j| (at.pos[j], at.rot[j]))).collect()
+    }
+
+    /// Where one sample of the skin is, each of its joints at the place and turn `at` gives for it.
+    pub fn carried(&self, s: &Sample, at: impl Fn(usize) -> (Vec3, Quat)) -> Vec3 {
+        let sum: Vec3 = s.joints.iter().map(|&(j, w)| { let (p, q) = at(j); (p + q * (s.at - self.joints[j].head)) * w }).sum();
+        sum / s.joints.iter().map(|j| j.1).sum::<f32>().max(1e-6)
     }
 
     /// the local turn that gives joint `i` the world turn `world`, against its drawn parent

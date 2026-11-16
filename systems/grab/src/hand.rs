@@ -154,43 +154,26 @@ pub fn curl(skel: &Skeleton, turns: &mut [Quat], wrist: (Vec3, Quat), s: Side, t
         let mut base = own;
         // each bone's own skin, where the body has samples of it
         let skin = js.map(|j| skel.skin_of(j).collect::<Vec<_>>());
-        // the least clearance of bone k's skin with the finger bent by `bend` (radians a joint). Each sample is where
-        // its joints carry it by their weights, as the skin is drawn: the ball of the thumb is shared with the hand,
-        // and read as riding the thumb's bone alone it stood clear of a box it was 9 mm inside. (A joint that is not
-        // this finger's rides with the hand.)
+        // the least clearance of bone k's skin with the finger bent by `bend` (radians a joint), each sample where its
+        // joints carry it by their weights, as it is drawn (the ball of the thumb is half the hand's: read as riding
+        // the thumb's bone alone it stood clear of a box it was 9 mm inside). A joint not this finger's rides the hand.
         let clear = |base: &[Quat; 3], bend: [f32; 3], k: usize| {
-            let (mut pp, mut pr) = wrist;
             let mut at = [wrist; 3];
             for i in 0..3 {
-                let j = &skel.joints[js[i]];
+                let (j, (pp, pr)) = (&skel.joints[js[i]], if i == 0 { wrist } else { at[i - 1] });
                 // (the knuckle from the hand's joint, whatever lies between: SOMA has a bone in the palm there)
                 let p = pp + pr * if i == 0 { j.head - skel.joints[hand].head } else { skel.offset(js[i]) };
-                let q = (pr * base[i] * Quat::from_axis_angle(axis(i), bend[i])).normalize();
-                at[i] = (p, q);
-                (pp, pr) = (p, q);
+                at[i] = (p, (pr * base[i] * Quat::from_axis_angle(axis(i), bend[i])).normalize());
             }
-            let mut least = f32::MAX;
-            if skin[k].is_empty() {
-                let j = &skel.joints[js[k]];
-                for along in [0.45, 0.75, 1.0] {
-                    least = least.min(thing.distance(at[k].0 + at[k].1 * ((j.tail - j.head) * along)) - thick);
-                }
-            }
-            for x in &skin[k] {
-                let (mut sum, mut total) = (Vec3::ZERO, 0.0);
-                for &(j, w) in &x.joints {
-                    let (p, q, head) = js.iter().position(|&c| c == j).map_or((wrist.0, wrist.1, skel.joints[hand].head), |i| (at[i].0, at[i].1, skel.joints[j].head));
-                    sum += (p + q * (x.at - head)) * w;
-                    total += w;
-                }
-                least = least.min(thing.distance(sum / total.max(1e-6)));
-            }
-            least
+            let place = |j: usize| js.iter().position(|&c| c == j).map_or((wrist.0 + wrist.1 * (skel.joints[j].head - skel.joints[hand].head), wrist.1), |i| at[i]);
+            let j = &skel.joints[js[k]];
+            let bare = [0.45, 0.75, 1.0].map(|along| thing.distance(at[k].0 + at[k].1 * ((j.tail - j.head) * along)) - thick);
+            let own = skin[k].iter().map(|x| thing.distance(skel.carried(x, place)));
+            if skin[k].is_empty() { bare.into_iter().fold(f32::MAX, f32::min) } else { own.fold(f32::MAX, f32::min) }
         };
         // each joint starts opened and bends until its bone, or any bone past it, meets the surface (the last step
-        // halved down to the contact), so the finger wraps whatever is there; the joints after it wait opened. (Read
-        // on its own bone alone, a knuckle bent 60 degrees onto a box's face carried the two bones past it 24 and
-        // 35 mm into the box, and a joint already in the thing is left as it is.)
+        // halved down to the contact), so the finger wraps whatever is there; the joints after it wait opened. (On
+        // its own bone alone, a knuckle bent 60 degrees onto a box's face carried the next two bones 35 mm in.)
         let free = |base: &[Quat; 3], bend: [f32; 3], k: usize| (k..3).map(|i| clear(base, bend, i)).fold(f32::MAX, f32::min);
         let open = OPEN[thumb as usize].map(f32::to_radians);
         // a thumb that is in the thing even opened is spread out from the palm (turned about the hand's length, the
