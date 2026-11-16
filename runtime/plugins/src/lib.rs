@@ -15,6 +15,9 @@
 //! by zero. A frame reached by a jump is stepped to through the frames between, and a frame before the last stepped one
 //! reloads the edit and steps from 0, so a plugin's state at frame f is always f steps from the load, however f was
 //! reached (a render of one frame, a play, a seek).
+//!
+//! A load whose rows give the plugins nothing to carry from frame to frame (`steps` false) isn't stepped (#77): its
+//! clock is `pure`, and Time and the keyed rows are the frame drawn's, f / fps from 0, however it was reached (#162).
 
 use std::any::TypeId;
 use std::collections::BTreeMap;
@@ -92,6 +95,11 @@ pub struct PluginClock {
     pub dt: Duration,
     pub advancing: bool,
     pub steps: u64,
+    /// the load gives the plugins nothing to step (`steps` false): nothing is stepped, and Time and the keyed rows are
+    /// the frame drawn's however it was reached (pure_time, keyed_rows). Stepping only on the frame after the last
+    /// stepped one froze them: a still at frame 200 sampled globals.time 0, and a batch's second frame drew the
+    /// first's <Material> uniforms (#162)
+    pub pure: bool,
 }
 
 /// A mesh whose Transform a plugin owns (sync_meshes leaves it alone).
@@ -200,7 +208,28 @@ fn install_list(app: &mut App, fps: f64, list: Vec<fn(&mut App)>) {
     }
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
     app.world_mut().resource_mut::<Time<Fixed>>().set_timestep(dt);
-    app.insert_resource(PluginClock { stepped: 0, dt, advancing: false, steps: 0 });
+    app.insert_resource(PluginClock { stepped: 0, dt, advancing: false, steps: 0, pure: false });
+    app.add_systems(First, pure_time.after(bevy::time::TimeSystems));
+}
+
+/// A pure clock's Time: the frame drawn's, f / fps from 0, whatever was drawn before it (a still alone, a batch's
+/// next frame, a seek back in live play); Time<Virtual> too, which the fixed loop copies back into Time. It moves by
+/// one step on an update that draws another frame than the last, and by none on the same frame drawn again.
+fn pure_time(clock: Option<Res<Clock>>, pc: Option<Res<PluginClock>>, mut virt: ResMut<Time<Virtual>>, mut time: ResMut<Time>, mut last: Local<Option<i64>>) {
+    let (Some(f), Some(c)) = (clock, pc) else { return };
+    if !c.pure {
+        *last = None;
+        return;
+    }
+    let f = f.0.max(0);
+    let at = c.dt * u32::try_from(f).unwrap_or(u32::MAX);
+    let step = if *last == Some(f) { Duration::ZERO } else { c.dt.min(at) };
+    *last = Some(f);
+    let mut v = Time::<Virtual>::default();
+    v.advance_by(at - step);
+    v.advance_by(step);
+    *time = v.as_generic();
+    *virt = v;
 }
 
 pub fn active(world: &World) -> bool {
@@ -228,6 +257,12 @@ pub fn steps(inserted: &[Tup]) -> bool {
 pub fn arm(world: &mut World) {
     let f = world.resource::<Clock>().0;
     let Some(mut c) = world.get_resource_mut::<PluginClock>() else { return };
+    if c.pure {
+        // nothing stepped: Time is the frame's (pure_time), and its real clock doesn't move
+        c.advancing = false;
+        world.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
+        return;
+    }
     let step = f == c.stepped + 1;
     c.advancing = step;
     if std::env::var_os("RAEA_PLUGIN_TRACE").is_some() {
@@ -244,12 +279,18 @@ pub fn arm(world: &mut World) {
 }
 
 /// Keyed rows whose frame has come, set on the update that draws it (so a plugin's steps after it see them): with a
-/// plugin, on the frame its clock steps to; without one, on the frame drawn, whichever way it was reached.
+/// plugin that steps, on the frame its clock steps to; without one, or with a pure clock, on the frame drawn, whichever
+/// way it was reached.
 /// A live engine (a fed render's, live play's) takes them too: its frames' rows set the values that change
 /// (apply_live_rows), but a row held for its `from` never changes after the load, so nothing else sets it (a render to
 /// MP4 left a rigid body from frame 36 asleep for good). Each lands once, on its frame.
 fn keyed_rows(world: &mut World) {
     let f = match world.get_resource::<PluginClock>() {
+        // a pure clock steps nothing: the frame drawn's rows, as without a plugin (#162)
+        Some(c) if c.pure => match world.get_resource::<Clock>() {
+            Some(c) => c.0,
+            None => return,
+        },
         Some(c) if !c.advancing => return,
         Some(c) => c.stepped,
         None => match world.get_resource::<Clock>() {

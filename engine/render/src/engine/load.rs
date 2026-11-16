@@ -15,6 +15,12 @@ impl Engine {
         }
         // kept (and the frames before a frame stepped through: catch_up) only when the rows need steps (#77)
         self.replay = (plugins::active(self.app.world()) && plugins::steps(inserted)).then(|| (prog.clone(), inserted.to_vec()));
+        // without them, the plugins' clock steps nothing: Time and the keyed rows are each frame's however it's reached
+        // (a still at frame 200, a batch's second frame, a seek), not frozen at the first frame drawn (#162)
+        let pure = self.replay.is_none();
+        if let Some(mut c) = self.app.world_mut().get_resource_mut::<plugins::PluginClock>() {
+            c.pure = pure;
+        }
         self.drawn = None;
         let world = self.app.world_mut();
         let g = world.resource::<Gen>().0;
