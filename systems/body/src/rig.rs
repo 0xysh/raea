@@ -211,6 +211,9 @@ pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
     // the palm's middle: a little over half way to the knuckles, out to the skin (the body's own, where it has
     // samples: the highest of the palm's skin within 2.5 cm of that middle; else 12 mm)
     let middle = reach * 0.55;
+    // and the ball of the thumb, which is the palm's too though the thumb's first bone carries it: a face the palm
+    // lies on meets it first (left out, it sat 6 to 9 mm inside a held box with the thumb as far open as it goes)
+    let ball = skel.skin_of(skel.finger("thumb", s)?[0]).filter(|x| x.normal.dot(palm) > 0.5).map(|x| (x.at - h).dot(palm));
     let skin = skel
         .skin_of(hand)
         // (skin the hand mostly carries itself: the web to the thumb stands 13 mm proud of the palm and goes with the thumb)
@@ -218,11 +221,8 @@ pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
         .map(|x| x.at - h)
         .filter(|o| (*o - middle).reject_from_normalized(palm).length() < 0.025)
         .map(|o| o.dot(palm))
+        .chain(ball)
         .fold(f32::MIN, f32::max);
-    // and the ball of the thumb, which is the palm's too though the thumb's first bone carries it: a face the palm
-    // lies on meets it first (left out, it sat 6 to 9 mm inside a held box with the thumb as far open as it goes)
-    let ball = skel.finger("thumb", s).map_or(f32::MIN, |js| skel.skin_of(js[0]).filter(|x| x.normal.dot(palm) > 0.5).map(|x| (x.at - h).dot(palm)).fold(f32::MIN, f32::max));
-    let skin = skin.max(ball);
     Some(HandRest { along, palm, mid: middle + palm * if skin > 0.0 { skin } else { 0.012 } })
 }
 
