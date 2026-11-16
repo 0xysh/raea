@@ -37,6 +37,7 @@ describe("raea clothes", () => {
   test("wear sends the folder, the garments innermost first and the body", () => {
     const { ops } = run(["wear", "assets/characters/dressed", "tee-jeans", "bomber", "--body", "assets/characters/soma-headless"]);
     expect(ops).toEqual([{ op: "wear", out: "assets/characters/dressed", garments: ["tee-jeans", "bomber"], body: "assets/characters/soma-headless" }]);
+    expect(run(["wear", "out", "tee", "--body", "headless", "--head", "assets/characters/heads/real"]).ops[0]).toMatchObject({ body: "headless", head: "assets/characters/heads/real" });
   });
 
   test("what doesn't fit is said before anything is drawn", () => {

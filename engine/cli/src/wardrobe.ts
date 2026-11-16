@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
+import { gradeToHead } from "./grade";
 
 type Env = Record<string, string | undefined>;
 type Said = { said: string };
@@ -185,7 +186,7 @@ function cover(raea: string, cwd: string, env: Env, a: { name: string; parts: st
   return { said: [...s.made, ...said, `${relative(cwd, file)}. raea clothes wear assets/characters/NAME ${a.over ? `${a.over} ` : ""}${a.name} puts it on SOMA's body.`].join("\n") + "\n" };
 }
 
-function wear(raea: string, cwd: string, env: Env, a: { out: string; garments: string[]; body?: string }): Said {
+function wear(raea: string, cwd: string, env: Env, a: { out: string; garments: string[]; body?: string; head?: string }): Said {
   const at = (p: string) => (isAbsolute(p) ? p : join(cwd, p));
   const files = a.garments.map((g) => (g.endsWith(".json") ? at(g) : join(cwd, "assets/clothes", `${g}.json`)));
   for (const f of files) if (!existsSync(f)) throw new Error(`no garment ${relative(cwd, f)}: raea clothes lists the ones made`);
@@ -198,6 +199,12 @@ function wear(raea: string, cwd: string, env: Env, a: { out: string; garments: s
   const said = blender(raea, env, "garment.py", ["wear", join(body, "body.glb"), s.rig, out, ...files]);
   // the dressed body is a body folder of its own: its skeleton, its joints' stand-in and a headless body's collar
   for (const f of ["skeleton.json", "joint.glb", "collar.json"]) if (existsSync(join(body, f))) copyFileSync(join(body, f), join(out, f));
+  // a head that joins the body at the collar: the body's skin graded to the head's (grade.ts)
+  if (a.head) {
+    const json = join(at(a.head), "head.json");
+    if (!existsSync(json)) throw new Error(`${a.head}: not a head folder (no head.json)`);
+    said.push(gradeToHead(join(out, "body.glb"), json));
+  }
   const served = relative(join(cwd, "assets"), out);
   const use = served.startsWith("..")
     ? ""

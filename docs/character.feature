@@ -405,6 +405,23 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # and the head's ears, which the face session is rebuilding.
       Then a generated head is drawn on SOMA's body as a part, joined at the collar
 
+    @done
+    Scenario: CH20b. The body's skin is graded to the head at the collar
+      # 11-15. Measured first (sheet3d compositions/seam_check.tsx: the headless body at rest with the head as a
+      # part, lit evenly, seen close from the front, both sides and the back, the collar on the middle row): the
+      # body, built in the head's neck colour, stood 8 levels of 255 lighter than the head's skin across the
+      # collar at the front, 1 to 3 at the sides and back, and the line showed. `raea clothes wear ... --head
+      # HEAD_DIR` (engine/cli/src/grade.ts) now writes the join into the body it dresses: the skin takes the
+      # head's neck colour, and each vertex under the collar takes the colour the head's own skin has above it
+      # (head.json's ring colours, evened over five round the ring: one texel a vertex drew streaks), easing into
+      # the neck colour 8 cm down, as vertex colours on body.glb. The step at the front is under 1 level, 1 to 4
+      # round the rest. Left: the head's own strip above the collar repeats one texel a column (its ring takes
+      # its nearest rim vertex's place in the picture), the neck's outline stops flaring for 2 cm above the
+      # collar, and the body's skin has none of the head's fine detail.
+      Given a headless body and the head joined to its collar
+      Then the body dressed with that head named has its skin in the head's neck colour, graded to the head's
+        own skin at the collar, and no step of colour shows across the join
+
     Scenario: CH21. Hair
       # Agreed with the face session 11-15. sdk/body/src/cloth.ts already moves hair and clothes that follow
       # skin. Hair cards are the face session's working choice, pending its tests; strand hair stays a reference

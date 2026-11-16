@@ -12,7 +12,7 @@ export const CLOTHES_USAGE = `raea clothes   (the project's garments: assets/clo
 raea clothes make NAME "WHAT IT IS, AS WORN" [--over UNDER[,UNDER...]] [--max-cents N]   (drawn over the garments named; N: the most one picture may cost, 10 unless said)
 raea clothes remeasure NAME   (measured again from its kept pictures, after raea's measuring changed: nothing drawn or paid for)
 raea clothes cover NAME --parts PART[:SHARE],... --colour #RRGGBB [--stand MM] [--over UNDER]   (by procedure, no picture: ${PARTS.join(", ")}; a limb's share is how far along it from its top, foreArm:0.5)
-raea clothes wear OUT_DIR GARMENT... [--body DIR]   (GARMENT: a garment's name or its .json, innermost first; DIR: a SOMA body folder, SOMA's own unless said)
+raea clothes wear OUT_DIR GARMENT... [--body DIR] [--head HEAD_DIR]   (GARMENT: a garment's name or its .json, innermost first; DIR: a SOMA body folder, SOMA's own unless said; HEAD_DIR: the head that joins a headless body, whose skin the body's is graded to at the collar)
 `;
 
 const flagOf = (args: string[], name: string) => {
@@ -65,8 +65,8 @@ export function clothesVerb(ask: Ask, args: string[]): string {
     }
     case "wear": {
       const [out, ...garments] = plain(rest);
-      if (!out || !garments.length) throw new Error(`raea clothes wear OUT_DIR GARMENT... [--body DIR]\n${CLOTHES_USAGE}`);
-      return q("wear", { out, garments, body: flagOf(rest, "--body") }).said;
+      if (!out || !garments.length) throw new Error(`raea clothes wear OUT_DIR GARMENT... [--body DIR] [--head HEAD_DIR]\n${CLOTHES_USAGE}`);
+      return q("wear", { out, garments, body: flagOf(rest, "--body"), head: flagOf(rest, "--head") }).said;
     }
     default:
       throw new Error(CLOTHES_USAGE);
