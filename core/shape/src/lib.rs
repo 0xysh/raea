@@ -26,6 +26,7 @@
 //! `minus(frame(), slide(disc(200, 960, 150), 680, 0, 0, 150))` is the clip with a hole moving across it.
 
 
+mod buffer;
 mod build;
 mod glyphs;
 mod grown;
@@ -35,6 +36,7 @@ mod parse;
 mod sphere;
 pub use sphere::{SphereOf, cuboid_of, cylinder_of, plane_of, sphere_of};
 
+pub use buffer::{buffer_tris, export_tris};
 pub use mesh::{export, from_mesh, read_glb, read_obj, to_mesh};
 
 use std::collections::HashMap;
@@ -204,6 +206,12 @@ pub fn cached(expr: &str) -> Result<std::sync::Arc<Tris>, String> {
     let cache = CACHE.get_or_init(Default::default);
     if let Some(t) = cache.lock().unwrap().get(expr) {
         return Ok(t.clone());
+    }
+    // a buffer mesh's own triangles (buffer.rs): data already, so nothing is kept on disk for it
+    if let Some(b) = expr.strip_prefix("buffer:") {
+        let t = std::sync::Arc::new(buffer_tris(b)?.0);
+        cache.lock().unwrap().insert(expr.to_string(), t.clone());
+        return Ok(t);
     }
     // made by this build before, on disk (kept.rs): read back as it was written
     let kept = kept::place(expr);

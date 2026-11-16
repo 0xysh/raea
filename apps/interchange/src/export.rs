@@ -99,10 +99,22 @@ fn shape(expr: &str, out: &Path, meshes: &mut BTreeMap<String, String>) -> R<Val
         Some(f) => f.clone(),
         None => {
             let f = format!("meshes/mesh{k}.glb");
-            let m = raea_core_shape::solid(expr)?;
-            raea_core_shape::export(&m, &out.join(&f).to_string_lossy(), "glb")?;
             // and as an .obj, which Godot imports as a mesh of its own (a .glb comes in as a scene)
-            raea_core_shape::export(&m, &out.join(f.replace(".glb", ".obj")).to_string_lossy(), "obj")?;
+            let (glb, obj) = (out.join(&f).to_string_lossy().into_owned(), out.join(f.replace(".glb", ".obj")).to_string_lossy().into_owned());
+            match expr.strip_prefix("buffer:") {
+                // a mesh given by its own vertices (a <BufferMesh>, a three.js geometry through raea/r3f): written as it
+                // is, with its normals and texture coordinates, since it needn't be a closed solid
+                Some(b) => {
+                    let (t, uv) = raea_core_shape::buffer_tris(b)?;
+                    raea_core_shape::export_tris(&t, uv.as_deref(), &glb, "glb")?;
+                    raea_core_shape::export_tris(&t, uv.as_deref(), &obj, "obj")?;
+                }
+                None => {
+                    let m = raea_core_shape::solid(expr)?;
+                    raea_core_shape::export(&m, &glb, "glb")?;
+                    raea_core_shape::export(&m, &obj, "obj")?;
+                }
+            }
             meshes.insert(expr.to_string(), f.clone());
             f
         }
@@ -310,6 +322,10 @@ mod tests {
         assert!(out.join(v["file"].as_str().unwrap()).is_file());
         // the same mesh twice is one file
         assert_eq!(shape("difference(box(1, 1, 1), sphere(0.6))", &out, &mut m).unwrap(), v);
+        // a buffer mesh (an open quad, as raea/r3f gives a three.js PlaneGeometry) is a mesh file too, not refused
+        let q = shape(r#"buffer:{"positions": [0,0,0, 1,0,0, 1,1,0, 0,1,0], "indices": [0,1,2, 0,2,3]}"#, &out, &mut m).unwrap();
+        assert_eq!(q["type"], "mesh");
+        assert!(out.join(q["file"].as_str().unwrap()).is_file() && out.join(q["obj"].as_str().unwrap()).is_file());
         let _ = std::fs::remove_dir_all(&out);
     }
 }
