@@ -19,6 +19,8 @@ export class Element_ extends Node_ {
   _props: Record<string, unknown> = {};
   /** props JS set on it (attributes, scroll offsets, a field's value): React's props are frozen, these sit over them */
   _extra: Record<string, unknown> = {};
+  /** scrollTop and scrollLeft values written to the host and not yet seen back in its scroll event (setScroll) */
+  _ahead?: Record<string, number[]>;
   _attrs = new Map<string, string>();
   _style: Record<string, unknown> = {};
   _styleObj: any;
@@ -443,6 +445,10 @@ function setScroll(el: Element_, box: number[], prop: string, at: number, v: num
   const last = el._extra[prop];
   const send = last === v ? v + 1e-4 : v;
   el._extra[prop] = send;
+  // what the host hasn't told back yet (its scroll event, input.ts): an event that carries an older one is stale
+  const q = ((el._ahead ??= {})[prop] ??= []);
+  q.push(send);
+  if (q.length > 64) q.shift();
   wire.set(el.__wid!, prop, send);
 }
 

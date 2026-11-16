@@ -6,27 +6,12 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { useEffect, useRef, useState } from "react";
 import { install, layout } from "../src/dom";
 import { createPortal, flushSync, mount } from "../src/react";
-import { flush, restart } from "../src/wire";
-import { Host } from "./host";
+import { flush } from "../src/wire";
+import { fresh, snap } from "./host";
 
 beforeAll(() => install());
 const g = globalThis as any;
 
-/** A snapshot with these boxes (by data-testid): [x, y, w, h] and optional scroll [sl, st, sw, sh]. */
-function snap(host: Host, boxes: Record<string, number[]>) {
-  const n: number[] = [];
-  for (const [t, b] of Object.entries(boxes)) {
-    const id = host.tid(t);
-    const [x, y, w, h, sl = 0, st = 0, sw = w, sh = h] = b;
-    n.push(id, x, y, w, h, sl, st, sw, sh, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-  }
-  layout(JSON.stringify({ vw: 800, vh: 600, dpr: 2, n }));
-}
-function fresh() {
-  restart();
-  const host = new Host();
-  return host;
-}
 const press = (x: number, y: number, detail = 1) => ({ x: 0, y: 0, clientX: x, clientY: y, button: 0, detail });
 
 describe("P18 DOM surface", () => {
@@ -70,33 +55,6 @@ describe("P18 DOM surface", () => {
     // setAttribute goes to the host as a prop
     ref.setAttribute("data-state", "open");
     g.__flushTest?.();
-  });
-
-  test("geometry from the snapshot; scroll writes to the host", async () => {
-    const host = fresh();
-    let el: any;
-    mount(
-      <div data-testid="root">
-        <div data-testid="box" className="overflow-y-auto" ref={(e: any) => (el = e)}>
-          <div data-testid="inner" />
-        </div>
-      </div>,
-      0,
-      { dom: true },
-    );
-    snap(host, { root: [0, 0, 800, 600], box: [10, 20, 200, 100, 0, 0, 200, 500], inner: [10, 20, 200, 500] });
-    const r = el.getBoundingClientRect();
-    expect([r.x, r.y, r.width, r.height, r.right, r.bottom]).toEqual([10, 20, 200, 100, 210, 120]);
-    expect(el.clientHeight).toBe(100);
-    expect(el.scrollHeight).toBe(500);
-    expect(g.innerWidth).toBe(800);
-    expect(g.devicePixelRatio).toBe(2);
-    const from = host.batches.length;
-    el.scrollTop = 1000;
-    expect(el.scrollTop).toBe(400);
-    await Promise.resolve();
-    const ops = host.since(from);
-    expect(ops.some((o: any) => o.op === "update" && o.set?.scrollTop === 400)).toBe(true);
   });
 
   test("a box with its own z-index stays under the overflow clip of the box it's in; a fixed one doesn't", () => {

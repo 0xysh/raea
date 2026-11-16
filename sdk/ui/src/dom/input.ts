@@ -350,14 +350,29 @@ export function hostEvent(el: Node_, ev: Ev, payload: any) {
         scrolling.set(el, S.frameNo);
         const b = el._box();
         const s = payload ?? {};
+        // The offset the host had when it committed. The page may have written past it since (each write is sent
+        // and shown at once, setScroll): then that newer one stands, as in Chrome, where a scroll handler reads the
+        // offset as it is now. Taken over, an older one put a scroller back a step, and two kept in step (a
+        // timeline's tracks and their heads) each put the other back, every frame, for good. One the page never
+        // wrote is the host's own (a wheel, a clamp): it stands, and what was written before it is over.
+        const take = (prop: "scrollTop" | "scrollLeft", i: 4 | 5) => {
+          const got = s[prop] as number | undefined;
+          if (got === undefined) return;
+          const q = el._ahead?.[prop];
+          const k = q ? q.findIndex((x) => Math.abs(x - got) < 1e-3) : -1;
+          if (q && k >= 0) {
+            q.splice(0, k + 1);
+            if (q.length) return;
+          } else if (q) q.length = 0;
+          if (b) b[i] = got;
+          el._extra[prop] = got;
+        };
+        take("scrollLeft", 4);
+        take("scrollTop", 5);
         if (b) {
-          b[4] = s.scrollLeft ?? b[4];
-          b[5] = s.scrollTop ?? b[5];
           if (s.scrollWidth) b[6] = s.scrollWidth;
           if (s.scrollHeight) b[7] = s.scrollHeight;
         }
-        el._extra.scrollTop = s.scrollTop;
-        el._extra.scrollLeft = s.scrollLeft;
         dispatchDirect(el, new Event_("scroll", { bubbles: false }));
         break;
       }
