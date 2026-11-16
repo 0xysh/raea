@@ -261,6 +261,28 @@ Feature: React Three Fiber both ways: an R3F scene drawn by raea, a raea composi
         fromCubemap are left out with a warning naming them, the scene drawn without them
       And test/errors.test.tsx holds it
 
+    @done
+    Scenario: R3F15b. three's RoomEnvironment lights an R3F scene (#165)
+      Given an <R3F> scene whose scene.environment is new PMREMGenerator(gl).fromScene(new RoomEnvironment(), sigma)
+        .texture, three's own recipe for soft studio light with no HDR file
+      When raea renders it
+      Then it is lit by the same room, made by raea's engine: <Environment room blur={sigma}>, which src/input/pmrem.ts
+        and lights.ts make of it (its intensity, its turn about +Y, and as the background when the room is that too)
+      And the room is three's (systems/environment room.rs): RoomEnvironment's boxes, light boxes and point light,
+        each direction from fromScene's cube camera traced to what it hits and lit by three's formulas, blurred by
+        sigma as fromScene blurs it, then filtered like any panorama
+      And fromScene of any other scene, and fromCubemap, are still left out with a warning naming them
+      And raea's own <Environment room> is drawn by three as RoomEnvironment through fromScene (src/three/scene.ts),
+        and the source export writes it so (src/export/emit.ts)
+      Status (11-16): done. The front face of #131's box, 136,76,58 before (no environment), is 255,189,155; three
+        draws 255,195,160. Two grey boxes lit by the room alone at half intensity: 137 and 125 against three's 140 and
+        127 (23 and 19 before). three's pixels come from test/room/three.ts, which runs three 0.185's PMREM (the room
+        in its 256 cube, the GGX filter chain, textureCubeUV) and MeshStandardMaterial's shading on the CPU, so the
+        check needs no browser; test/room/check.sh renders test/room/room.tsx and holds each pixel within 8 levels.
+        The room's light at 14 directions matches three's own RoomEnvironment object to 1e-3 (room.rs tests); Bevy's
+        filter in place of three's PMREM puts the rest within 3 to 6 levels. Not done: fromScene's options.position
+        (a cube camera away from the origin) is drawn from the origin, with a warning
+
   Rule: What three.js work online is made of draws in raea (0.1.5)
 
     Goal, 2026-11-15: "ship all of this in 0.1.5". An audit that day rendered 25 probes of what people post online made

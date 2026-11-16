@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { toRaea, stopsOf } from "../units";
 import type { Part, Props } from "./material";
 import { srcOf } from "./texture";
-import { LEFT_OUT } from "./pmrem";
+import { LEFT_OUT, ROOM } from "./pmrem";
 
 const hex = (c: THREE.Color) => "#" + c.getHexString();
 const at = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3()).toArray() as [number, number, number];
@@ -163,15 +163,25 @@ export function skyOf(scene: THREE.Scene, gl?: THREE.WebGLRenderer, webgpu = fal
     if (webgpu && !toned) warnOnce("scene.background", "is tone-mapped by three's WebGPURenderer with a curve raea doesn't copy for it: drawn as given");
     background = hex(toned ?? bg);
   }
-  const env = srcOf(scene.environment);
-  const sky = bg instanceof THREE.Texture ? srcOf(bg) : undefined;
-  // three's PMREMGenerator making one from a scene or a cube map (pmrem.ts): said as that, not as a missing file
+  // three's RoomEnvironment through PMREMGenerator.fromScene (pmrem.ts): raea's <Environment room>, the same room
+  const room = (t: unknown) => (t instanceof THREE.Texture && typeof t.userData?.[ROOM] === "number" ? (t.userData[ROOM] as number) : undefined);
+  const envRoom = room(scene.environment), skyRoom = room(bg);
+  const env = envRoom === undefined ? srcOf(scene.environment) : undefined;
+  const sky = bg instanceof THREE.Texture && skyRoom === undefined ? srcOf(bg) : undefined;
+  // three's PMREMGenerator making one from another scene or a cube map (pmrem.ts): said as that, not as a missing file
   const by = scene.environment?.userData?.[LEFT_OUT];
-  if (scene.environment && typeof by === "string" && !env) warnOnce("scene.environment", `made by three's ${by}, which renders on the GPU and raea doesn't make yet: the scene is drawn without it (use a panorama: <Environment preset> or PMREMGenerator.fromEquirectangular of an .hdr)`);
-  else if (scene.environment && !(env && PANORAMA.test(env))) warnOnce("scene.environment", "isn't a panorama file raea can load (.hdr, .exr, .png, .jpg): left out");
-  if (bg instanceof THREE.Texture && !(sky && PANORAMA.test(sky))) warnOnce("scene.background", "texture isn't a panorama file raea can load: left out");
+  if (scene.environment && typeof by === "string" && !env) warnOnce("scene.environment", `made by three's ${by}, which renders on the GPU and raea doesn't make yet: the scene is drawn without it (use a panorama: <Environment preset> or PMREMGenerator.fromEquirectangular of an .hdr; PMREMGenerator.fromScene of three's RoomEnvironment is made)`);
+  else if (scene.environment && envRoom === undefined && !(env && PANORAMA.test(env))) warnOnce("scene.environment", "isn't a panorama file raea can load (.hdr, .exr, .png, .jpg): left out");
+  if (bg instanceof THREE.Texture && skyRoom === undefined && !(sky && PANORAMA.test(sky))) warnOnce("scene.background", "texture isn't a panorama file raea can load: left out");
   const rotation = scene.environmentRotation?.y ?? 0;
-  if (env && PANORAMA.test(env)) {
+  if (envRoom !== undefined) {
+    const props: Props = { room: true, blur: envRoom, intensity: scene.environmentIntensity, rotation };
+    if (skyRoom === envRoom) Object.assign(props, { background: true, backgroundIntensity: scene.backgroundIntensity });
+    parts.push({ type: "Environment", props });
+  } else if (skyRoom !== undefined) {
+    // the room behind the scene, lighting nothing
+    parts.push({ type: "Environment", props: { room: true, blur: skyRoom, intensity: 0, rotation: scene.backgroundRotation?.y ?? 0, background: true, backgroundIntensity: scene.backgroundIntensity } });
+  } else if (env && PANORAMA.test(env)) {
     const props: Props = { src: env, intensity: scene.environmentIntensity, rotation };
     if (sky === env) Object.assign(props, { background: true, backgroundIntensity: scene.backgroundIntensity });
     parts.push({ type: "Environment", props });

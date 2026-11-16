@@ -12,6 +12,7 @@ import { GEOMETRY, geometryOfShape, shapesReady } from "./geometry";
 import { KINDS, PRIMITIVES } from "./kinds";
 import { TONE, fitCamera, makeLight, setCamera, setLight, vec } from "./lights";
 import { MATERIAL, paint, texture, vertexColoured } from "./materials";
+import { room } from "./room";
 import { shaderMaterial } from "./shader";
 import { ModelPart, decal, gizmoLines, imagePlane, instanced, place } from "./things";
 import { EXPOSURE } from "../units";
@@ -103,6 +104,7 @@ export class Scene3d {
   private height = 1;
   private seconds = 0;
   private cameraEl?: Element;
+  private renderer?: THREE.WebGLRenderer; // apply()'s last, which an <Environment room> is made on
 
   sync(root: Element, seconds = this.seconds) {
     this.seconds = seconds;
@@ -301,6 +303,10 @@ export class Scene3d {
       case "Canvas3D":
         return k;
       case "Environment": {
+        if (p.room) {
+          room(this.scene, p, this.renderer);
+          return k;
+        }
         const src = p.src as string;
         // attached once it has loaded (a cube-UV map made from an empty texture fails to compile), by this page's
         // next sync or, if the rows don't change, here
@@ -462,8 +468,11 @@ export class Scene3d {
     for (const m of this.flats) placeFlat(m, this.camera, width, height);
   }
 
-  /** raea's settings on a renderer: tone mapping, exposure, shadows */
+  /** raea's settings on a renderer: tone mapping, exposure, shadows; an <Environment room> waiting for it made */
   apply(renderer: THREE.WebGLRenderer) {
+    const env = this.scene.userData.raeaEnvironment as Props | undefined;
+    if (this.renderer !== renderer && env?.room) room(this.scene, env, renderer);
+    this.renderer = renderer;
     renderer.toneMapping = this.settings.toneMapping;
     // three's ACES scales its input by 1/0.6 (tonemapping_pars_fragment); Bevy's ACESFitted doesn't
     renderer.toneMappingExposure = this.settings.exposure * this.settings.grade * (this.settings.toneMapping === THREE.ACESFilmicToneMapping ? 0.6 : 1);

@@ -11,7 +11,8 @@
 //! taken off and its targets keep the filtered light. Filtering every frame was 2.2 ms of GPU a frame at 1920x1080 in
 //! the Rome film (lightprobe_radiance_map and lightprobe_irradiance_map), for the same light each frame.
 //!
-//! Camera columns: env_srcs (a JSON list of panorama paths), env_i (which one this frame, -1 none; keyed), env_k (its
+//! Camera columns: env_srcs (a JSON list of panorama paths, or `room:SIGMA` for three's RoomEnvironment, which room.rs
+//! makes), env_i (which one this frame, -1 none; keyed), env_k (its
 //! intensity in cd/m²; keyed), env_rot (a turn about +Y, radians; keyed), sky_k (the sky's brightness, 0 no sky;
 //! keyed).
 
@@ -35,6 +36,8 @@ pub use prefiltered::{sync_prefiltered, Prefiltered};
 /// A panorama's sun, for traced lighting (RT6)
 mod sun;
 pub use sun::{sync_suns, Suns};
+/// three.js's RoomEnvironment made as a panorama (<Environment room>, #165)
+mod room;
 
 /// The camera's panoramas as cubemaps, in env_srcs' order, and each one's bake entity (its filtered light).
 #[derive(Component)]
@@ -163,6 +166,16 @@ fn equirect(path: &Path) -> Result<Equirect, String> {
     // an 8-bit picture is sRGB-encoded; a float one is already linear light
     let px = rgb.pixels().map(|p| if hdr { [p[0], p[1], p[2]] } else { [srgb_to_linear(p[0]), srgb_to_linear(p[1]), srgb_to_linear(p[2])] }).collect();
     Ok(Equirect { w, h, px })
+}
+
+/// One of env_srcs as a panorama: three's room made here (`room:` and its blur), else the file, found as a media
+/// source is.
+fn source(inserted: &[Tup], src: &str, dir: &Path) -> Result<Equirect, String> {
+    if let Some(sigma) = room::blur_of(src) {
+        return Ok(room::room(sigma));
+    }
+    let path = resolve_src(inserted, src, dir).map_err(|e| format!("Environment: {e}"))?;
+    equirect(&path).map_err(|e| format!("Environment: {e}"))
 }
 
 /// A PFM (colour, "PF"): its header, then RGB floats row by row from the bottom; a negative scale is little-endian.
@@ -299,8 +312,7 @@ pub fn environment(world: &mut World, e: Entity, vals: &BTreeMap<String, V>, ins
     }
     let mut eqs = Vec::new();
     for s in &srcs {
-        let path = resolve_src(inserted, s, dir).map_err(|e| format!("Environment: {e}"))?;
-        eqs.push(equirect(&path).map_err(|e| format!("Environment: {e}"))?);
+        eqs.push(source(inserted, s, dir)?);
     }
     let widest = eqs.iter().map(|q| q.w).max().unwrap_or(1024) as u32;
     let size = (widest / 4).max(64).next_power_of_two().min(2048);
@@ -351,8 +363,7 @@ fn grow(world: &mut World, e: Entity, vals: &BTreeMap<String, V>, inserted: &[Tu
     }
     let size = world.resource::<Assets<Image>>().get(&first).map_or(512, |i| i.width());
     for s in &srcs[have..] {
-        let path = resolve_src(inserted, s, dir).map_err(|e| format!("Environment: {e}"))?;
-        let q = equirect(&path).map_err(|e| format!("Environment: {e}"))?;
+        let q = source(inserted, s, dir)?;
         let (map, _, bake) = panorama(world, &q, size);
         let mut m = world.get_mut::<EnvMaps>(e).ok_or("camera: its environment went")?;
         m.0.push(map);

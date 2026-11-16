@@ -248,8 +248,14 @@ export function Grade(props: GradeProps) {
 
 export interface EnvironmentProps {
   /** an equirectangular panorama in the media folder: a Radiance .hdr (Poly Haven's), an OpenEXR .exr, or an 8-bit
-   * .png/.jpg. Change it between frames to cut from one place to another */
-  src: string;
+   * .png/.jpg. Change it between frames to cut from one place to another. Give it or `room`, not both */
+  src?: string;
+  /** three.js's RoomEnvironment in place of a panorama: a white studio room with soft light boxes, made by raea with
+   * no file. It is the light a three.js scene gets from PMREMGenerator.fromScene(new RoomEnvironment(), blur), which
+   * <R3F> turns into this */
+  room?: boolean;
+  /** with `room`, its blur in radians before it lights (fromScene's sigma: three's examples use 0.04); 0 by default */
+  blur?: number;
   /** how strongly it lights the scene (1 by default: a sky about as bright as an AmbientLight of 2.5 overall); animate
    * it, or set 0 to switch it off for a shot */
   intensity?: number;
@@ -264,13 +270,20 @@ export interface EnvironmentProps {
 /** Light from all around, out of a panorama: soft light from the sky and reflections of it in every glossy or metal
  * surface (image-based lighting), and with `background` the panorama as the sky. Put it inside the Canvas3D, once a
  * frame; its src, intensity, rotation and background may change from frame to frame (a cut from a hall to a street).
+ * With `room` in place of a panorama it is three.js's RoomEnvironment, soft studio light with no file.
  * Bevy's EnvironmentMapLight with maps already filtered is <EnvironmentMapLight>.
  * Its panorama is filtered by Bevy's generator and, with `background`, drawn as the sky (engine/render
  * environment.rs): @bevy bevy_light::probe::GeneratedEnvironmentMapLight. Bevy's Skybox from its own cubemap is <Skybox>. */
 export function Environment(props: EnvironmentProps) {
-  if (typeof props.src !== "string" || props.src === "") throw new TypeError(`Environment: src must be a panorama's path, staticFile("sky.hdr"), got ${JSON.stringify(props.src)}`);
-  if (!/\.(hdr|exr|png|jpe?g)$/i.test(props.src.split("?")[0])) throw new TypeError(`Environment: src must be an equirectangular .hdr, .exr, .png or .jpg, got ${JSON.stringify(props.src)}`);
-  for (const k of ["intensity", "backgroundIntensity"] as const) {
+  if (props.room !== undefined && typeof props.room !== "boolean") throw new TypeError(`Environment: room is true or false, got ${JSON.stringify(props.room)}`);
+  if (props.room) {
+    if (props.src !== undefined) throw new TypeError(`Environment: give src (a panorama) or room, not both`);
+  } else {
+    if (typeof props.src !== "string" || props.src === "") throw new TypeError(`Environment: src must be a panorama's path, staticFile("sky.hdr"), or room for three's RoomEnvironment, got ${JSON.stringify(props.src)}`);
+    if (!/\.(hdr|exr|png|jpe?g)$/i.test(props.src.split("?")[0])) throw new TypeError(`Environment: src must be an equirectangular .hdr, .exr, .png or .jpg, got ${JSON.stringify(props.src)}`);
+    if (props.blur !== undefined) throw new TypeError(`Environment: blur is the room's (with room), not a panorama's`);
+  }
+  for (const k of ["intensity", "backgroundIntensity", "blur"] as const) {
     const v = props[k];
     if (v !== undefined && !(typeof v === "number" && v >= 0 && Number.isFinite(v))) throw new RangeError(`Environment: ${k} must be 0 or more, got ${v}`);
   }

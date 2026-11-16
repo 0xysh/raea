@@ -49,25 +49,71 @@ describe("an error inside the scene", () => {
 });
 
 describe("three's PMREMGenerator", () => {
-  test("fromScene (RoomEnvironment) leaves the environment out with a warning and the scene draws", () => {
+  const warnings = (fn: () => void) => {
     const warned: string[] = [];
     const warn = console.warn;
     console.warn = (m: string) => void warned.push(String(m));
     try {
+      fn();
+    } finally {
+      console.warn = warn;
+    }
+    return warned;
+  };
+
+  test("fromScene of three's RoomEnvironment lights the scene as raea's <Environment room>, with its blur (#165)", () => {
+    let parts: Part[] = [];
+    const warned = warnings(() => {
       const Studio = () => {
         const { gl, scene } = useThree();
         useMemo(() => {
           const pm = new THREE.PMREMGenerator(gl);
           scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+          scene.environmentIntensity = 0.8;
+          scene.environmentRotation.set(0, 0.5, 0);
         }, [gl, scene]);
         return null;
       };
-      const parts = partsOf(() => (<><Studio /><Box /></>));
-      expect(parts.some((p) => p.type === "Mesh")).toBe(true);
-      expect(parts.some((p) => p.type === "Environment")).toBe(false);
-    } finally {
-      console.warn = warn;
-    }
+      parts = partsOf(() => (<><Studio /><Box /></>));
+    });
+    expect(parts.some((p) => p.type === "Mesh")).toBe(true);
+    const env = parts.filter((p) => p.type === "Environment");
+    expect(env.map((p) => p.props)).toEqual([{ room: true, blur: 0.04, intensity: 0.8, rotation: 0.5 }]);
+    expect(warned.filter((w) => w.includes("environment"))).toEqual([]);
+  });
+
+  test("the room as the background too is drawn behind the scene; as the background alone it lights nothing", () => {
+    const Room = ({ light }: { light: boolean }) => {
+      const { gl, scene } = useThree();
+      useMemo(() => {
+        const t = new THREE.PMREMGenerator(gl).fromScene(new RoomEnvironment()).texture;
+        if (light) scene.environment = t;
+        scene.background = t;
+      }, [gl, scene, light]);
+      return null;
+    };
+    const both = partsOf(() => (<><Room light /><Box /></>)).find((p) => p.type === "Environment");
+    expect(both?.props).toMatchObject({ room: true, blur: 0, intensity: 1, background: true, backgroundIntensity: 1 });
+    const behind = partsOf(() => (<><Room light={false} /><Box /></>)).find((p) => p.type === "Environment");
+    expect(behind?.props).toMatchObject({ room: true, intensity: 0, background: true });
+  });
+
+  test("fromScene of any other scene leaves the environment out with a warning and the scene draws", () => {
+    let parts: Part[] = [];
+    const warned = warnings(() => {
+      const Own = () => {
+        const { gl, scene } = useThree();
+        useMemo(() => {
+          const own = new THREE.Scene();
+          own.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ color: "white" })));
+          scene.environment = new THREE.PMREMGenerator(gl).fromScene(own).texture;
+        }, [gl, scene]);
+        return null;
+      };
+      parts = partsOf(() => (<><Own /><Box /></>));
+    });
+    expect(parts.some((p) => p.type === "Mesh")).toBe(true);
+    expect(parts.some((p) => p.type === "Environment")).toBe(false);
     expect(warned.some((w) => w.includes("PMREMGenerator.fromScene"))).toBe(true);
   });
 

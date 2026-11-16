@@ -90,6 +90,7 @@ Used in: [ui/render_ui_to_texture](https://github.com/shinyobjectz/raea/blob/mai
 Light from all around, out of a panorama: soft light from the sky and reflections of it in every glossy or metal
 surface (image-based lighting), and with `background` the panorama as the sky. Put it inside the Canvas3D, once a
 frame; its src, intensity, rotation and background may change from frame to frame (a cut from a hall to a street).
+With `room` in place of a panorama it is three.js's RoomEnvironment, soft studio light with no file.
 Bevy's EnvironmentMapLight with maps already filtered is <EnvironmentMapLight>.
 Its panorama is filtered by Bevy's generator and, with `background`, drawn as the sky (engine/render
 environment.rs):
@@ -384,7 +385,9 @@ The props of [`DirectionalLight`](#directionallight), tabled there.
 
 | Field | Type | What it is |
 | --- | --- | --- |
-| `src` (required) | `string` | an equirectangular panorama in the media folder: a Radiance.hdr (Poly Haven's), an OpenEXR.exr, or an 8-bit.png/.jpg. Change it between frames to cut from one place to another |
+| `src` | `string` | an equirectangular panorama in the media folder: a Radiance.hdr (Poly Haven's), an OpenEXR.exr, or an 8-bit.png/.jpg. Change it between frames to cut from one place to another. Give it or `room`, not both |
+| `room` | `boolean` | three.js's RoomEnvironment in place of a panorama: a white studio room with soft light boxes, made by raea with no file. It is the light a three.js scene gets from PMREMGenerator.fromScene(new RoomEnvironment(), blur), which <R3F> turns into this |
+| `blur` | `number` | with `room`, its blur in radians before it lights (fromScene's sigma: three's examples use 0.04); 0 by default |
 | `intensity` | `number` | how strongly it lights the scene (1 by default: a sky about as bright as an AmbientLight of 2.5 overall); animate it, or set 0 to switch it off for a shot |
 | `rotation` | `number` | a turn about the vertical axis, in radians, for both the light and the sky: puts the sun where the shot wants it |
 | `background` | `boolean` | draw the panorama as the sky behind everything (off by default: light only) |

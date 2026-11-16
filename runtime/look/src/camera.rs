@@ -28,6 +28,15 @@ pub fn env_shown(sent: Option<&V>, cam: &mut BTreeMap<String, V>) {
     cam.insert("env_srcs".into(), V::S(serde_json::to_string(&list).unwrap_or_default()));
 }
 
+/// An <Environment>'s source in env_srcs: its panorama's path, or for <Environment room> `room:` and its blur (three's
+/// RoomEnvironment, which raea-sys-environment's room.rs makes, #165).
+pub fn env_src(e: &Item) -> Option<String> {
+    if e.props.get("room") == Some(&Value::Bool(true)) {
+        return Some(format!("room:{}", n(&e.props, "blur", 0.0)));
+    }
+    e.props.get("src").and_then(Value::as_str).map(src_path)
+}
+
 /// The camera row (`row`, id "cam": the scene's first camera) and a row for each camera after it (cam1, cam2, ...), each
 /// drawn in its `order` over the ones before, cleared or not by its `clear` (<Camera3d order clear_color>, Bevy's
 /// Camera: two_passes, split_screen), clearing to the first's colour when it clears.
@@ -157,11 +166,8 @@ fn lit(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, id: &s
     let envs: Vec<Option<&Item>> = all.iter().map(|its| its.iter().find(|i| i.kind == "environment" && !i.props.contains_key("diffuse_map"))).collect();
     if envs.iter().any(Option::is_some) {
         let mut srcs: Vec<String> = Vec::new();
-        let idx: Vec<f64> = envs.iter().map(|e| match e.and_then(|e| e.props.get("src")).and_then(Value::as_str) {
-            Some(s) => {
-                let s = src_path(s);
-                (srcs.iter().position(|x| *x == s).unwrap_or_else(|| { srcs.push(s); srcs.len() - 1 })) as f64
-            }
+        let idx: Vec<f64> = envs.iter().map(|e| match e.and_then(|e| env_src(e)) {
+            Some(s) => (srcs.iter().position(|x| *x == s).unwrap_or_else(|| { srcs.push(s); srcs.len() - 1 })) as f64,
             None => -1.0,
         }).collect();
         row.insert("env_srcs".into(), V::S(serde_json::to_string(&srcs).unwrap_or_default()));
