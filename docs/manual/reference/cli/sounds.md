@@ -16,10 +16,10 @@ raea sounds get vcsl/bass-drum-1 --all
 ```
 
 The ids are exact: `raea sounds kick` lists the kicks by their ids (`vcsl/bass-drum-1`, `-2`, `-3-legacy`). A drum or a
-hit comes as its first 12 takes unless `--all` is given. The four libraries are Salamander's grand piano and FluidR3's
-General MIDI set (both CC-BY 3.0: credit them), tonejs-instruments (public domain and CC-BY, per instrument) and the
-Versilian Community Sample Library (CC0). Larger libraries, effect packs and MIDI grooves are fetched by hand:
-`raea guide sources` lists them with their licences.
+hit comes as its first 12 takes unless `--all` is given. The four libraries are Salamander's grand piano, FluidR3's
+General MIDI set and tonejs-instruments (all three CC-BY 3.0: credit them), and the Versilian Community Sample Library
+(CC0). Larger libraries, effect packs and MIDI grooves are fetched by hand: `raea guide sources` lists them with
+their licences and the command that fetches each.
 
 <!-- generated:begin by tools/manual-ref/cli.ts from `raea help --json`; edit only the flag descriptions -->
 
