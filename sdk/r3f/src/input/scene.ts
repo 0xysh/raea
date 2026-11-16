@@ -9,6 +9,7 @@ import "./passes";
 import { passesOf } from "./targets";
 import { flipsY } from "./texture";
 import { arraysOf, posed, posedArrays, rewound, type Arrays } from "./geometry";
+import { decompose } from "./decompose";
 import { isTroikaText, textParts } from "./text";
 import { clipArrays, clipOf, type Clip } from "./clip";
 import { cameraOf, fogOf, lightsOf, skyOf, toneOf } from "./lights";
@@ -23,10 +24,11 @@ import { nodeInstancedParts } from "./tsl-instances";
 type V3 = [number, number, number];
 type Q = [number, number, number, number];
 
-/** an object's own transform, from its matrix (so matrixAutoUpdate={false} objects come out as three draws them) */
+/** an object's own transform, from its matrix (so matrixAutoUpdate={false} objects come out as three draws them); a
+ *  scale of 0 stays 0 (decompose.ts, #164) */
 function place(o: THREE.Object3D): Props {
   const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
-  o.matrix.decompose(p, q, s);
+  decompose(o.matrix, p, q, s);
   const out: Props = { position: p.toArray() as V3, quaternion: q.toArray() as Q };
   out.scale = s.x === s.y && s.y === s.z && s.x > 0 ? s.x : (s.toArray() as V3);
   return out;
@@ -151,7 +153,7 @@ function instancedParts(m: THREE.InstancedMesh, name: string, w: Walk, at: Props
   const copies = new Array(n);
   for (let i = 0; i < n; i++) {
     m.getMatrixAt(i, one);
-    one.decompose(p, q, s);
+    decompose(one, p, q, s);
     const hide = i >= shown || !Number.isFinite(p.x + p.y + p.z + q.x + q.y + q.z + q.w + s.x + s.y + s.z);
     const size = (v: number) => (hide ? 1e-5 : Math.max(Math.abs(v), 1e-5));
     e.setFromQuaternion(hide ? q.identity() : q, "XYZ");
@@ -171,7 +173,7 @@ function copyParts(m: THREE.InstancedMesh, name: string, w: Walk, at: Props): Pa
   const kids: Part[] = [];
   for (let i = 0; i < Math.min(m.count, m.instanceMatrix.count); i++) {
     m.getMatrixAt(i, one);
-    one.decompose(p, q, s);
+    decompose(one, p, q, s);
     for (const part of meshParts(m, `${name}.${i}`, w, { position: p.toArray() as V3, quaternion: q.toArray() as Q, scale: s.toArray() as V3 })) {
       if (m.instanceColor) {
         m.getColorAt(i, c);
@@ -202,7 +204,7 @@ function batchedParts(b: THREE.BatchedMesh, name: string, w: Walk): Part[] {
     const arrays = arraysOf(b.geometry, { start: range.start, count: range.count, flipV: flipped(material), colors: false });
     if (!arrays) return;
     b.getMatrixAt(i, one);
-    one.decompose(p, q, s);
+    decompose(one, p, q, s);
     let own = surface;
     if (colours) {
       b.getColorAt(i, c);
@@ -355,7 +357,9 @@ function spriteParts(s: THREE.Sprite, name: string, w: Walk): Part[] {
   const mat = s.material;
   if (!mat.visible) return [];
   const pos = s.getWorldPosition(new THREE.Vector3());
-  const scale = s.getWorldScale(new THREE.Vector3());
+  // three's sprite shader sizes it by its world matrix's axes: none, in a group scaled to 0 (#164)
+  const scale = new THREE.Vector3();
+  decompose(s.matrixWorld, new THREE.Vector3(), new THREE.Quaternion(), scale);
   const q = w.camera.getWorldQuaternion(new THREE.Quaternion()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), mat.rotation));
   const [cx, cy] = [s.center.x, s.center.y];
   const positions = [-cx, -cy, 0, 1 - cx, -cy, 0, 1 - cx, 1 - cy, 0, -cx, 1 - cy, 0];
