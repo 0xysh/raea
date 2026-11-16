@@ -61,7 +61,7 @@ describe("an agent's plan tools", () => {
 
   test("plan_close closes with CLOSED, the item it made and a note; dropped keeps the task", async () => {
     const h = host()
-    await answerPlanTool("plan_close", { id: "t-door", item: "i-door-3", note: "Warm key at 3200K." }, h)
+    await answerPlanTool("plan_close", { id: "t-door", item: "i-door-3", note: "Warm key at 3200K.", all: true }, h)
     expect(h.now()).toContain("** DONE Light the door\nCLOSED: [2026-11-14 Sat 16:40]")
     expect(h.now()).toContain(":ITEM:     i-door-3")
     expect(h.now()).toContain("Warm key at 3200K.")
@@ -87,5 +87,29 @@ describe("an agent's plan tools", () => {
     expect(r.open).toContain("t-new1  TODO  Written in Emacs")
     expect(r.open).not.toMatch(/#\d/)
     expect(h.now()).toContain("** TODO Written in Emacs\n:PROPERTIES:\n:ID:       t-new1\n:END:\n")
+  })
+
+  test("done with its checkboxes unticked or a subtask open is refused, naming them; all: true ticks and closes them with it", async () => {
+    const h = host()
+    await expect(answerPlanTool("plan_close", { id: "t-door" }, h)).rejects.toThrow(/t-door still has 2 unticked checkboxes \(0 "warm key", 1 "cool fill"\): tick what's done \(plan_update check\), close or move what's left, or close it with all: true/)
+    await expect(answerPlanTool("plan_update", { changes: [{ id: "t-door", state: "done" }] }, h)).rejects.toThrow(/or close it with plan_close and all: true/)
+    expect(h.now()).toBe(START)
+    // ticked in the same call, in either order, it closes
+    await answerPlanTool("plan_update", { changes: [{ id: "t-door", check: 0 }, { id: "t-door", check: 1, state: "done" }] }, h)
+    expect(find(readPlan(h.now()), "t-door")).toMatchObject({ state: "done", progress: { done: 2, total: 2 } })
+    // dropped leaves what's open as it was
+    const d = host()
+    await answerPlanTool("plan_close", { id: "t-door", state: "dropped" }, d)
+    expect(find(readPlan(d.now()), "t-door")!.progress).toEqual({ done: 0, total: 2 })
+    // an open subtask, and its own checkbox, the same
+    const sub = host(`${START}*** TODO Rim light\n:PROPERTIES:\n:ID:       t-rim\n:END:\n- [ ] gel\n`)
+    await expect(answerPlanTool("plan_close", { id: "t-door", all: false }, sub)).rejects.toThrow(/2 unticked checkboxes .* and 1 open subtask \(t-rim "Rim light"\)/)
+    await answerPlanTool("plan_close", { id: "t-door", all: true }, sub)
+    const p = readPlan(sub.now())
+    expect([find(p, "t-door")!.state, find(p, "t-rim")!.state, find(p, "t-rim")!.checks[0].done, find(p, "t-door")!.checks.every((c) => c.done)]).toEqual(["done", "done", true, true])
+    // a task already done isn't asked again (a note added to it, say)
+    const was = host(START.replace("** TODO", "** DONE"))
+    await answerPlanTool("plan_close", { id: "t-door", note: "Kept." }, was)
+    expect(was.now()).toContain("Kept.")
   })
 })

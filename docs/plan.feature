@@ -25,12 +25,15 @@ Feature: Plans: a project's plan.org, kept by its agents
   # (Rust, engine/cli), so reference/files.md, generated from it, doesn't list one; the page makes it on the first
   # write. The brief page (BriefView, unmounted) still draws a brief's own ## Tasks. Compositions can't import
   # @raea/task until sdk/tsconfig.base.json and raea's bundler map it.
+  # 11-16: PL7, agents finish what they plan (raea-feed plan-finish: plan/keeper.ts, PlanKeeper.tsx; sdk/task tools.ts).
+  # Checked in raea's window: e2e chat-plan 2 of 2 with a real ACP stand-in planning through the tool port, and
+  # chat-goal, respawn, todo, outside, heads, primary, consolidate, ai-login unchanged; vitest 1621; sdk/task 33.
 
   Background:
     Given the app's code is apps/app (raea-feed), the SDK sdk/task, the skill skills/raea/plan.md in raea-skills
     And the plan's tests: sdk/task/test/*.test.ts (PL2, PL3, PL5, PL6), apps/app src/plan/plan.test.ts (PL1c, PL4, PL4c,
       PL5), src/plan/agent.test.ts (PL5a, PL5b), host/plan.test.ts (PL4, PL5), src/feed/todo.test.ts and outside.test.ts
-      (PL4b), e2e/todo.spec.ts (PL4b)
+      (PL4b), e2e/todo.spec.ts (PL4b), apps/app src/plan/keeper.test.ts and e2e/chat-plan.spec.ts (PL7)
 
   Rule: PL1. A project's plan is plan.org at the top of its folder
     # Why there: it's the project's own file, versioned with it in the workspace's repo, found by anyone who opens the
@@ -198,3 +201,60 @@ Feature: Plans: a project's plan.org, kept by its agents
       Then usePlan(text or source) gives the plan, its text and edit; useView a registered view; TaskLine, PlanOutline,
         Agenda and BoardLanes draw them, with toggled for a checkbox's edit
       And none of it uses a dynamic import or dangerouslySetInnerHTML, so raea's window bundle (one IIFE) holds it
+
+  Rule: PL7. An agent finishes what it planned
+    # Shane, 2026-11-16: "i notice often that it makes tasks but never completes them itself". His plans that morning:
+    # TarotChess's agent posted a first pass and left its own follow-ups TODO (frame rate, a clipping score, a dark
+    # encode); Cadence's said "all six masters are finished and posted" over a plan still saying Track MAKING and Build,
+    # Render and Masters TODO (it had woken itself on a render's report, a turn raea sends no plan with); v0.1.5's
+    # closed five tasks with every checkbox unticked, so the list read 0/4 on finished work; and its last turn ended
+    # with Film v2's tasks MAKING, "waiting on three helpers", when the session stopped under them. Nothing asked any
+    # of them to go on: only a /goal does that, and only when the person sets one.
+
+    @done
+    Scenario: PL7a. Each time an agent stops with tasks of its own open, raea asks it to settle them
+      Given a chat in a project whose agent's turn ends (apps/app src/plan/PlanKeeper.tsx, beside GoalKeeper)
+      And tasks of its own are TODO or MAKING in the plan, read from the file first
+      Then raea's next turn to it lists them by id ("[raea plan] Ask N: ...") and says how each is settled: closed with
+        the item it made, done now and closed, REVIEW saying what it needs from the person, dropped with why, or a
+        line starting "WAITING:" naming the job of its own that will report back
+      And it asks again each time the agent stops while one is TODO or MAKING; REVIEW is the person's, and ends it
+      And the rule each turn carries says the same: finish what you planned; before you stop, every task of yours is
+        closed, REVIEW or waiting on a job; close what a job finished when it reports back in a turn you started
+
+    @done
+    Scenario: PL7b. The asks stop
+      Then they stop when none of its tasks is TODO or MAKING, or pause, saying why, when the person presses Stop, its
+        session closes or the turn fails, its reply has a WAITING: line, two asks in a row leave the plan as it was, or
+        12 have gone since the person's last message
+      And the person's next message starts them again from nothing, and Continue over the composer asks at once
+      And a chat with an open /goal is the goal's: its checks keep it going, and the plan's asks wait until it's met
+
+    @done
+    Scenario: PL7c. Which tasks are the agent's
+      Then a task is the chat's when its agent (or the chat) holds it; or nobody holds it and it stands on an item the
+        chat posted (its :ITEM:, or a note's item in its :FROM:: an agent writing plan.org by hand leaves :AGENT: out);
+        or nobody holds it and it's MAKING while no other agent holds open work
+      And a task nobody holds otherwise is the person's (written in the to-do list or Emacs, moved from a brief): never
+        pushed on whoever is chatting; one SCHEDULED for a later day waits for that day
+
+    @done
+    Scenario: PL7d. Done means its checkboxes and subtasks are done
+      When an agent marks a task done (plan_close, or plan_update's state) while a checkbox under it is unticked or a
+        subtask open, as Org's org-enforce-todo-dependencies refuses
+      Then the tool refuses, naming each by its place or id, and nothing is written
+      And plan_close with all: true ticks them and closes the subtasks with it; ticked in the same call, it closes
+      And dropped closes whatever is under it as it is; the person's own check-off in the to-do list isn't refused
+
+    @done
+    Scenario: PL7e. A post names what's still open
+      Given an agent's feed_post in a project
+      Then its answer carries the agent's open tasks and asks it to close what the post finished, with the item, so a
+        turn the agent started itself (a job reporting back carries no plan) still closes them
+
+    @done
+    Scenario: PL7f. Seen in the chat
+      Then each ask is a small line of its own ("Finishing the plan (2): 3 open"), never the marker in the person's words
+      And over the composer, while it asks or after it pauses with tasks open, one line: "Plan  3 of its tasks open",
+        "Finishing · ask 2" with × to stop asking until the next message, or "Paused · Continue" with why on hover
+
