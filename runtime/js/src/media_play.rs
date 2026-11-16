@@ -147,12 +147,16 @@ impl<'a> Player<'a> {
                 }
             }
             if let Some(t) = seek {
-                // the frame at exactly the time asked (the element's `seeked`), and a playing clock goes on from it
-                if self.clock.is_some() {
-                    self.go(t);
-                }
+                // the frame at exactly the time asked (the element's `seeked`), and a playing clock goes on from it once
+                // it is sent: started before, the seek's decode (from the keyframe before it: 30 to 300 ms at 4K) ran
+                // on the clock, and the frames after it were skipped to catch up (11-16)
                 if !self.frame(t, &tx) {
                     return self.stop();
+                }
+                if self.clock.is_some() {
+                    self.go(t);
+                    // the frame showing at t has gone: the next one is the first to decode
+                    self.cursor = Self::index_at(t, self.fps) + 1;
                 }
             }
             if let Some((at, looping)) = play {
@@ -184,6 +188,11 @@ impl<'a> Player<'a> {
             Source::Audio(_) => 0.5 * frame,
         };
         Duration::from_secs_f64(wait)
+    }
+
+    /// The index (at fps) of the frame showing at `t`: one on fps's grid is its own, not the one before for a rounding.
+    fn index_at(t: f64, fps: f64) -> i64 {
+        (t * fps + 1e-6).floor() as i64
     }
 
     /// The cursor's frame's time on the clock.
@@ -353,13 +362,76 @@ mod tests {
 
     /// A second of 30 fps picture and a tone (ffmpeg's test sources), or None without ffmpeg.
     fn clip() -> Option<std::path::PathBuf> {
-        let p = std::env::temp_dir().join(format!("raea-media-play-{}.mp4", std::process::id()));
+        clip_of("1", "one")
+    }
+
+    /// `seconds` of 30 fps picture and a tone, named `name` among this run's clips, or None without ffmpeg.
+    fn clip_of(seconds: &str, name: &str) -> Option<std::path::PathBuf> {
+        let p = std::env::temp_dir().join(format!("raea-media-play-{}-{name}.mp4", std::process::id()));
         let ok = std::process::Command::new("ffmpeg")
-            .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"])
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", seconds, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"])
             .arg(&p)
             .status()
             .is_ok_and(|s| s.success());
         ok.then_some(p)
+    }
+
+    /// A seek while playing (raea feed's timeline, 11-16: a stretch played twice): the decoder answers with the frame
+    /// at the time asked before any other news from its new place, nothing it decoded for the old place comes after
+    /// that frame, and play goes on from the frame after it, due on a clock started once it was sent.
+    #[test]
+    fn a_seek_while_playing_answers_first_and_plays_on_from_there() {
+        // SAFETY: set before any stream reads it, and nothing else in this test binary reads it concurrently
+        unsafe { std::env::set_var("RAEA_AUDIO_MUTE", "1") };
+        let Some(path) = clip_of("3", "seek") else { return eprintln!("no ffmpeg: skipped") };
+        let mut st = stream::open(path.to_str().unwrap(), true).expect("a stream");
+        assert!(matches!(next(&st, Duration::from_secs(10)), Some(Msg::Meta { .. })));
+        assert!(matches!(next(&st, Duration::from_secs(5)), Some(Msg::Frame(t, ..)) if t == 0.0));
+        st.ask(Cmd::Play { at: 0.0, looping: false });
+        // play until frames from past a second are coming
+        let until = Instant::now() + Duration::from_secs(3);
+        let mut furthest = 0.0;
+        while Instant::now() < until && furthest < 1.2 {
+            if let Some(Msg::Due(t, ..)) = next(&st, Duration::from_millis(200)) {
+                furthest = f64::max(furthest, t);
+            }
+        }
+        assert!(furthest >= 1.2, "played to {furthest}");
+        // back to 0.5 while playing: what was on its way may come first, then the seek's frame
+        let asked = Instant::now();
+        st.ask(Cmd::Seek(0.5));
+        let mut answered = None;
+        let (mut after, mut last) = (Vec::new(), 0.5);
+        let until = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < until && after.len() < 10 {
+            match next(&st, Duration::from_millis(300)) {
+                Some(Msg::Frame(t, ..)) => {
+                    assert_eq!(t, 0.5, "the seek's frame");
+                    answered = Some(Instant::now());
+                }
+                Some(Msg::Due(t, _, due, _)) if answered.is_some() => {
+                    assert!(t > last, "after the seek, frames in order from it: {t} after {last}");
+                    last = t;
+                    after.push((t, due));
+                }
+                _ => {}
+            }
+        }
+        let answered = answered.expect("the seek answered with its frame");
+        assert!(answered.duration_since(asked) < Duration::from_secs(1));
+        // the frame after the seek's (index 15 at 30 fps is 0.5 itself): the seek's frame isn't sent twice
+        let first = after.first().expect("play went on after the seek").0;
+        assert!((first - 16.0 / 30.0).abs() < 1e-9, "the first frame after the seek is at {first}");
+        // each due a frame on from the seek's moment, on a clock started when the seek's frame went (not before its
+        // decode), so none had to be skipped: ten frames in a row
+        for (i, (t, _)) in after.iter().enumerate() {
+            assert!((t - (16 + i) as f64 / 30.0).abs() < 1e-9, "frame {i} after the seek is at {t}");
+        }
+        let (t1, due1) = after[0];
+        let on_clock = due1.saturating_duration_since(answered).as_secs_f64();
+        assert!(on_clock <= t1 - 0.5 + 0.03, "the first frame after the seek is due {on_clock} s after its answer");
+        st.ask(Cmd::Pause);
+        let _ = std::fs::remove_file(path);
     }
 
     /// A halving's pixel is the mean of the four it stands for; an odd last row or column is left out; a picture a

@@ -119,6 +119,10 @@ pub fn sync(doc: &mut BaseDocument, nodes: &Nodes, medias: &mut Medias, out: &mu
             {
                 m.seeking = Some(t);
                 st.ask(Cmd::Seek(t));
+                // the frames decoded ahead for where it was are never shown: a seek while playing went on showing up
+                // to a quarter second of them (and telling their times) until its own frame came, a stretch played
+                // again after a seek back (11-16)
+                m.ahead.clear();
             }
             m.seek = seek;
         }
@@ -142,6 +146,8 @@ pub fn sync(doc: &mut BaseDocument, nodes: &Nodes, medias: &mut Medias, out: &mu
                     out.push(if m.video { json!({"id": id, "type": "loadedmetadata", "w": w, "h": h, "duration": duration}) } else { json!({"id": id, "type": "loadedmetadata", "duration": duration}) });
                 }
                 Msg::Fail(err) => {
+                    // a seek that failed lands nowhere: the frames after it aren't held back for it
+                    m.seeking = None;
                     bevy::log::warn!("raea-page: media: {err}");
                     out.push(json!({"id": id, "type": "error", "message": err}));
                 }
@@ -166,9 +172,10 @@ pub fn sync(doc: &mut BaseDocument, nodes: &Nodes, medias: &mut Medias, out: &mu
                         told(m, id, t, out);
                     }
                 }
-                // a playing video's frame, for later; one that comes after a pause is for nothing
+                // a playing video's frame, for later; one that comes after a pause is for nothing, and so is one decoded
+                // before a seek still on its way (the decoder answers a seek with its frame first, then plays on from it)
                 Msg::Due(t, f, due, halves) => {
-                    if m.playing {
+                    if keep_due(m.playing, m.seeking) {
                         m.ahead.push_back((t, (f.width, f.height, f.rgba), due, halves));
                     }
                 }
@@ -274,6 +281,12 @@ fn due_by<T>(ahead: &mut VecDeque<(f64, T, Instant, Halvings)>, reach: Instant) 
     (due, passed)
 }
 
+/// Whether a playing video's frame decoded ahead (`Msg::Due`) waits to be shown: not after a pause, and not while a
+/// seek is on its way, when it was decoded for where the video was before the seek.
+fn keep_due(playing: bool, seeking: Option<f64>) -> bool {
+    playing && seeking.is_none()
+}
+
 /// A playing element's time: each as `time` (its currentTime), and a `timeupdate` four times a second.
 fn told(m: &mut Media, id: u64, t: f64, out: &mut Vec<Value>) {
     out.push(json!({"id": id, "type": "time", "time": t}));
@@ -321,6 +334,15 @@ fn set_image(doc: &mut BaseDocument, n: blitz_dom::NodeId, w: u32, h: u32, rgba:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A frame decoded ahead waits only while playing and no seek is on its way: one that comes between a seek and
+    /// its answer was decoded for where the video was, and shown it played that stretch again (11-16).
+    #[test]
+    fn frames_decoded_before_a_seek_are_not_kept() {
+        assert!(keep_due(true, None));
+        assert!(!keep_due(true, Some(2.0)));
+        assert!(!keep_due(false, None));
+    }
 
     /// At a sync the frame shown is the latest one due by then; earlier ones due are passed over, later ones wait.
     #[test]
