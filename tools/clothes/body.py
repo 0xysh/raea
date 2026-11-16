@@ -132,6 +132,20 @@ def part_of(name):
     return PART.get(n, "chest"), side
 
 
+# Each sample is written on the joints a pose turns. SOMA hangs skin on joints that no pose, clip or solver turns:
+# the twist joints along a limb (all of an arm's and a leg's skin), the bone in the palm under each finger and the
+# end joint past each fingertip. Left on those, a hand on a cup was 12 samples of palm with no forearm and its
+# fingertips 2 cm short. The part still says where the skin is (a palm bone's is "palm").
+above = {j["name"]: joints[j["parent"]]["name"] for j in joints if j["parent"] >= 0}
+PALM = tuple(f"Hand{f}1" for f in ("Index", "Middle", "Ring", "Pinky"))
+
+
+def carrier(n):
+    while n in above and ("Twist" in n or n.endswith("End") or n.endswith(PALM)):
+        n = above[n]
+    return n
+
+
 gname = {g.index: g.name for g in skin.vertex_groups}
 by_part = {}
 for v in skin.data.vertices:
@@ -140,7 +154,10 @@ for v in skin.data.vertices:
         continue
     tot = sum(w for w, _ in ws)
     part, side = part_of(ws[0][1])
-    j0 = ws[0][1]
+    j0, on = carrier(ws[0][1]), {}
+    for w, n in ws:
+        on[carrier(n)] = on.get(carrier(n), 0) + w
+    ws = [(on[j0], j0)] + sorted(((w, n) for n, w in on.items() if n != j0), reverse=True)
     by_part.setdefault((part, side), []).append({"part": part, "side": side, "j": [idx[n] for _, n in ws], "w": [round(w / tot, 4) for w, _ in ws],
                                                  "o": R(v.co - head[j0]), "n": R(v.normal)})
 random.seed(7)
