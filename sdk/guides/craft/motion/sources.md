@@ -55,7 +55,7 @@ raea setup-audio sao       # one of them
   both on the PATH for the setup:
 
   ```sh
-  T=$(dirname "$(realpath "$(command -v raea)")")/../share/raea/tools   # or tools/ in a raea checkout
+  B=$(dirname "$(realpath "$(command -v raea)")"); T=$B/../share/raea/tools; [ -d "$T" ] || T=$B/../../tools  # an install, or a checkout
   PATH="$(dirname "$(bash "$T/ensure.sh" uv)"):$(dirname "$(bash "$T/ensure.sh" git)"):$PATH" raea setup-audio
   ```
 
@@ -171,63 +171,68 @@ person: they download its sounds themselves.
   const cello = (note: string, dur: string, t: number, vel: number) => (vel < 0.6 ? soft : loud).triggerAttackRelease(note, dur, t, vel);
   ```
 
-- **A MIDI file** (a Groove MIDI performance, a Mutopia piece): raea/music reads one (`parseMidi`, in
-  sdk/audio/src/midi.ts), and the raea app imports a `.mid` into a listen item's Part, but a composition can't import
-  a `.mid` yet (docs/sound.feature SN6). Turn it into JSON in raea/music's `MidiFile` shape (`tracks[].notes[]` with
-  `midi`, `time` and `duration` in seconds, and `velocity` 0 to 1), each note from its note-on to its note-off, one
-  track per channel; a composition imports that, and its code stays the same when a `.mid` can be imported:
-
-  ```sh
-  uv run -q --no-project --with mido python3 -I - media/grooves/funk-92.mid media/grooves/funk-92.json <<'PY'
-  import json, sys, mido
-  f = mido.MidiFile(sys.argv[1])
-  tempo, ticks, secs, held, tracks, tempos, sigs = 500000, 0, 0.0, {}, {}, [], []
-  def end(ch, note, at, t, v):  # one note, from its note-on to now, as raea/music's MidiNote
-      tracks.setdefault(ch, []).append({"midi": note, "time": round(at, 4), "duration": round(secs - at, 4), "velocity": round(v / 127, 3), "ticks": t, "durationTicks": ticks - t})
-  for m in mido.merge_tracks(f.tracks):
-      ticks += m.time
-      secs += mido.tick2second(m.time, f.ticks_per_beat, tempo)
-      if m.type == "set_tempo":
-          tempo = m.tempo
-          tempos.append({"ticks": ticks, "bpm": round(mido.tempo2bpm(m.tempo), 3)})
-      elif m.type == "time_signature":
-          sigs.append({"ticks": ticks, "timeSignature": [m.numerator, m.denominator]})
-      elif m.type == "note_on" and m.velocity:
-          held.setdefault((m.channel, m.note), []).append((secs, ticks, m.velocity))
-      elif m.type in ("note_on", "note_off") and held.get((m.channel, m.note)):
-          end(m.channel, m.note, *held[(m.channel, m.note)].pop(0))
-  for (ch, note), left in held.items():  # still sounding when the file ends
-      for n in left:
-          end(ch, note, *n)
-  out = [{"name": f"channel {ch + 1}", "channel": ch, "notes": sorted(ns, key=lambda n: n["time"])} for ch, ns in sorted(tracks.items())]
-  json.dump({"header": {"ppq": f.ticks_per_beat, "tempos": tempos, "timeSignatures": sigs, "name": ""}, "tracks": out, "duration": round(secs, 4)}, open(sys.argv[2], "w"))
-  PY
-  ```
-
-  A drum track plays on a kit of Players by note number. Groove MIDI was recorded on a Roland kit, whose map differs
-  from General MIDI's: its hi-hat edge hits are 22 (closed) and 26 (open), notes General MIDI doesn't have, so a
-  General MIDI map drops many of its hi-hats:
-
-  ```tsx
-  import groove from "./media/grooves/funk-92.json"; // seconds, at the drummer's 92 bpm
-  // Roland's drum map (the dataset's page lists the toms and cymbals): 36 kick; 37, 38 and 40 snare (cross-stick,
-  // head, rim); 42, 22 and 44 closed hi-hat (bow, edge, pedal); 46 and 26 open hi-hat (bow, edge)
-  const KIT: Record<number, string> = { 36: "kick", 37: "snare", 38: "snare", 40: "snare", 42: "hat", 22: "hat", 44: "hat", 46: "open", 26: "open" };
-  const kit = new Tone.Players({
-    kick: staticFile("sounds/vcsl-bass-drum-1/BDrumNew_hit_v5_rr1_Sum.wav"),
-    snare: staticFile("sounds/vcsl-snare-drum-modern-1/Snare2_HitSN_v5_rr1_Mid.wav"),
-    hat: staticFile("sounds/vcsl-hi-hat-cymbal/HiHat_HitC_v3_rr1_Mid.wav"),
-    ghost: staticFile("sounds/vcsl-hi-hat-cymbal/HiHat_HitC_v1_rr1_Mid.wav"),
-    open: staticFile("sounds/vcsl-hi-hat-cymbal/HiHat_HitO_rr1_Mid.wav"),
-  }).connect(Tone.buses.music);
-  const stretch = 92 / Tone.getTransport().bpm.value; // the drummer's tempo onto the cue's
-  const hits = groove.tracks.flatMap((track) => track.notes).filter((n) => n.midi in KIT);
-  // a soft closed hat plays the soft take
-  new Tone.Part((t, n) => kit.player(KIT[n.midi] === "hat" && n.velocity < 0.45 ? "ghost" : KIT[n.midi]).start(t), hits.map((n) => ({ ...n, time: n.time * stretch }))).start("4m");
-  ```
-
-  A pitched track (a Mutopia piece) plays on a Sampler, one Part a track, each note at its own length:
-  `piano.triggerAttackRelease(Tone.Frequency(n.midi, "midi").toNote(), n.duration * stretch, t, n.velocity)`.
+- **A MIDI file** (a Groove MIDI performance, a Mutopia piece): turned into JSON and played on Samplers and Players
+  (below).
 - **A SoundFont** (`.sf2`, `.sf3`): raea can't play one. To hear a MIDI file the person hands over as it is, render
   it with FluidSynth (`brew install fluid-synth`, then `fluidsynth -ni -F song.wav -r 48000 MuseScore_General.sf3
   song.mid`) and play the WAV as `<Audio bus="music">`; to write parts, use the sampled libraries instead.
+
+## A MIDI file in a composition
+
+A Groove MIDI performance or a Mutopia piece comes as a `.mid`. raea/music reads one (`parseMidi`, in
+sdk/audio/src/midi.ts), and the raea app imports a `.mid` into a listen item's Part, but a composition can't import
+a `.mid` yet (docs/sound.feature SN6). Turn it into JSON in raea/music's `MidiFile` shape (`tracks[].notes[]` with
+`midi`, `time` and `duration` in seconds, and `velocity` 0 to 1), each note from its note-on to its note-off, one
+track per channel; a composition imports that, and its code stays the same when a `.mid` can be imported:
+
+```sh
+uv run -q --no-project --with mido python3 -I - media/grooves/funk-92.mid media/grooves/funk-92.json <<'PY'
+import json, sys, mido
+f = mido.MidiFile(sys.argv[1])
+tempo, ticks, secs, held, tracks, tempos, sigs = 500000, 0, 0.0, {}, {}, [], []
+def end(ch, note, at, t, v):  # one note, from its note-on to now, as raea/music's MidiNote
+    tracks.setdefault(ch, []).append({"midi": note, "time": round(at, 4), "duration": round(secs - at, 4), "velocity": round(v / 127, 3), "ticks": t, "durationTicks": ticks - t})
+for m in mido.merge_tracks(f.tracks):
+    ticks += m.time
+    secs += mido.tick2second(m.time, f.ticks_per_beat, tempo)
+    if m.type == "set_tempo":
+        tempo = m.tempo
+        tempos.append({"ticks": ticks, "bpm": round(mido.tempo2bpm(m.tempo), 3)})
+    elif m.type == "time_signature":
+        sigs.append({"ticks": ticks, "timeSignature": [m.numerator, m.denominator]})
+    elif m.type == "note_on" and m.velocity:
+        held.setdefault((m.channel, m.note), []).append((secs, ticks, m.velocity))
+    elif m.type in ("note_on", "note_off") and held.get((m.channel, m.note)):
+        end(m.channel, m.note, *held[(m.channel, m.note)].pop(0))
+for (ch, note), left in held.items():  # still sounding when the file ends
+    for n in left:
+        end(ch, note, *n)
+out = [{"name": f"channel {ch + 1}", "channel": ch, "notes": sorted(ns, key=lambda n: n["time"])} for ch, ns in sorted(tracks.items())]
+json.dump({"header": {"ppq": f.ticks_per_beat, "tempos": tempos, "timeSignatures": sigs, "name": ""}, "tracks": out, "duration": round(secs, 4)}, open(sys.argv[2], "w"))
+PY
+```
+
+A drum track plays on a kit of Players by note number. Groove MIDI was recorded on a Roland kit, whose map differs
+from General MIDI's: its hi-hat edge hits are 22 (closed) and 26 (open), notes General MIDI doesn't have, so a
+General MIDI map drops many of its hi-hats:
+
+```tsx
+import groove from "./media/grooves/funk-92.json"; // seconds, at the drummer's 92 bpm
+// Roland's drum map (the dataset's page lists the toms and cymbals): 36 kick; 37, 38 and 40 snare (cross-stick,
+// head, rim); 42, 22 and 44 closed hi-hat (bow, edge, pedal); 46 and 26 open hi-hat (bow, edge)
+const KIT: Record<number, string> = { 36: "kick", 37: "snare", 38: "snare", 40: "snare", 42: "hat", 22: "hat", 44: "hat", 46: "open", 26: "open" };
+const kit = new Tone.Players({
+  kick: staticFile("sounds/vcsl-bass-drum-1/BDrumNew_hit_v5_rr1_Sum.wav"),
+  snare: staticFile("sounds/vcsl-snare-drum-modern-1/Snare2_HitSN_v5_rr1_Mid.wav"),
+  hat: staticFile("sounds/vcsl-hi-hat-cymbal/HiHat_HitC_v3_rr1_Mid.wav"),
+  ghost: staticFile("sounds/vcsl-hi-hat-cymbal/HiHat_HitC_v1_rr1_Mid.wav"),
+  open: staticFile("sounds/vcsl-hi-hat-cymbal/HiHat_HitO_rr1_Mid.wav"),
+}).connect(Tone.buses.music);
+const stretch = 92 / Tone.getTransport().bpm.value; // the drummer's tempo onto the cue's
+const hits = groove.tracks.flatMap((track) => track.notes).filter((n) => n.midi in KIT);
+// a soft closed hat plays the soft take
+new Tone.Part((t, n) => kit.player(KIT[n.midi] === "hat" && n.velocity < 0.45 ? "ghost" : KIT[n.midi]).start(t), hits.map((n) => ({ ...n, time: n.time * stretch }))).start("4m");
+```
+
+A pitched track (a Mutopia piece) plays on a Sampler, one Part a track, each note at its own length:
+`piano.triggerAttackRelease(Tone.Frequency(n.midi, "midi").toNote(), n.duration * stretch, t, n.velocity)`.

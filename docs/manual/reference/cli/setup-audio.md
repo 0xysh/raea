@@ -33,7 +33,7 @@ Mac without them, `share/raea/tools/ensure.sh uv` and `ensure.sh git` install ra
 git 2.56.0, each download checked against its SHA-256) and print where; put those folders on the PATH:
 
 ```sh
-T=$(dirname "$(realpath "$(command -v raea)")")/../share/raea/tools
+B=$(dirname "$(realpath "$(command -v raea)")"); T=$B/../share/raea/tools; [ -d "$T" ] || T=$B/../../tools  # an install, or a checkout
 PATH="$(dirname "$(bash "$T/ensure.sh" uv)"):$(dirname "$(bash "$T/ensure.sh" git)"):$PATH" raea setup-audio
 ```
 
