@@ -60,7 +60,8 @@ untar() {
   return $rc
 }
 raea_bin=$bin/raea; [ -f "$raea_bin.exe" ] && raea_bin=$raea_bin.exe
-# The gate reads the feed app's checkout (apps/app), which is private: a public checkout (release.yml's runners) has
+# The gate reads the feed app (apps/app), in raea's own tree since 11-16, so every checkout of a later REF has it and
+# skills.sh reads the app REF holds. Before, the app was private and a public checkout (release.yml's runners) had
 # none. There, RAEA_SKILLS_PASSED=SHA stands for it: the gate passed at SHA where the feed app is (a maintainer's
 # checkout), and it counts for REF only when what the gate reads (the skills and guides, the glossary, the CLI's usage,
 # skills.sh) is the same at both. With neither, the release refuses (T1f, 11-07)
