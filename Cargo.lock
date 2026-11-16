@@ -13975,6 +13975,7 @@ dependencies = [
  "raea-io-media",
  "raea-runtime-bundle",
  "raea-runtime-export",
+ "raea-sys-kimodo",
  "serde_json",
 ]
 
@@ -15864,6 +15865,18 @@ dependencies = [
  "raea-gpu-device",
  "serde_json",
  "wgpu",
+]
+
+[[package]]
+name = "raea-sys-kimodo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mlx-rs",
+ "raea-sys-ml",
+ "raea-sys-mlx",
+ "serde_json",
+ "tokenizers",
 ]
 
 [[package]]

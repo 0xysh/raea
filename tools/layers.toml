@@ -55,6 +55,8 @@ raea-seedling = "systems"
 raea-sys-ml = "systems"
 # MLX on Apple silicon, beside raea-sys-ml's ONNX Runtime (empty on other systems)
 raea-sys-mlx = "systems"
+# Kimodo's text to SOMA motion on MLX (raea motion; docs/character.feature CH15c)
+raea-sys-kimodo = "systems"
 raea-sys-speech = "systems"
 raea-sys-layout = "systems"
 raea-sys-vision = "systems"

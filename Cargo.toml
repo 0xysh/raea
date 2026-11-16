@@ -81,6 +81,7 @@ members = [
     "systems/mix",
     "systems/ml",
     "systems/mlx",
+    "systems/kimodo",
     "systems/speech",
     "systems/layout",
     "systems/vision",

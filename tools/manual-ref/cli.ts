@@ -30,7 +30,7 @@ const GROUPS: [string, string, string[]][] = [
   ["Check", "What's wrong before anyone watches it.", ["check", "judge", "fingerprint", "findings", "scene", "world", "solid", "next", "doctor", "hook", "traces"]],
   ["Footage", "Takes, cuts and the camera, from your own media.", ["media", "cut", "frame", "track", "splat", "mezz", "neural"]],
   ["Sound", "Music read, foley and instruments made on this machine.", ["song", "sounds", "sao", "tokensynth", "setup-audio"]],
-  ["Generate and 3D tools", "Generated media, physics bakes, clothes for SOMA's body, Blender and Godot.", ["gen", "physics", "clothes", "blender", "godot"]],
+  ["Generate and 3D tools", "Generated media, physics bakes, clothes and motion for SOMA's body, Blender and Godot.", ["gen", "physics", "clothes", "motion", "blender", "godot"]],
   ["Agents and setup", "What an agent reads and shows the person, and the tools raea installs.", ["guide", "context", "notes", "show", "skill", "skills", "setup"]],
 ]
 /** A verb's page: VERB.md, but index.md is this section's own page, so raea index's is indexer.md */

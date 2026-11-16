@@ -4,6 +4,8 @@
 //! made.app, fal, Replicate, OpenRouter, Modal and ComfyUI, with sao as the local model: apps/tools/src/generate.rs).
 
 pub mod generate;
+/// `raea motion`: body motion made on this Mac by Kimodo on MLX (raea-sys-kimodo)
+pub mod motion;
 pub mod song;
 pub mod sound;
 pub mod splat;

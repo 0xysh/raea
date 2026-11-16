@@ -274,7 +274,7 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # `mps` device), so the earlier line that it does not run on a Mac is untested, not true.
       Then a stage `do` line gets a clip made from its words, checked, and kept in the project
 
-    Scenario: CH15c. Kimodo on the user's own machine, in MLX (planned)
+    Scenario: CH15c. Kimodo on the user's own machine, in MLX
       # The user, 11-15: "lets plan that if kimodo works well we port it mlx weights or go find some". Gated on
       # an eval first: about ten lines (wave, point, shrug, clap, nod, bow, look at a watch, cross the arms,
       # scratch the head, stretch), each with a check of its own (which hand rises, where the head turns) and a look
@@ -286,6 +286,25 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # model (a small diffusion transformer): its weights converted and run in MLX, checked against the PyTorch
       # motion for the same line, constraints, seed and noise. Before anything ships to users: the licences of
       # converted weights (NVIDIA's Open Model License for Kimodo, Meta's Llama 3 licence for the encoder).
+      # 11-16. Done in Rust, no Python: raea-sys-kimodo runs Kimodo-SOMA-RP-v1's denoiser and LLM2Vec on MLX from
+      # the checkpoints' own files (nothing converted: mlx-community's 8-bit Llama 3 8B Instruct, McGill-NLP's two
+      # adapters run beside it unmerged), and `raea motion "LINE" [--keys KEYS.json]` writes the clip fromkimodo.ts
+      # reads. Against PyTorch: the denoiser within 2e-3; a whole 100-step generation from the same noise and text
+      # within 0.002 cm on every joint; constraints become the same conditions. The stated tolerance is the 8-bit
+      # encoder's: cosine 0.99993 to float32, which moves the joints 0.01 to 0.74 cm on average and 1.44 cm at
+      # worst over eight lines (4-bit moved them 8 cm and is not used). A seed's noise is not torch's, so a seed is
+      # not the cloud's motion for that seed; measured by what it does, the local wave falls in the cloud's three
+      # (a hand above the shoulder 54 to 67 of 120 frames against 48 to 59, the hips within 3 cm). Cost: the
+      # motion model 1.1 GB and the encoder 8.8 GB once, then 5 s to load and read a new line (a line's numbers
+      # are kept, so a line is read once) and about 8 s a 4 s clip on an M5 Pro, against the cloud's 130 s
+      # loading. The eval (sdk/body tools/doeval.ts, each line's check measured on the joints; clips by
+      # tools/makedo.ts, three seeds a line between standing keys): every clip passes the bar of the captures that
+      # end standing; the seed kept is the one whose upper body moves most (a do line fails by standing through
+      # it: one seed of three stood still through "scratch the head"), and the kept ten all do what they say
+      # (seed 1 alone 7 of 10, seed 2 8, seed 3 7). Film: sheet3d out/do-eval-v1.mp4, posted for the user's look
+      # (i-show-mwj21c0d-1). Open: that look; the user's word on shipping the downloads (Kimodo under NVIDIA's
+      # Open Model License; Meta Llama 3 under its Community License, fetched from mlx-community's ungated 8-bit
+      # copy; the adapters MIT); Kimodo's own post-processing (its C++ foot-skate clean-up) is not ported.
       Given the eval's lines pass
       Then a do line's clip is made on a Mac with no GPU in the cloud, matching the cloud's within a stated
         tolerance
