@@ -213,15 +213,15 @@ pub fn hand_rest(skel: &Skeleton, s: Side) -> Option<HandRest> {
     let middle = reach * 0.55;
     // and the ball of the thumb, which is the palm's too though the thumb's first bone carries it: a face the palm
     // lies on meets it first (left out, it sat 6 to 9 mm inside a held box with the thumb as far open as it goes)
-    let ball = skel.skin_of(skel.finger("thumb", s)?[0]).filter(|x| x.normal.dot(palm) > 0.5).map(|x| (x.at - h).dot(palm));
+    let ball = skel.skin_of(skel.finger("thumb", s)?[0]).filter(|x| x.normal.dot(palm) > 0.5);
     let skin = skel
         .skin_of(hand)
         // (skin the hand mostly carries itself: the web to the thumb stands 13 mm proud of the palm and goes with the thumb)
         .filter(|x| x.part == "palm" && x.normal.dot(palm) > 0.5 && x.joints.first().is_some_and(|j| j.1 >= 0.8))
-        .map(|x| x.at - h)
-        .filter(|o| (*o - middle).reject_from_normalized(palm).length() < 0.025)
-        .map(|o| o.dot(palm))
+        .filter(|x| (x.at - h - middle).reject_from_normalized(palm).length() < 0.025)
         .chain(ball)
+        .map(|x| x.at - h)
+        .map(|o| o.dot(palm))
         .fold(f32::MIN, f32::max);
     Some(HandRest { along, palm, mid: middle + palm * if skin > 0.0 { skin } else { 0.012 } })
 }
