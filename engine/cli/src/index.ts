@@ -27,6 +27,8 @@ import { libraryVerb } from "./library";
 import { showVerb } from "./show";
 // `raea clothes` (clothes.ts): garments for SOMA's body from words
 import { clothesVerb } from "./clothes";
+// `raea bug` (bug.ts): an agent's report of a bug in raea, to raea's server
+import { bugVerb } from "./bug";
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name);
@@ -267,6 +269,8 @@ export function raeaHandler(host?: Host, engine?: Engine) {
           return out(showVerb(ask, args.slice(1), c.cwd, (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}));
         case "clothes":
           return out(clothesVerb(ask, args.slice(1)));
+        case "bug":
+          return out(bugVerb(ask, args.slice(1), (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}));
         default:
           return await native();
       }

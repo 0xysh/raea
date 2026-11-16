@@ -128,5 +128,6 @@ What an agent reads and shows the person, and the tools raea installs.
 | [`raea skill`](skill.md) | Print the agent skill this raea ships, matched to its version, or one of its references. |
 | [`raea skills`](skills.md) | Install raea's agent skill where Claude Code, Codex, Kimi or Gemini read skills, with its MCP server and hook. |
 | [`raea setup`](setup.md) | Find Blender, or download its current LTS, and install raea's add-on and the MCP add-on. |
+| [`raea bug`](bug.md) | Report a bug in raea itself to raea's server: a line saying what's wrong and what happened, with raea's version and the OS added, no account needed. |
 
 <!-- generated:end -->

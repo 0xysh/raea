@@ -304,6 +304,27 @@ function frame(a: { take: string; at?: number }): string {
   return lines.join("\n");
 }
 
+/** `raea bug`'s report (bug.ts) to raea's server, with raea's version and the OS added; RAEA_API names the server
+ *  (https://raea.io, where raea's server takes reports). No account: the server takes a report from anyone. */
+function bug(a: { report: Record<string, unknown>; dry?: boolean }) {
+  const version = (spawnSync(raea, ["--version"], { encoding: "utf8" }).stdout ?? "").trim().split(/\s+/).pop() || undefined;
+  const mac = process.platform === "darwin" ? (spawnSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).stdout ?? "").trim() : "";
+  const sent = { ...a.report, raea: version, os: mac ? `macOS ${mac}` : `${process.platform} ${process.arch}` };
+  if (a.dry) return { sent };
+  const api = (process.env.RAEA_API ?? "https://raea.io").replace(/\/$/, "");
+  const r = spawnSync("curl", ["-sS", "--max-time", "20", "-X", "POST", "-H", "content-type: application/json", "--data-binary", "@-", "-w", "\n%{http_code}", `${api}/v1/bugs/agent`], { input: JSON.stringify(sent), encoding: "utf8" });
+  const text = r.stdout ?? "";
+  const cut = text.lastIndexOf("\n");
+  const status = Number(text.slice(cut + 1)) || 0;
+  let answer: { id?: string; count?: number; known?: boolean; message?: string } = {};
+  try {
+    answer = JSON.parse(text.slice(0, cut));
+  } catch {
+    answer = { message: (r.stderr ?? "").trim() || text.slice(0, 200) };
+  }
+  return { ...answer, status, sent };
+}
+
 /** One request by curl (the host steps are synchronous): its body and where it ended up, or why it failed */
 function curl(url: string, o: { out?: string; secs?: number } = {}): { body: string; url: string } {
   // a browser's agent: some sites send a bare page, or none, to anything else
@@ -391,6 +412,8 @@ const host: Host = (op, a) => {
       return show(a);
     case "clothes":
       return clothesHost(raea, cwd, process.env, a);
+    case "bug":
+      return bug(a as { report: Record<string, unknown>; dry?: boolean });
     case "harness":
       return harness();
     case "task":
