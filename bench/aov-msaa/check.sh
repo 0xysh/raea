@@ -20,7 +20,7 @@ for c in ramp game; do
     n=$(printf '%05d' "$i")
     [ "$(wc -c < "$OUT/$c/depth/frame-$n.f32" 2>/dev/null | tr -d ' ')" = 230400 ] || { echo "FAIL: $c --aov: frame $i's depth is missing or not 320 x 180"; exit 1; }
     [ "$(wc -c < "$OUT/$c/motion/frame-$n.f32" 2>/dev/null | tr -d ' ')" = 460800 ] || { echo "FAIL: $c --aov: frame $i's motion is missing or not 320 x 180"; exit 1; }
-    [ "$(tr -d '\0' < "$OUT/$c/depth/frame-$n.f32" | head -c 1 | wc -c | tr -d ' ')" = 1 ] || { echo "FAIL: $c --aov: frame $i's depth is all zero"; exit 1; }
+    [ "$(LC_ALL=C tr -d '\0' < "$OUT/$c/depth/frame-$n.f32" | head -c 1 | wc -c | tr -d ' ')" = 1 ] || { echo "FAIL: $c --aov: frame $i's depth is all zero"; exit 1; }
   done
   echo "PASS: $c --aov: frames 0 to 5, each with its depth and motion"
 done
