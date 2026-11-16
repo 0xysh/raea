@@ -173,11 +173,108 @@ Feature: Realtime editing: a composition's controls change the live frame, then 
         control" are in P1
 
   Rule: RT3. Playback of pre-rendered video
-    # Status: not measured. The founder, 11-16: timeline playback, even of plain pre-rendered videos, is choppy and
-    # repeats itself. Measure it first (frames shown against frames due, frames repeated) on a plain .mp4 in the
-    # timeline, then fix it.
+    # The founder, 11-16: timeline playback, even of plain pre-rendered videos, is choppy and repeats itself.
+    # Bench (file | job)
+    #   the app's e2e/playback.spec.ts   | 12 s films made with ffmpeg (testsrc2 and a tone, H.264 with B-frames, a
+    #                                    | keyframe every 2 s: 1080p30, 1080p60, 4K30) posted as plain review items and
+    #                                    | played in the Watch view under the timeline, in raea's window, headless.
+    #                                    | Each frame the window shows is logged from the news it sends the player
+    #                                    | (`time`, one per frame drawn), with each seek the page makes and the
+    #                                    | playhead's place at each page frame. PB_SECONDS, PB_STRICT=1 (frames passed
+    #                                    | over under 1 in 500), PB_PROFILE=1 (the page's JS cost)
+    #   runtime/js/src/media_play.rs     | a_seek_while_playing_answers_first_and_plays_on_from_there
+    #   runtime/js/src/media_sound.rs    | the sound clock between callbacks, a late callback, a start during one
+    #   runtime/dom/media/src/lib.rs     | frames_decoded_before_a_seek_are_not_kept
+    # Status, 11-16: RT3a-RT3e built (the app's timeline-playback branch, and the timeline-playback lane for the
+    # window); RT3f, RT3g and RT3h not. Measured with RAEA_PAGE_FPS=120 and RAEA_AUDIO_MUTE=1 on the M5 Pro Mac with
+    # other sessions' renders running (antsy board), so the page's frame times, and the frames it passes over, go with
+    # the load. Before: the app at the branch's base with a window built 11-15. After: the branch with a window built
+    # from this lane. Runs alternated back to back.
+    #
+    #   measured                                  before                                after
+    #   plain play: steps back, frames twice      0 and 0 on all three films             0 and 0
+    #   plain play: the playhead's moves a second 3-4 (the four timeupdates)             23-58 (each frame the page drew)
+    #   plain play: frames passed over            0.5-58% (page frame p50 9-35 ms)       0.5-62% (p50 9-54 ms): the load's
+    #   a seek back and one on, while playing     no frame from before either; at most   the same (the old window's queue
+    #                                             2 already drawn; there in 27-44 ms     of frames didn't show headless);
+    #                                                                                    there in 48-55 ms, 190-280 ms
+    #                                                                                    when the page drew at 18-54 ms
+    #   an edited film across a split             frames 93-95, then 92 again: 1 step    no seek, no frame twice
+    #                                             back, 2 shown twice (a seek back
+    #                                             found up to 250 ms late)
+    #   an edited film across a cut               not reached (fails at the split)       no frame the cut took out; after
+    #                                                                                    a stall the seek comes early by
+    #                                                                                    the page's frame time, so the
+    #                                                                                    clip's last 4-13 frames go unshown
+    #   played to its end                         went round: 359, then 0 and on         stopped on 359, paused
+    #   the page's CPU a frame drawn              19-41 ms (old window)                  15-29 ms (branch, old window):
+    #                                                                                    the playhead's move costs nothing
+    #                                                                                    seen past the load's spread
 
-    Scenario: RT3a. A pre-rendered video plays smoothly and once
+    Scenario: RT3a. A plain film plays each frame once, in order
       Given a plain .mp4 on the timeline
       When it plays
-      Then every frame is shown once, in order, at the film's rate, with none repeated or skipped by a stall
+      Then every frame shown is shown once, and never one before the frame before it
+      # Status: built; e2e "plain play of a ... film shows each frame once, in order": 0 and 0 before and after (the
+      # repeats the founder saw were RT3d's and RT3e's)
+
+    Scenario: RT3b. The playhead moves with the picture
+      Given a film playing under the timeline
+      Then the playhead and the collapsed scrubber's played part move at each frame the page draws
+      And the view still renders at the clock's four timeupdates a second, not at every frame
+      # Status: built (the app's src/timeline/livePlayhead.ts on the player's time each page frame, clock.ts useLive);
+      # e2e "plain play": more than min(10, 0.6 of what it could) moves a second, 3-4 before; a key at the playhead
+      # while it plays (a step, a split, a mark) acts on the frame showing, not the last timeupdate
+
+    Scenario: RT3c. A seek while playing plays on from there, with nothing from where it was
+      Given a film playing
+      When it is seeked back or on (the ruler, Home)
+      Then the seek's frame is the first from its new place, and no frame decoded for the old place shows after it
+      And play goes on from the frame after it, with no frame passed over for the seek's decode
+      # Status: built in the window: the page drops the frames queued for the old place and keeps none that come while
+      # the seek is on its way (runtime/dom/media keep_due), and the decoder sends the seek's frame before it starts
+      # its clock (media_play.rs index_at). Unit tests above; e2e "a seek while it plays" (passes on both builds)
+
+    Scenario: RT3d. An edited film plays across its edits once
+      Given a film split on the timeline, and a stretch of it taken out
+      When it plays across the split
+      Then it plays on into the next clip with no seek, and no frame is shown twice
+      When it plays across the cut
+      Then no frame the cut took out is shown, while the page draws a frame at least every three of the film's
+      # Status: built (the app's src/timeline/playcut.ts onward): a clip's end is heard at every page frame, not at the
+      # timeupdates; into a clip that goes on from the same place in the file the player plays on; anywhere else the
+      # seek is made on the clip's last frame, early by the page's frame time (clock.ts Live.gap). e2e "an edited film
+      # plays across a split ... and across a cut"; unit tests in the app's src/timeline/playcut.test.ts
+
+    Scenario: RT3e. Played to its end, the film stops there
+      Given a film playing under the timeline
+      When it reaches its last frame
+      Then it stops on it, paused, and play starts it again from the start
+      # Status: built (the player's loop is off under the timeline; the old strip's player still goes round), and a
+      # page's media element played again from its end is at 0 from the call on, as a browser's is (sdk/ui
+      # dom/media.ts play; test/dom.test.tsx). e2e "played to its end"
+
+    Scenario: RT3f. Frames passed over under 1 in 500 on a loaded machine
+      Given the films of RT3a played on a 120 Hz page with other sessions' renders and builds running
+      Then fewer than 1 in 500 of their frames are passed over
+      # Status: not built. Passed over goes with the page's frame time (0.5% at 9 ms p50, 58% at 35 ms), the same
+      # before and after. A sample of the window playing 1080p60: a third of the main thread waits on the render
+      # sub-app, Metal's command buffer submission is the biggest single cost (the GPU shared with other renders), the
+      # page's JS step about a tenth, the DOM host's layout out about 8%, Blitz's paint 4%; the page uses 15-40 ms of
+      # CPU over its threads for each frame it draws. Left: the frame's cost (a video frame that changes only its
+      # texture should not lay out or paint the page again), and the IOSurface path for decoded frames.
+
+    Scenario: RT3g. The window plays an edited film's clips itself
+      Given an edited film's main track as a list of file ranges
+      When the page hands the list to the player
+      Then the window shows each range's frames and goes on to the next range's first frame, decoded ahead, with no
+        hold at the cut and no frame of the file between ranges, however late the page draws
+      # Status: not built. Today the page seeks at each cut (RT3d): the last frame holds for the seek's decode (27-280
+      # ms headless), and a page held up for more than three frames at the cut shows the one frame it draws there
+
+    Scenario: RT3h. The sound clock on screen
+      Given a film playing with its sound on, on screen
+      Then the picture follows a clock that moves at every page frame and never goes back
+      # Status: built, not measured: the clock runs on between the device's callbacks from the last one's position,
+      # never before a time already read, and a start during a callback stands (media_sound.rs Shared::time_at, its
+      # unit tests). The headless bench mutes sound (RAEA_AUDIO_MUTE=1), whose clock is the wall clock
