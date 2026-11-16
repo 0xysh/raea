@@ -63,6 +63,40 @@ describe("P18 DOM surface: scrolling", () => {
     expect(heard).toEqual([120, 120, 300]);
   });
 
+  test("an offset written reads back as the host will show it, to a hundredth, so steps smaller than that add up and arrive", () => {
+    // (raea's window: the host's geometry each frame has every number to a hundredth, systems/page snapshot.rs. Read
+    // back unrounded, a write of 74.9931 looked like a move, and a spring that keeps what hasn't moved yet, as
+    // use-stick-to-bottom's does, threw that away; the frame then put 74.99 back. Its steps under 0.005 never
+    // arrived, and it wrote every frame for good: a chat's last turn never held still)
+    const host = fresh();
+    let el: any;
+    mount(
+      <div data-testid="root">
+        <div data-testid="box" className="overflow-y-auto" ref={(e: any) => (el = e)}>
+          <div data-testid="inner" />
+        </div>
+      </div>,
+      0,
+      { dom: true },
+    );
+    const frame = () => snap(host, { root: [0, 0, 800, 600], box: [0, 0, 200, 100, 0, Math.round(el.scrollTop * 100) / 100, 200, 175], inner: [0, -el.scrollTop, 200, 175] });
+    snap(host, { root: [0, 0, 800, 600], box: [0, 0, 200, 100, 0, 74.99, 200, 175], inner: [0, -74.99, 200, 175] });
+    el.scrollTop = 74.9931;
+    expect(el.scrollTop).toBe(74.99);
+    // the spring: a step under a hundredth each frame, kept until the offset moves
+    let kept = 0;
+    let frames = 0;
+    while (el.scrollTop < 75 && frames++ < 60) {
+      const was = el.scrollTop;
+      kept += 0.002;
+      el.scrollTop = was + kept;
+      if (el.scrollTop !== was) kept = 0;
+      frame();
+    }
+    expect(el.scrollTop).toBe(75);
+    expect(frames).toBeLessThan(10);
+  });
+
   test("two scrollers kept in step both ways settle, though the host's scroll events come a frame late", async () => {
     // (a timeline's tracks and heads: they went round for good in raea's window, a drag's offsets coming back in turn)
     const host = fresh();

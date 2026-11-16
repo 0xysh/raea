@@ -427,7 +427,11 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function setScroll(el: Element_, box: number[], prop: string, at: number, v: number) {
+function setScroll(el: Element_, box: number[], prop: string, at: number, wrote: number) {
+  // held to a hundredth, as the host's geometry gives it back each frame (systems/page snapshot.rs), as Chrome snaps
+  // a written offset to its pixels at once: read back finer, a write looked like a move the next frame took back, and a
+  // spring that keeps what hasn't moved yet (use-stick-to-bottom's) threw its steps away and wrote every frame for good
+  const v = Math.round(wrote * 100) / 100;
   // what it holds moves at once (Chrome lays out again on the next read): its descendants' boxes by the change
   const d = v - box[at];
   if (d) {
