@@ -36,7 +36,7 @@ export const KINDS: Record<string, { status: Status; three: string; note?: strin
   PointLight: { status: "drawn", three: "PointLight (units.ts)" },
   SpotLight: { status: "drawn", three: "SpotLight with its target (units.ts)" },
   RectAreaLight: { status: "drawn", three: "RectAreaLight facing its target (units.ts; RectAreaLightUniformsLib)" },
-  Environment: { status: "drawn", three: "the panorama as scene.environment (and background), RGBE/EXR/picture loaders" },
+  Environment: { status: "drawn", three: "the panorama as scene.environment (and background), RGBE/EXR/picture loaders; room: RoomEnvironment through PMREMGenerator.fromScene" },
   Model: { status: "drawn", three: "GLTFLoader's scene: its clip at `time` (or blended `animations`), morphs, hidden nodes, re-covered materials, a copy for each placement in `at`", note: "a cloth bake, `attach`, `bones` and an authored `graph` are raea's engine's" },
   Refinish: { status: "drawn", three: "the models inside it re-covered (MeshStandardMaterial props on each glTF material)" },
   ImagePlane: { status: "drawn", three: "a plane with the picture (grid cells, cutout)" },
