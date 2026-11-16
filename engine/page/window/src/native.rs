@@ -14,8 +14,9 @@
 //!
 //! Live only on screen (--window) and without RAEA_NO_OPEN=1: otherwise every call is recorded and answered as if done,
 //! so headless runs never touch the person's clipboard, browser or notifications. Notifications and raea:// links need
-//! the app's identity: the window running as raea.app's own process (tools/raea-app/launch.sh execs it from
-//! Contents/MacOS); elsewhere notify answers an error that says so.
+//! the app's identity: the window's program in raea.app's Contents/MacOS, which makes raea.app its main bundle
+//! (tools/raea-app/launch.sh starts it there as its child, never exec'd: an exec left the app without a pid in AppKit,
+//! #163); elsewhere notify answers an error that says so.
 //! AppKit is called on the main thread: the calls queue here and `drain` (a NonSend system) runs them.
 
 use std::sync::Mutex;
