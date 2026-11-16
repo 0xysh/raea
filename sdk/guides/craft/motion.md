@@ -88,8 +88,9 @@ import * as Tone from "raea/tone";
 import { css } from "./styles.gen";
 
 // the music: a chord on the title and a two-note lift after it, on a library piano (`raea sounds get
-// salamander/piano --notes C4,C5`); a sting, not a bed (motion/music)
-const piano = new Tone.Sampler({ urls: { C4: staticFile("sounds/salamander-piano/C4.mp3"), C5: staticFile("sounds/salamander-piano/C5.mp3") }, release: 1, volume: -10 }).connect(Tone.buses.music);
+// salamander/piano`: roots a minor third apart, D#4 as Ds4.mp3); a sting, not a bed (motion/music)
+const ROOTS = ["C4", "D#4", "F#4", "A4", "C5", "D#5"];
+const piano = new Tone.Sampler({ urls: Object.fromEntries(ROOTS.map((n) => [n, staticFile(`sounds/salamander-piano/${n.replace("#", "s")}.mp3`)])), release: 1, volume: -10 }).connect(Tone.buses.music);
 new Tone.Part((t, n) => piano.triggerAttackRelease(n.notes, n.dur, t, n.vel), [
   { time: "0:0", notes: ["C4", "E4", "G4", "C5"], dur: "2n", vel: 0.8 },
   { time: "0:2", notes: ["D5"], dur: "8n", vel: 0.55 },

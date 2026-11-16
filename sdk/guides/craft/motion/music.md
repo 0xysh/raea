@@ -36,8 +36,9 @@ drone under a long reverb is what generated music sounds like. Before any instru
     `raea sounds get tonejs-instruments/cello` copies its notes into `media/sounds/` and prints the `Sampler` that
     plays them. Drums and hits come as takes for `Tone.Player`s. Whole orchestras, multi-velocity kits and drummers'
     grooves are fetched by hand (`motion/sources`).
-  - **TokenSynth** for a timbre no library has: `Tone.tokensynth("a bowed saw, close, eerie", ["C3", "C4", "C5"],
-    { seconds: 2 })` renders those root notes once on this computer, and the Sampler pitches between them. Describe
+  - **TokenSynth** for a timbre no library has: `Tone.tokensynth("a bowed saw, close, eerie", ["C3", "E3", "G#3",
+    "C4", "E4", "G#4", "C5"], { seconds: 2 })` renders those root notes, a major third apart, once on this computer,
+    and the Sampler pitches between them. Describe
     the timbre the way you'd describe a patch ("a soft wooden marimba, felt mallet, warm"; "a bright analog synth
     lead, saw, short decay"); a note's `seconds` is how long it's held (under 5). Its takes need curating (below).
   - Tone's own synths (`Synth`, `PolySynth`, `MonoSynth`, `MembraneSynth`, `MetalSynth`, `NoiseSynth`, `FMSynth`) for
@@ -64,10 +65,11 @@ drone under a long reverb is what generated music sounds like. Before any instru
   `Tone.vary(instrument, { pitch: 0.3, volume: 2 })` so repeats don't sound copied (the variation is seeded by the
   frame, so a replay is the same). Cap their voices with `maxPolyphony` (the oldest is stolen, faded in 5 ms).
 - In a timeline, cut on the music: `Tone.Time("1m").toFrames(fps)` is a bar in frames, and `Tone.Time("4n")` a beat.
-- To hear a sound before writing it in, `raea sao "PROMPT" --seconds 1 -o media/sfx/try.wav` or `raea tokensynth
-  "TIMBRE" --notes C3 -o media/try/` makes it now; the edit's own call with the same words and settings then plays
-  what was made instead of making it again. Another `--seed` makes another take; play a seed's file by its path
-  (`staticFile("sfx/try.wav")`), since `sao()` in the edit has no seed.
+- To hear a sound before writing it in, `raea sao "PROMPT" --seconds 1 --dir EDIT_DIR -o EDIT_DIR/media/sfx/try.wav`
+  or `raea tokensynth "TIMBRE" --notes C3 --dir EDIT_DIR -o EDIT_DIR/media/try/` makes it now and keeps it in the
+  edit's asset store (`--dir` is the edit's folder; without it, the folder you run it from), so the edit's own call
+  with the same words and settings then plays what was made instead of making it again. Another `--seed` makes
+  another take; play a seed's file by its path (`staticFile("sfx/try.wav")`), since `sao()` in the edit has no seed.
 - When SAO or TokenSynth isn't installed yet, `raea setup-audio` installs it (`motion/sources` says what it fetches
   and what to do when it fails).
 
@@ -171,11 +173,13 @@ remote music model, is retired: an older edit keeps the take it made, and a new 
 - `new Tone.Synth()` inside a component. Make instruments at the top level.
 - A `https://` URL for a Sampler or a Player. Sources are media files or generated assets, and the render has no
   network: `raea sounds get` puts a library's files in `media/` first.
-- One TokenSynth root for a whole part. A Sampler stretched three octaves from one note sounds chipmunked or
-  muddy; give it a root every octave (or `raea sounds get` a library's roots, a minor third apart).
+- One root for a whole part, or one an octave. A Sampler stretched far from its root sounds chipmunked or muddy;
+  give it a root every 3 to 4 semitones over the range the part plays: a library's own roots (`raea sounds get`
+  with no `--notes` takes them a minor third apart, or every note the library sampled if it's sparser), or as many
+  TokenSynth roots.
 - Rewording a `tokensynth()` timbre on every pass: each new wording makes its notes again. Settle the timbre first.
-- A sample library's licence ignored. CC-BY ones (FluidR3, Salamander) need their credit where the piece is shown;
-  `LICENCE.txt` beside the files has the line. VCSL is CC0.
+- A sample library's licence ignored. CC-BY ones (FluidR3, Salamander, tonejs-instruments) need their credit where
+  the piece is shown; `LICENCE.txt` beside the files has the line. VCSL is CC0.
 - `part.loop = true` after `part.start()`: the Part plays once. Set `loop` and `loopEnd` first.
 - `Tone.Draw.schedule` for visuals. There's no draw loop: read the frame (`useCurrentFrame`) and the same times.
 - Cutting on `Tone.Time("1m").toFrames(fps)` across a tempo ramp. `Tone.getTransport().bpm.rampTo(120, 4)` bends the
@@ -190,13 +194,14 @@ remote music model, is retired: an older edit keeps the take it made, and a new 
 
 Spotted as one cue over nine one-bar cards: A (bars 1 to 4) piano and a pizzicato ostinato, the flute's motif from
 bar 3; B (bars 5 to 8) the ostinato drops out, bass and kit come in, the motif climbs; the button on the end card's
-cut. The instruments came from:
+cut. The instruments came from these commands, each printing the roots it fetched (with no `--notes`, a minor third
+apart from C1 to C7, or every note the library sampled when that's sparser):
 
 ```sh
-raea sounds get salamander/piano --notes C3,C4,C5
-raea sounds get fluid/pizzicato_strings --notes A2,C3,E3,A3
-raea sounds get tonejs-instruments/flute --notes C4,E4,A4,C5,E5,A5
-raea sounds get fluid/acoustic_bass --notes E1,A1,D2
+raea sounds get salamander/piano
+raea sounds get fluid/pizzicato_strings
+raea sounds get tonejs-instruments/flute
+raea sounds get fluid/acoustic_bass
 raea sounds get vcsl/bass-drum-1 && raea sounds get vcsl/snare-drum-modern-1 && raea sounds get vcsl/hi-hat-cymbal
 ```
 
@@ -207,12 +212,13 @@ import * as Tone from "raea/tone";
 Tone.getTransport().bpm.value = 96; // first: a Part reads its times at the tempo when it's made
 const BAR = Tone.Time("1m").toFrames(30); // 75 frames
 
-const notes = (dir: string, names: string[]) => Object.fromEntries(names.map((n) => [n, staticFile(`sounds/${dir}/${n}.mp3`)]));
+// the roots each part's range needs, of those `raea sounds get` printed (D#3 is the file Ds3.mp3)
+const notes = (dir: string, names: string[]) => Object.fromEntries(names.map((n) => [n, staticFile(`sounds/${dir}/${n.replace("#", "s")}.mp3`)]));
 const room = new Tone.Reverb({ decay: 1.6, wet: 0.2 }).connect(Tone.buses.music);
-const piano = new Tone.Sampler({ urls: notes("salamander-piano", ["C3", "C4", "C5"]), release: 1, volume: -8 }).connect(room);
-const pizz = new Tone.Sampler({ urls: notes("fluid-pizzicato_strings", ["A2", "C3", "E3", "A3"]), release: 0.2, volume: -12 }).connect(room);
-const flute = new Tone.Sampler({ urls: notes("tonejs-instruments-flute", ["C4", "E4", "A4", "C5", "E5", "A5"]), release: 0.4, volume: -6 }).connect(room);
-const bass = new Tone.Sampler({ urls: notes("fluid-acoustic_bass", ["E1", "A1", "D2"]), release: 0.3, volume: -6 }).connect(Tone.buses.music);
+const piano = new Tone.Sampler({ urls: notes("salamander-piano", ["A2", "C3", "D#3", "F#3", "A3", "C4", "D#4", "F#4"]), release: 1, volume: -8 }).connect(room);
+const pizz = new Tone.Sampler({ urls: notes("fluid-pizzicato_strings", ["D#2", "F#2", "A2", "C3", "D#3", "F#3", "A3", "C4"]), release: 0.2, volume: -12 }).connect(room);
+const flute = new Tone.Sampler({ urls: notes("tonejs-instruments-flute", ["E4", "A4", "C5", "E5", "A5", "C6"]), release: 0.4, volume: -6 }).connect(room);
+const bass = new Tone.Sampler({ urls: notes("fluid-acoustic_bass", ["D#1", "F#1", "A1", "C2", "D#2"]), release: 0.3, volume: -6 }).connect(Tone.buses.music);
 const kit = new Tone.Players({
   kick: staticFile("sounds/vcsl-bass-drum-1/BDrumNew_hit_v5_rr1_Sum.wav"),
   snare: staticFile("sounds/vcsl-snare-drum-modern-1/Snare2_HitSN_v5_rr1_Mid.wav"),
@@ -283,8 +289,8 @@ const Edit = () => (
 registerRoot(() => <Composition id="cue" component={Edit} width={1080} height={1920} fps={30} durationInFrames={BAR * 9} />);
 ```
 
-FluidR3 and Salamander are CC-BY 3.0, so the piece credits them (the line is in each `LICENCE.txt`); the flute's
-`LICENCE.txt` says its source's licence; VCSL is CC0.
+FluidR3, Salamander and tonejs-instruments (the flute) are CC-BY 3.0, so the piece credits all three (the line is in
+each `LICENCE.txt`); VCSL is CC0.
 
 ## Example: a game's sound
 
@@ -301,7 +307,12 @@ Tone.getTransport().bpm.value = 112;
 Tone.buses.music.duck(Tone.buses.voice, { amount: -12 });
 const thump = Tone.vary(new Tone.MembraneSynth({ octaves: 4, maxPolyphony: 4, poly: true }), { pitch: 0.5, volume: 2 }).connect(Tone.buses.sfx);
 const coin = new Tone.Sampler({ urls: { C5: Tone.sao("a bright arcade coin chime, short", { seconds: 1 }) } }).connect(Tone.buses.sfx);
-const marimba = new Tone.Sampler({ urls: Tone.tokensynth("a soft wooden marimba, felt mallet, warm", ["C3", "C4", "C5"], { seconds: 2 }), volume: -10 }).connect(Tone.buses.music);
+// a recorded marimba (`raea sounds get vcsl/marimba`: CC0, the notes VCSL sampled, a fourth or a fifth apart)
+const marimba = new Tone.Sampler({
+  urls: Object.fromEntries(["F3", "C4", "G4", "B4", "F5"].map((n) => [n, staticFile(`sounds/vcsl-marimba/${n}.wav`)])),
+  release: 0.4,
+  volume: -10,
+}).connect(new Tone.Reverb({ decay: 1.2, wet: 0.15 }).connect(Tone.buses.music));
 // a loop that wants to come round: a question (bars 1-2) and its answer (bars 3-4), rhythm before pitch
 const tune = new Tone.Part((t, n) => marimba.triggerAttackRelease(n.note, "8n", t, n.vel), [
   { time: "0:0", note: "C4", vel: 0.8 }, { time: "0:0:2", note: "E4", vel: 0.5 }, { time: "0:1:2", note: "G4", vel: 0.6 }, { time: "0:3", note: "A4", vel: 0.7 },
@@ -335,4 +346,6 @@ registerRoot(() => <Composition id="game" component={Game} width={1920} height={
 ```
 
 `raea/music` is the shorthand for notes on named instruments (`new Part("bass", [...])`, `<Music>`). It plays
-through the same Tone layer, so the two mix.
+through the same Tone layer, so the two mix. Its named instruments are Tone synth presets (`pad` is a PolySynth of
+fat saws, `kick` a MembraneSynth), good for a sketch or a test, not a score: write the score on sampled instruments,
+as above. It also reads and writes MIDI files (`parseMidi`, `toMidi`; `motion/sources`).

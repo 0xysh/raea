@@ -269,4 +269,5 @@ function Game() {
 }
 ```
 
-sdk/react/bench/tone/game is a working game with all of this (a machine, a ducked bed, an SAO coin, a voice line).
+sdk/react/bench/tone/game is a working game with all of this (a machine, a chiptune loop that asks and answers,
+ducked under a voice line, an SAO coin).

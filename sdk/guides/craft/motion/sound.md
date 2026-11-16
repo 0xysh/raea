@@ -49,9 +49,11 @@
   | foley hits, whooshes, pops | -16 to -22 dB | -1 to -6 dB |
 
   These are starting points; listen and decide.
-- `raea sao "PROMPT" --seconds 1.2 -o media/sfx/hit.wav` makes a sound now, to check it before it goes in; the edit's
-  `sao("PROMPT", { seconds: 1.2 })` then plays that one rather than making another. `--seed 2` makes another take of
-  the same prompt; play that file by its path (`staticFile("sfx/hit-2.wav")`), since `sao()` has no seed.
+- `raea sao "PROMPT" --seconds 1.2 --dir EDIT_DIR -o EDIT_DIR/media/sfx/hit.wav` makes a sound now, to check it
+  before it goes in, and keeps it in the edit's asset store (`--dir` is the edit's folder; without it, the folder you
+  run it from), so the edit's `sao("PROMPT", { seconds: 1.2 })` then plays that one rather than making another.
+  `--seed 2` makes another take of the same prompt; play that file by its path (`staticFile("sfx/hit-2.wav")`), since
+  `sao()` has no seed.
 
 ## Why
 
@@ -132,8 +134,11 @@ Tone.getTransport().bpm.value = (4 * 4 * 60 * 30) / END_CARD; // about 114 bpm
 Tone.buses.music.duck(Tone.buses.voice, { amount: -12 });
 Tone.buses.music.volume.value = -21;
 Tone.buses.music.volume.rampTo(-12, 0.33, END_CARD / 30);
+// `raea sounds get salamander/piano` printed its roots a minor third apart (D#2 is the file Ds2.mp3); these cover
+// F2 to G5, what the cue plays
+const ROOTS = ["D#2", "F#2", "A2", "C3", "D#3", "F#3", "A3", "C4", "D#4", "F#4", "A4", "C5", "D#5", "F#5"];
 const piano = new Tone.Sampler({
-  urls: { C3: staticFile("sounds/salamander-piano/C3.mp3"), C4: staticFile("sounds/salamander-piano/C4.mp3"), C5: staticFile("sounds/salamander-piano/C5.mp3") },
+  urls: Object.fromEntries(ROOTS.map((n) => [n, staticFile(`sounds/salamander-piano/${n.replace("#", "s")}.mp3`)])),
   release: 1,
 }).connect(new Tone.Reverb({ decay: 1.4, wet: 0.2 }).connect(Tone.buses.music));
 const CHORDS = [["A2", "E3", "C4"], ["F2", "C3", "A3"], ["C3", "G3", "E4"], ["G2", "D3", "B3"]];
