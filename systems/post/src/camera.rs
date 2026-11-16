@@ -9,7 +9,7 @@ use raea_core_program::ir::V;
 use raea_sys_frame::*;
 
 mod on;
-use raea_sys_frame::camera::{Group, remove};
+use raea_sys_frame::camera::{Group, PrepassRead, remove};
 
 type Vals = BTreeMap<String, V>;
 
@@ -56,10 +56,12 @@ fn take_off_brought(world: &mut World, e: Entity, by: &mut [bool; 3]) {
     use bevy::core_pipeline::prepass::{DeferredPrepass, DepthPrepass, NormalPrepass};
     let w = world.entity(e);
     let ao = w.contains::<bevy::pbr::ScreenSpaceAmbientOcclusion>() || w.contains::<crate::outline::InkOutline>();
+    // a pass after the camera reads its prepasses (--aov, RAEA_PASS): they stay
+    let read = w.contains::<PrepassRead>();
     let need = [
         w.contains::<bevy::post_process::bloom::Bloom>() || w.contains::<bevy::pbr::AtmosphereSettings>() || w.contains::<DeferredPrepass>(),
-        ao || w.contains::<bevy::post_process::motion_blur::MotionBlur>() || w.contains::<DeferredPrepass>(),
-        ao,
+        ao || read || w.contains::<bevy::post_process::motion_blur::MotionBlur>() || w.contains::<DeferredPrepass>(),
+        ao || read,
     ];
     let mut em = world.entity_mut(e);
     for (i, b) in by.iter_mut().enumerate() {
@@ -93,7 +95,8 @@ pub fn apply(world: &mut World, e: Entity, vals: &Vals, extra: &[Group]) {
 /// Each camera's post-processing as this frame's row has it: a group whose columns changed since the camera last took
 /// them is taken off and put on again (a frame's own sky, fog or anti-aliasing: frame_sets, raea-sys-frame tables.rs).
 /// Multisampling goes off with AO or SMAA/FXAA and back to the camera's own without, except on a deferred camera (Solari),
-/// which can't multisample. `extra` as `apply` had it.
+/// which can't multisample, and on one whose prepasses a pass reads (PrepassRead: --aov, RAEA_PASS), which stays off
+/// (#159). `extra` as `apply` had it.
 pub fn sync(world: &mut World, extra: &[Group]) {
     let groups: Vec<&Group> = GROUPS.iter().chain(extra).collect();
     let cams: Vec<Entity> = world.query_filtered::<Entity, With<Applied>>().iter(world).collect();
@@ -120,7 +123,7 @@ pub fn sync(world: &mut World, extra: &[Group]) {
             by[i] |= now[i] && !had[i];
         }
         take_off_brought(world, e, &mut by);
-        let single = vals.contains_key("ssao") || vals.contains_key("aa");
+        let single = vals.contains_key("ssao") || vals.contains_key("aa") || world.get::<PrepassRead>(e).is_some();
         let want = if single { Msaa::Off } else { own };
         let deferred = world.get::<bevy::core_pipeline::prepass::DeferredPrepass>(e).is_some();
         if world.get::<Msaa>(e) != Some(&want) && (want == Msaa::Off || !deferred) {
@@ -208,6 +211,29 @@ mod tests {
         set(&mut w, row(&[("bloom", V::N(0.05)), ("x", V::N(3.0))]));
         sync(&mut w, &[]);
         assert_eq!(w.get::<bevy::post_process::bloom::Bloom>(e).unwrap().intensity, 0.5);
+    }
+
+    #[test]
+    fn a_camera_whose_prepasses_are_read_stays_single_sampled() {
+        use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass};
+        // made multisampled with AO on its first shot (AO brought the depth prepass), then given its prepasses as
+        // --aov gives them (#159)
+        let (mut w, e) = world(row(&[("bloom", V::N(0.1)), ("ssao", V::S("ultra".into()))]));
+        w.entity_mut(e).insert((DepthPrepass, MotionVectorPrepass, Msaa::Off, raea_sys_frame::camera::PrepassRead));
+        // the AO goes and the bloom ramps: still single-sampled, and the depth prepass stays
+        for b in [0.2, 0.3] {
+            set(&mut w, row(&[("bloom", V::N(b))]));
+            sync(&mut w, &[]);
+            assert_eq!(w.get::<Msaa>(e), Some(&Msaa::Off), "bloom {b}");
+            assert!(w.get::<DepthPrepass>(e).is_some() && w.get::<MotionVectorPrepass>(e).is_some(), "bloom {b}");
+        }
+        // a live scene's frame with 3D in it leaves it single-sampled too
+        crate::msaa_for_3d(&mut w, true);
+        assert_eq!(w.get::<Msaa>(e), Some(&Msaa::Off));
+        // a camera nothing reads the prepasses of still multisamples again (#38)
+        w.entity_mut(e).remove::<raea_sys_frame::camera::PrepassRead>();
+        crate::msaa_for_3d(&mut w, true);
+        assert_eq!(w.get::<Msaa>(e), Some(&Msaa::Sample4));
     }
 
     #[test]

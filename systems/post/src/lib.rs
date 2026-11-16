@@ -22,7 +22,8 @@ pub mod outline;
 /// 10 and had hard edges live). Not one whose row asks for a single-sampled frame (ssao, aa, outline, frame_looks,
 /// passes: spawn_camera's rule), not in preview, and not a deferred camera (a ray-traced one): Bevy turns MSAA off
 /// on those itself each frame and says so, so this turned it on again every frame, a warning a frame in a render's
-/// log and the camera's pipelines made again for nothing.
+/// log and the camera's pipelines made again for nothing. Nor one whose prepasses a pass reads single-sampled
+/// (PrepassRead: --aov, RAEA_PASS): turned on under them, a game's --aov was refused at its third frame (#159).
 pub fn msaa_for_3d(world: &mut World, has_3d: bool) {
     if !has_3d || preview() {
         return;
@@ -31,7 +32,8 @@ pub fn msaa_for_3d(world: &mut World, has_3d: bool) {
     for e in cams {
         let single = world.resource::<FrameRows>().vals(e).is_none_or(|v| ["ssao", "aa", "outline", "frame_looks", "passes"].iter().any(|k| v.contains_key(*k)));
         let deferred = world.entity(e).contains::<bevy::core_pipeline::prepass::DeferredPrepass>();
-        if !single && !deferred && world.get::<Msaa>(e) == Some(&Msaa::Off) {
+        let read = world.entity(e).contains::<raea_sys_frame::camera::PrepassRead>();
+        if !single && !deferred && !read && world.get::<Msaa>(e) == Some(&Msaa::Off) {
             world.entity_mut(e).insert(Msaa::default());
         }
     }

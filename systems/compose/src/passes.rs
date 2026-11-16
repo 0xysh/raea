@@ -78,7 +78,8 @@ pub fn install(app: &mut App) {
 fn mark(pass: Pass, mut commands: Commands, cams: Query<Entity, (With<Camera3d>, Without<PassView>)>, mut mats: ResMut<Assets<StandardMaterial>>) {
     for e in &cams {
         let mut c = commands.entity(e);
-        c.insert((PassView(pass as u32), DepthPrepass, NormalPrepass, Msaa::Off));
+        // single-sampled on every frame, whatever the camera's row asks (#159)
+        c.insert((PassView(pass as u32), DepthPrepass, NormalPrepass, Msaa::Off, raea_sys_frame::camera::PrepassRead));
         if pass == Pass::Albedo {
             c.insert((Tonemapping::None, super::bevy_api::Untonemapped)).remove::<DistanceFog>().remove::<bevy::post_process::bloom::Bloom>().remove::<bevy::render::view::ColorGrading>();
         }

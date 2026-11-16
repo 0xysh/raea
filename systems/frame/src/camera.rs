@@ -50,6 +50,14 @@ pub fn remove<B: Bundle>(world: &mut World, e: Entity) {
 #[derive(Component, Clone, Copy, Default)]
 pub struct IntoImage;
 
+/// A camera whose prepasses a pass after it reads (`--aov`'s motion vectors and depth, RAEA_PASS's depth and normals),
+/// bound as single-sampled textures: it draws with MSAA off on every frame, whatever its row asks, and keeps the depth
+/// and normal prepasses an effect brought when the effect goes (raea-sys-post's msaa_for_3d and sync). Put on with the
+/// prepasses, never taken off (#159: the row's post-processing turned MSAA back on under them, and the pass's bind
+/// group refused the frame).
+#[derive(Component, Clone, Copy, Default)]
+pub struct PrepassRead;
+
 /// The image a camera row draws into (a rendercam's `into`, "render:NAME:WxH[:float]": docs/r3f.feature R3F23a), made
 /// if it's new, as the camera's size and target; None for a screen camera.
 pub fn image_of(world: &mut World, vals: &BTreeMap<String, V>) -> Result<Option<((u32, u32), RenderTarget)>, String> {

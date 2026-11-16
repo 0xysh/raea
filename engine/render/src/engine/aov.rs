@@ -1,11 +1,12 @@
 //! RT1 (docs/raytracing.feature): each frame's motion vectors and depth, the guide data a neural or denoising pass
 //! after the render needs (MLX-DLSS's run-sequence, MetalFX). Asked for with `want_aov`, before the first draw: the 3D
-//! cameras then draw Bevy's depth and motion-vector prepasses (MSAA off: a multisampled prepass can't be read), and
+//! cameras then draw Bevy's depth and motion-vector prepasses (MSAA off on every frame: they're read single-sampled), and
 //! each frame's first draw reads both back (`take_aov`). A redraw of the same frame keeps the first draw's: drawn
 //! again, every mesh's last pose is its pose now, and its motion would read zero.
 
 use super::*;
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, ViewPrepassTextures};
+use raea_sys_frame::camera::PrepassRead;
 
 /// One frame's guide data at the prepass's size (the frame's, times RAEA_SS).
 pub struct Aov {
@@ -24,9 +25,13 @@ pub(crate) struct AovWanted {
     last: Option<Aov>,
 }
 
-fn aov_prepasses(mut cmd: Commands, q: Query<Entity, (With<Camera3d>, Without<MotionVectorPrepass>)>) {
+/// Each 3D camera draws both prepasses, single-sampled on every frame: PrepassRead keeps the row's post-processing from
+/// putting MSAA back (#159: raea-sys-post's sync did on the first frame whose post changed, msaa_for_3d on each frame
+/// of a live scene, and frame 2's readback was refused). Marked by PrepassRead, not by the motion-vector prepass, which
+/// a camera with motion blur has already.
+fn aov_prepasses(mut cmd: Commands, q: Query<Entity, (With<Camera3d>, Or<(Without<PrepassRead>, Without<DepthPrepass>, Without<MotionVectorPrepass>)>)>) {
     for e in &q {
-        cmd.entity(e).insert((DepthPrepass, MotionVectorPrepass, Msaa::Off));
+        cmd.entity(e).insert((DepthPrepass, MotionVectorPrepass, Msaa::Off, PrepassRead));
     }
 }
 
@@ -93,6 +98,12 @@ impl Engine {
             .ok_or("no 3D camera drew a depth and motion-vector prepass")?;
         // the target is a row taller than the frame (the frame tag's row, open.rs), at the frame's scale (RAEA_SS)
         let (w, h) = (pick.size.width, pick.size.height.min(self.h * (pick.size.width / self.w.max(1)).max(1)));
+        // the bindings below are single-sampled: a multisampled prepass is said here, not given to the GPU, whose
+        // validation error stops the render
+        let samples = pick.motion_vectors.as_ref().unwrap().texture.texture.sample_count();
+        if samples > 1 {
+            return Err(format!("the prepass is multisampled ({samples} samples)"));
+        }
         let depth = pick.depth_only_view().ok_or("the prepass has no depth view")?.clone();
         let motion = pick.motion_vectors.as_ref().unwrap().texture.default_view.clone();
         let device = rw.resource::<bevy::render::renderer::RenderDevice>().wgpu_device().clone();
