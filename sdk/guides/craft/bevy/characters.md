@@ -85,14 +85,30 @@ its hands, feet, gaze and seat on the scene's real things, said in the scene's c
   (hurdle 127_25-28, run over a box 127_33-36, duck under 127_29-32, dive and roll 127_23-24, runs, quick stops);
   49_04-05 leap a gap. `examples/character/course.tsx` is a side-scrolling course.
 - Clothes are made for SOMA's body with `raea clothes`, never modelled by hand:
-  - `raea clothes cover tee --parts chest,torso,waist,upperArm:0.45 --colour "#e8e4da"` makes one by procedure, for
-    nothing.
-  - `raea clothes make overshirt "a flannel overshirt, worn open" --over tee` has an image model draw it over the
-    mannequin's four views (about 20 cents), then measures it onto SOMA's vertices. Look at its pictures in
-    `assets/clothes/overshirt/views` before you wear it.
-  - `raea clothes wear assets/characters/dressed tee overshirt` writes a dressed body folder (innermost layer first).
-    Register that folder with `registerBody`, and give each garment's glb to `<Character>` as one of its `parts`.
-  - A garment lies on the skin, so a shirt drawn hanging over the hips wraps them instead.
+  - `raea clothes make tee --plain --set shirt.length=1.5 --colour "#e8e2d6"` sews one: a sewing pattern cut to
+    SOMA, draped on the body and baked, for nothing, in about 20 seconds. `--plain` starts from a plain
+    short-sleeved top; each `--set PATH=VALUE` changes one setting. Trousers:
+    `--set meta.upper=none,meta.bottom=Pants,meta.wb=StraightWB,pants.length=0.8`. A hood:
+    `--set collar.component.style=Hood2Panels`. `raea clothes settings` lists every setting and what it may be.
+  - `raea clothes make hoodie "a hooded sweatshirt"` takes the pattern from the words instead, as a first guess.
+    It says what it made ("made: ..."); correct it with `--set`.
+  - Look at the garment's pictures in `assets/clothes/NAME/` (`NAME_front.png` ...) before you wear it.
+  - `raea clothes cover shorts --parts hips,thigh:0.5 --colour "#1f2a44"` lays one on the skin by procedure: for
+    what is skin-tight (leggings, a swimsuit, socks). It can't hang free.
+  - `raea clothes wear assets/characters/dressed trousers tee --body assets/characters/NAME --head HEAD_DIR` writes
+    a dressed body folder. Register that folder with `registerBody`, and give each garment's glb to `<Character>`
+    as one of its `parts`.
+- An act no capture holds (wave at the camera, shrug, look at a watch) is made from its words on this Mac with
+  `raea motion`, Kimodo on MLX (no cloud GPU):
+  - `raea motion "A person waves at the camera" --keys stand.json --seconds 4 --seed 2 -o wave.clip.json` takes about
+    8 seconds. Say who moves ("A person ..."), as Kimodo's captions do. `--keys` holds the body to poses or places
+    on given frames: `bun sdk/body/tools/between.ts` writes standing keys at both ends, so the act starts and ends
+    where the walks around it can join it.
+  - Each seed is another take, and a take can stand still through its line. `bun sdk/body/tools/makedo.ts SKELETON
+    LIBDIR OUTDIR "wave at the camera" ...` makes a stage's `do` lines with three seeds each, and keeps the take
+    that passes the body's checks and moves most.
+  - The first use fetches the motion model (1.1 GB), and the first new line the text encoder (8.8 GB). A line's
+    words are read once and kept.
 
 ```tsx
 const perf = perform(lib, { at: [0.4, 0, 2], facing: Math.PI / 2, frames: 450, steps: [
