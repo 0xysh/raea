@@ -7,6 +7,9 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
   settled, a generative or procedural clothing system, perhaps with the mannequin as the base input and an image
   model on top, layered.
 
+  The user, 11-16: the character SDK ships as raea 0.1.7, and 0.1.6 is a patch for the app. What of it is on main
+  before then ships in 0.1.6's binary unannounced, as 0.1.5's did.
+
   This file is the map. The detail stays where it is: docs/hands.feature (arms and hands, the SOMA rule),
   docs/creatures.feature (four legs), docs/drawn-characters.feature (a drawing as a character),
   docs/character.md (the five layers and eleven principles of the rebuilt SDK, which still hold except principle
