@@ -432,7 +432,7 @@ fn the_head_turns_to_the_thing_and_a_wrist_stops_at_its_limit() {
     let (w0, w) = (s.fk(&s.rest()), s.fk(&turned));
     let toward = |w: &Posed| (w.rot[head] * Vec3::Z).dot((at - w.pos[head]).normalize());
     assert!(toward(&w) > toward(&w0) + 0.3, "the head faces the thing more: {} from {}", toward(&w), toward(&w0));
-    assert!(w.rot[head].angle_between(w0.rot[head]).to_degrees() < 78.0);
+    assert!(w.rot[head].angle_between(w0.rot[head]).to_degrees() < LOOK_MOST + 0.5, "a glance, not a bow");
     assert_eq!(look(&s, &s.rest(), at, 0.0), s.rest());
     // SOMA's twist joints: a forearm's follow its hand by rising shares; an upper arm's undo the shoulder's twist
     let fore = twist_joints(Vec3::X, 0.0, 1.0, false);

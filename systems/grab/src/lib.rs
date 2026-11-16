@@ -24,4 +24,4 @@ pub use interact::pick;
 pub use json::{TAKE_ANSWER, TAKE_ARGS, take_json};
 pub use raea_sys_body::json::{FIT_ANSWER, FIT_ARGS, HAND_ANSWER, HAND_ARGS, SOMA_ANSWER, SOMA_ARGS, TURNS_ANSWER, TURNS_ARGS, TWISTS_ARGS, fit_json, hand_json, soma_json, turns_json, twists_json};
 pub use take::{Frame, Key, Phase, Release, Take, perform};
-pub use trunk::{clear, give_for, hand_points, look, own_solids, room, spread_for, stand_for, stoop, torso};
+pub use trunk::{clear, give_for, hand_points, look, own_solids, room, spread_for, stand_for, stoop, torso, LOOK_MOST};

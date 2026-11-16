@@ -142,17 +142,18 @@ pub fn stand_for(thing: &Thing, from: Vec3) -> (Vec3, f32) {
     (Vec3::new(at.x, from.y, at.z), (-to.x).atan2(-to.z))
 }
 
-/// The head turned toward a place by `weight` (0 to 1): the neck takes two fifths of the turn and the head the rest,
-/// no more than 55 degrees in all, so eyes go to what the hands are after.
+/// Most the head and neck turn together to a place, degrees (55 a joint bowed a taker onto a cup); eyes do the rest.
+pub const LOOK_MOST: f32 = 30.0;
+/// The head turned toward a place by `weight` (0 to 1), `LOOK_MOST` at most: the neck two fifths, the head the rest.
 pub fn look(skel: &Skeleton, pose: &Pose, at: Vec3, weight: f32) -> Pose {
     let (Some(neck), Some(head)) = (skel.joint("neck_01"), skel.joint("head")) else { return pose.clone() };
-    let mut out = pose.clone();
-    for (joint, share) in [(neck, 0.4), (head, 1.0)] {
+    let (mut out, mut most) = (pose.clone(), None);
+    for (joint, share) in [(neck, 0.4), (head, 0.6)] {
         let w = skel.fk(&out);
         let Some(to) = (at - w.pos[head]).try_normalize() else { break };
-        let turn = Quat::from_rotation_arc(w.rot[head] * Vec3::Z, to);
-        let (axis, angle) = turn.to_axis_angle();
-        let angle = angle.min(55f32.to_radians()) * share * weight.clamp(0.0, 1.0);
+        let (axis, angle) = Quat::from_rotation_arc(w.rot[head] * Vec3::Z, to).to_axis_angle();
+        let most = *most.get_or_insert(angle.min(LOOK_MOST.to_radians()) * weight.clamp(0.0, 1.0));
+        let angle = (most * share).min(angle);
         out.turns[joint] = skel.local_for(&w, joint, Quat::from_axis_angle(axis, angle) * w.rot[joint]);
     }
     out
