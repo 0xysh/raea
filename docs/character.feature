@@ -205,6 +205,36 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       And the turbo suite's cases pass on a SOMA person at least as well as they do today
 
     @done
+    Scenario: CH14b. The suite's eight cases pass on SOMA, and paths drawn at random are run beside them
+      # 11-15, sdk/body (the private repository, 58fed86 and 4b1781f): 8 of 8, from 0. What each failure was:
+      # Hip pops: tuning the matcher only moved the same few jumps from one path to another (the adjustment
+      # toward the path comes on as a foot lifts, a turn goes about another ankle, a switch changes pace), so
+      # the hips' path is evened afterwards to the captures' own largest change of speed in a frame, before the
+      # feet are held (perform.ts evenHips, hipLimit): no pop in any case, the path moved by millimetres.
+      # The run's curve: a straight run could not turn, so a curve of 7 m was two turn captures handed back and
+      # forth every 17 frames. A curve gentler than 0.2 radians a metre is now a straight clip steered about its
+      # planted ankle, and the matcher is asked for the path with that bend taken out.
+      # A run's corner: the guide went through a corner of 90 degrees at 3.6 m/s and the body ran half a metre
+      # past it. The guide now comes into a corner at the pace the turn captures take one (guide.ts cornerSpeed:
+      # 45 degrees at 3 m/s, 90 at 1.9), and a run slowing for it may come down through run to walk.
+      # The head on curves: a walk came to rest in the sway capture, filed as a way of standing, its head 19
+      # degrees over. Sway is its own situation.
+      # Slides: a foot in the air rode down with the hips when they came down for the other leg, and a stop's
+      # closing step came in 1 cm over the floor for 20 cm. It is lifted over where the lowered hips leave it,
+      # and its lift eased over as many frames as a hold (let down in three, the shin jolted 16 degrees).
+      # The suite itself: jolt bars per gait (the run captures' own foot strikes failed a bar set mostly by
+      # walks, in 8 to 10 per cent of their frames), slide measured on the performance's own floor.
+      # Beside the eight, `SWEEP=40 bun sdk/body/tools/suite.ts` draws 40 paths at random (one to three legs, a
+      # walk, a jog or a run, some with a wait): 45 of 48 pass, from 33 before the slide's cause was found. Left:
+      # three paths 34 to 39 cm off their line at a sharp turn (the bar is 30).
+      # Tried and taken back: the adjustment on a spring (20 to 30 cm wider at a run's corner), contacts taken
+      # from the playing captures, a sole's speed read with the adjustment's carrying taken off (both held feet
+      # the blend was still moving: slides of metres), a standing body held to the start captures (one path
+      # ended 4 m past its mark).
+      Then `bun sdk/body/tools/suite.ts` prints 8 of 8 on SOMA
+      And with SWEEP=40 at least 45 of the 48 paths pass
+
+    @done
     Scenario: CH15a. Two situations the captures lack, made by Kimodo from two of their poses
       # 11-15. sdk/body/tools/between.ts writes Kimodo's full-body keyframes from two library frames (the first at
       # the origin facing +z, the second where and how the body must end); src/kimodo.ts crosses a pose both ways
