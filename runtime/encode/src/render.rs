@@ -103,8 +103,11 @@ pub fn render_fed(
     }
     let t_frames = std::time::Instant::now();
     let mut n = 0;
+    // how far it's got, for whatever shows it (progress.rs)
+    let mut meter = crate::progress::Progress::start(out, list.len());
     let dt = v.render_nv12_fed(&list, feed, |f, px| {
         n += 1;
+        meter.frame();
         direct_sink(tx.as_ref(), &mut lines, f, px)
     });
     drop(tx);
@@ -197,7 +200,9 @@ pub fn render_with(prog: &Program, rows: &[Tup], dir: &Path, out: &Path, ro: &Re
             }));
         }
         let t_frames = std::time::Instant::now();
+        let mut meter = crate::progress::Progress::start(out, list.len());
         let tm = v.render_nv12(&list, |f, px| {
+            meter.frame();
             if let Some(tx) = tx.as_ref() {
                 return tx.send(px).map_err(|_| "the encoder stopped".to_string());
             }
@@ -269,8 +274,10 @@ pub fn render_with(prog: &Program, rows: &[Tup], dir: &Path, out: &Path, ro: &Re
         }
         let t_frames = std::time::Instant::now();
         let mut n = 0;
+        let mut meter = crate::progress::Progress::start(out, list.len());
         let dt = v
             .render_nv12(&list, |f, px| {
+                meter.frame();
                 match pngs {
                     true => save_png(&if still { out.to_path_buf() } else { out.join(format!("frame-{f:05}.png")) }, &straight(px), w, h)?,
                     false => direct_sink(tx.as_ref(), &mut lines, f, px)?,

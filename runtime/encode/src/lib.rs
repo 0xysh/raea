@@ -14,6 +14,7 @@ pub use raea_render::{dir_of, inserted_of, save_png};
 pub mod html;
 mod sound;
 pub use sound::*;
+mod progress;
 mod render;
 pub use render::*;
 
