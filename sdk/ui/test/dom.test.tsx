@@ -4,7 +4,7 @@
 // Chrome by the parity cases (sdk/ui/parity/cases/p18-dom); this is the fast check.
 import { beforeAll, describe, expect, test } from "bun:test";
 import { useEffect, useRef, useState } from "react";
-import { install, layout } from "../src/dom";
+import { getComputedStyle, install, layout } from "../src/dom";
 import { createPortal, flushSync, mount } from "../src/react";
 import { flush } from "../src/wire";
 import { fresh, snap } from "./host";
@@ -421,5 +421,46 @@ describe("video and audio play on the host's player (runtime/dom media.rs, raea-
     v.play();
     expect(prop("__volume")).toBe(0.4);
     expect(seen).toEqual(["volumechange:0.4"]);
+  });
+});
+
+// getComputedStyle on a React page: the boxes and the classes libraries read come from the page's own cascade, with
+// no host call; a colour or a custom property, which that cascade can't know (a class's color, a var()), is the
+// host's (stylo's style.computed), as an HTML page's every value is
+describe("P18 DOM surface: computed style", () => {
+  test("a React page asks the host for a colour and a custom property, never for display or a size", () => {
+    const host = fresh();
+    let el: any;
+    mount(<span data-testid="gold" className="block text-gold" ref={(e: any) => (el = e)} />, 0, { dom: true });
+    snap(host, { gold: [0, 0, 40, 20] });
+    const asked: { name: string; args: any }[] = [];
+    const was = g.__ui_sync;
+    g.__ui_sync = (name: string, args: string) => {
+      const a = JSON.parse(args);
+      asked.push({ name, args: a });
+      const v: Record<string, string> = { color: "rgb(240, 180, 40)", "background-color": "rgba(0, 0, 0, 0)", "--accent": "#5b8cff" };
+      return JSON.stringify({ ok: { [a.names[0]]: v[a.names[0]] ?? "" } });
+    };
+    let got: { display: string; askedForDisplay: number; color: string; accent: string; background: string };
+    try {
+      const c = getComputedStyle(el);
+      const display = c.display;
+      got = { display, askedForDisplay: asked.length, color: c.color, accent: c.getPropertyValue("--accent"), background: c.backgroundColor };
+    } finally {
+      g.__ui_sync = was;
+    }
+    expect(got).toEqual({ display: "block", askedForDisplay: 0, color: "rgb(240, 180, 40)", accent: "#5b8cff", background: "rgba(0, 0, 0, 0)" });
+    expect(asked.map((a) => [a.name, a.args.id === el.__wid, a.args.names[0]])).toEqual([
+      ["style.computed", true, "color"],
+      ["style.computed", true, "--accent"],
+      ["style.computed", true, "background-color"],
+    ]);
+  });
+
+  test("with no host to ask, a colour is the page cascade's, as before", () => {
+    fresh();
+    let el: any;
+    mount(<span style={{ color: "red" }} ref={(e: any) => (el = e)} />, 0, { dom: true });
+    expect(getComputedStyle(el).color).toBe("red");
   });
 });
