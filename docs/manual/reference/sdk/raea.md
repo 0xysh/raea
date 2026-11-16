@@ -69,7 +69,7 @@ Sound in step with the frame; no picture. A muted or ended Audio is silent.
 
 | Prop | Type | What it does |
 | --- | --- | --- |
-| `src` (required) | `string \| GeneratedAsset` | a file URL, or a generated asset from lyria() or sao() |
+| `src` (required) | `string \| GeneratedAsset` | a file URL (staticFile), or a generated sound from sao() |
 
 Also takes the props of [`MediaProps`](video.md#mediaprops).
 

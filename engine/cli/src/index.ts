@@ -97,9 +97,11 @@ Layout: <AbsoluteFill>, <Sequence from durationInFrames>, <Series><Series.Sequen
 Media: <Video src startFrom endAt volume playbackRate muted framing="face" punchIn style> (framing="face" keeps the
 eyes 38% down as the speaker moves; an objectPosition or transform turns it off), <Audio src startFrom endAt volume={n | (f) => n} gainDb fadeIn fadeOut>,
 <Img src>. Media files import as modules: import take from
-"./media/x.mov". Sound: music in Tone.js (import * as Tone from "raea/tone"): instruments in a Tone.Sampler
-playing a Part or Sequence, the instrument's notes from Tone.tokensynth("a warm upright bass", ["C2", "C3", "C4"]) or a
-sample library (\`raea sounds\`); sao("prompt", {seconds}) for an effect, as an <Audio src>; narration
+"./media/x.mov". Sound: decide what each scene is heard as first (silence, its own sound, score, effects); music,
+where there is some, in Tone.js (import * as Tone from "raea/tone"), composed for the cut (a motif, chords that move,
+a part with rhythm, ending on a cut; never a pad or drone by default): instruments in a Tone.Sampler playing Parts and
+Sequences, the notes from a sample library (\`raea sounds\`, \`raea guide sources\`) or, for a timbre no library has,
+Tone.tokensynth("a bowed saw, close", ["C3", "C4", "C5"]); sao("prompt", {seconds}) for an effect, as an <Audio src>; narration
 is <Speech text start> from raea/speech (Pocket TTS). All of it local. <Mix lufs ceiling> masters the sound.
 Words: useWords() -> [{text, from, to}] (frames, the cuts' words), word("phrase") -> the frame it's said,
 findPhrase(words, "phrase", {occurrence, edge: "start" | "end"}).

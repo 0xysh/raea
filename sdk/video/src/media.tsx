@@ -87,7 +87,7 @@ export function matteStyle(m: VideoMatte, seconds: number, fit: CSSProperties["o
 }
 
 export type AudioProps = Omit<MediaProps, "style" | "className" | "src"> & {
-  /** a file URL, or a generated asset from lyria() or sao() */
+  /** a file URL (staticFile), or a generated sound from sao() */
   src: string | GeneratedAsset;
 };
 
