@@ -1,18 +1,19 @@
-// `raea clothes`: clothes for SOMA's body from words (raea docs/character.feature CH40 to CH45). make has an image
-// model dress the mannequin's four views, one view a call, and measures the pictures onto SOMA's template vertices
-// (a garment rides any SOMA body); wear puts garments on a body, innermost first. The work is the host's (op
-// "clothes": engine/cli/src/wardrobe.ts on the native raea); this file reads the words and says what was done.
+// `raea clothes`: clothes for SOMA's body (raea docs/character.feature CH45c). make sews a garment: a pattern from
+// words (the garment model's first guess) or from the plain base, any setting changed by path, cut to SOMA, draped
+// and baked; cover makes one by procedure on the skin; wear puts garments on a body. The work is the host's (op
+// "clothes": engine/cli/src/wardrobe.ts and sewn.ts on the native raea); this file reads the words and says what
+// was done.
 
 type Ask = (op: string, args: Record<string, unknown>) => any;
 
 /** the body's parts a garment made by procedure covers (tools/clothes/garment.py's PARTS) */
 export const PARTS = ["chest", "foot", "foreArm", "hand", "head", "hips", "neck", "shin", "thigh", "toes", "torso", "upperArm", "waist"];
 
-export const CLOTHES_USAGE = `raea clothes   (the project's garments: assets/clothes/NAME.json, their pictures in assets/clothes/NAME/)
-raea clothes make NAME "WHAT IT IS, AS WORN" [--over UNDER[,UNDER...]] [--max-cents N]   (drawn over the garments named; N: the most one picture may cost, 10 unless said)
-raea clothes remeasure NAME   (measured again from its kept pictures, after raea's measuring changed: nothing drawn or paid for)
-raea clothes cover NAME --parts PART[:SHARE],... --colour #RRGGBB [--stand MM] [--over UNDER]   (by procedure, no picture: ${PARTS.join(", ")}; a limb's share is how far along it from its top, foreArm:0.5)
-raea clothes wear OUT_DIR GARMENT... [--body DIR] [--head HEAD_DIR]   (GARMENT: a garment's name or its .json, innermost first; DIR: a SOMA body folder, SOMA's own unless said; HEAD_DIR: the head that joins a headless body, whose skin the body's is graded to at the collar)
+export const CLOTHES_USAGE = `raea clothes   (the project's garments: assets/clothes/NAME.json, their files in assets/clothes/NAME/)
+raea clothes make NAME ["WHAT IT IS"] [--plain] [--set PATH=VALUE,...] [--colour #RRGGBB]   (a sewn garment: its pattern from the words, or from the plain base with --plain or no words; each PATH=VALUE changes one setting)
+raea clothes settings   (a sewn garment's settings: each path, its value in the plain base, what it may be)
+raea clothes cover NAME --parts PART[:SHARE],... --colour #RRGGBB [--stand MM] [--over UNDER]   (by procedure on the skin: ${PARTS.join(", ")}; a limb's share is how far along it from its top, foreArm:0.5)
+raea clothes wear OUT_DIR GARMENT... [--body DIR] [--head HEAD_DIR]   (GARMENT: a garment's name or its .json, innermost first; DIR: a SOMA body folder, SOMA's own unless said; HEAD_DIR: the head that joins a headless body, whose skin is graded to it at the collar)
 `;
 
 const flagOf = (args: string[], name: string) => {
@@ -29,25 +30,23 @@ export function clothesVerb(ask: Ask, args: string[]): string {
   switch (sub) {
     case undefined:
     case "list": {
-      const gs: { name: string; layer: number; vertices: number; over?: string }[] = q("list").garments;
-      if (!gs.length) return 'No garments yet. raea clothes make NAME "what it is, as worn" makes one.\n';
-      return gs.map((g) => `${g.name}  layer ${g.layer}, ${g.vertices} of SOMA's vertices${g.over ? `, over ${g.over}` : ""}`).join("\n") + "\n";
+      const gs: { name: string; layer: number; vertices?: number; over?: string; sewn?: string }[] = q("list").garments;
+      if (!gs.length) return 'No garments yet. raea clothes make NAME "what it is" sews one.\n';
+      return gs.map((g) => (g.sewn !== undefined ? `${g.name}  sewn: ${g.sewn}` : `${g.name}  layer ${g.layer}, ${g.vertices} of SOMA's vertices${g.over ? `, over ${g.over}` : ""}`)).join("\n") + "\n";
     }
     case "make": {
-      const [name, words, ...more] = plain(rest);
-      if (!name || !words || more.length) throw new Error(`raea clothes make NAME "WHAT IT IS, AS WORN" [--over UNDER] [--max-cents N]\n${CLOTHES_USAGE}`);
+      const plainBase = rest.includes("--plain"), [name, words, ...more] = plain(rest.filter((x) => x !== "--plain"));
+      if (!name || more.length) throw new Error(`raea clothes make NAME ["WHAT IT IS"] [--plain] [--set PATH=VALUE,...] [--colour #RRGGBB]\n${CLOTHES_USAGE}`);
       if (!NAME.test(name)) throw new Error(`${name}: a garment's name is letters, digits, - and _ (it names its file)`);
-      const over = flagOf(rest, "--over"), cents = Number(flagOf(rest, "--max-cents") ?? 10);
-      if (over !== undefined && !over.split(",").every((o) => NAME.test(o))) throw new Error(`--over ${over}: name garments already made, innermost first, with commas between (raea clothes lists them)`);
-      if (!(cents > 0)) throw new Error("--max-cents takes the most one picture may cost, in cents");
-      return q("make", { name, words, over, cents }).said;
+      const set = flagOf(rest, "--set")?.split(",").map((x) => x.trim()).filter(Boolean) ?? [], colour = flagOf(rest, "--colour");
+      for (const x of set) if (!/^[a-z][a-z0-9_.-]*=[^=]+$/i.test(x)) throw new Error(`--set ${x}: a setting is PATH=VALUE, sleeve.length=0.3 (raea clothes settings lists them)`);
+      if (colour !== undefined && !/^#?[0-9a-f]{6}$/i.test(colour)) throw new Error(`--colour ${colour}: a colour is #RRGGBB`);
+      if (!words && !plainBase && !set.length) throw new Error(`say what ${name} is, or make it from the plain base: --plain, --set PATH=VALUE,...\n${CLOTHES_USAGE}`);
+      return q("make", { name, words: plainBase ? undefined : words, set, plain: plainBase || !words, colour: colour === undefined ? undefined : colour.startsWith("#") ? colour : `#${colour}` }).said;
     }
-    case "remeasure": {
-      const [name, ...more] = plain(rest);
-      if (!name || more.length) throw new Error(`raea clothes remeasure NAME   (measured again from its kept pictures; nothing is drawn or paid for)\n${CLOTHES_USAGE}`);
-      if (!NAME.test(name)) throw new Error(`${name}: a garment's name is letters, digits, - and _ (it names its file)`);
-      return q("remeasure", { name }).said;
-    }
+    case "settings":
+      if (rest.length) throw new Error(`raea clothes settings takes nothing after it\n${CLOTHES_USAGE}`);
+      return q("settings").said;
     case "cover": {
       const [name, ...more] = plain(rest);
       const parts = flagOf(rest, "--parts"), colour = flagOf(rest, "--colour"), over = flagOf(rest, "--over"), mm = Number(flagOf(rest, "--stand") ?? 6);

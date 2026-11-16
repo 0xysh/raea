@@ -63,7 +63,7 @@ for d in dirs:
         dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
         bpy.ops.object.modifier_apply(modifier=dt.name)
         g.parent = arm; g.modifiers.new("skin", "ARMATURE").object = arm
-    colour = PALETTE[zlib.crc32(name.encode()) % len(PALETTE)]
+    colour = os.environ.get("COLOUR") or PALETTE[zlib.crc32(name.encode()) % len(PALETTE)]  # COLOUR=#rrggbb: the colour asked for
     rgb = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
     mat = bpy.data.materials.new(name); mat.use_nodes = True
     bsdf = next(x for x in mat.node_tree.nodes if x.type == "BSDF_PRINCIPLED")

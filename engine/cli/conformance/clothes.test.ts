@@ -1,11 +1,11 @@
-// `raea clothes`: what the command sends the host for a garment made from words or garments put on a body (docs/
-// character.feature CH45), and what it refuses before anything is drawn or paid for. The host (src/wardrobe.ts, which
-// runs Blender and the image model) is faked: this is the command's side.
+// `raea clothes`: what the command sends the host for a garment sewn from words or settings, one made by procedure,
+// or garments put on a body (docs/character.feature CH45c), and what it refuses before anything is made. The host
+// (src/wardrobe.ts and sewn.ts, which run the sewing tools and Blender) is faked: this is the command's side.
 import { describe, expect, test } from "bun:test";
 import { clothesVerb } from "../src/clothes.ts";
 
 /** clothesVerb with a host that keeps each op it was asked and answers as the host does */
-function run(args: string[], garments: { name: string; layer: number; vertices: number; over?: string }[] = []) {
+function run(args: string[], garments: { name: string; layer: number; vertices?: number; over?: string; sewn?: string }[] = []) {
   const ops: Record<string, unknown>[] = [];
   const ask = (op: string, b: Record<string, unknown>) => {
     expect(op).toBe("clothes");
@@ -17,15 +17,18 @@ function run(args: string[], garments: { name: string; layer: number; vertices: 
 
 describe("raea clothes", () => {
   test("alone, it lists the project's garments, and says how to make one when there are none", () => {
-    expect(run([]).out).toContain('raea clothes make NAME "what it is, as worn"');
-    const { out } = run(["list"], [{ name: "tee-jeans", layer: 0, vertices: 11873 }, { name: "bomber", layer: 1, vertices: 6120, over: "tee-jeans" }]);
-    expect(out).toBe("tee-jeans  layer 0, 11873 of SOMA's vertices\nbomber  layer 1, 6120 of SOMA's vertices, over tee-jeans\n");
+    expect(run([]).out).toContain('raea clothes make NAME "what it is"');
+    const { out } = run(["list"], [{ name: "shorts", layer: 0, vertices: 769 }, { name: "bomber", layer: 1, vertices: 6120, over: "shorts" }, { name: "trousers", layer: 0, sewn: "trousers, a waistband" }]);
+    expect(out).toBe("shorts  layer 0, 769 of SOMA's vertices\nbomber  layer 1, 6120 of SOMA's vertices, over shorts\ntrousers  sewn: trousers, a waistband\n");
   });
 
-  test("make sends the name, the words, the layer under it and the most a picture may cost", () => {
-    const { ops } = run(["make", "bomber", "an olive bomber jacket, zipped", "--over", "tee-jeans", "--max-cents", "8"]);
-    expect(ops).toEqual([{ op: "make", name: "bomber", words: "an olive bomber jacket, zipped", over: "tee-jeans", cents: 8 }]);
-    expect(run(["make", "tee", "a white tee"]).ops[0]).toMatchObject({ over: undefined, cents: 10 });
+  test("make sends the name, the words or the plain base, the settings changed and the colour", () => {
+    const { ops } = run(["make", "hoodie", "a hooded sweatshirt", "--set", "sleeve.length=0.9, shirt.length=1.6", "--colour", "3f5a3c"]);
+    expect(ops).toEqual([{ op: "make", name: "hoodie", words: "a hooded sweatshirt", set: ["sleeve.length=0.9", "shirt.length=1.6"], plain: false, colour: "#3f5a3c" }]);
+    expect(run(["make", "tee", "--plain"]).ops[0]).toEqual({ op: "make", name: "tee", words: undefined, set: [], plain: true, colour: undefined });
+    expect(run(["make", "trousers", "--set", "meta.upper=none,meta.bottom=Pants"]).ops[0]).toMatchObject({ words: undefined, plain: true, set: ["meta.upper=none", "meta.bottom=Pants"] });
+    expect(run(["make", "tee", "--plain", "a white tee"]).ops[0]).toMatchObject({ words: undefined, plain: true });
+    expect(run(["settings"]).ops).toEqual([{ op: "settings" }]);
   });
 
   test("cover sends the parts, the colour and the stand-off in metres, for a garment with no picture", () => {
@@ -42,12 +45,12 @@ describe("raea clothes", () => {
 
   test("what doesn't fit is said before anything is drawn", () => {
     const refused = (args: string[], says: string) => expect(() => run(args)).toThrow(says);
-    refused(["make", "tee"], 'raea clothes make NAME "WHAT IT IS, AS WORN"');
-    refused(["make", "tee", "a white tee", "and more"], 'raea clothes make NAME "WHAT IT IS, AS WORN"');
+    refused(["make", "tee"], "say what tee is, or make it from the plain base");
+    refused(["make", "tee", "a white tee", "and more"], 'raea clothes make NAME ["WHAT IT IS"]');
     refused(["make", "../tee", "a white tee"], "a garment's name is letters, digits, - and _");
-    refused(["make", "tee", "a white tee", "--over", "a b"], "--over a b: name garments already made");
-    expect(run(["make", "jacket", "a denim jacket", "--over", "tee,shorts"]).ops[0]).toMatchObject({ over: "tee,shorts" });
-    refused(["make", "tee", "a white tee", "--max-cents", "0"], "--max-cents takes the most one picture may cost");
+    refused(["make", "tee", "a white tee", "--set", "sleeve length 3"], "--set sleeve length 3: a setting is PATH=VALUE");
+    refused(["make", "tee", "a white tee", "--colour", "white"], "--colour white: a colour is #RRGGBB");
+    refused(["settings", "tee"], "raea clothes settings takes nothing after it");
     refused(["cover", "tee", "--parts", "chest"], "raea clothes cover NAME --parts");
     refused(["cover", "tee", "--parts", "belly", "--colour", "#ffffff"], "--parts: no part belly");
     refused(["cover", "tee", "--parts", "shin:1.5", "--colour", "#ffffff"], "a share is how far along the limb");

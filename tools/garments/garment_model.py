@@ -111,7 +111,11 @@ def train(data, model_path):
         if s % 1000 == 0 or s == STEPS - 1: print(f"train: step {s} loss {float(l):.3f}", flush=True)
     net.eval()
     w = {k: np.array(v) for k, v in __import__("mlx.utils", fromlist=["tree_flatten"]).tree_flatten(net.parameters())}
-    np.savez(model_path, mu_i=mu_i, mu_t=mu_t, schema=schema.dump(), **{f"w:{k}": v for k, v in w.items()})
+    # each training design with its pictures' mean embedding: the nearest one stands in when GarmentCode refuses
+    # what the network decodes
+    tn = np.array([str(n) for n in Z["names"][keep]]); kept = sorted(set(tn))
+    near_E = unit(np.stack([X[tn == n].mean(0) for n in kept])); near_Y = np.stack([schema.encode(designs[n]) for n in kept])
+    np.savez(model_path, mu_i=mu_i, mu_t=mu_t, schema=schema.dump(), near_E=near_E, near_Y=near_Y, **{f"w:{k}": v for k, v in w.items()})
     print(f"train: {len(names)} designs ({int(keep.sum())} pictures kept for training), {schema.width} slots -> {model_path}")
 
 
@@ -159,9 +163,13 @@ def evaluate(data, model_path):
 
 
 def make(model_path, words, out):
+    """OUT/design.yaml from the network, and OUT/nearest.yaml, the training design nearest the words (the fallback)"""
     M, net, schema = restore(model_path)
-    d = schema.decode(predict(net, schema, unit(text_embed([words]) - M["mu_t"]))[0])
+    t = unit(text_embed([words]) - M["mu_t"])
+    d = schema.decode(predict(net, schema, t)[0])
     os.makedirs(out, exist_ok=True); yaml.safe_dump({"design": d}, open(f"{out}/design.yaml", "w"), sort_keys=False)
+    if "near_E" in M.files:
+        yaml.safe_dump({"design": schema.decode(M["near_Y"][int((t @ M["near_E"].T).argmax())])}, open(f"{out}/nearest.yaml", "w"), sort_keys=False)
     print(f"make: {words!r} -> {out}/design.yaml (upper {_get(d, ('meta', 'upper'))['v']}, bottom {_get(d, ('meta', 'bottom'))['v']})")
 
 

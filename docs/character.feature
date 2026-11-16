@@ -710,6 +710,30 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # garment a call; an outfit is several calls, innermost first.
       Then a garment is made by one command from words or by procedure, and an outfit is worn by one more
 
+    @done
+    Scenario: CH45c. `raea clothes make` sews; the picture-measured garments are gone
+      # 11-15 night. `raea clothes make NAME ["WORDS"] [--plain] [--set PATH=VALUE,...] [--colour #RRGGBB]` makes a
+      # sewn garment (CH47a's patterns, CH48c's model) in the project: assets/clothes/NAME.json (kind "sewn") and
+      # assets/clothes/NAME/ (the glb, the design, the flat pattern, four pictures). The design is the garment
+      # model's from the words, or GarmentCode's plain base with --plain or no words; each --set changes one of its
+      # 122 settings by path, checked against its options or range (a wrong one says what is allowed);
+      # `raea clothes settings` lists them. The first use sets up raea's models folder (garments/): GarmentCode
+      # cloned at a fixed commit and checked by it, a Python 3.11 environment made by uv from a pinned list, SOMA's
+      # body as a distance grid. `wear` takes sewn garments beside ones laid on the skin: each sewn glb is copied
+      # and the skin under it left out (tools/garments/hide_under.py). Measured before building: the model alone
+      # is not enough ("a short-sleeved t-shirt" came out an open flared tunic with ruffled cuffs, "straight
+      # trousers" knee-length culottes, colours by chance), so the settings are the control and the words a first
+      # guess. A tee and trousers by settings, 18 and 28 seconds, $0, worn with the generated head and walked
+      # (sheet3d compositions/soma_sewn.tsx): they read as clothes, with a cut, a hem and folds. Taken out: `make`
+      # by four drawn pictures measured onto the skin, `remeasure`, the mannequin's views (wardrobe.ts's drawing,
+      # tools/clothes/garment.py's measure, mannequin.py); a garment measured that way is refused by `wear` with
+      # what to do instead. `cover` stays for what is skin-tight. Wrong still: an outer garment is draped on the
+      # bare body (the trousers' waistband shows through the tee's hem); trousers at length 0.9 drag on the
+      # floor; a sewn garment is skinned in motion, not simulated (CH44); the words model is not fetched by a
+      # release yet (only this machine's models folder has one).
+      Then a garment is sewn by one command from words or from settings, for nothing, and worn by one more
+      And no garment is measured from pictures any more
+
     Scenario: CH45. From words to a wardrobe
       Then `raea` takes a description of an outfit, draws its layers and views, builds the garments, and writes
         them beside the body, saying what each picture cost; the pictures are kept with the garment as its source

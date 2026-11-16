@@ -18,6 +18,12 @@ for words in "$@"; do
   mkdir -p "$d"; printf '%s\n' "$words" > "$d/words.txt"
   "$PY" -I "$T/garment_model.py" make "$MODEL" "$words" "$d" | grep -E "^make:"
   (cd "$T" && DESIGN="$d/design.yaml" GID=$n "$PY" -I sample_designs.py "$GC" "$T/soma.yaml" "$OUT" 1 1) | grep -E "^sample: (w|rejected)" | cut -c1-160
+  # refused (a combination GarmentCode's checks don't allow): the training design nearest the words instead
+  if [ ! -f "$d/$n.panels.json" ] && [ -f "$d/nearest.yaml" ]; then
+    echo "words: $n ($words): GarmentCode refused the design; the nearest training design instead"
+    cp "$d/nearest.yaml" "$d/design.yaml"; echo nearest > "$d/fallback.txt"
+    (cd "$T" && DESIGN="$d/design.yaml" GID=$n "$PY" -I sample_designs.py "$GC" "$T/soma.yaml" "$OUT" 1 1) | grep -E "^sample: (w|rejected)" | cut -c1-160
+  fi
   [ -f "$d/$n.panels.json" ] || { echo "words: $n ($words): GarmentCode refused the design"; continue; }
   log=$( (cd "$T" && "$PY" -I drape_mlx.py "$DATA/soma_sdf.npz" "$d/$n.panels.json" "$d" 150 -0.064 "$T/soma.yaml") 2>&1 ) && grep -E '^drape: \{' <<<"$log" | cut -c1-160 \
     || echo "drape: $n failed: $(grep -vE '^\s*$' <<<"$log" | tail -1 | sed 's/Traceback/trace/')"

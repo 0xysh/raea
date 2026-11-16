@@ -159,7 +159,7 @@ done
 # (@raea/ui, the page's DOM every render goes through, isn't an @raea/<name> path, so it's named here)
 git archive "$ref" sdk/tsconfig.base.json sdk/ui/src sdk/ui/package.json sdk/ui/bevy sdk/raea/src sdk/raea/library sdk/raea/package.json sdk/react/js/src sdk/react/js/lite sdk/react/js/shims sdk/react/js/package.json sdk/react/js/tsconfig.json sdk/shell/src \
   "${pkgs[@]}" \
-  tools/tokensynth tools/sao tools/goo tools/splat tools/matchmove tools/clothes tools/ensure.sh sdk/guides/craft docs/sdk-coverage.md engine/cli/template/theme.css ':(glob)engine/cli/src/*.ts' \
+  tools/tokensynth tools/sao tools/goo tools/splat tools/matchmove tools/clothes tools/garments tools/ensure.sh sdk/guides/craft docs/sdk-coverage.md engine/cli/template/theme.css ':(glob)engine/cli/src/*.ts' \
   | tar -x -C "$stage/share/raea"
 # a folder copied as it is here (links kept, as rsync -a; tar, since Git's bash on Windows has no rsync)
 copy() { mkdir -p "$2" && tar -C "$(dirname "$1")" --exclude .cache -cf - "$(basename "$1")" | tar -C "$2" -xf -; }

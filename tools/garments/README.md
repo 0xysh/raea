@@ -15,6 +15,17 @@ its sample SMPL bodies (research-only) and GarmentCodeData (draped on SMPL, lice
       matplotlib cgal trimesh psutil networkx shapely rtree libigl pillow mlx
     export GARMENTCODE=$PWD/GarmentCode GARMENT_PY=$PWD/venv/bin/python
 
+## One garment: what `raea clothes make` runs
+
+    tools/garments/sew.sh OUT_DIR NAME "a hooded sweatshirt" [--set sleeve.length=0.9] [--colour #3f5a3c]
+    tools/garments/sew.sh OUT_DIR NAME "" --plain --set meta.upper=none --set meta.bottom=Pants --set pants.length=0.8
+
+`sew.sh` takes a design from words (the model, `GARMENT_MODEL`) or from GarmentCode's plain base (`--plain`),
+changes settings by path (`design.py`, which checks each against its options or range), cuts it to SOMA, drapes it
+(`GARMENT_SDF`: the body's distance grid) and bakes `OUT_DIR/NAME/NAME.glb`. `raea clothes make` sets these up in
+raea's models folder (`garments/`) the first time and calls it (engine/cli/src/sewn.ts); `hide_under.py` leaves out
+the body's skin under worn garments for `raea clothes wear`.
+
 ## Run
 
     tools/garments/engine.sh OUT_DIR 24 11     # 24 random designs, seed 11

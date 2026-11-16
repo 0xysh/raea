@@ -12,6 +12,7 @@ for d in dirs:
     cap = open(os.path.join(d, "caption.txt")).read().strip() if os.path.exists(os.path.join(d, "caption.txt")) else ""
     if os.path.exists(os.path.join(d, "words.txt")):  # asked in words (words.sh): the words, then what was made
         cap = f'asked "{open(os.path.join(d, "words.txt")).read().strip()}", made: {cap}'
+        if os.path.exists(os.path.join(d, "fallback.txt")): cap += " (refused as decoded: the nearest training design)"
     rep = glob.glob(os.path.join(d, "*.drape.json")); r = __import__("json").load(open(rep[0])) if rep else {}
     flag = "" if r.get("ok", True) else "  [FAILED: " + ("slid" if not r.get("stayed", True) else "seams/inside") + "]"
     ImageDraw.Draw(row).text((8, 10), f"{os.path.basename(d.rstrip('/'))}: {cap}{flag}", fill="red" if flag else "black")
