@@ -58,6 +58,14 @@ pub fn wanted() -> Option<Pass> {
 #[extract_app(bevy::render::RenderApp)]
 struct PassView(u32);
 
+/// A camera whose prepasses a pass after it reads (`--aov`'s motion vectors and depth, RAEA_PASS's depth and normals),
+/// bound as single-sampled textures: it draws with MSAA off on every frame, whatever its row asks, and keeps the depth
+/// and normal prepasses an effect brought when the effect goes (raea-sys-post's msaa_for_3d and sync). Put on with the
+/// prepasses, never taken off (#159: the row's post-processing turned MSAA back on under them, and the pass's bind
+/// group refused the frame).
+#[derive(Component, Clone, Copy, Default)]
+pub struct PrepassRead;
+
 pub fn install(app: &mut App) {
     let Some(pass) = wanted() else { return };
     bevy::asset::embedded_asset!(app, "passes.wesl");
@@ -79,7 +87,7 @@ fn mark(pass: Pass, mut commands: Commands, cams: Query<Entity, (With<Camera3d>,
     for e in &cams {
         let mut c = commands.entity(e);
         // single-sampled on every frame, whatever the camera's row asks (#159)
-        c.insert((PassView(pass as u32), DepthPrepass, NormalPrepass, Msaa::Off, raea_sys_frame::camera::PrepassRead));
+        c.insert((PassView(pass as u32), DepthPrepass, NormalPrepass, Msaa::Off, PrepassRead));
         if pass == Pass::Albedo {
             c.insert((Tonemapping::None, super::bevy_api::Untonemapped)).remove::<DistanceFog>().remove::<bevy::post_process::bloom::Bloom>().remove::<bevy::render::view::ColorGrading>();
         }

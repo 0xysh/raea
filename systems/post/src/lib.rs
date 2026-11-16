@@ -32,7 +32,7 @@ pub fn msaa_for_3d(world: &mut World, has_3d: bool) {
     for e in cams {
         let single = world.resource::<FrameRows>().vals(e).is_none_or(|v| ["ssao", "aa", "outline", "frame_looks", "passes"].iter().any(|k| v.contains_key(*k)));
         let deferred = world.entity(e).contains::<bevy::core_pipeline::prepass::DeferredPrepass>();
-        let read = world.entity(e).contains::<raea_sys_frame::camera::PrepassRead>();
+        let read = world.entity(e).contains::<raea_sys_compose::passes::PrepassRead>();
         if !single && !deferred && !read && world.get::<Msaa>(e) == Some(&Msaa::Off) {
             world.entity_mut(e).insert(Msaa::default());
         }

@@ -9,7 +9,8 @@ use raea_core_program::ir::V;
 use raea_sys_frame::*;
 
 mod on;
-use raea_sys_frame::camera::{Group, PrepassRead, remove};
+use raea_sys_compose::passes::PrepassRead;
+use raea_sys_frame::camera::{Group, remove};
 
 type Vals = BTreeMap<String, V>;
 
@@ -219,7 +220,7 @@ mod tests {
         // made multisampled with AO on its first shot (AO brought the depth prepass), then given its prepasses as
         // --aov gives them (#159)
         let (mut w, e) = world(row(&[("bloom", V::N(0.1)), ("ssao", V::S("ultra".into()))]));
-        w.entity_mut(e).insert((DepthPrepass, MotionVectorPrepass, Msaa::Off, raea_sys_frame::camera::PrepassRead));
+        w.entity_mut(e).insert((DepthPrepass, MotionVectorPrepass, Msaa::Off, PrepassRead));
         // the AO goes and the bloom ramps: still single-sampled, and the depth prepass stays
         for b in [0.2, 0.3] {
             set(&mut w, row(&[("bloom", V::N(b))]));
@@ -231,7 +232,7 @@ mod tests {
         crate::msaa_for_3d(&mut w, true);
         assert_eq!(w.get::<Msaa>(e), Some(&Msaa::Off));
         // a camera nothing reads the prepasses of still multisamples again (#38)
-        w.entity_mut(e).remove::<raea_sys_frame::camera::PrepassRead>();
+        w.entity_mut(e).remove::<PrepassRead>();
         crate::msaa_for_3d(&mut w, true);
         assert_eq!(w.get::<Msaa>(e), Some(&Msaa::Sample4));
     }

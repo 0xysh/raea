@@ -6,7 +6,7 @@
 
 use super::*;
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, ViewPrepassTextures};
-use raea_sys_frame::camera::PrepassRead;
+use raea_sys_compose::passes::PrepassRead;
 
 /// One frame's guide data at the prepass's size (the frame's, times RAEA_SS).
 pub struct Aov {
