@@ -6,7 +6,7 @@
 use blitz_traits::net::{Bytes, NetHandler, NetProvider, Request};
 
 mod host;
-pub use host::fetch;
+pub use host::{fetch, load as host_load};
 
 /// Files and data URLs; a path that isn't on disk is looked for under each of `roots` in turn (a server's root: WPT's
 /// `/css/...`).
@@ -68,6 +68,8 @@ impl NetProvider for FileNet {
                 })
             }),
             "data" => raea_io_net::data_url(url.as_str()).map(|(_, b)| b),
+            // the page's own /host/*: its host's (RAEA_PAGE_HOST), as the page's fetch of it is (host.rs)
+            "http" if url.host_str() == Some("localhost") && url.port().is_none() && url.path().starts_with("/host/") => host::load(&url),
             // the page's own origin (http://localhost/, as page_fetch has it): the file under the roots, confined, so an
             // @font-face, image or stylesheet the app names by its URL loads as in Chrome (Excalidraw's fonts did not)
             "http" if url.host_str() == Some("localhost") && url.port().is_none() && !self.roots.is_empty() => {
