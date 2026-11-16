@@ -302,7 +302,8 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # end standing; the seed kept is the one whose upper body moves most (a do line fails by standing through
       # it: one seed of three stood still through "scratch the head"), and the kept ten all do what they say
       # (seed 1 alone 7 of 10, seed 2 8, seed 3 7). Film: sheet3d out/do-eval-v1.mp4, posted for the user's look
-      # (i-show-mwj21c0d-1). Open: that look; the user's word on shipping the downloads (Kimodo under NVIDIA's
+      # (i-show-mwj21c0d-1). The user's look, 11-16: "All ten read right". Open: the user's word on shipping the
+      # downloads (i-show-mwj24i8o-2: Kimodo under NVIDIA's
       # Open Model License; Meta Llama 3 under its Community License, fetched from mlx-community's ungated 8-bit
       # copy; the adapters MIT); Kimodo's own post-processing (its C++ foot-skate clean-up) is not ported.
       Given the eval's lines pass

@@ -79,13 +79,14 @@ function list(cwd: string) {
   return { garments: garments.map((g) => (g.kind === "sewn" ? { name: g.name, layer: g.layer, sewn: g.made ?? "" } : { name: g.name, layer: g.layer, vertices: g.vertices.length, over: g.over })) };
 }
 
-function cover(raea: string, cwd: string, env: Env, a: { name: string; parts: string; colour: string; stand: number; over?: string }): Said {
+function cover(raea: string, cwd: string, env: Env, a: { name: string; parts: string; colour: string; stand: number; over?: string; hard?: { sole?: number; soleColour?: string; panels?: string[] } }): Said {
   const clothes = join(cwd, "assets/clothes"), file = join(clothes, `${a.name}.json`), under = a.over ? join(clothes, `${a.over}.json`) : undefined;
   if (under && !existsSync(under)) throw new Error(`no garment ${a.over} (assets/clothes/${a.over}.json): raea clothes lists the ones made`);
   if (a.over === a.name) throw new Error("a garment can't be laid over itself");
   const s = soma(raea, env);
   mkdirSync(clothes, { recursive: true });
-  const said = blender(raea, env, "garment.py", ["cover", join(s.body, "body.glb"), s.rig, file, a.parts, a.colour, String(a.stand), ...(under ? [under] : [])]);
+  const hard = a.hard ? ["--hard", ...(a.hard.sole !== undefined ? ["--sole", String(a.hard.sole)] : []), ...(a.hard.soleColour ? ["--sole-colour", a.hard.soleColour] : []), ...(a.hard.panels?.length ? ["--panels", a.hard.panels.join(",")] : [])] : [];
+  const said = blender(raea, env, "garment.py", ["cover", join(s.body, "body.glb"), s.rig, file, a.parts, a.colour, String(a.stand), ...(under ? [under] : []), ...hard]);
   if (!existsSync(file)) throw new Error("no garment was written");
   return { said: [...s.made, ...said, `${relative(cwd, file)}. raea clothes wear assets/characters/NAME ${a.over ? `${a.over} ` : ""}${a.name} puts it on SOMA's body.`].join("\n") + "\n" };
 }

@@ -12,7 +12,7 @@ export const PARTS = ["chest", "foot", "foreArm", "hand", "head", "hips", "neck"
 export const CLOTHES_USAGE = `raea clothes   (the project's garments: assets/clothes/NAME.json, their files in assets/clothes/NAME/)
 raea clothes make NAME ["WHAT IT IS"] [--plain] [--set PATH=VALUE,...] [--colour #RRGGBB]   (a sewn garment: its pattern from the words, or from the plain base with --plain or no words; each PATH=VALUE changes one setting)
 raea clothes settings   (a sewn garment's settings: each path, its value in the plain base, what it may be)
-raea clothes cover NAME --parts PART[:SHARE],... --colour #RRGGBB [--stand MM] [--over UNDER]   (by procedure on the skin: ${PARTS.join(", ")}; a limb's share is how far along it from its top, foreArm:0.5)
+raea clothes cover NAME --parts PART[:SHARE],... --colour #RRGGBB [--stand MM] [--over UNDER] [--hard [--sole MM] [--sole-colour #RRGGBB] [--panels #RRGGBB,...]]   (by procedure on the skin; --hard: footwear, on a last round the foot with a sole under it: ${PARTS.join(", ")}; a limb's share is how far along it from the end that joins the rest: upperArm,foreArm:0.5 from the elbow, foot,shin:0.4 from the ankle)
 raea clothes wear OUT_DIR GARMENT... [--body DIR] [--head HEAD_DIR]   (GARMENT: a garment's name or its .json, innermost first; DIR: a SOMA body folder, SOMA's own unless said; HEAD_DIR: the head that joins a headless body, whose skin is graded to it at the collar)
 `;
 
@@ -20,8 +20,10 @@ const flagOf = (args: string[], name: string) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
+/** the flags that take no value */
+const BARE = new Set(["--plain", "--hard"]);
 /** the words that aren't flags or a flag's value */
-const plain = (args: string[]) => args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
+const plain = (args: string[]) => args.filter((a, i) => !a.startsWith("--") && (!args[i - 1]?.startsWith("--") || BARE.has(args[i - 1])));
 const NAME = /^[a-z0-9][a-z0-9_-]*$/i;
 
 export function clothesVerb(ask: Ask, args: string[]): string {
@@ -60,7 +62,14 @@ export function clothesVerb(ask: Ask, args: string[]): string {
       if (!/^#?[0-9a-f]{6}$/i.test(colour)) throw new Error(`--colour ${colour}: a colour is #RRGGBB`);
       if (!(mm > 0 && mm <= 80)) throw new Error("--stand takes how far the cloth stands off the skin, in millimetres (above 0, at most 80)");
       if (over !== undefined && !NAME.test(over)) throw new Error(`--over ${over}: name a garment already made (raea clothes lists them)`);
-      return q("cover", { name, parts: parts.replace(/\s+/g, ""), colour: colour.startsWith("#") ? colour : `#${colour}`, stand: mm / 1000, over }).said;
+      // a hard piece (footwear): its own shape on a last round the foot, a sole under it, panels in their colours
+      const hard = rest.includes("--hard"), sole = flagOf(rest, "--sole"), soleColour = flagOf(rest, "--sole-colour"), panels = flagOf(rest, "--panels");
+      if (!hard && (sole ?? soleColour ?? panels) !== undefined) throw new Error("--sole, --sole-colour and --panels are a hard piece's: add --hard");
+      if (sole !== undefined && !(Number(sole) >= 0 && Number(sole) <= 60)) throw new Error("--sole takes the sole's thickness in millimetres (0 to 60)");
+      for (const c of [soleColour, ...(panels?.split(",") ?? [])]) if (c !== undefined && !/^#?[0-9a-f]{6}$/i.test(c.trim())) throw new Error(`${c}: a colour is #RRGGBB`);
+      const hex = (c: string) => (c.trim().startsWith("#") ? c.trim() : `#${c.trim()}`);
+      return q("cover", { name, parts: parts.replace(/\s+/g, ""), colour: colour.startsWith("#") ? colour : `#${colour}`, stand: mm / 1000, over,
+        ...(hard ? { hard: { sole: sole === undefined ? undefined : Number(sole), soleColour: soleColour && hex(soleColour), panels: panels?.split(",").map(hex) } } : {}) }).said;
     }
     case "wear": {
       const [out, ...garments] = plain(rest);
