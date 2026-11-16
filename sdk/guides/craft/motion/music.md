@@ -307,7 +307,7 @@ Tone.getTransport().bpm.value = 112;
 Tone.buses.music.duck(Tone.buses.voice, { amount: -12 });
 const thump = Tone.vary(new Tone.MembraneSynth({ octaves: 4, maxPolyphony: 4, poly: true }), { pitch: 0.5, volume: 2 }).connect(Tone.buses.sfx);
 const coin = new Tone.Sampler({ urls: { C5: Tone.sao("a bright arcade coin chime, short", { seconds: 1 }) } }).connect(Tone.buses.sfx);
-// a recorded marimba (`raea sounds get vcsl/marimba`: CC0, the notes VCSL sampled, a fourth or a fifth apart)
+// a recorded marimba (`raea sounds get vcsl/marimba`: CC0, every note VCSL sampled, four to seven semitones apart)
 const marimba = new Tone.Sampler({
   urls: Object.fromEntries(["F3", "C4", "G4", "B4", "F5"].map((n) => [n, staticFile(`sounds/vcsl-marimba/${n}.wav`)])),
   release: 0.4,
