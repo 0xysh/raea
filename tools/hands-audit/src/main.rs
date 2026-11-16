@@ -76,7 +76,8 @@ fn audit(skel: &Skeleton, name: &str, base: &dyn Fn(f32) -> Pose, take: &Take, u
             if held && d < 0.006 && sample.part.ends_with('3') {
                 touching.insert((sample.part.clone(), sample.joints[0].0));
             }
-            if held && sample.part == "palm" {
+            // (the palm's skin and the ball of the thumb, which lies on a face with it)
+            if held && (sample.part == "palm" || sample.part == "thumb1") {
                 gap = gap.min(d);
             }
         }
