@@ -364,10 +364,12 @@ describe("video and audio play on the host's player (runtime/dom media.rs, raea-
     expect(v.paused).toBe(true);
     expect(v.ended).toBe(true);
     expect(v.currentTime).toBe(120.6);
-    // played again from the end starts at the beginning
+    // played again from the end starts at the beginning, and is there from the call on (a pause before the host's first
+    // frame pauses it at the start, as a browser's does, not back at the end)
     v.play();
     expect(prop("__play")).toEqual([true, 0, 6, true]);
-    expect(seen).toEqual(["canplay@0.0", "play@0.0", "playing@0.0", "timeupdate@2.0", "pause@2.0", "play@2.0", "pause@2.0", "play@2.0", "pause@120.6", "ended@120.6", "play@120.6"]);
+    expect(v.currentTime).toBe(0);
+    expect(seen).toEqual(["canplay@0.0", "play@0.0", "playing@0.0", "timeupdate@2.0", "pause@2.0", "play@2.0", "pause@2.0", "play@2.0", "pause@120.6", "ended@120.6", "play@0.0"]);
 
     // load(): back to the start, paused with no pause event, and the host's decoder opened again
     v.load();
@@ -376,7 +378,7 @@ describe("video and audio play on the host's player (runtime/dom media.rs, raea-
     expect(v.readyState).toBe(0);
     expect(prop("__load")).toBe(1);
     expect(prop("__play")).toEqual([false, 0, 7, true]);
-    expect(seen.at(-1)).toBe("play@120.6");
+    expect(seen.at(-1)).toBe("play@0.0");
     expect(v.canPlayType("video/mp4")).toBe("maybe");
     expect(v.canPlayType("video/x-unknown")).toBe("");
   });

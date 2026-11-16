@@ -80,11 +80,14 @@ export class HTMLMediaElement_ extends HTMLElement_ {
   }
   play() {
     if (!this._playing) {
+      // played to its end, it starts again from the start, as a browser's does, and currentTime is 0 from now: it was
+      // left at the end until the host's first frame came, so a pause before then paused it back at the end (11-16)
+      if (this._ended || this._time >= (this.duration || Infinity)) this._time = 0;
       this._playing = true;
       this._ended = false;
       this._tell("__muted", this.muted);
       if (this._volume !== undefined) this._tell("__volume", this._volume);
-      this._tell("__play", [true, this._time >= (this.duration || Infinity) ? 0 : this._time, ++this._plays, this.loop]);
+      this._tell("__play", [true, this._time, ++this._plays, this.loop]);
       dispatchDirect(this, new Event_("play", { bubbles: false }));
     }
     return Promise.resolve();
