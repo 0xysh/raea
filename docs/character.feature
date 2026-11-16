@@ -451,8 +451,29 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # generated head joined at the neck, hair and glasses, generated clothes in two layers, walking by motion
       # matching. Not yet: the hair moving (the follower does not read the stray attribute from a part), and
       # raea's own hair shading on it (that shader wants tangents the cards do not carry, so it is drawn with
-      # its own material).
+      # its own material). Both since: CH21b.
       Then a person is a body folder and parts, each made by its own flow
+
+    @done
+    Scenario: CH21b. Generated hair moves on the follower
+      # 11-15. `bun sdk/body/tools/hair.ts SKELETON.json HAIR.glb POSES.json OUT.bind.rseq SKIN.glb...` reads a
+      # head's hair cards as cloth (each vertex free by its stray attribute), carries them through a
+      # performance on the cloth follower, kept outside the skin as drawn (the head, the body, what it wears),
+      # and writes the frames in the hair's own bind pose; a Character part draws them with
+      # `cloth: { src, frame }`, so the hair keeps its cut-out and raea's hair shader (the cards carry tangents
+      # now). Measured on the first head's loose hair (33,191 particles, three quarters free) over SOMA's 449
+      # frame locomotion clip, as free particles more than 3 mm inside the skin, the worst of every tenth
+      # frame: 3,874 carried by the head alone, 223 on the follower; the hair leaves its skinned place by 13 mm
+      # on average. Three causes found on the way. The hair is generated for the head alone and hung straight
+      # through the upper back (4,982 particles in the skin at rest): it is laid over the body at rest first.
+      # Brought out one particle at a time, each lock was kinked at every vertex and drew as zigzags over the
+      # shoulders: what the fit moves is evened along each lock. And the follower starts as the skin has it,
+      # in the shoulders of the first pose: the first pose is held for 20 frames first. Left: a few locks
+      # stretch down an arm (a particle strays 15 cm at most, its limit 6), the bake runs at 0.36 s a frame, and
+      # the frames are baked for one performance, not followed live in play.
+      Given a head's hair cards, a body with what it wears, and a performance
+      Then the hair is carried by the follower through it, outside the head, the body and the clothes
+      And it is drawn as a part of the character with raea's hair shader
 
   Rule: Creatures
 
