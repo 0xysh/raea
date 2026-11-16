@@ -24,3 +24,9 @@ bench/bridge/engine3d.tsx	-	0.3 0.9 1.25
 sdk/raea/bench/bevy/pick3d/edit.tsx	script:bench/render-play/pick3d.json	0.1 0.2 0.3 0.4 0.6 0.9
 sdk/r3f/test/live/pointer.tsx	script:sdk/r3f/test/live/pointer.json	0.2 0.4 0.6 0.9
 sdk/raea/bench/bevy/appscreen/edit.tsx	script:bench/render-play/appscreen.json	0.2 0.4 0.6 0.9
+# Compositions with a control in their defaultProps (docs/realtime.feature RT0a): a 2D card, a raster-lit 3D scene and
+# the same under a page caption, each played live and rendered (bench/realtime/stage.sh checks a control changed on
+# the engine's stage against the render)
+bench/realtime/cases/title.tsx	-	0.5 1.5 2.5
+bench/realtime/cases/raster.tsx	-	0.5 1.5 2.5
+bench/realtime/cases/caption.tsx	-	0.5 1.5 2.5	the caption's page over 3D is 0.999998 here and 0.999999 on the stage (11-16): the plan's bar for HTML over 3D is 0.9994
