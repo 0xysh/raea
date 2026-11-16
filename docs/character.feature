@@ -422,6 +422,19 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       Then the body dressed with that head named has its skin in the head's neck colour, graded to the head's
         own skin at the collar, and no step of colour shows across the join
 
+    @done
+    Scenario: CH20c. The eyes take a look target
+      # 11-15. `<Character gaze={[x, y, z]}>` (sdk/character/src/character/eyes.ts): each eye joint is turned to
+      # the point on top of the pose, in its head's frame, so the eyes cover what the head has not turned; no
+      # further than an eye goes (35 degrees to a side, 25 down, 17 up: the head's upper lid has no morph that
+      # lifts it, and at 25 up the iris went under it). A part that has the eye joints has its upper lids ride
+      # the eyes down (its blink morphs raised to 0.45 at the lowest): without that the white showed over the
+      # iris. Seen on the first head, straight, to each side, up and down (sheet3d compositions/gaze_check.tsx).
+      # Not yet: lids that lift, and a stage act's `look` sending the eyes as well as the head.
+      Given a body whose head has eye joints, and a point in the scene
+      Then the eyes turn to it within their range, whatever the neck and head are doing
+      And the upper lids come down with them
+
     Scenario: CH21. Hair
       # Agreed with the face session 11-15. sdk/body/src/cloth.ts already moves hair and clothes that follow
       # skin. Hair cards are the face session's working choice, pending its tests; strand hair stays a reference

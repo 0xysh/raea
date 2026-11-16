@@ -6,7 +6,7 @@ import { SKIN_LOOK, SKIN_SURFACE, SKIN_WESL, type SkinLook, type SkinSurface } f
 import { ExtendedMaterial, LinearRgba, ShaderExtension, Srgba, StandardMaterial } from "@raea/render/bevy3d";
 import type { Glitch } from "@raea/physics/physics";
 import { staticFile } from "@raea/video/media";
-import { Goals, Pose, Side, Skeleton, add, eulerXYZ, faceWeights, pose, qmul, qrot, qyaw, rest, scale3, skinJoints, solve, sub, type Face } from "./all";
+import { Goals, Pose, Side, Skeleton, add, eulerXYZ, eyesTo, faceWeights, lidsFor, pose, qmul, qrot, qyaw, rest, scale3, skinJoints, solve, sub, type Face } from "./all";
 
 // ---------------------------------------------------------------- placement
 
@@ -81,6 +81,11 @@ export interface CharacterProps extends Placement {
    * "mouth-open", "eyebrows-left-up" ...) and presets mixed from them (FACE_PRESETS: blink, smile, frown, surprise,
    * sad, and the lips' open, pucker and wide), 0 to 1; they add */
   face?: Face;
+  /** a point in the scene the eyes turn to (character/eyes.ts): each eye joint turned to it on top of the pose, no
+   * further than an eye goes (35 degrees to a side, 17 up, 25 down), so the eyes cover what the head has not turned.
+   * For a body whose head has eye joints (SOMA's LeftEye and RightEye, which a generated head's eyes follow); a part
+   * that has those joints has its upper lids ride the eyes down (its blink_left and blink_right morphs raised) */
+  gaze?: Vec3;
   /** the hair drawn as hair (character/hair.ts: strand highlights on the body's "hair" material, after lighting): on by
    * default, false for the plain surface, or settings over HAIR_LOOK; `coverage: true` softens the cards' cut edges
    * (alphaMode "coverage", for a scene with <AntiAliasing mode="msaa">: without MSAA the cards draw solid); `color`
@@ -175,6 +180,7 @@ export function Character(props: CharacterProps) {
   const k = at.scale ?? 1;
   let p = props.pose ?? rest(skel);
   if (props.goals) p = solve(skel, p, goalsToBody(at, props.goals));
+  if (props.gaze) p = eyesTo(skel, p, toBody(at, props.gaze));
   const w = pose(skel, p);
   const turn = qyaw(at.yaw ?? 0);
   // the skin stands at the origin scaled by k, so its joints go where they are in the scene over k
@@ -199,8 +205,11 @@ export function Character(props: CharacterProps) {
       </Model>
       {(props.parts ?? []).map((part) => {
         const id = part.src.split("/").pop()!.replace(/\.glb$/, "");
+        // (a head's lids ride its eyes down: character/eyes.ts)
+        const lids = props.gaze && part.joints?.some((j) => j === "LeftEye" || j === "eye_l") ? lidsFor(skel, p) : 0;
+        const pm = lids > 0 ? { ...part.morphs, blink_left: Math.min(1, (part.morphs?.blink_left ?? 0) + lids), blink_right: Math.min(1, (part.morphs?.blink_right ?? 0) + lids) } : part.morphs;
         return (
-          <Model key={id} name={`${name}-${id}`} src={part.src} bones={part.joints ? Object.fromEntries(part.joints.filter((j) => j in bones).map((j) => [j, bones[j]])) : bones} scale={k} {...(glitch ? { glitch } : {})} {...pass} {...(part.morphs && Object.keys(part.morphs).length ? { morphs: part.morphs } : {})} {...(part.cloth ? { cloth: part.cloth } : {})}>
+          <Model key={id} name={`${name}-${id}`} src={part.src} bones={part.joints ? Object.fromEntries(part.joints.filter((j) => j in bones).map((j) => [j, bones[j]])) : bones} scale={k} {...(glitch ? { glitch } : {})} {...pass} {...(pm && Object.keys(pm).length ? { morphs: pm } : {})} {...(part.cloth ? { cloth: part.cloth } : {})}>
             {part.children}
             {id.includes("hair") && props.hair !== false && hairMaterial(props.hair)}
           </Model>
