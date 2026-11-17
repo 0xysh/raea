@@ -24,7 +24,7 @@ impl Plugin for IdlePlugin {
 
 fn rest(settings: Option<ResMut<WinitSettings>>, docs: Option<NonSend<raea_sys_page::Docs>>, mut last: Local<u64>, mut quiet: Local<u32>) {
     let Some(mut settings) = settings else { return };
-    let drawn = raea_sys_page::draws();
+    let drawn = raea_sys_page::DRAWS.load(std::sync::atomic::Ordering::Relaxed);
     let moved = drawn != *last || docs.is_some_and(|d| d.0.values().any(|d| d.is_animating()));
     *last = drawn;
     *quiet = quieter(*quiet, moved);

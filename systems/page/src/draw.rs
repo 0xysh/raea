@@ -13,14 +13,10 @@ pub struct Scenes {
     pub todo: Vec<Drawn>,
 }
 
-/// Pages drawn so far (each one Vello drew, not one skipped as painted the same): what the window reads to rest (draws).
-static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// How many pages have been drawn since the process started: unchanged from one frame to the next, nothing on any page
-/// changed (a playing video, a stage or a view draws its page every frame).
-pub fn draws() -> u64 {
-    DRAWS.load(std::sync::atomic::Ordering::Relaxed)
-}
+/// How many pages have been drawn since the process started (each one Vello drew, not one skipped as painted the same):
+/// unchanged from one frame to the next, nothing on any page changed (a playing video, a stage or a view draws its page
+/// every frame). What the window reads to rest (raea-page-host's idle.rs).
+pub static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The one Vello renderer on Bevy's device (not `Sync`: its shader cache holds cells, so it's held in a SyncCell and the
 /// render world can run on a thread of its own, as the engine's pipelined updates run it), made on first use; each page's
