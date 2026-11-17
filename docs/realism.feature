@@ -268,6 +268,8 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         setup, made raea's); each instance's custom index points into a record table (D3); static BLASes are
         compacted; BLAS builds go in the frame's encoder on a budget; a streamed tile merges into a few BLASes; past a
         distance an instance is its proxy, and far off its tile's HLOD
+      And leaves and other alpha-cut cards go into the ray scene without stalling it: one alpha an instance rejected
+        by blue noise far off, an alpha test only where a card is near and shows (Metal has no opacity micromaps)
       And the world cache is a hash grid on the surfaces rays hit (D6), from vendor/bevy_solari's world cache made
         raea's: cells sized by distance, split by normal, refined near a hit, filled by one path an 8x8 tile of at
         most three bounces ending in last frame's cache
@@ -291,7 +293,9 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
       And `raea light check` uses it for every reference; Berlin, in its four skies, and the kitchen get theirs, and
         Bevy's <Pathtracer> leaves the check
       And the film tier renders FLOOR3, Stay and the anything films with no history, N samples a frame, OIDN and a
-        fixed seed, the same frame every time
+        fixed seed, the same frame every time; once it converges plainly, it may reuse paths across pixels and frames
+        (ReSTIR PT Enhanced, NVIDIA, I3D 2026: 2-3x faster than ReSTIR PT, 15.5 ms at 1080p on an RTX 5880 Ada, with
+        Russian roulette its largest single gain), measured on FLOOR3 against plain sampling at the same time
       And LT1's numbers are taken again on all four scenes, raster and raea GI
 
   Rule: Every light, everything in it
@@ -303,7 +307,7 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
       And the kitchen's window panels and FLOOR3's ceiling panels bounce as the reference has them; the kitchen's
         stand-in "bounce the renderer doesn't trace" panel can go
       And Berlin at dusk, with its gas lamps and lit windows, bounces as its reference does; stochastic direct light
-        for the many lamps (MegaLights' way) is the step after
+        for the many lamps (MegaLights' way, or ReSTIR's direct-light reuse) is the step after
 
     Scenario: LT7. Characters posed in the ray scene
       Given RT5's trial poses CPU twins (another lane), which stays a trial: they cost the bus every frame
@@ -338,11 +342,16 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
 
   Rule: Surfaces and image
 
-    Scenario: LT11. Skin, hair and cloth as shading models
+    Scenario: LT11. Skin, hair, cloth, leaves and layers as shading models
       Then skin (subsurface, from sdk/character's skin look), hair cards (two lobes) and cloth (sheen, without
         11-17's velvet haze at grazing angles) are shading models in the deferred pass, direct light and the GI both
         going through them, replacing sdk/character's `lit` hooks (M14)
-      And Berlin's faces are checked against the reference in every sky
+      And leaves are thin and translucent: a backlit leaf glows with the light through it, in raster and at a ray's
+        hit, so summer's trees and autumn's read against the sun as the photos have them
+      And layered materials: a clear coat over paint and varnish, and a film of water over stone, brick and wood
+        that the season's wet look sets, darkening the base and adding its own sharp reflection
+      And Berlin's faces are checked against the reference in every sky, and its trees and wet streets against the
+        photos of their season
 
     Scenario: LT12. Speed and image
       Then the caches keep their own history, a temporal filter of ours steadies the frame, and MetalFX's temporal
@@ -350,7 +359,19 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         never part of the budget; on Windows and Linux a denoiser slot takes DLSS-RR or FSR's in MetalFX's place
       And the game meets D13's budget at 1080p on this Mac with raea GI on, measured live on Berlin, FLOOR3 and the
         kitchen, and the editor's live frame meets docs/realtime.feature's
-      And quality tiers scale it for smaller GPUs, each tier's numbers in LT1's table
+      And quality tiers scale it for smaller GPUs, each tier's numbers in LT1's table, down to a tier for GPUs with
+        no ray-tracing hardware: screen traces and probes, the world cache filled by a compute traversal of the
+        coarse ray scene, leaf translucency and the finish (LT19) intact, so the image degrades and never drops
+
+    Scenario: LT19. The camera and the finish
+      Given much of a photo's look is its camera's, not its light's (Shane's notes, 11-17: a good denoiser, AgX,
+        real depth of field, bloom and layered materials do a lot of the "photo" feel)
+      Then raea's camera is physical: the field of view from focal length and sensor, depth of field from the
+        aperture with real bokeh, motion blur from the shutter, noise from the ISO, bloom and glare from the light's
+        real energy, a lens's vignette, AgX tone mapping, all in D12's units and set from a photo's EXIF in LT17
+      And OIDN denoises the film tier (LT5); the live frame keeps LT12's filter
+      And each is checked against the photos: depth of field and bokeh on the portraits, bloom on the night and
+        sun-into-lens photos, motion blur on the street, with no per-shot knob (D16)
 
   Rule: One renderer
 
