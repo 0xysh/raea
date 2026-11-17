@@ -674,8 +674,12 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # under-seam inside her narrower arm and draped as two flaps beside it (drape_mlx.py: sleeves start round the
       # arm, SLEEVE_LIFT 0.01); the drape's "stayed on" read the template's shoulder height (now scaled by the
       # measures); a collar trim on a neckline GarmentCode can cut no higher than its fc_depth 0.3 was a ring round
-      # her collarbones (trims.py's collar "drop": its top closes at the throat). Not done: a shaped headless body's
-      # on-skin covers (boots) need its template twin cut at the same place; the build is chosen by hand.
+      # her collarbones (trims.py's collar "drop": its top closes at the throat); her coat, cut and draped on the bare
+      # body, was narrower at its hem than her skirt there, which stood out through it with the edge hide_under cut
+      # showing (sdf_igl.py --under: the skirt, its waist and hem closed, inflated 3 mm and joined to the body's
+      # distance grid, so the coat drapes over it, 3.7 cm wider each side at the knee). On-skin covers made on the
+      # template's vertices (the black boots) wear on her full and headless bodies as they are, on her feet's own shape.
+      # Not done: the build is chosen by hand.
       Then a woman's figure is a SOMA build whose joints, garments and head join are her own
 
     @done
