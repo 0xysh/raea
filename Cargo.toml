@@ -39,6 +39,7 @@ members = [
     "engine/bundle",
     "engine/cli",
     "engine/neural",
+    "engine/light",
     "engine/modules",
     "engine/native",
     "io/npm",

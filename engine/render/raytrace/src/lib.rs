@@ -8,12 +8,19 @@ use std::collections::HashMap;
 mod solari;
 #[cfg(target_os = "macos")]
 mod metalfx;
+// RAEA_LIGHT: one light path for every camera (docs/realism.feature LT1)
+pub mod force;
 
-pub use solari::add;
+/// Solari's plugins, and RAEA_LIGHT's camera override when it names a path.
+pub fn add(app: &mut App) {
+    solari::add(app);
+    force::add(app);
+}
 
-/// The program asks for Solari: a camera's SolariLighting or Pathtracer component (`prog` is raea-render's Program).
+/// The program asks for Solari (a camera's SolariLighting or Pathtracer component; `prog` is raea-render's Program),
+/// or RAEA_LIGHT forces it.
 pub fn wanted(prog: &impl std::fmt::Debug) -> bool {
-    format!("{prog:?}").contains("bevy_solari::")
+    force::needs_solari() || format!("{prog:?}").contains("bevy_solari::")
 }
 
 /// After app.finish(): MetalFX's denoiser after Solari's lighting, on the Mac; nothing elsewhere.

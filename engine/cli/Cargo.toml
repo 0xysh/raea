@@ -48,6 +48,8 @@ serde = "1"
 serde_json = "1"
 # `raea neural` (docs/raytracing.feature RT2)
 raea-neural = { path = "../neural" }
+# `raea light check` (docs/realism.feature LT1)
+raea-light = { path = "../light" }
 regex = "1"
 # the app crates' verbs: `raea check`, `raea ci`, and the local tools' (sao, tokensynth, setup-audio, sounds, splat)
 raea-app-check = { path = "../../apps/check" }

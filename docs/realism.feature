@@ -88,7 +88,8 @@ Feature: raea Light: one realism system for shading, ray tracing and occlusion, 
         made by hand), in the same units and exposure, so switching paths doesn't change brightness.
     D11. One set of units: lux, cd/m², EV, and one exposure model for every path. 11-17's captured environment had
         to be scaled 1.36, 0.13, 0.02 and 0.006 per sky to match the flat ambient: a sign there's no shared model.
-    D12. One owner (proposed 11-17: the session that wrote this file, until the orchestrator or Shane names one). A change to
+    D12. One owner: the session that wrote this file, on lane `realism` (Shane adopted the file 11-17 and set its goal:
+        every LT @done with its numbers). A change to
         light, shadow, occlusion or a shading model lands with before and after on the reference scenes (LT1).
 
   Background:
@@ -99,8 +100,10 @@ Feature: raea Light: one realism system for shading, ray tracing and occlusion, 
   Rule: The bar first
 
     Scenario: LT1. Reference scenes, a reference frame for each, and the numbers
-      Given four scenes: gambit's people-ingame (the street and faces, four skies), the FLOOR3 room (interior, light
-        jumps), the kitchen (contact shadows and occlusion) and the glade (foliage, sun through leaves)
+      Given four scenes (bench/light/scenes.json): gambit's people-ingame (the street and faces, four skies), the FLOOR3
+        room (interior, light jumps), a kitchen (gambit's first-person table, fp-lab-table: contact shadows and occlusion;
+        the anything film's kitchen doesn't render on 11-17, every composition in content/anything throwing "Can't find
+        variable: raea" before its first frame) and the glade (foliage, sun through leaves)
       Then each has a converged <Pathtracer> frame as its reference, in the same units and exposure; gambit's, whose
         world is drawn by hooks the path tracer can't run (M5), only once LT2 and LT3 put them in the traced path
       And `raea light check` renders each with the current path and reports distance to the reference (mean and

@@ -9,6 +9,7 @@ use raea_runtime_export::{self as export, *};
 use raea_app_tools as tools;
 use serde_json::json;
 use raea_neural as neural;
+use raea_light as light;
 
 mod cli;
 mod guide;

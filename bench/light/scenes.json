@@ -1,0 +1,65 @@
+{
+  "about": "raea Light's reference scenes (docs/realism.feature LT1), for `raea light check bench/light/scenes.json -o DIR`",
+  "scenes": [
+    {
+      "name": "gambit-street",
+      "dir": "~/Studio/raea/projects/gambit",
+      "file": "compositions/people-ingame.tsx",
+      "composition": "people-ingame",
+      "stills": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        11,
+        15,
+        16
+      ],
+      "reference": false,
+      "why": "its city is drawn by shader hooks the path tracer can't run and its people aren't traced (M3, M5): after LT2, LT3 and LT5"
+    },
+    {
+      "name": "floor3-room",
+      "dir": "~/Studio/raea/projects/floor3",
+      "file": "compositions/floor3.tsx",
+      "composition": "floor3",
+      "stills": [
+        300,
+        900
+      ],
+      "shot": [
+        600,
+        630
+      ]
+    },
+    {
+      "name": "kitchen",
+      "dir": "~/Studio/raea/projects/gambit",
+      "file": "compositions/fp-lab-table.tsx",
+      "composition": "fp-lab-table-coat-gloves-day",
+      "stills": [
+        48,
+        200
+      ],
+      "shot": [
+        100,
+        124
+      ]
+    },
+    {
+      "name": "glade",
+      "dir": "~/Studio/raea/projects/stay",
+      "file": "v3/film.tsx",
+      "composition": "v3-wide",
+      "stills": [
+        0,
+        40
+      ],
+      "shot": [
+        10,
+        34
+      ]
+    }
+  ]
+}

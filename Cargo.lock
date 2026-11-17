@@ -14248,6 +14248,7 @@ dependencies = [
  "raea-io-media",
  "raea-io-npm",
  "raea-io-trace",
+ "raea-light",
  "raea-native",
  "raea-neural",
  "raea-render",
@@ -14685,6 +14686,15 @@ dependencies = [
  "raea-io-home",
  "serde_json",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "raea-light"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "raea-runtime-bundle",
+ "serde_json",
 ]
 
 [[package]]
