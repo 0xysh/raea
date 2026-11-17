@@ -731,6 +731,26 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # outline (it is a plain tube), a hood or a coat's tails, and its colour from a garment file.
       Then cloth hangs free of the body and moves with it
 
+    @done
+    Scenario: CH44b. A sewn garment worn over others moves on the cloth follower
+      # 11-17 (sdk/body tools/worn.ts, private). `bun sdk/body/tools/worn.ts SKELETON GARMENT.glb POSES OUT.bind.rseq
+      # BODY.glb UNDER.glb...` reads a sewn garment from `raea clothes wear` as cloth (free by how far it hangs off what
+      # it is worn over), follows it through the poses with SOMA's twist joints set as the engine sets them, and writes
+      # it in its own bind pose for <Character parts={[{ src, cloth: { src, frame } }]}>; its trims (buttons, straps, a
+      # belt, from tools/garments/trims.py) ride the cloth they were cast on. A coat's skirt is found from its sewn
+      # weights, evened between the legs and kept outside them by capsules and by the legs' skin lifted to a smooth hull
+      # over the trousers. `FOLLOW=NAME raea clothes wear ...` keeps the garments under a followed one whole below the
+      # crotch. Run on a Landsturm greatcoat over trousers and boots through a 304-frame walk (gambit
+      # compositions/people-wardrobe.tsx): 217 particles inside the legs on the follower against 2,066 skinned alone,
+      # edges 44 per cent at the 99th percentile, 139 ms a frame. Mended on the way, each found by a picture and then
+      # measured: holes the wear step cut in the trousers under the swinging skirt; a fin 3 cm proud down the coat's
+      # centre front from the drape (its seams were free hinges; tools/garments/drape_mlx.py now bends across them);
+      # normals turned from the glTF's skin, not the follower's, which drew a ragged band down the front; the coat
+      # pressed onto every fold of the trousers. Wrong still: the trousers' crotch hangs 18 cm low (GarmentCode's
+      # pants pattern on SOMA); the plain skin stretches 70 to 90 per cent across the small of the back in a walk; the
+      # bake is per performance, not live in play.
+      Then a sewn coat swings over the garments under it through a walk without showing them through it
+
     Scenario: CH44. Cloth that hangs free
       Then a skirt, a coat's tails, a hood, a scarf are meshes of their own, grown from the garment's edge on the
         body down to the outline the views show, weighted from the body at the edge and free below it
