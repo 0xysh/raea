@@ -47,6 +47,13 @@ def get(href, header, dest):
         shutil.copyfileobj(r, f, CHUNK)
 
 
+def probe(href, header):
+    """One byte through the job's own signed URL: a cached file is used only when the account could fetch it"""
+    req = urllib.request.Request(href, headers={**AGENT, "range": "bytes=0-0", **(header or {})})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        r.read(1)
+
+
 def put(href, header, src, size):
     with open(src, "rb") as f:
         # as git-lfs's basic transfer sends it
@@ -56,7 +63,7 @@ def put(href, header, src, size):
             r.read()
 
 
-def fetch(work, cache, log=print, download=get):
+def fetch(work, cache, log=print, download=get, check=probe):
     """The job's media from R2 into its folder, through the cache: {objects, fetched, cached} (bytes)."""
     m = os.path.join(work, MANIFEST)
     if not os.path.exists(m):
@@ -72,6 +79,8 @@ def fetch(work, cache, log=print, download=get):
             raise ValueError(f"media: {path!r} ({oid}) isn't a path in the job or an object id")
         blob = os.path.join(cache, oid)
         if os.path.exists(blob) and os.path.getsize(blob) == size:
+            # a hash alone doesn't open the cache: the job's URL, signed for its account, has to answer
+            check(o["href"], o.get("header"))
             cached += size
         else:
             tmp = f"{blob}.part-{os.getpid()}"

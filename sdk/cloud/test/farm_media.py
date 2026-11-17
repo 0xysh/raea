@@ -1,6 +1,6 @@
 # The farm's media by hash (deploy/modal/farm_media.py) against a local HTTP server standing in for R2's signed URLs:
 # python3 test/farm_media.py from sdk/cloud. Checked: a job's inputs come by hash into the cache once (a second job
-# fetches nothing), a wrong hash and a path out of the job are refused, its media outputs are found by type and size
+# fetches nothing, but its URL must still open the file), a wrong hash and a path out of the job are refused, its media outputs are found by type and size
 # and PUT to their URLs, and outputs meant for outside the project aren't.
 
 import hashlib
@@ -16,7 +16,7 @@ import farm_media as fm  # noqa: E402
 
 ok = lambda m: print(f"ok {m}")
 r2 = tempfile.mkdtemp()
-hits = {"GET": 0, "PUT": 0}
+hits = {"GET": 0, "PUT": 0, "bytes": 0}
 
 
 class R2(http.server.BaseHTTPRequestHandler):
@@ -30,9 +30,15 @@ class R2(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        self.send_response(200)
+        body = open(p, "rb").read()
+        if self.headers.get("range") == "bytes=0-0":
+            self.send_response(206)
+            body = body[:1]
+        else:
+            self.send_response(200)
         self.end_headers()
-        self.wfile.write(open(p, "rb").read())
+        hits["bytes"] += len(body)
+        self.wfile.write(body)
 
     def do_PUT(self):
         hits["PUT"] += 1
@@ -70,10 +76,19 @@ assert open(os.path.join(w1, "footage/take.mov"), "rb").read() == take
 assert not os.path.exists(os.path.join(w1, fm.MANIFEST))
 assert s1 == {"objects": 1, "fetched": len(take), "cached": 0}, s1
 w2 = job([obj])
-before = hits["GET"]
+before = hits["bytes"]
 s2 = fm.fetch(w2, cache, log=lambda _: None)
-assert hits["GET"] == before and s2["cached"] == len(take) and s2["fetched"] == 0, s2
-ok("a job's input came from R2 by hash into the cache; the next job's came from the cache, nothing fetched")
+assert hits["bytes"] == before + 1 and s2["cached"] == len(take) and s2["fetched"] == 0, (s2, hits)
+assert open(os.path.join(w2, "footage/take.mov"), "rb").read() == take
+ok("a job's input came from R2 by hash into the cache; the next job's came from the cache (R2 sent it 1 byte, its URL checked)")
+
+# a job that names a cached hash with a URL that doesn't open (another account's file, a made-up link) gets nothing
+try:
+    fm.fetch(job([dict(obj, href=f"{base}/not-signed-for-you")]), cache, log=lambda _: None)
+    raise SystemExit("FAIL a cached file went to a job whose URL doesn't open it")
+except Exception as e:
+    assert "404" in str(e), e
+ok("a cached file goes only to a job whose own signed URL opens it")
 
 bad = dict(obj, oid="0" * 64)
 try:
