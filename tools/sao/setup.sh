@@ -1,6 +1,8 @@
 #!/bin/sh
-# Stable Audio Open Small on Core ML (stabilityai/stable-audio-open-small, Stability AI Community License; the Core ML
-# packages are mlboydaisuke/Stable-Audio-Open-Small-CoreML) for raea-render's asset store: `make("sao", prompt, seed, {seconds})`
+# Stable Audio Open Small (stabilityai/stable-audio-open-small, Stability AI Community License) on Core ML on a Mac (the
+# packages are mlboydaisuke/Stable-Audio-Open-Small-CoreML), else on ONNX Runtime (the same weights as three fp32 graphs,
+# atauser001/stable-audio-open-small-onnx: 2 GB, with onnxruntime-gpu and its CUDA libraries where nvidia-smi finds a
+# GPU, else onnxruntime; RAEA_SAO_BACKEND=coreml|onnx picks) for raea-render's asset store: `make("sao", prompt, seed, {seconds})`
 # renders one sound locally (run.py, copied in beside the models). Installs into $RAEA_SAO (default ~/.cache/raea-sao),
 # outside the repo, as TokenSynth's lives in ~/.cache/raea-tokensynth. raea-render runs this itself the first time a sound is
 # asked for and nothing is installed; `raea setup-audio` runs it on purpose.
@@ -21,6 +23,12 @@ FROM=${RAEA_SAO_FROM:-$HOME/.cache/raea-sao}
 REPO=mlboydaisuke/Stable-Audio-Open-Small-CoreML
 REV=8fa80903adebfeb62fc885c45505ac81628f3320
 T5REV=a9723ea7f1b39c1eae772870f3b547bf6ef7e6c1
+ONNXREPO=atauser001/stable-audio-open-small-onnx
+ONNXREV=8f9544df5933b9ed4a7e8ed7fa6f77b3dd48ddce
+BACKEND=${RAEA_SAO_BACKEND:-}
+if [ -z "$BACKEND" ]; then
+  if [ "$(uname)" = Darwin ]; then BACKEND=coreml; else BACKEND=onnx; fi
+fi
 mkdir -p "$DIR"
 DIR=$(cd "$DIR" && pwd)
 [ "$(cd "$FROM" 2>/dev/null && pwd)" = "$DIR" ] && FROM=
@@ -33,6 +41,10 @@ trap 'rm -rf "$DIR/.setup-lock"' EXIT
 trap 'exit 130' INT TERM
 cd "$DIR"
 say() { echo "sao setup: $*" >&2; }
+# a file's SHA-256 (sha256sum on Linux, shasum on a Mac)
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
 
 # a file of the installation: kept if it's here, cloned from $FROM if that has it, else downloaded; checked against
 # its SHA-256 when one is given. fetch DEST URL [SHA256]
@@ -46,7 +58,7 @@ fetch() {
     say "downloading $dest"
     curl -fL --retry 3 --progress-bar -o "$dest.part" "$url"
   fi
-  if [ -n "$sum" ] && [ "$(shasum -a 256 "$dest.part" | cut -d' ' -f1)" != "$sum" ]; then
+  if [ -n "$sum" ] && [ "$(sha256 "$dest.part")" != "$sum" ]; then
     rm -f "$dest.part"
     say "$dest doesn't match its SHA-256"
     exit 1
@@ -55,10 +67,40 @@ fetch() {
 }
 
 # the venv: only what run.py imports. An existing one that already has them is left alone
-if ! .venv/bin/python -c "import numpy, coremltools, tokenizers" 2>/dev/null; then
+if [ "$BACKEND" = onnx ]; then
+  runtime="onnxruntime==1.23.2"
+  # an NVIDIA GPU: the CUDA build, with CUDA's and cuDNN's libraries as wheels (run.py preloads them)
+  command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1 && runtime="onnxruntime-gpu[cuda,cudnn]==1.23.2"
+  [ -n "${RAEA_SAO_CUDA:-}" ] && runtime="onnxruntime-gpu[cuda,cudnn]==1.23.2"
+  if ! .venv/bin/python -c "import numpy, onnxruntime, tokenizers" 2>/dev/null; then
+    say "making the venv ($runtime)"
+    [ -x .venv/bin/python ] || uv venv -q --python 3.11 .venv
+    VIRTUAL_ENV="$DIR/.venv" uv pip install -q --python .venv/bin/python "numpy==2.4.6" "tokenizers==0.23.3" "$runtime"
+  fi
+elif ! .venv/bin/python -c "import numpy, coremltools, tokenizers" 2>/dev/null; then
   say "making the venv"
   [ -x .venv/bin/python ] || uv venv -q --python 3.11 .venv
   VIRTUAL_ENV="$DIR/.venv" uv pip install -q --python .venv/bin/python "numpy==2.4.6" "coremltools==9.0" "tokenizers==0.23.3"
+fi
+
+# the tokenizer from the install, never the Hugging Face cache (the spike's runner read ~/.cache/huggingface)
+fetch t5-tokenizer/tokenizer.json "https://huggingface.co/google-t5/t5-base/resolve/$T5REV/tokenizer.json" \
+  d2acde0d8d71dd30a711834b07781b9c89feaac33fd332f60507699282740066
+
+if [ "$BACKEND" = onnx ]; then
+  # the graphs at a pinned revision, each against the SHA-256 its model card publishes; its licence and NOTICE (what
+  # the conversion changed) beside them
+  O=https://huggingface.co/$ONNXREPO/resolve/$ONNXREV
+  fetch onnx/cond.onnx "$O/cond.onnx" 847822809975d0c36a665594fad0312c4c225147910657820e9936b09014629c
+  fetch onnx/dit.onnx "$O/dit.onnx" 8e9c8b14baac4a26159d5ecf3d365ef5a097f321541f9548d62d136354a23d8b
+  fetch onnx/dec.onnx "$O/dec.onnx" 96029859b4d563f3aff266e97e715190e8d53278c6e27ab94095535a0da4c911
+  fetch onnx/LICENSE "$O/LICENSE"
+  fetch onnx/NOTICE "$O/NOTICE"
+  cp "$HERE/run.py" "$DIR/run.py"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$DIR/.ready"
+  du -sh "$DIR/onnx" "$DIR/.venv" >&2
+  say "ready in $DIR (ONNX)"
+  exit 0
 fi
 
 HF=https://huggingface.co/$REPO/resolve/$REV
@@ -72,10 +114,6 @@ NumberEmbedder 14ecb9a0f6c3d04c3a611352343d7dea0c5b0720c9f8b56d87b8eae794b9c64c 
 VAEDecoder 9614b1ec8ba90995c1b8e797da19ba21fc4acc67b0dfe0bbb28527dcbfc0a262 a8a1bdb84b854f38e2ef1d3adb5860a03303a442f8eaa8d567aeb606e66a4fc8
 DiT a118772c17fb831a6eda6a1ec2527f535d004064e27a8eb4597d5ae6d33a0576 c5444973f1a2bb3878a33049a4c559a1097de77fca8dc358aba38ee72033e97d
 EOF
-
-# the tokenizer from the install, never the Hugging Face cache (the spike's runner read ~/.cache/huggingface)
-fetch t5-tokenizer/tokenizer.json "https://huggingface.co/google-t5/t5-base/resolve/$T5REV/tokenizer.json" \
-  d2acde0d8d71dd30a711834b07781b9c89feaac33fd332f60507699282740066
 
 T5=coreml/T5EncoderFP32.mlpackage
 # made under another name until it's whole (coremltools insists on the .mlpackage extension)
