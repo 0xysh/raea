@@ -44,6 +44,7 @@
       "raea/overlay": ["./video/src/overlay.tsx"],
       "raea/paint": ["./render/src/paint.tsx"],
       "raea/panel": ["./video/src/panel.ts"],
+      "raea/people": ["./character/src/people.ts"],
       "raea/physics": ["./physics/src/physics.tsx"],
       "raea/r3f": ["./r3f/src/index.ts"],
       "raea/blender": ["./blender/src/index.ts"],

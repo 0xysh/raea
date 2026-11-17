@@ -985,3 +985,41 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # copy SOMA's bare shape.
       Then words make a helmet, a hat or armour that SOMA wears and moves with
       And each piece is its own part on the bone it covers, so pieces mix with sewn garments as layers
+
+    Scenario: CH50. The people of a place, drawn from its roles
+      # 11-17, sdk/character/src/people (raea/people), for a city's worth of characters (THE GAMBIT's Berlin): a
+      # project lists roles (a profession, a rank in a service, a household part: the share of women, the ages, the
+      # traits the role leans to, the dress and things carried by weight, how its people travel, where they work,
+      # their day and habits) and places (homes with how many households, shops, works, posts, stops). populate()
+      # draws everyone from one seed: name, sex, age, five traits, habits, a crowd face's numbers (its own seed,
+      # build, iris, stubble, facial hair by age), height, hair style, colour and grey, dress, kit and gait.
+      # test/people.test.ts.
+      Given roles, places and a seed
+      Then the same seed draws the same people on every machine, and a different one draws others
+      And everyone drawn from a role keeps its sex, ages, rank and gait, and a working role has a workplace
+
+    Scenario: CH51. A person's day
+      # dayOf(): the role's blocks that apply on the weekday (a shift, a queue, a patrol round of posts), at real
+      # places (the person's home or work, or one of the nearest few of a kind), at times moved by how punctual
+      # the person is (conscientiousness scales each block's jitter from 1.6x to 0.4x); habits (church on Sunday,
+      # a pipe on the doorstep) on their own chance leaned by traits; the trips between, by a mode chosen from the
+      # distance, the cold and the person's leanings (under 900 m always walked), leaving in time by that mode,
+      # waiting when early. whereAt() says where anyone is at any minute, along a trip's path.
+      Then a day covers 00:00 to 24:00 with no gaps, and a trip joins every change of place
+      And punctual people start closer to their times than careless ones
+      And a far commute in the cold goes by tram, and a short errand is walked
+
+    Scenario: CH52. Three levels of detail by distance
+      # Every person exists as data and a day. snapshot() gives everyone's place, facing and doing at a minute and
+      # their level for a camera: near (skinned characters performing their acts), middle (agents moved along
+      # their trips with no skinning), far (census(): how many are at each kind of place, or moving by each mode,
+      # in each hour). A person changes level with a tenth of hysteresis so the edge does not flicker. The ranges
+      # are the project's (THE GAMBIT's world/budgets.ts: near 150 m, middle 1500 m).
+      Then a city of thousands is placed at any minute, and only those near the camera are characters
+
+    Scenario: CH53. How a person meets an event
+      # react(): a shock underfoot (a mine's blast felt through the ground), a gun's report, a shout. Felt
+      # strength falls with distance; a look toward it (or at the ground, for a shock underfoot), a flinch or
+      # covered ears for the nervous, a dead stop for the rest, a turn to a neighbour for the outgoing, a run for
+      # the very nervous and young; how long they freeze. Acts are in the stage's words.
+      Then a crowd reacts to one event each in their own way, the same way on every run
