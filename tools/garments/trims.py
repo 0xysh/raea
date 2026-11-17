@@ -17,6 +17,12 @@
 # "over": metres a button or patch stands further out (on a strap or a belt, not the cloth under it).
 #   {"kind": "band", "y": 1.0, "h": 0.05, "thick": 0.004, "axis": [x, z], "within": 0.32, "material": {...}}
 #      round the body at a height, on the outermost cloth nearer the axis than `within` (not the sleeves)
+#   {"kind": "sash", "lo": [x, y, z], "hi": [x, y, z], "w": 0.02, "thick": 0.003, "material": {...}}
+#      a strap across the body from by one hip (lo) over the other shoulder (hi) and down the back, on the outermost
+#      cloth (a bag's strap, a cartridge bandolier, an officer's cross belt)
+#   {"kind": "bag", "at": [x, y], "from": [dx, dy, dz], "size": [w, h, d], "material": {...}, "frame": {...}}
+#      a framed leather bag hung against the cloth (its frame's top where the ray meets it), rigid, a metal frame and
+#      clasp on top (a conductress's money bag; hang its strap as a sash whose low end passes behind it)
 #   {"kind": "collar", "stand": 0.035, "fall": 0.03, "gap": 0.02, "thick": 0.003, "ease": 0.006, "drop": 0.05, "neck": {"centre": [x, z],
 #      "r": [rx, rz]}, "points": {"w": 0.018, "len": 0.04, "material": {...}, "piping": {...}}, "material": {...}}
 #      a stand-and-fall collar from the garment's neckline up round the neck, stiff, an L of braid on each point if asked
@@ -190,6 +196,101 @@ def band(cl, y, h, thick, axis, within, seg=96):
         P[:, 1:-1] = (P[:, :-2] + 2 * P[:, 1:-1] + P[:, 2:]) / 4
     P[:, -1] = P[:, 0]
     return P, N, ok
+
+
+def sash(cl, lo, hi, w, seg=144):
+    """A strap worn across the body, over one shoulder to the other hip: the band's ring in the plane through `lo` (a
+    point by the hip it hangs to) and `hi` (one over the shoulder), front to back, each ray cast in from outside
+    toward the chest between them so it lies on the outermost cloth (in SOMA's A pose the arm leaves that plane
+    nearly square to it, so the rays by the shoulder meet its top, not the sleeve). Rows across its width `w`."""
+    lo, hi = np.asarray(lo, float), np.asarray(hi, float)
+    c = (lo + hi) / 2
+    u = unit(hi - lo); z = unit(np.array([0, 0, 1.0]) - u * u[2])
+    n = unit(np.cross(u, z))
+    rows = 3
+    P = np.zeros((rows, seg + 1, 3)); N = np.zeros_like(P); ok = np.zeros((rows, seg + 1), bool)
+    for r in range(rows):
+        cr = c + n * (w * (r / (rows - 1) - 0.5))
+        for k in range(seg + 1):
+            a = 2 * np.pi * k / seg
+            d = np.cos(a) * u + np.sin(a) * z
+            hs = cl.hits(cr + 0.9 * d, -d)
+            if hs:
+                P[r, k], N[r, k], ok[r, k] = hs[0][1], hs[0][2], True
+    for r in range(rows):
+        good = np.nonzero(ok[r])[0]
+        if len(good) == 0:
+            raise SystemExit("trims: sash: no cloth in its plane")
+        for k in np.nonzero(~ok[r])[0]:
+            j = good[np.argmin(np.minimum(np.abs(good - k), seg - np.abs(good - k)))]
+            P[r, k], N[r, k] = P[r, j], N[r, j]
+        ok[r] = True
+    for _ in range(4):                  # pulled taut over the folds, as a strap with a bag's weight on it is
+        P[:, 1:-1] = (P[:, :-2] + 2 * P[:, 1:-1] + P[:, 2:]) / 4
+    P[:, -1] = P[:, 0]
+    # (rows across the plane's normal this way round face the slab inward; slab() faces it out with them reversed)
+    return P[::-1], N[::-1], ok
+
+
+def tube_mesh(path, r, n=10):
+    """a round tube along points (k, 3), its ends closed: V, F, UV"""
+    P = np.asarray(path, float); k = len(P)
+    tan = unit(np.gradient(P, axis=0)); a = unit(np.cross(tan, [0, 1.0, 0]) + 1e-9); b = np.cross(tan, a)
+    ang = 2 * np.pi * np.arange(n) / n
+    V = (P[:, None] + r * (np.cos(ang)[None, :, None] * a[:, None] + np.sin(ang)[None, :, None] * b[:, None])).reshape(-1, 3)
+    F = [[i * n + j, i * n + (j + 1) % n, (i + 1) * n + j] for i in range(k - 1) for j in range(n)]
+    F += [[i * n + (j + 1) % n, (i + 1) * n + (j + 1) % n, (i + 1) * n + j] for i in range(k - 1) for j in range(n)]
+    V = np.vstack([V, P[0], P[-1]]); c0, c1 = len(V) - 2, len(V) - 1
+    F += [[c0, (j + 1) % n, j] for j in range(n)] + [[c1, (k - 1) * n + j, (k - 1) * n + (j + 1) % n] for j in range(n)]
+    UV = np.zeros((len(V), 2)); UV[:k * n, 0] = np.repeat(np.arange(k), n) * 0.01; UV[:k * n, 1] = np.tile(ang * r, k)
+    return V, np.array(F), UV
+
+
+def bag(cl, at, d, size, seg=40, rows=24):
+    """A framed leather bag hung against the cloth where a ray from outside along `d` meets it at `at` (x, y): `size`
+    (width, height, depth) in metres, its frame's top at the point met. The pouch is a rounded box in plan (a
+    superellipse), closed flat at the frame, full below it and rounded at the bottom; its back bent round the cloth
+    across its width (the leather is soft, the hip round). Returns the pouch (V, F, UV), the frame's path and the
+    point the bag hangs from."""
+    W, H, D = size
+    d = unit(d)
+    o = np.array([at[0], at[1], 0.0]) - d * 0.6
+    hit = cl.onto(o, d)
+    if hit is None:
+        raise SystemExit(f"trims: bag: no cloth at {at} from {list(d)}")
+    p, n = hit
+    out = unit(np.array([n[0], 0, n[2]])); up = np.array([0, 1.0, 0]); right = unit(np.cross(up, out))
+    xs = np.linspace(-W / 2, W / 2, 9); back = []
+    for x in xs:                        # the cloth's place across the bag's width, at its middle height
+        h = cl.onto(p + right * x - up * H / 2 + out * 0.3, -out)
+        back.append(((h[0] - p) @ out) if h is not None else 0.0)
+    back = np.clip(np.array(back), -0.03, 0.03) + LIFT + 0.006
+    t = np.linspace(0, 1, rows)
+    tb = np.clip((t - 0.62) / 0.38, 0, 1)
+    a = W / 2 * (1 - tb ** 3) ** (1 / 3) * (0.94 + 0.06 * np.minimum(t / 0.2, 1))   # half width: the frame a little narrower
+    c = D / 2 * np.sin(np.minimum(t / 0.3, 1) * np.pi / 2) * np.sqrt(np.maximum(a / (W / 2), 0))   # half depth
+    ph = 2 * np.pi * np.arange(seg) / seg; e = 2 / 3.0
+    cx, cz = np.sign(np.cos(ph)) * np.abs(np.cos(ph)) ** e, np.sign(np.sin(ph)) * np.abs(np.sin(ph)) ** e
+    V, UV = [], []
+    for i in range(rows):
+        for k in range(seg):
+            x = a[i] * cx[k]
+            z = np.interp(x, xs, back) + D / 2 + c[i] * cz[k]
+            V.append(p + right * x + out * z - up * (t[i] * H)); UV.append([ph[k] * (W + D) / np.pi, t[i] * H])
+    V.append(p + out * (np.interp(0, xs, back) + D / 2) - up * H); UV.append([0, H])
+    F = [[i * seg + k, (i + 1) * seg + k, i * seg + (k + 1) % seg] for i in range(rows - 1) for k in range(seg)]
+    F += [[i * seg + (k + 1) % seg, (i + 1) * seg + k, (i + 1) * seg + (k + 1) % seg] for i in range(rows - 1) for k in range(seg)]
+    bc = len(V) - 1
+    F += [[(rows - 1) * seg + k, bc, (rows - 1) * seg + (k + 1) % seg] for k in range(seg)]
+    # (the faces' winding is made to face out below)
+    V, F = np.array(V), np.array(F)
+    fn = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]]); fc = V[F].mean(1)
+    mid = p + out * (np.interp(0, xs, back) + D / 2) - up * H / 2
+    if ((fn * (fc - mid)).sum(1) < 0).mean() > 0.5:
+        F = F[:, [0, 2, 1]]
+    fx = np.linspace(-a[0] * 1.02, a[0] * 1.02, 17)
+    frame = np.array([p + right * x + out * (np.interp(x, xs, back) + D / 2) + up * (0.008 * (1 - (x / a[0]) ** 2)) for x in fx])
+    return (V, F, np.array(UV)), frame, p
 
 
 def neckline(P, centre, seg, reach=0.16, ylow=1.2):
@@ -478,7 +579,7 @@ def main():
     cloth_mat = j["materials"][base.get("material", 0)] if j.get("materials") else {}
     made = []
 
-    def emit(V, F, UV, mspec, label, src):
+    def emit(V, F, UV, mspec, label, src, rigid=None):
         if len(F) == 0:
             print(f"trims: {label}: nothing of it lies on the cloth (missed)")
             return
@@ -486,6 +587,8 @@ def main():
         F = wound(V, F, tree, Nr)
         Nv = sheet_normals(V, F, tree, Nr)
         _, nn = tree.query(V)
+        if rigid is not None:           # every vertex skinned as the one cloth vertex it hangs from: it moves whole
+            nn = np.full(len(V), tree.query(np.asarray(rigid, np.float64))[1])
         j.setdefault("materials", []).append(material(mspec, cloth_mat, label))
         prim = {"attributes": {"POSITION": g.accessor(V.astype(np.float32), 34962, bounds=True), "NORMAL": g.accessor(Nv, 34962),
                                "TEXCOORD_0": g.accessor(np.asarray(UV, np.float32), 34962), "JOINTS_0": g.accessor(Jn[nn], 34962),
@@ -538,12 +641,30 @@ def main():
             Pg, Ng, ok = band(cl, t["y"], t.get("h", 0.05), t.get("thick", 0.004), t.get("axis", [0, -0.02]), t.get("within", 0.32))
             V, F, UV = slab(Pg.transpose(1, 0, 2), Ng.transpose(1, 0, 2), ok.T, t.get("thick", 0.004))
             emit(V, F, UV, t.get("material", {}), label, src)
+        elif kind == "sash":
+            Pg, Ng, ok = sash(cl, t["lo"], t["hi"], t.get("w", 0.02))
+            V, F, UV = slab(Pg.transpose(1, 0, 2), Ng.transpose(1, 0, 2), ok.T, t.get("thick", 0.003))
+            emit(V, F, UV, t.get("material", {}), label, src)
+        elif kind == "bag":
+            (V, F, UV), frame, hang = bag(cl, t["at"], t["from"], t.get("size", [0.2, 0.22, 0.07]))
+            emit(V, F, UV, t.get("material", {}), label, src, rigid=hang)
+            fm = t.get("frame", {"colour": "#b9b6ad", "metal": 0.85, "rough": 0.35})
+            V, F, UV = tube_mesh(frame, t.get("frame_r", 0.005))
+            emit(V, F, UV, fm, f"{label}-frame", src, rigid=hang)
+            mid = frame[len(frame) // 2]                   # the clasp: two knobs crossed over the frame's middle
+            out_ = unit(np.cross(frame[-1] - frame[0], [0, 1.0, 0]))
+            if (out_ * (mid - hang)).sum() < 0:
+                out_ = -out_
+            for dx in (-0.006, 0.006):
+                kn = mid + unit(frame[-1] - frame[0]) * dx + np.array([0, 0.012, 0])
+                V, F, UV = tube_mesh([kn - out_ * 0.004, kn + out_ * 0.004], 0.0055, 12)
+                emit(V, F, UV, fm, f"{label}-clasp", src, rigid=hang)
         elif kind == "collar":
             for G, Ng, ok, part, mspec, th in collar(P, t):
                 V, F, UV = slab(G.transpose(1, 0, 2), Ng.transpose(1, 0, 2), ok.T, th)
                 emit(V, F, UV, mspec, f"{label}-{part}", src)
         else:
-            raise SystemExit(f"trims: {label}: kind {kind} is button, patch, band or collar")
+            raise SystemExit(f"trims: {label}: kind {kind} is button, patch, band, sash, bag or collar")
         if src:
             print(f"trims: {label} ({src})")
     size = g.save(path)
