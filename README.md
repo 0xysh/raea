@@ -45,12 +45,10 @@ scrub it, mark it up and send it back with notes. Download it from [raea.io](htt
 Linux. It tells you when a new version is out; on the Mac it updates itself.
 
 <p align="center">
-  <a href="https://media.raea.io/#goose-learns-raea"><img src="docs/readme/goose-learns-raea.jpg" width="720" alt="Goose Learns raea, the tutorial: the raea app with Goose on its stage"></a>
+  <a href="https://media.raea.io/#goose-learns-raea"><img src="docs/readme/goose-learns-raea.jpg" width="720" alt="The raea app tutorial"></a>
 </p>
 
-**[Goose Learns raea](https://media.raea.io/#goose-learns-raea)** (5:50) is the tutorial: a dry narrator walks Goose
-through the app while he makes his own music video, from the first ask to the finished film. It was made in raea too,
-and its source is in [raea-films](https://github.com/shinyobjectz/raea-films/tree/main/swamp-side-mayor).
+New to the app? **[Watch the tutorial](https://media.raea.io/#goose-learns-raea)** (5:50).
 
 What the app does now:
 
