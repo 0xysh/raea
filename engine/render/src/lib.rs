@@ -29,7 +29,7 @@ pub fn inserted_of(p: &Program) -> Vec<Tup> {
 }
 
 pub fn dir_of(path: &str) -> PathBuf {
-    std::fs::canonicalize(Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."))).unwrap_or_else(|_| PathBuf::from("."))
+    dunce::canonicalize(Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."))).unwrap_or_else(|_| PathBuf::from("."))
 }
 
 pub fn save_png(path: &Path, rgba: &[u8], w: u32, h: u32) -> Result<(), String> {

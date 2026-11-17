@@ -13,11 +13,6 @@
 #
 # Comment lines don't count. Not checked: vendored crates (not ours), and for the home folder two test tools for the
 # Mac and Unix only, each its own workspace (Unix PATH strings, ~/Library/Caches): sdk/ui/conformance and sdk/ui/parity.
-#
-# WAITING: a file whose fix is on a branch of its own that hasn't landed yet, so the check holds at zero everywhere
-# else meanwhile. A waiting file with nothing left to fix fails, so the list only shrinks:
-#   engine/render/src/lib.rs   the texture folder's canonicalize (windows-paths-render)
-WAITING=(engine/render/src/lib.rs)
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 2
@@ -27,15 +22,6 @@ code() { grep -v -E '^[^:]+:[0-9]+:[[:space:]]*//'; }
 canon=$(git grep -n -E '\.canonicalize\(\)|(^|[^A-Za-z0-9_:])(std::)?fs::canonicalize\(|tokio::fs::canonicalize\(' -- '*.rs' "${NOT_OURS[@]}" | code)
 home=$(git grep -n -E 'env::var(_os)?\("HOME"\)' -- '*.rs' "${NOT_OURS[@]}" "${MAC_TOOLS[@]}" | code | grep -v USERPROFILE)
 status=0
-waits=()
-for w in ${WAITING[@]+"${WAITING[@]}"}; do
-  if grep -q "^$w:" <<< "$canon"$'\n'"$home"; then
-    canon=$(grep -v "^$w:" <<< "$canon"); home=$(grep -v "^$w:" <<< "$home"); waits+=("$w")
-  else
-    echo "windows-paths: $w has nothing left to fix; take it off WAITING (tools/windows-paths.sh)"
-    status=1
-  fi
-done
 if [ -n "$canon" ]; then
   echo "windows-paths: canonicalize() through std gives \\\\?\\C:\\... on Windows; use dunce::canonicalize(&path):"
   printf '  %s\n' "${canon//$'\n'/$'\n'  }"
@@ -46,5 +32,5 @@ if [ -n "$home" ]; then
   printf '  %s\n' "${home//$'\n'/$'\n'  }"
   status=1
 fi
-[ $status = 0 ] && echo "windows-paths: ok (every canonicalize through dunce, every home folder through user_home${waits[0]+; waiting: ${waits[*]}})"
+[ $status = 0 ] && echo "windows-paths: ok (every canonicalize through dunce, every home folder through user_home)"
 exit $status

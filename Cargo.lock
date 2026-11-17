@@ -14851,6 +14851,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bytemuck",
+ "dunce",
  "image",
  "raea-core-program",
  "raea-core-shape",

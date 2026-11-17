@@ -7,6 +7,7 @@ publish = false
 description = "raea's render engine: an edit's rows drawn by Bevy (3D) or the direct GPU path, its sound mixed, its video encoded"
 
 [dependencies]
+dunce = "1"
 # a frame's rows as the passes read them (FrameRows, the edit, the clock, row helpers, bevy_api)
 raea-sys-frame = { path = "../../systems/frame" }
 # a part held where a hand has it, and wireframe (the app's scene inspector)
