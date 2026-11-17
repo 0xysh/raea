@@ -300,6 +300,28 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         Russian roulette its largest single gain), measured on FLOOR3 against plain sampling at the same time
       And LT1's numbers are taken again on all four scenes, raster and raea GI
 
+  Rule: Detail where it shows
+
+    Scenario: LT20. LOD, streaming and culling: the frame holds what the camera can see
+      Given gambit's streamer (world/stream.ts, the map lane's: 250 m tiles at three levels of detail, hysteresis at
+        each range's edge, a level change cross-faded over 30 frames, a tile unloaded 240 frames after it leaves the
+        keep radius) and its budgets (world/budgets.ts: 6M triangles and 1,500 draws a frame, 640 MB of city a camera)
+      Then a tile's level is picked by its error on screen in pixels at the inside size (D13), not by metres alone,
+        so 1440p and 4K out keep one look and the far city doesn't pop
+      And streaming is budgeted in bytes and milliseconds a frame (uploads and BLAS builds), not in tiles: a level-0
+        tile is up to 56 MB, so two a frame would stall it
+      And what can't be seen isn't drawn: each 64 m cell gets the tiles visible from it, baked with the map (the city
+        is static; Bevy's two-phase occlusion culling doesn't work with deferred and may not run on Metal), so a
+        street canyon drops most of the level-1 tiles behind its fronts; frustum culling stays
+      And props are GPU instances by kind, culled by distance and size on screen; far landmarks (the domes, the
+        towers) are octahedral impostors; level 2 gets an HLOD over 1-2 km blocks with baked material atlases
+      And crowds come in three rings: skinned near (up to 40 people, about 55 m), instanced vertex animation in the
+        middle (up to 400, about 180 m), impostors beyond
+      And the ray scene is built from the same tiles as they stream in (LT3)
+      And a walk down Leipziger Straße at 1440p out holds FRAME_BUDGET with no visible pop, measured frame by frame;
+        virtual geometry (Nanite's cluster LOD) and virtual texturing follow once Bevy's meshlets or mesh shaders run
+        on Metal
+
   Rule: Every light, everything in it
 
     Scenario: LT6. Every light feeds the GI
