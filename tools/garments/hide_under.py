@@ -6,7 +6,10 @@
 # A body vertex is under cloth when a ray out along its normal meets a garment within REACH (6 cm); a face goes when
 # its vertices and all their neighbours are under cloth (the edge of the cut stays, so no gap shows at a hem). A
 # garment's vertex is under the garments outside it when a ray either way along its normal meets one within REACH
-# (cloth's normals are not all outward); NO_LAYERS=1 leaves garments whole.
+# (cloth's normals are not all outward); NO_LAYERS=1 leaves garments whole. FOLLOW=NAME,... names the garments the
+# cloth follower carries (raea sdk/body/tools/worn.ts): their cloth below the crotch swings off what it lies on at rest,
+# so it hides nothing (11-17: a greatcoat's skirt swung clear of the trousers it had hidden at rest, and the holes left
+# in them showed the coat's inside, ragged at the cut faces' edges).
 import bpy, bmesh, sys, os
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
@@ -19,14 +22,29 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=body_glb)
 skin = max((o for o in bpy.data.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 keep = set(bpy.data.objects)
+FOLLOW = {n for n in os.environ.get("FOLLOW", "").split(",") if n}
+# the crotch, as the follower's garment reader takes it (sdk/body/tools/garment.ts readWorn: the thighs' joints, 8 cm down)
+arm = next((o for o in bpy.data.objects if o.type == "ARMATURE"), None)
+legs = [arm.matrix_world @ arm.data.bones[b].head_local for b in ("LeftLeg", "RightLeg", "thigh_l", "thigh_r") if arm and b in arm.data.bones]
+CROTCH = min(p.z for p in legs) - 0.08 if legs else None
+if FOLLOW and CROTCH is None: sys.exit("hide_under: FOLLOW given but the body has no thigh joints to find its crotch by")
+
+
+def cover(into, o, path):
+    """a garment's mesh added to what hides (in the world), less a followed garment's cloth below the crotch"""
+    t = bmesh.new(); t.from_object(o, bpy.context.evaluated_depsgraph_get()); t.transform(o.matrix_world)
+    if os.path.splitext(os.path.basename(path))[0] in FOLLOW:
+        bmesh.ops.delete(t, geom=[f for f in t.faces if all(v.co.z < CROTCH for v in f.verts)], context="FACES")
+    m = bpy.data.meshes.new("t"); t.to_mesh(m); t.free(); into.from_mesh(m)
+
+
 dg = bpy.context.evaluated_depsgraph_get()
 cb = bmesh.new()
 for gpath in garments:
     before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=gpath)
     for o in set(bpy.data.objects) - before:
         if o.type == "MESH":
-            t = bmesh.new(); t.from_object(o, bpy.context.evaluated_depsgraph_get()); t.transform(o.matrix_world)
-            m = bpy.data.meshes.new("t"); t.to_mesh(m); t.free(); cb.from_mesh(m)
+            cover(cb, o, gpath)
 bvh = BVHTree.FromBMesh(cb)
 W = skin.matrix_world; N = W.to_3x3()
 bm = bmesh.new(); bm.from_mesh(skin.data); bm.verts.ensure_lookup_table()
@@ -62,8 +80,7 @@ if os.environ.get("NO_LAYERS") != "1":
         for opath in garments[k + 1:]:
             for o in load_mesh(opath):
                 if o.type == "MESH":
-                    t = bmesh.new(); t.from_object(o, bpy.context.evaluated_depsgraph_get()); t.transform(o.matrix_world)
-                    m = bpy.data.meshes.new("t"); t.to_mesh(m); t.free(); ob.from_mesh(m)
+                    cover(ob, o, opath)
                     bpy.data.objects.remove(o)
                 elif o.type != "ARMATURE":
                     bpy.data.objects.remove(o)

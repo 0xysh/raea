@@ -67,6 +67,30 @@ edges = np.array(list(opp.keys()), np.int32)
 bends = np.array([v for v in opp.values() if len(v) == 2], np.int32).reshape(-1, 2)
 rest_e = np.linalg.norm(FLAT[edges[:, 0]] - FLAT[edges[:, 1]], axis=1)
 rest_b = np.linalg.norm(FLAT[bends[:, 0]] - FLAT[bends[:, 1]], axis=1)
+# bends across the seams too, each at its two pieces laid flat across it: with none, a seam was a free hinge and the
+# stitch line stood out of the cloth as a fin (11-17: a greatcoat's centre front, 3 cm proud of the cloth beside it
+# from the chest to the hem, drawn as a crinkled line down its front once it moved). A pressed seam lies flat.
+if E("SEAM_BEND", 1):
+    mate = {}
+    for i, j in seams:
+        mate.setdefault(int(i), set()).add(int(j)); mate.setdefault(int(j), set()).add(int(i))
+    def off_line(o, i, j):  # the flat distance of o from the line through i and j, in o's piece's cut
+        d = FLAT[j] - FLAT[i]; L = float(np.hypot(*d)) or 1e-9
+        return abs(float(d[0] * (FLAT[o][1] - FLAT[i][1]) - d[1] * (FLAT[o][0] - FLAT[i][0]))) / L
+    rim = {k: v[0] for k, v in opp.items() if len(v) == 1}
+    across, rest_x = [], []
+    for (i, i2), o in rim.items():
+        for j in mate.get(i, ()):
+            for j2 in mate.get(i2, ()):
+                k = (min(j, j2), max(j, j2))
+                if k in rim and k != (i, i2):
+                    across.append((o, rim[k])); rest_x.append(off_line(o, i, i2) + off_line(rim[k], j, j2))
+    if across:
+        u = {}
+        for (a_, b_), r in zip(across, rest_x): u[(min(a_, b_), max(a_, b_))] = r
+        bends = np.concatenate([bends, np.array(list(u.keys()), np.int32).reshape(-1, 2)])
+        rest_b = np.concatenate([rest_b, np.array(list(u.values()), np.float32)])
+        print(f"drape: {len(u)} bends across the seams", flush=True)
 cnt = np.bincount(np.concatenate([edges.ravel(), bends.ravel(), seams.ravel()]), minlength=n).astype(np.float32)[:, None]
 # pins: one-sided planes on GarmentCode's labelled edges, what elastic, boning or the neck does in a real garment.
 # A waistband (lower_interface) stays at or above the waist, a strapless top's edge at or above the armpit, a neckline

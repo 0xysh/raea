@@ -340,6 +340,11 @@ def cover(out, spec, colour, stand_m, under=None):
     rgb = [int(colour.lstrip("#")[k:k + 2], 16) / 255 for k in (0, 2, 4)]
     ids = sorted(set(int(c) for c in cid[covered]))
     stand = np.full(len(ids), max(stand_m, OFF))
+    if under and "stand" not in under:
+        # a sewn garment (raea clothes make) isn't laid on the skin's vertices, so there's no stand to go over: it
+        # crashed here (KeyError 'stand', 11-17, boots --over sewn trousers)
+        raise SystemExit(f"cover: --over {under.get('name')}: it is sewn, not laid on the skin; make this one without "
+                         "--over and list it before the sewn one in `raea clothes wear`, which layers them in that order")
     if under:
         u = np.zeros(len(C)); u[under["vertices"]] = under["stand"]
         stand = np.maximum(stand, u[ids] + THICK)
