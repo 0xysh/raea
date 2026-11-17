@@ -48,6 +48,15 @@ pub struct File {
     pub channels: u32,
     #[serde(default = "rate_48k")]
     pub sample_rate: u32,
+    /// how far its pictures are turned to stand upright, as its container says (a phone's take is stored on its side):
+    /// counter-clockwise degrees, 0, 90, 180 or 270; its width and height are upright already. Resolve crops such a
+    /// file mirrored (xml::Editor)
+    #[serde(default, skip_serializing_if = "is_zero_u")]
+    pub rotation: u32,
+}
+
+fn is_zero_u(v: &u32) -> bool {
+    *v == 0
 }
 
 fn two() -> u32 {
@@ -108,8 +117,22 @@ pub struct Clip {
     pub r#box: Option<[f64; 4]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fit: Option<String>,
+    /// footage: what of its box shows at its first frame, when a box it's in cuts it (an `overflow: hidden` parent):
+    /// [x, y, width, height] on the canvas, inside its box; none when all of the box shows
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clip: Option<[f64; 4]>,
+    /// footage: where the picture sits in what its box leaves free (CSS's object-position) when not centred, each axis
+    /// as px plus a share of the free space: [x px, x share, y px, y share]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<[f64; 4]>,
     /// footage: its opacity at its first frame
     pub opacity: f64,
+    /// footage that moves, scales, is cut, pans in its box or fades over its run: its box, clip, object-position and
+    /// opacity at the frames where that
+    /// changes, a straight line between two keys being what each frame between them shows (the first key is its first
+    /// frame, the last its last); none when it holds as its first frame shows it
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<Key>,
     /// a sound: its gain in decibels and its fades in seconds
     #[serde(default, skip_serializing_if = "is_zero")]
     pub gain_db: f64,
@@ -123,6 +146,43 @@ pub struct Clip {
     pub link: Option<String>,
 }
 
+/// Footage's box, clip, object-position and opacity at one frame of its clip.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Key {
+    /// from the clip's first frame
+    pub frame: i64,
+    pub r#box: [f64; 4],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clip: Option<[f64; 4]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<[f64; 4]>,
+    pub opacity: f64,
+}
+
+/// The key at `frame` (keys' frames counted alike): the straight line between the keys either side of it, the first's
+/// before them and the last's after; none when there are no keys. A clip or object-position one key has and the other
+/// hasn't goes from the whole box, or the centre, to it.
+pub fn key_at(keys: &[Key], frame: i64) -> Option<Key> {
+    let i = keys.iter().position(|k| k.frame >= frame).unwrap_or(keys.len().checked_sub(1)?);
+    let b = &keys[i];
+    if i == 0 || b.frame <= frame {
+        return Some(Key { frame, ..b.clone() });
+    }
+    let a = &keys[i - 1];
+    let t = (frame - a.frame) as f64 / (b.frame - a.frame) as f64;
+    let clip = (a.clip.is_some() || b.clip.is_some()).then(|| toward(crate::plan::shown(&a.r#box, &a.clip), &crate::plan::shown(&b.r#box, &b.clip), t));
+    let position = (a.position.is_some() || b.position.is_some()).then(|| toward(crate::plan::placed(&a.position), &crate::plan::placed(&b.position), t));
+    Some(Key { frame, r#box: toward(a.r#box, &b.r#box, t), clip, position, opacity: a.opacity + (b.opacity - a.opacity) * t })
+}
+
+/// `from` moved `t` of the way to `to`, each of its four alike.
+fn toward(mut from: [f64; 4], to: &[f64; 4], t: f64) -> [f64; 4] {
+    for (v, end) in from.iter_mut().zip(to) {
+        *v += (end - *v) * t;
+    }
+    from
+}
+
 fn is_zero(v: &f64) -> bool {
     *v == 0.0
 }
@@ -130,7 +190,7 @@ fn is_zero(v: &f64) -> bool {
 impl Clip {
     /// A clip of `file` from `start` for `frames`, from its source's `source_in` at speed 1, fully opaque.
     pub fn new(id: String, file: usize, start: i64, frames: i64, source_in: f64) -> Clip {
-        Clip { id, file, start, frames, source_in, speed: 1.0, r#box: None, fit: None, opacity: 1.0, gain_db: 0.0, fade_in: 0.0, fade_out: 0.0, link: None }
+        Clip { id, file, start, frames, source_in, speed: 1.0, r#box: None, fit: None, clip: None, position: None, opacity: 1.0, keys: Vec::new(), gain_db: 0.0, fade_in: 0.0, fade_out: 0.0, link: None }
     }
 
     pub fn end(&self) -> i64 {

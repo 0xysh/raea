@@ -1,34 +1,46 @@
 //! Where a picture sits in CapCut's terms (docs/capcut.feature CC2a). The manifest is read by raea-app-layers, the same
-//! for every editor; this is CapCut's own.
+//! for every editor, and so is where a picture is drawn and what of it is kept (raea_app_layers::plan::picture); this
+//! is CapCut's own.
 
-use raea_app_layers::plan::full;
+use raea_app_layers::model::Clip;
+use raea_app_layers::plan::{self, Picture};
 use raea_io_capcut::Place;
 
-/// Where a picture of `mw` x `mh` sits to show as it does in its box with its object-fit, in CapCut's terms (scale 1:
-/// fitted inside the canvas; a crop is fitted as the part it keeps). A warning when CapCut can't show it so.
-pub fn place(bx: &[f64; 4], fit: &str, mw: f64, mh: f64, w: f64, h: f64, opacity: f64) -> (Place, Option<String>) {
-    let (bw, bh) = (bx[2].max(1.0), bx[3].max(1.0));
-    let (x, y) = (bx[0] + bw / 2.0, bx[1] + bh / 2.0);
-    let fit0 = (w / mw).min(h / mh);
-    let mut warn = None;
-    let contain = (bw / mw).min(bh / mh);
-    let (scale, crop) = match fit {
-        "cover" if full(bx, w, h) => ((bw / mw).max(bh / mh) / fit0, [0.0, 0.0, 1.0, 1.0]),
-        "cover" => {
-            let s = (bw / mw).max(bh / mh);
-            let (cw, ch) = (bw / (mw * s), bh / (mh * s));
-            let fitc = (w / (mw * cw)).min(h / (mh * ch));
-            (bw / (mw * cw * fitc), [(1.0 - cw) / 2.0, (1.0 - ch) / 2.0, (1.0 + cw) / 2.0, (1.0 + ch) / 2.0])
-        }
-        "none" => (1.0 / fit0, [0.0, 0.0, 1.0, 1.0]),
-        "scale-down" => (contain.min(1.0) / fit0, [0.0, 0.0, 1.0, 1.0]),
-        "contain" => (contain / fit0, [0.0, 0.0, 1.0, 1.0]),
-        _ => {
-            if ((bw / bh) - (mw / mh)).abs() > 0.01 * (mw / mh) {
-                warn = Some(format!("stretched to its {bw:.0}x{bh:.0} box in raea (object-fit: fill), fitted inside it in CapCut"));
-            }
-            (contain / fit0, [0.0, 0.0, 1.0, 1.0])
-        }
-    };
-    (Place { x, y, scale, opacity, crop }, warn)
+/// Where a picture of `mw` x `mh` drawn as `p` sits in CapCut's terms on a `w` x `h` canvas: the part of it kept as
+/// its crop, which CapCut fits inside the canvas (scale 1), then scaled to the size raea drew it, centred where raea
+/// drew that part.
+pub fn place(p: &Picture, (mw, mh): (f64, f64), (w, h): (f64, f64), opacity: f64) -> Place {
+    let [dx, dy, dw, dh] = p.drawn;
+    let [l, t, r, b] = p.kept;
+    let (cw, ch) = ((r - l).max(1e-6), (b - t).max(1e-6));
+    let fit = (w / (mw * cw)).min(h / (mh * ch));
+    let (x, y) = (dx + dw * (l + r) / 2.0, dy + dh * (t + b) / 2.0);
+    Place { x, y, scale: dw / (mw * fit), opacity, crop: p.kept }
+}
+
+/// A footage clip's keys in CapCut's terms (frames from its first, each its place there; none when it holds), cut
+/// throughout as `first` keeps it (its first frame's): CapCut's crop holds, so its moves, scaling and fades are keyed
+/// around that cut. Thinned to what a straight line between can't give, to 0.15 px and half a percent of opacity; and
+/// whether what is cut changes over its run, which CapCut can't show.
+pub fn keys(c: &Clip, fit: &str, first: [f64; 4], (mw, mh): (f64, f64), canvas: (f64, f64)) -> (Vec<(i64, Place)>, bool) {
+    let mut changes = false;
+    let all: Vec<(i64, [f64; 4])> = c
+        .keys
+        .iter()
+        .map(|k| {
+            let (p, _) = plan::picture(&k.r#box, &k.clip, fit, &k.position, (mw, mh), canvas);
+            changes |= plan::apart(&p.kept, &first) > 1e-3;
+            let at = place(&Picture { drawn: p.drawn, kept: first }, (mw, mh), canvas, k.opacity);
+            (k.frame, [at.x, at.y, at.scale, at.opacity])
+        })
+        .collect();
+    if all.is_empty() {
+        return (Vec::new(), false);
+    }
+    // a scale step a 0.15 px change in the width of what's kept, as CapCut fits it inside the canvas
+    let (cw, ch) = ((first[2] - first[0]).max(1e-6), (first[3] - first[1]).max(1e-6));
+    let fitted = mw * cw * (canvas.0 / (mw * cw)).min(canvas.1 / (mh * ch));
+    let kept = plan::thin(&all, &[0.15, 0.15, 0.15 / fitted, 0.005]);
+    let keys = kept.into_iter().map(|(f, [x, y, scale, opacity])| (f, Place { x, y, scale, opacity, crop: first })).collect();
+    (keys, changes)
 }

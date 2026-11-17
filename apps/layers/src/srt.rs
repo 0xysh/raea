@@ -17,11 +17,25 @@ pub fn said(manifest: &Value) -> Vec<String> {
         .as_array()
         .into_iter()
         .flatten()
-        .map(|f| {
-            let words: Vec<String> = f["text"].as_array().into_iter().flatten().filter(|t| t["caption"] == true && t["opacity"].as_f64().unwrap_or(1.0) > 0.01).filter_map(|t| t["text"].as_str()).map(|s| s.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty()).collect();
-            words.join(" ")
-        })
+        .map(caption_words)
         .collect()
+}
+
+/// A frame's caption words (text marked `caption` and shown), each run's spacing made single, joined in order.
+fn caption_words(frame: &Value) -> String {
+    let mut out = String::new();
+    for t in frame["text"].as_array().into_iter().flatten() {
+        if t["caption"] != true || t["opacity"].as_f64().unwrap_or(1.0) <= 0.01 {
+            continue;
+        }
+        for word in t["text"].as_str().unwrap_or_default().split_whitespace() {
+            if !out.is_empty() {
+                out.push(' ');
+            }
+            out.push_str(word);
+        }
+    }
+    out
 }
 
 /// The lines: a run of frames showing the same words is one, and so is a line whose words come in one by one (each

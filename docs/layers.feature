@@ -143,6 +143,31 @@ Feature: A render in layers: captions, graphics, footage and sound apart, for Ca
       And it says what CC2e notes, the same lines the command prints
       And it names no editor's format: CapCut's draft and the XML are written from it
 
+    Scenario: LA4c. Footage that moves, scales, is cut or fades keeps its keys
+      Given footage a box it's in clips (`overflow: hidden`), or whose box or opacity changes over its run (a split
+        screen: the take rising into the top of the frame while the box holding it shrinks to the seam)
+      Then render.json's video entry says what of its box shows (`clip`), the clip each box up its containing blocks
+        that clips it leaves, read from the layout, raea's drawing unchanged; one clipped away entirely isn't listed
+      And layers.json's clip has its first frame's clip and keys: its box, clip and opacity at its first and last
+        frames and at the frames on either side of each change, a straight line between two keys being each frame between
+      And whether it's the main footage or a picture in picture is read from what of it shows, not its box
+      And each editor's export keys it in its own terms (the XML's keyframes, LA5a; CapCut's, docs/capcut.feature CC2f),
+        and says what it can't (CapCut: a cut that changes over the run)
+
+    Scenario: LA4d. Every editor places a picture as raea drew it, from one reading of it
+      Given footage of any shape (upright, horizontal, square) in a composition of any size (1080 x 1920, 4K)
+      Then where the picture is drawn and what of it is kept is worked out once (raea_app_layers::plan::picture), as
+        blitz-paint draws it: sized by its object-fit, placed by its object-position (render.json's `position` when
+        it isn't centred, each axis as px plus a share of the free space), cut where its box or a box it's in cuts it
+      And only cuts inside the frame are crops: an edge on or past the frame's cuts nothing, the frame cutting it
+        anyway, so an editor reframing the clip finds the rest of the picture there, not a crop
+      And each editor's export turns that into its own terms (the XML's motion, CapCut's place)
+      And footage composed at its own size (a 4K edit of 4K takes) is at 100 in every editor
+      And LA3a composites it back as the render on 11-17 at 35 dB and over, in a 1080 x 1920 and a 2160 x 3840
+        composition alike (telluride-layers/positioning-test: a horizontal take covering the frame and panned inside
+        it, a contained picture in picture sliding, a phone's take in a card cutting its sides, pushed in, and the split
+        close): `RAEA_LAYERS_PROJECT=EDIT.tsx RAEA_LAYERS_COMPOSITION=ID cargo test -p raea-app-layers composite -- --ignored`
+
     Scenario: LA4b. The CapCut export reads it
       Then `raea export capcut` exports the composition in layers into out/capcut/NAME (raea-app-layers) and writes
         layers.json as a CapCut draft (apps/capcut from_layers.rs): its tracks bottom first, the footage CapCut's main
@@ -156,7 +181,7 @@ Feature: A render in layers: captions, graphics, footage and sound apart, for Ca
 
   Rule: LA5. Premiere Pro and DaVinci Resolve take the same XML
     Scenario: LA5a. `raea export xml EDIT.tsx` writes an FCP7 XML project
-      Then it writes a folder: NAME.xml (xmeml version 5), the layers' movies, the .srt (LA2b) and reference.mp4,
+      Then it writes a folder: NAME.premiere.xml and NAME.resolve.xml (xmeml version 5), the layers' movies, the .srt (LA2b) and reference.mp4,
         which the sequence doesn't use
       And the sequence has the composition's frame rate and size, its video tracks bottom to top under, footage
         (main, then each picture in picture on a track above), graphics, captions, and its audio tracks below
@@ -173,6 +198,33 @@ Feature: A render in layers: captions, graphics, footage and sound apart, for Ca
       And each channel of a stereo file is panned to its side by an Audio Pan on its clip (-1 left, 1 right), as
         Resolve and FCP7 write it: without it both editors import the channels centred, and a stereo track plays as
         mono; Premiere's own track pan (PannerCurrentValue) was tried, and neither editor read it
+      And footage with keys (LA4c) is keyframed: Basic Motion's scale and centre, its crop (what object-fit and its
+        clip cut) and Opacity, each a value where it holds and a keyframe at each key where it changes, timed in the
+        source's frames as FCP7 times a clip's filters; a key a straight line between its neighbours already gives
+        (to a tenth of a pixel) is left out, so a steady move is its two ends
+      And a clip raea plays at another speed is placed at its own (FCP7's speed isn't written) and said: as many source
+        frames as it lasts, its keys timed at that speed
+      And the crop is written as each editor writes it, read from an XML each exported of a clip it keyframed (11-17):
+        Premiere's as Basic Motion's leftcrop, topcrop, rightcrop and bottomcrop; Resolve's as FCP7's Crop filter. One
+        XML can't be both, so the folder holds NAME.premiere.xml and NAME.resolve.xml, the same but for that
+      And a file stored turned (a phone's take: its container's display matrix stands it upright; layers.json's
+        `rotation`) is cropped as Resolve cuts it: on 11-17 each editor rendered a timeline cropping one picture
+        stored at 0, 90, -90 and 180 (top 25, then left 25). Premiere 26.2.2 cut the upright picture's named side at
+        each; Resolve 21.2.0 cut it mirrored, top and bottom swapped at 90, left and right at -90, both at 180, so
+        Resolve's sides are written swapped to match
+      And footage's Scale is as each editor reads it: Premiere's of the media's own pixels, Resolve's of the media
+        already fitted to the timeline (its default, "scale entire image to fit": a 4K take on a 1080 timeline is
+        Premiere's 50, Resolve's 100), read from the XML Resolve exported on 11-17; the earlier tests' media were the
+        timeline's size, where the two agree. Resolve's export says so when footage isn't the timeline's size: with
+        another Input Scaling, that footage comes in at another size
+      And footage's Center is as each editor reads it: Resolve's in the frame's width and height, Premiere's in the
+        media's own pixels, upright and unscaled (read on 11-17 from the Position Premiere gave the Telluride close:
+        Center vert -0.120370 at y 497.8 on a 1920-high sequence, 462.2 px up, 0.120370 of 3840); a 2160 x 3840 take
+        risen 260 px on a 1080 x 1920 timeline is Resolve's -260 / 1920, Premiere's -260 / 3840
+      And a layer's movie has its alpha from its first frame in one sample description (depth 32), even when it opens
+        on a full-frame card: VideoToolbox encodes leading opaque frames without alpha and starts a second description
+        where the alpha starts, which Premiere 26.2.2 won't import ("the importer reported a generic error") and
+        Resolve 21.2.0 shows opaque (the Telluride graphics, 11-17)
       And a command of an editor's own (`raea export premiere`, `raea export resolve`) is added only where LA5b finds
         that editor reading the XML differently: none is, on 11-16
 

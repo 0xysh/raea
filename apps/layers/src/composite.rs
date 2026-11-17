@@ -3,12 +3,13 @@
 //! are composited bottom to top (under, footage as layers.json places it, graphics, captions) and compared with the
 //! reference render's frame. A test of the method, run by hand on a machine with a GPU:
 //!   cargo test -p raea-app-layers composite -- --ignored --nocapture   (RAEA_BIN: the raea, default target/release/raea;
-//!   RAEA_LAYERS_PROJECT=DIR/EDIT.tsx checks that composition, its media/ beside it, in place of the fixtures)
+//!   RAEA_LAYERS_PROJECT=DIR/EDIT.tsx checks that composition, its media/ beside it, in place of the fixtures, and
+//!   RAEA_LAYERS_COMPOSITION=ID one of its compositions by id)
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::model::{Clip, Layer, Layers};
+use crate::model::{Clip, Key, Layer, Layers, key_at};
 
 /// The least PSNR (dB) a composited frame has against the reference render's: the reference is an H.264 movie and the
 /// footage is decoded and scaled here as the page does it, so a frame is never exact.
@@ -36,21 +37,23 @@ impl Picture {
         }
     }
 
-    /// A picture of `mw` x `mh` (RGBA) drawn into `bx` as CSS's object-fit `fit` draws it (centred, clipped to its
-    /// box), sampled bilinearly, times `opacity`.
-    fn draw(&mut self, rgba: &[u8], mw: usize, mh: usize, bx: [f64; 4], fit: &str, opacity: f32) {
-        let [bx0, by0, bw, bh] = bx;
-        let (sx, sy) = (bw / mw as f64, bh / mh as f64);
-        let (sx, sy) = match fit {
-            "cover" => (sx.max(sy), sx.max(sy)),
-            "contain" => (sx.min(sy), sx.min(sy)),
-            "none" => (1.0, 1.0),
-            "scale-down" => (sx.min(sy).min(1.0), sx.min(sy).min(1.0)),
-            _ => (sx, sy),
+    /// A picture of `mw` x `mh` (RGBA) as a footage clip shows it at `key` (layers.json's place for that frame): where
+    /// plan::picture draws it and keeps it, or stretched over its box for object-fit: fill (as raea draws it; an editor
+    /// fits it inside), sampled bilinearly, times its opacity.
+    fn draw(&mut self, rgba: &[u8], mw: usize, mh: usize, key: &Key, fit: &str) {
+        let (canvas, media) = ((self.w as f64, self.h as f64), (mw as f64, mh as f64));
+        // where the whole picture is, and the edges of what of it shows
+        let ([ox, oy, dw, dh], [l, t, r, b]) = if fit == "fill" {
+            let [x, y, w, h] = crate::plan::shown(&key.r#box, &key.clip);
+            (key.r#box, [x, y, x + w, y + h])
+        } else {
+            let (p, _) = crate::plan::picture(&key.r#box, &key.clip, fit, &key.position, media, canvas);
+            let [dx, dy, dw, dh] = p.drawn;
+            (p.drawn, [dx + p.kept[0] * dw, dy + p.kept[1] * dh, dx + p.kept[2] * dw, dy + p.kept[3] * dh])
         };
-        let (ox, oy) = (bx0 + (bw - mw as f64 * sx) / 2.0, by0 + (bh - mh as f64 * sy) / 2.0);
-        let (x0, y0) = (bx0.max(0.0) as usize, by0.max(0.0) as usize);
-        let (x1, y1) = (((bx0 + bw).ceil() as usize).min(self.w), ((by0 + bh).ceil() as usize).min(self.h));
+        let (sx, sy, opacity) = (dw / media.0, dh / media.1, key.opacity as f32);
+        let (x0, y0) = (l.max(0.0) as usize, t.max(0.0) as usize);
+        let (x1, y1) = ((r.ceil().max(0.0) as usize).min(self.w), (b.ceil().max(0.0) as usize).min(self.h));
         let at = |x: usize, y: usize, c: usize| rgba[(y.min(mh - 1) * mw + x.min(mw - 1)) * 4 + c] as f32 / 255.0;
         for y in y0..y1 {
             for x in x0..x1 {
@@ -61,9 +64,9 @@ impl Picture {
                 let (u, v) = (u.max(0.0), v.max(0.0));
                 let (iu, iv, fu, fv) = (u as usize, v as usize, (u.fract()) as f32, (v.fract()) as f32);
                 let p = &mut self.px[y * self.w + x];
-                for c in 0..3 {
+                for (c, ch) in p.iter_mut().enumerate() {
                     let s = at(iu, iv, c) * (1.0 - fu) * (1.0 - fv) + at(iu + 1, iv, c) * fu * (1.0 - fv) + at(iu, iv + 1, c) * (1.0 - fu) * fv + at(iu + 1, iv + 1, c) * fu * fv;
-                    p[c] = p[c] * (1.0 - opacity) + s * opacity;
+                    *ch = *ch * (1.0 - opacity) + s * opacity;
                 }
             }
         }
@@ -100,9 +103,13 @@ fn composite(dir: &Path, l: &Layers, f: i64) -> Result<Picture, String> {
                 Layer::Sound => {}
                 Layer::Footage => {
                     let file = &l.files[c.file];
-                    let secs = c.source_in + (f - c.start) as f64 / l.fps * c.speed + 0.25 / l.fps;
+                    // the source frame at or before the time, as raea shows it (a take faster than the edit has one
+                    // between two of its frames): only a hair past the time, for the manifest's whole milliseconds
+                    let secs = c.source_in + (f - c.start) as f64 / l.fps * c.speed + 1e-4;
                     let (rgba, w, h) = frame(Path::new(&file.path), secs)?;
-                    pic.draw(&rgba, w, h, c.r#box.unwrap(), c.fit.as_deref().unwrap_or("fill"), c.opacity as f32);
+                    let first = Key { frame: 0, r#box: c.r#box.unwrap_or([0.0, 0.0, l.width as f64, l.height as f64]), clip: c.clip, position: c.position, opacity: c.opacity };
+                    let key = key_at(&c.keys, f - c.start).unwrap_or(first);
+                    pic.draw(&rgba, w, h, &key, c.fit.as_deref().unwrap_or("fill"));
                 }
                 _ => {
                     // a layer's movie is NAME.CODEC.mov, its frames NAME.frames
@@ -133,8 +140,11 @@ fn export(bin: &Path, fixture: &Path, work: &Path) -> Result<(Layers, PathBuf), 
         (fixture.parent().unwrap().to_path_buf(), fixture.file_name().unwrap().to_string_lossy().into_owned())
     };
     let out = work.join(&name).join("layers");
+    let comp: Vec<String> = std::env::var("RAEA_LAYERS_COMPOSITION").map(|c| vec!["--composition".to_string(), c]).unwrap_or_default();
     let run = Command::new(bin)
-        .args(["export", "layers", edit.as_str(), "-o"])
+        .args(["export", "layers", edit.as_str()])
+        .args(&comp)
+        .arg("-o")
         .arg(&out)
         .current_dir(&src)
         .env("RAEA_LAYERS_KEEP_FRAMES", "1")

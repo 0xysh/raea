@@ -20,8 +20,9 @@ pub fn track_name(layer: Layer, name: &str) -> String {
     }
 }
 
-/// The timeline. `dir` is where layers.json is: its movies' paths are relative to it.
-pub fn timeline(l: &Layers, dir: &Path) -> Timeline {
+/// The timeline, and what it can't carry. `dir` is where layers.json is: its movies' paths are relative to it.
+pub fn timeline(l: &Layers, dir: &Path) -> (Timeline, Vec<String>) {
+    let mut notes = Vec::new();
     let media: Vec<Media> = l
         .files
         .iter()
@@ -47,10 +48,19 @@ pub fn timeline(l: &Layers, dir: &Path) -> Timeline {
                     Layer::Footage => {
                         let m = &media[c.file];
                         // (a picture stretched to its box is noted by the layers export already, for every editor)
-                        let (place, _) = plan::place(&c.r#box.unwrap_or([0.0, 0.0, l.width as f64, l.height as f64]), c.fit.as_deref().unwrap_or("fill"), (m.width as f64).max(1.0), (m.height as f64).max(1.0), l.width as f64, l.height as f64, c.opacity);
+                        let (media, canvas) = (((m.width as f64).max(1.0), (m.height as f64).max(1.0)), (l.width as f64, l.height as f64));
+                        let bx = c.r#box.unwrap_or([0.0, 0.0, canvas.0, canvas.1]);
+                        let fit = c.fit.as_deref().unwrap_or("fill");
+                        let (picture, _) = raea_app_layers::plan::picture(&bx, &c.clip, fit, &c.position, media, canvas);
+                        let place = plan::place(&picture, media, canvas, c.opacity);
+                        let (keys, cut_changes) = plan::keys(c, fit, picture.kept, media, canvas);
+                        if cut_changes {
+                            let name = Path::new(&l.files[c.file].path).file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                            notes.push(format!("{name} (frames {}-{}): what of it is cut changes over its run, and CapCut's crop holds: cut as its first frame shows it throughout, its moves and fades keyed", c.start, c.end() - 1));
+                        }
                         // its own sound at its gain, or silent: the composition doesn't play its sound there
                         let own = c.link.as_deref().and_then(|id| all().find(|a| a.id == id));
-                        Clip { volume: own.map_or(0.0, |a| 10f64.powf(a.gain_db / 20.0)), place, ..base }
+                        Clip { volume: own.map_or(0.0, |a| 10f64.powf(a.gain_db / 20.0)), place, keys, ..base }
                     }
                     Layer::Graphics | Layer::Captions | Layer::Under | Layer::Backing => Clip { volume: 0.0, place: Place::centred(l.width, l.height), ..base },
                 }
@@ -68,5 +78,5 @@ pub fn timeline(l: &Layers, dir: &Path) -> Timeline {
         main.name.clear();
     }
     video.extend(audio);
-    Timeline { width: l.width, height: l.height, fps: l.fps, media, tracks: video }
+    (Timeline { width: l.width, height: l.height, fps: l.fps, media, tracks: video }, notes)
 }

@@ -8,6 +8,7 @@
 //!   4. RAEA_LAYER=captions, when a frame shows a caption: the captions alone, and the words as SubRip;
 //!   5. RAEA_LAYER=behind:FILE, for each file shown as a picture in picture: what's drawn behind it (its card), kept
 //!      only where it's a picture in picture, on a track between it and the footage under it.
+//!
 //! The footage and sounds are clips of their own files where they are; each layer is clips of its movie, cut where it
 //! draws something. A render that isn't an export draws once, as it always has (LA2o).
 
@@ -32,7 +33,7 @@ pub type R<T> = Result<T, String>;
 
 pub const USAGE: &str = "raea export layers EDIT.tsx [--composition ID] [-o DIR] [--name NAME] [--alpha-codec prores|hevc|rle|png]   (the composition as its layers and the timeline that places them, layers.json: the captions and the graphics as transparent movies, what's under the footage (and any 3D) as an opaque one, the footage and sounds as clips of their own files where they are, the captions also as SubRip, and the reference render; into out/layers/NAME, or DIR)";
 
-pub const USAGE_XML: &str = "raea export xml EDIT.tsx [--composition ID] [-o DIR] [--name NAME] [--alpha-codec prores|hevc|rle|png]   (the composition as an FCP7 XML project for Premiere Pro (File, Import) and DaVinci Resolve (File, Import, Timeline): its layers as raea export layers writes them, NAME.xml beside them placing them on a timeline, the footage and sounds as clips of their own files where they are, each clip's own sound linked to it; into out/xml/NAME, or DIR)";
+pub const USAGE_XML: &str = "raea export xml EDIT.tsx [--composition ID] [-o DIR] [--name NAME] [--alpha-codec prores|hevc|rle|png]   (the composition as an FCP7 XML project for Premiere Pro (File, Import) and DaVinci Resolve (File, Import, Timeline): its layers as raea export layers writes them, NAME.premiere.xml and NAME.resolve.xml beside them placing them on a timeline, each as that editor writes it, the footage and sounds as clips of their own files where they are, each clip's own sound linked to it; into out/xml/NAME, or DIR)";
 
 /// `export layers ...` and `export xml ...`; None for anything else.
 pub fn cli(args: &[String]) -> Option<R<String>> {
@@ -50,7 +51,7 @@ pub fn cli(args: &[String]) -> Option<R<String>> {
 fn export_xml(args: &[String]) -> R<String> {
     let tsx = args.first().filter(|a| !a.starts_with('-')).ok_or(USAGE_XML)?;
     let edit = dunce::canonicalize(PathBuf::from(tsx)).map_err(|e| format!("{tsx}: {e}"))?;
-    let name = flag(args, "--name").unwrap_or_else(|| edit.file_stem().unwrap().to_string_lossy().into_owned());
+    let name = named(args, &edit);
     let dir = flag(args, "-o").map_or_else(|| edit.parent().unwrap().join("out/xml").join(&name), PathBuf::from);
     let mut layer_args = args.to_vec();
     if flag(args, "-o").is_none() {
@@ -58,13 +59,23 @@ fn export_xml(args: &[String]) -> R<String> {
     }
     let (layers, _) = export(&layer_args)?;
     let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let (text, notes) = xml::write(&layers, &dir);
-    let out = dir.join(format!("{name}.xml"));
-    std::fs::write(&out, text).map_err(|e| format!("{}: {e}", out.display()))?;
+    // an XML an editor, the same but for what they read differently (xml::Editor)
+    let mut notes: Vec<String> = Vec::new();
+    for e in [xml::Editor::Premiere, xml::Editor::Resolve] {
+        let (text, n) = xml::write(&layers, &dir, e);
+        let out = dir.join(format!("{name}.{}.xml", e.name()));
+        std::fs::write(&out, text).map_err(|e| format!("{}: {e}", out.display()))?;
+        for n in n {
+            if !notes.contains(&n) {
+                notes.push(n);
+            }
+        }
+    }
+    let _ = std::fs::remove_file(dir.join(format!("{name}.xml")));
     let count = |l: Layer| layers.tracks.iter().filter(|t| t.layer == l).count();
     let mut said = format!(
-        "APPLIED  FCP7 XML \"{name}\" at {}: {} video tracks, {} audio tracks; import it in Premiere Pro (File, Import) or DaVinci Resolve (File, Import, Timeline); the layers, layers.json{} and the reference render beside it",
-        out.display(),
+        "APPLIED  FCP7 XML \"{name}\" at {}: {name}.premiere.xml for Premiere Pro (File, Import), {name}.resolve.xml for DaVinci Resolve (File, Import, Timeline); {} video tracks, {} audio tracks; the layers, layers.json{} and the reference render beside them",
+        dir.display(),
         layers.tracks.len() - count(Layer::Sound),
         count(Layer::Sound),
         layers.srt.as_ref().map_or(String::new(), |s| format!(", {s} (captions to upload)")),
@@ -92,28 +103,41 @@ pub fn render(args: &[String], env: &[(&str, &str)]) -> R<()> {
     Ok(())
 }
 
-/// A layer's movie, rendered with RAEA_LAYER=`layer` into DIR/NAME.CODEC.mov (NAME the layer's, or `name` for one of
-/// many), its frames in DIR/NAME.frames, removed unless `keep` (LA3a's test reads them).
-fn pass(tsx: &Path, comp: &[String], dir: &Path, layer: &str, codec: raea_io_alpha::Codec, fps: f64, keep: bool, also: impl FnOnce(&Path) -> bool) -> R<Option<(PathBuf, raea_io_alpha::Made)>> {
-    pass_named(tsx, comp, dir, layer, layer, codec, fps, keep, also)
+/// What every layer's pass renders from: the edit, its composition flags, the export's folder, the movies' codec and
+/// the rate.
+struct Passes<'a> {
+    tsx: &'a Path,
+    comp: &'a [String],
+    dir: &'a Path,
+    codec: raea_io_alpha::Codec,
+    fps: f64,
 }
 
-#[allow(clippy::too_many_arguments)]
-fn pass_named(tsx: &Path, comp: &[String], dir: &Path, name: &str, layer: &str, codec: raea_io_alpha::Codec, fps: f64, keep: bool, also: impl FnOnce(&Path) -> bool) -> R<Option<(PathBuf, raea_io_alpha::Made)>> {
-    // the layer under the page is the bottom one, so it's drawn opaque: over 3D the page's background is the 3D's
-    // clear, which --alpha would clear to nothing
-    let alpha: &[String] = if layer == "under" { &[] } else { &["--alpha".to_string()] };
-    let frames = dir.join(format!("{name}.frames"));
-    let _ = std::fs::remove_dir_all(&frames);
-    let out = dir.join(format!("{name}.{}.mov", codec_ext(codec)));
-    let done = render(&[[tsx.display().to_string(), "-o".into(), format!("{}/", frames.display())].as_slice(), alpha, comp].concat(), &[("RAEA_LAYER", layer)])
-        .and_then(|_| if also(&frames) { raea_io_alpha::encode_dir(&frames, &out, codec, fps, 0.9).map(|m| Some((out, m))) } else { Ok(None) });
-    // the frames' render leaves its manifest beside them: the reference's is the export's
-    let _ = std::fs::remove_file(dir.join(format!("{name}.render.json")));
-    if !keep {
+impl Passes<'_> {
+    /// A layer's movie, rendered with RAEA_LAYER=`layer` into DIR/NAME.CODEC.mov (`name` the layer's own, or one of
+    /// many's), its frames in DIR/NAME.frames, removed unless `keep` (LA3a's test reads them); none when `also` says
+    /// its frames aren't worth a movie.
+    fn pass(&self, name: &str, layer: &str, keep: bool, also: impl FnOnce(&Path) -> bool) -> R<Option<(PathBuf, raea_io_alpha::Made)>> {
+        // the layer under the page is the bottom one, so it's drawn opaque: over 3D the page's background is the 3D's
+        // clear, which --alpha would clear to nothing
+        let alpha: &[String] = if layer == "under" { &[] } else { &["--alpha".to_string()] };
+        let frames = self.dir.join(format!("{name}.frames"));
         let _ = std::fs::remove_dir_all(&frames);
+        let out = self.dir.join(format!("{name}.{}.mov", codec_ext(self.codec)));
+        let done = render(&[[self.tsx.display().to_string(), "-o".into(), format!("{}/", frames.display())].as_slice(), alpha, self.comp].concat(), &[("RAEA_LAYER", layer)])
+            .and_then(|_| if also(&frames) { raea_io_alpha::encode_dir(&frames, &out, self.codec, self.fps, 0.9).map(|m| Some((out, m))) } else { Ok(None) });
+        // the frames' render leaves its manifest beside them: the reference's is the export's
+        let _ = std::fs::remove_file(self.dir.join(format!("{name}.render.json")));
+        if !keep {
+            let _ = std::fs::remove_dir_all(&frames);
+        }
+        done
     }
-    done
+}
+
+/// The export's name: --name's, else the edit's file stem.
+fn named(args: &[String], edit: &Path) -> String {
+    flag(args, "--name").unwrap_or_else(|| edit.file_stem().map_or_else(|| "edit".to_string(), |s| s.to_string_lossy().into_owned()))
 }
 
 /// The export: the layers and layers.json in DIR, and what it says.
@@ -122,7 +146,7 @@ pub fn export(args: &[String]) -> R<(Layers, String)> {
     let tsx = dunce::canonicalize(PathBuf::from(tsx)).map_err(|e| format!("{tsx}: {e}"))?;
     let edit_dir = tsx.parent().unwrap().to_path_buf();
     let codec = flag(args, "--alpha-codec").map_or(Ok(raea_io_alpha::Codec::default_here()), |c| raea_io_alpha::Codec::parse(&c))?;
-    let name = flag(args, "--name").unwrap_or_else(|| tsx.file_stem().unwrap().to_string_lossy().into_owned());
+    let name = named(args, &tsx);
     let dir = flag(args, "-o").map_or_else(|| edit_dir.join("out/layers").join(&name), PathBuf::from);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -141,7 +165,8 @@ pub fn export(args: &[String]) -> R<(Layers, String)> {
 
     // 2-4. the layers' passes
     // (its frames kept until the footage it covers is found)
-    let graphics = pass(&tsx, &comp, &dir, "graphics", codec, fps, true, |_| true)?;
+    let passes = Passes { tsx: &tsx, comp: &comp, dir: &dir, codec, fps };
+    let graphics = passes.pass("graphics", "graphics", true, |_| true)?;
     // footage the graphics cover (opaque over most of its box at its middle frame) goes above them: the composition
     // draws it under something it draws in front of it
     let covered: Vec<bool> = runs.iter().map(|r| graphics.is_some() && opaque_over(&dir.join("graphics.frames"), r)).collect();
@@ -149,18 +174,18 @@ pub fn export(args: &[String]) -> R<(Layers, String)> {
         let _ = std::fs::remove_dir_all(dir.join("graphics.frames"));
     }
     // what's under the page: the backgrounds holding footage, and the 3D, which the whole page is drawn over
-    let under = if runs.is_empty() && manifest["has3d"] != true { None } else { pass(&tsx, &comp, &dir, "under", codec, fps, keep, lit)? };
-    let captions = if said.iter().any(|s| !s.is_empty()) { pass(&tsx, &comp, &dir, "captions", codec, fps, keep, |_| true)? } else { None };
+    let under = if runs.is_empty() && manifest["has3d"] != true { None } else { passes.pass("under", "under", keep, lit)? };
+    let captions = if said.iter().any(|s| !s.is_empty()) { passes.pass("captions", "captions", keep, |_| true)? } else { None };
     // what's behind each file shown as a picture in picture (its card), between it and the footage under it (LA2c):
     // a pass for each such file, kept only where it's a picture in picture
-    let full = |r: &plan::Run| plan::full(&r.bx, w as f64, h as f64);
+    let full = |r: &plan::Run| plan::full(&plan::shown(&r.bx, &r.clip), w as f64, h as f64);
     let mut pips: Vec<String> = runs.iter().zip(&covered).filter(|(r, c)| !**c && !full(r)).map(|(r, _)| r.src.clone()).collect();
     pips.dedup();
     pips.sort();
     pips.dedup();
     let mut behind = Vec::new();
     for (k, src) in pips.iter().enumerate() {
-        let made = pass_named(&tsx, &comp, &dir, &format!("behind-{}", k + 1), &format!("behind:{src}"), codec, fps, keep, |_| true)?;
+        let made = passes.pass(&format!("behind-{}", k + 1), &format!("behind:{src}"), keep, |_| true)?;
         let shown: Vec<(i64, i64)> = runs.iter().zip(&covered).filter(|(r, c)| !**c && !full(r) && r.src == *src).map(|(r, _)| (r.start, r.end)).collect();
         behind.push((made, shown));
     }
@@ -181,19 +206,14 @@ pub fn export(args: &[String]) -> R<(Layers, String)> {
         let path = plan::resolve(&edit_dir, &r.src);
         let f = add(&mut files, &mut index, &path, video)?;
         let what = format!("{} (frames {}-{})", r.src, r.start, r.end - 1);
-        if r.moved {
-            notes.push(format!("{what}: moves or scales in its box; placed as its first frame shows it"));
-        }
-        if r.faded {
-            notes.push(format!("{what}: fades; placed at its first frame's opacity"));
-        }
         if r.fit == "fill" && files[f].width > 0 && ((r.bx[2] / r.bx[3].max(1.0)) - (files[f].width as f64 / files[f].height.max(1) as f64)).abs() > 0.01 * (files[f].width as f64 / files[f].height.max(1) as f64) {
             notes.push(format!("{what}: stretched to its {:.0}x{:.0} box (object-fit: fill); an editor may fit it inside instead", r.bx[2], r.bx[3]));
         }
         if *cov {
             notes.push(format!("{what}: raea draws over all of it from outside what holds it (a layer before it in the page); placed above the graphics, so their drawing over it is hidden in an editor"));
         }
-        let mut clip = Clip { r#box: Some(r.bx), fit: Some(r.fit.clone()), opacity: r.opacity, speed: r.rate.unwrap_or(1.0).max(0.01), ..Clip::new(ids.next("v"), f, r.start, r.end - r.start, r.at) };
+        let keys = r.keys.iter().map(|k| model::Key { frame: k.frame - r.start, ..k.clone() }).collect();
+        let mut clip = Clip { r#box: Some(r.bx), fit: Some(r.fit.clone()), clip: r.clip, position: r.position, opacity: r.opacity, keys, speed: r.rate.unwrap_or(1.0).max(0.01), ..Clip::new(ids.next("v"), f, r.start, r.end - r.start, r.at) };
         // its own sound: the manifest's sound clip of the same file over the same frames from the same time
         if let Some(k) = sounds.iter().position(|c| plan::resolve(&edit_dir, &c.src) == path && (c.from - r.start).abs() <= 1 && (c.to - r.end).abs() <= 1 && (c.at - r.at).abs() <= 1.5 / fps) {
             let s = sounds.remove(k);
@@ -201,7 +221,7 @@ pub fn export(args: &[String]) -> R<(Layers, String)> {
             clip.link = Some(a.id.clone());
             linked.push(a);
         }
-        match (*cov, plan::full(&r.bx, w as f64, h as f64)) {
+        match (*cov, plan::full(&plan::shown(&r.bx, &r.clip), w as f64, h as f64)) {
             (true, _) => over.push(clip),
             (false, true) => main.push(clip),
             (false, false) => rest.push(clip),
@@ -219,7 +239,7 @@ pub fn export(args: &[String]) -> R<(Layers, String)> {
             let _ = std::fs::remove_file(path);
             return Vec::new();
         }
-        files.push(File { path: path.file_name().unwrap().to_string_lossy().into_owned(), kind: FileKind::Video, seconds: m.frames as f64 / fps, width: m.width, height: m.height, has_audio: false, channels: 2, sample_rate: 48_000 });
+        files.push(File { path: path.file_name().unwrap().to_string_lossy().into_owned(), kind: FileKind::Video, seconds: m.frames as f64 / fps, width: m.width, height: m.height, has_audio: false, channels: 2, sample_rate: 48_000, rotation: 0 });
         let k = files.len() - 1;
         let clips = spans.iter().map(|&(a, b)| Clip::new(ids.next(&name[..1]), k, a, b - a, a as f64 / fps)).collect();
         model::lay(layer, name, clips)
@@ -237,10 +257,18 @@ pub fn export(args: &[String]) -> R<(Layers, String)> {
     tracks.extend(model::lay(Layer::Backing, "behind picture in picture", backing));
     tracks.extend(model::lay(Layer::Footage, "footage", main));
     tracks.extend(movie(&mut files, &under, Layer::Under, "under", &mut ids, None));
+    // a phone's take is stored turned and Resolve crops it mirrored (xml::Editor); ffprobe says how a file is turned
+    if !runs.is_empty() && Command::new("ffprobe").arg("-version").output().is_err() {
+        notes.push("ffprobe isn't installed, so how each take is turned wasn't read: all are taken as upright, and Resolve may crop a phone's take on the wrong side".to_string());
+    }
     let mut audio = linked;
     for c in sounds {
         let f = add(&mut files, &mut index, &plan::resolve(&edit_dir, &c.src), sound)?;
-        audio.push(Clip { gain_db: c.gain_db, fade_in: c.fade_in, fade_out: c.fade_out, speed: c.rate, ..Clip::new(ids.next("a"), f, c.from, c.to - c.from, c.at) });
+        let frames = plan::heard_frames(&c, files[f].seconds, fps);
+        if frames <= 0 {
+            continue;
+        }
+        audio.push(Clip { gain_db: c.gain_db, fade_in: c.fade_in, fade_out: c.fade_out, speed: c.rate, ..Clip::new(ids.next("a"), f, c.from, frames, c.at) });
     }
     audio.sort_by_key(|c| c.start);
     // the first sound track is the top one, so later ones are listed after it (lay lists the last laid first)
@@ -289,7 +317,8 @@ impl Ids {
 }
 
 /// "1 clip", "4 clips"
-fn many(k: usize, what: &str) -> String {
+/// "1 clip", "3 clips".
+pub fn many(k: usize, what: &str) -> String {
     if k == 1 { format!("1 {what}") } else { format!("{k} {what}s") }
 }
 
@@ -312,7 +341,9 @@ pub fn video(path: &Path) -> R<File> {
             Ok(d) => {
                 let i = d.info();
                 let (has_audio, channels, sample_rate) = heard(path);
-                return Ok(File { path: path.display().to_string(), kind: FileKind::Video, seconds: i.duration, width: i.width, height: i.height, has_audio, channels, sample_rate });
+                // one whose rotation can't be read is taken as upright (export notes it: only Resolve's crop turns on it)
+                let rotation = rotation(path).unwrap_or(0);
+                return Ok(File { path: path.display().to_string(), kind: FileKind::Video, seconds: i.duration, width: i.width, height: i.height, has_audio, channels, sample_rate, rotation });
             }
             Err(e) => why.push(format!("{}: {e}", b.name())),
         }
@@ -324,11 +355,19 @@ pub fn video(path: &Path) -> R<File> {
 pub fn sound(path: &Path) -> R<File> {
     let seconds = raea_io_media::probe_seconds(path).ok_or_else(|| format!("{}: no sound length", path.display()))?;
     let (_, channels, sample_rate) = heard(path);
-    Ok(File { path: path.display().to_string(), kind: FileKind::Audio, seconds, width: 0, height: 0, has_audio: true, channels, sample_rate })
+    Ok(File { path: path.display().to_string(), kind: FileKind::Audio, seconds, width: 0, height: 0, has_audio: true, channels, sample_rate, rotation: 0 })
 }
 
 /// Whether a short window of a file's sound decodes to samples, and its channels and sample rate (stereo at 48 kHz
 /// when it has none to read).
+/// How far a video's pictures are turned to stand upright, from its container's display matrix (ffprobe's rotation,
+/// counter-clockwise), as 0, 90, 180 or 270 (to the nearest quarter turn); None when ffprobe can't say (it isn't there).
+fn rotation(path: &Path) -> Option<u32> {
+    let out = Command::new("ffprobe").args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream_side_data=rotation", "-of", "csv=p=0"]).arg(path).output().ok().filter(|o| o.status.success())?;
+    let deg = String::from_utf8_lossy(&out.stdout).lines().find_map(|l| l.trim().parse::<f64>().ok()).unwrap_or(0.0);
+    Some(((deg / 90.0).round() as i64).rem_euclid(4) as u32 * 90)
+}
+
 fn heard(path: &Path) -> (bool, u32, u32) {
     match raea_io_media::decode_audio_window(path, 0.0, 0.05) {
         Ok(a) if a.len() > 0 => (true, (a.channels.len() as u32).max(1), a.rate),
@@ -345,15 +384,17 @@ pub fn codec_ext(c: raea_io_alpha::Codec) -> &'static str {
     }
 }
 
-/// Whether the graphics are opaque over 90% of a run's box at its middle frame (a grid of points inside it).
+/// Whether the graphics are opaque over 90% of what shows of a run at its middle frame (a grid of points inside it).
 fn opaque_over(frames: &Path, r: &plan::Run) -> bool {
     let mid = (r.start + r.end - 1) / 2;
     let Ok((px, w, h)) = raea_io_alpha::read_png(&frames.join(format!("frame-{mid:05}.png"))) else { return false };
+    let k = r.at(mid);
+    let [bx, by, bw, bh] = plan::shown(&k.r#box, &k.clip);
     let (mut n, mut opaque) = (0, 0);
     for j in 0..16 {
         for i in 0..16 {
-            let x = (r.bx[0] + r.bx[2] * (i as f64 + 0.5) / 16.0) as i64;
-            let y = (r.bx[1] + r.bx[3] * (j as f64 + 0.5) / 16.0) as i64;
+            let x = (bx + bw * (i as f64 + 0.5) / 16.0) as i64;
+            let y = (by + bh * (j as f64 + 0.5) / 16.0) as i64;
             if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 {
                 continue;
             }

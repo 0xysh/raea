@@ -12,6 +12,7 @@ mod tests;
 
 use std::path::{Path, PathBuf};
 
+use raea_app_layers::many;
 use raea_io_capcut::Kind;
 use raea_runtime_bundle::flag;
 
@@ -78,13 +79,17 @@ fn export(args: &[String]) -> R<String> {
     let reference = work.join(&layers.reference);
 
     // 2. its tracks as CapCut's, and the draft
-    let tl = from_layers::timeline(&layers, &work);
+    let (tl, carried) = from_layers::timeline(&layers, &work);
     let mut notes = layers.notes.clone();
+    notes.extend(carried);
     let markers = raea_io_capcut::seed(&root);
     let written = raea_io_capcut::write(&tl, &root, &name, &markers, media::cover(&reference).as_deref())?;
     notes.extend(written.warnings.iter().cloned());
     // the reference render in the draft's folder, on no track, to set beside what CapCut plays (LA4b)
-    std::fs::copy(&reference, written.dir.join("reference.mp4")).map_err(|e| format!("{}: {e}", written.dir.join("reference.mp4").display()))?;
+    let beside = written.dir.join("reference.mp4");
+    if let Err(e) = std::fs::copy(&reference, &beside) {
+        return Err(format!("{}: {e}", beside.display()));
+    }
     let listed = if !in_store || args.iter().any(|a| a == "--no-register") {
         "not entered in CapCut's project list".to_string()
     } else {
@@ -117,11 +122,6 @@ fn export(args: &[String]) -> R<String> {
         said.push_str(&format!("\n  note  {n}"));
     }
     Ok(said)
-}
-
-/// "1 clip", "4 clips"
-fn many(k: usize, what: &str) -> String {
-    if k == 1 { format!("1 {what}") } else { format!("{k} {what}s") }
 }
 
 /// Where CapCut's project list is copied before a draft is entered in it: the person's own folder, ~/.raea/capcut/backups

@@ -39,9 +39,36 @@ fn r6(v: f64) -> f64 {
     (v * 1e6).round() / 1e6
 }
 
-/// A picture's clip: the centre offset from the canvas's centre in half-canvas units, +y up.
+/// A picture's centre as CapCut has it: across and up from the canvas's centre, in half-canvas units.
+fn offset(p: &Place, w: f64, h: f64) -> [f64; 2] {
+    [(p.x - w / 2.0) / (w / 2.0), (h / 2.0 - p.y) / (h / 2.0)]
+}
+
+/// A picture's clip: its centre (offset), scale and opacity.
 fn clip_json(p: &Place, w: f64, h: f64) -> Value {
-    json!({"alpha": r6(p.opacity), "flip": {"horizontal": false, "vertical": false}, "rotation": 0.0, "scale": {"x": r6(p.scale), "y": r6(p.scale)}, "transform": {"x": r6((p.x - w / 2.0) / (w / 2.0)), "y": r6((h / 2.0 - p.y) / (h / 2.0))}})
+    let [x, y] = offset(p, w, h);
+    json!({"alpha": r6(p.opacity), "flip": {"horizontal": false, "vertical": false}, "rotation": 0.0, "scale": {"x": r6(p.scale), "y": r6(p.scale)}, "transform": {"x": r6(x), "y": r6(y)}})
+}
+
+/// A picture's keyframes as CapCut keeps them on its segment (common_keyframes): a group a property (its centre across
+/// and up, its scale across and up alike, its opacity), each key at its time from the segment's start in microseconds,
+/// straight lines between ("Line"), read from published accounts of the draft (capcut-cli's draft schema,
+/// pyJianYingDraft). Every property is keyed while any is: CapCut sets the clip's own values aside when there are keys.
+fn keyframes_json(keys: &[(i64, Place)], w: f64, h: f64, fps: f64) -> Value {
+    const PROPERTIES: [&str; 5] = ["KFTypePositionX", "KFTypePositionY", "KFTypeScaleX", "KFTypeScaleY", "KFTypeAlpha"];
+    // a place's values, in PROPERTIES' order
+    let values = |p: &Place| {
+        let [x, y] = offset(p, w, h);
+        [x, y, p.scale, p.scale, p.opacity]
+    };
+    let group = |(k, kind): (usize, &&str)| {
+        let list: Vec<Value> = keys
+            .iter()
+            .map(|(f, p)| json!({"curveType": "Line", "graphID": "", "id": uid(), "left_control": {"x": 0.0, "y": 0.0}, "right_control": {"x": 0.0, "y": 0.0}, "string_value": "", "time_offset": us(*f, fps), "values": [r6(values(p)[k])]}))
+            .collect();
+        json!({"id": uid(), "keyframe_list": list, "material_id": "", "property_type": kind})
+    };
+    Value::Array(PROPERTIES.iter().enumerate().map(group).collect())
 }
 
 pub fn build(tl: &Timeline, markers: &Markers) -> R<Built> {
@@ -124,6 +151,9 @@ pub fn build(tl: &Timeline, markers: &Markers) -> R<Built> {
                 v["crop"] = json!({"upper_left_x": l, "upper_left_y": tp, "upper_right_x": r, "upper_right_y": tp, "lower_left_x": l, "lower_left_y": b, "lower_right_x": r, "lower_right_y": b});
                 mats.entry("videos").or_default().push(v);
                 seg["clip"] = clip_json(&c.place, w, h);
+                if !c.keys.is_empty() {
+                    seg["common_keyframes"] = keyframes_json(&c.keys, w, h, fps);
+                }
             } else {
                 mats.entry("audios").or_default().push(json!({
                     "app_id": 0, "category_id": "", "category_name": "local", "check_flag": 1, "copyright_limit_type": "none",
