@@ -122,16 +122,16 @@ fn an_exports_layers_split_the_captions_from_the_rest() {
     assert_eq!(hiding_css("", Some("1"), Some("text")), None);
 }
 
-/// docs/layers.feature LA2a: the captions and under layers draw none of the 3D, keeping only its cameras; the
-/// graphics layer and a render that isn't an export draw it all
+/// docs/layers.feature LA2a: the captions and graphics layers draw none of the 3D, keeping only its cameras; the
+/// layer under the page and a render that isn't an export draw it all
 #[test]
 fn a_layer_without_3d_keeps_only_the_cameras() {
     let all = ["camera", "mesh", "directional", "text", "rendercam", "splat"];
     let kinds = |layer: Option<&str>| all.iter().filter(|k| draws_part(layer, k)).copied().collect::<Vec<_>>();
-    for layer in [Some("captions"), Some("under")] {
+    for layer in [Some("captions"), Some("graphics")] {
         assert_eq!(kinds(layer), ["camera", "rendercam"], "{layer:?}");
     }
-    for layer in [None, Some("graphics")] {
+    for layer in [None, Some("under")] {
         assert_eq!(kinds(layer).len(), 6, "{layer:?}");
     }
 }
