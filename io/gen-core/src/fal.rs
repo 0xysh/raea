@@ -123,14 +123,17 @@ fn base64(b: &[u8]) -> String {
     s
 }
 
-/// A step's inputs as the endpoint's fields: prompt, seed, negative_prompt; x_<name> as <name>; media into the
-/// endpoint's image field (from its schema: `image_url`, `input_image_url`, `image_urls`, …).
+/// A step's inputs as the endpoint's fields: prompt, seed, negative_prompt; x_<name> as <name>; any other setting the
+/// endpoint's schema names as it is (`resolution`, `aspect_ratio`: a 4K step on fal-ai/nano-banana-pro/edit came back
+/// 1K while they were dropped); media into the endpoint's image field (from its schema: `image_url`,
+/// `input_image_url`, `image_urls`, …).
 pub fn body(inputs: &serde_json::Map<String, J>, media: &[(String, String)], fields: &[(String, bool)]) -> J {
     let mut b = json!({});
     for (k, v) in inputs {
         match k.as_str() {
             "prompt" | "seed" | "negative" => { b[if k == "negative" { "negative_prompt" } else { k.as_str() }] = v.clone(); }
             k if k.starts_with("x_") => { b[&k[2..]] = v.clone(); }
+            k if fields.iter().any(|(n, _)| n == k) && b.get(k).is_none() => { b[k] = v.clone(); }
             _ => {}
         }
     }
@@ -148,4 +151,24 @@ pub fn body(inputs: &serde_json::Map<String, J>, media: &[(String, String)], fie
         _ => b["image_urls"] = json!(images),
     }
     b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_the_schema_names_go_through() {
+        let inputs = json!({"prompt": "a face", "seed": 7, "resolution": "4K", "aspect_ratio": "1:1", "image": "x", "x_safety_tolerance": "4"});
+        let fields = vec![("resolution".to_string(), false), ("aspect_ratio".to_string(), false), ("image_urls".to_string(), true), ("prompt".to_string(), false)];
+        let b = body(inputs.as_object().unwrap(), &[("image".into(), "https://f/1.png".into())], &fields);
+        assert_eq!(b["resolution"], "4K");
+        assert_eq!(b["aspect_ratio"], "1:1");
+        assert_eq!(b["safety_tolerance"], "4");
+        assert_eq!(b["image_urls"], json!(["https://f/1.png"]));
+        // a setting the endpoint doesn't name is not sent (made.app's names that fal has no field for)
+        assert!(b.get("image").is_none());
+        let none = body(inputs.as_object().unwrap(), &[], &[]);
+        assert!(none.get("resolution").is_none());
+    }
 }
