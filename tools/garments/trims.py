@@ -17,6 +17,10 @@
 # "over": metres a button or patch stands further out (on a strap or a belt, not the cloth under it).
 #   {"kind": "band", "y": 1.0, "h": 0.05, "thick": 0.004, "axis": [x, z], "within": 0.32, "material": {...}}
 #      round the body at a height, on the outermost cloth nearer the axis than `within` (not the sleeves)
+#   {"kind": "collar", "stand": 0.035, "fall": 0.03, "gap": 0.02, "thick": 0.003, "ease": 0.006, "neck": {"centre": [x, z],
+#      "r": [rx, rz]}, "points": {"w": 0.018, "len": 0.04, "material": {...}, "piping": {...}}, "material": {...}}
+#      a stand-and-fall collar from the garment's neckline up round the neck, stiff, an L of braid on each point if asked
+#      (sew the garment with no collar of its own: a sewn one has nothing to hold it up and falls open at the throat)
 # material: {"colour": "#rrggbb", "metal": 0..1, "rough": 0..1, "cloth": true (the garment's cloth maps under the
 #   colour)}. Any trim may carry "source": where it is attested (printed, kept in the glb's extras).
 import json
@@ -185,6 +189,129 @@ def band(cl, y, h, thick, axis, within, seg=96):
         P[:, 1:-1] = (P[:, :-2] + 2 * P[:, 1:-1] + P[:, 2:]) / 4
     P[:, -1] = P[:, 0]
     return P, N, ok
+
+
+def neckline(P, centre, seg, reach=0.16, ylow=1.2):
+    """The garment's neckline round the neck: at each of `seg` angles about the vertical axis through `centre` ([x, z];
+    angle 0 the front, +z), the highest cloth within `reach` of it and above `ylow`, placed at that angle exactly, its
+    height and distance kept. (Not the mesh's open edges: a sewn garment's panels keep their seams open too.)"""
+    d = P[:, [0, 2]] - np.asarray(centre)
+    r, a = np.hypot(d[:, 0], d[:, 1]), np.arctan2(d[:, 0], d[:, 1])
+    near = (r < reach) & (P[:, 1] > ylow)
+    out = np.zeros((seg, 2))
+    for k in range(seg):
+        ak = -np.pi + 2 * np.pi * k / seg
+        w = near & (np.abs((a - ak + np.pi) % (2 * np.pi) - np.pi) < 1.5 * np.pi / seg)
+        if not w.any():
+            raise SystemExit(f"trims: no neckline at {np.degrees(ak):.0f} degrees (no cloth within {reach} m of the neck's axis)")
+        i = np.nonzero(w)[0][np.argmax(P[w, 1])]
+        out[k] = P[i, 1], r[i]
+    for _ in range(2):                                  # a stray high vertex shouldn't notch the collar
+        out = (np.roll(out, 1, 0) + 2 * out + np.roll(out, -1, 0)) / 4
+    return out
+
+
+class Body:
+    """SOMA's body as raea's sewing measured it (sdf_igl.py's distance grid: metres, glTF's frame, negative inside), to
+    keep a trim off the skin: GARMENT_SDF, else raea's models folder's, else the sewing scripts' cache. None if absent."""
+    def __init__(self):
+        cands = [os.environ.get("GARMENT_SDF", ""), os.path.expanduser("~/.local/share/raea-models/garments/soma_sdf.npz"),
+                 os.path.join(os.environ.get("GARMENT_DATA", os.path.expanduser("~/.cache/raea-garments")), "soma_sdf.npz")]
+        f = next((c for c in cands if c and os.path.exists(c)), None)
+        self.ok = f is not None
+        if self.ok:
+            S = np.load(f)
+            self.o, self.c, self.sdf, self.grad = S["origin"].astype(np.float64), float(S["cell"]), S["sdf"], S["grad"]
+
+    def at(self, p):
+        """The distance and its gradient at points p (n x 3), trilinear."""
+        from scipy.ndimage import map_coordinates
+        u = ((np.asarray(p, np.float64) - self.o) / self.c).T
+        d = map_coordinates(self.sdf, u, order=1, mode="nearest")
+        g = np.stack([map_coordinates(self.grad[..., k], u, order=1, mode="nearest") for k in range(3)], 1)
+        return d, g
+
+    def to(self, p, gap, out_only=False, flat=True, steps=4):
+        """p moved (across, keeping its height when flat) until it stands `gap` off the skin; out_only: only if nearer."""
+        p = np.array(p, np.float64)
+        for _ in range(steps):
+            d, g = self.at(p)
+            if flat:
+                g[:, 1] = 0
+            g = unit(g)
+            move = gap - d
+            if out_only:
+                move = np.maximum(move, 0)
+            p += g * move[:, None]
+        return p
+
+
+def collar(P, t, seg=192):
+    """A stand-and-fall collar, stiff as a real one is (a sewn collar has nothing to hold it up and falls open): the stand
+    from the garment's neckline up round the neck, `stand` m tall, its top `ease` off the skin (SOMA's measured body;
+    without it the ellipse `neck`: {"centre": [x, z], "r": [rx, rz]}), closed at the front (hooks); the fall turned down
+    over it, `fall` m deep, open `gap` m at the front; `points` ({"w", "len", "thick", "material", "piping"}): an L of
+    braid on each front point of the fall, up its front edge and `len` along its foot. Returns [(grid, normals,
+    inside, label, material, thick)], each grid rows x columns round the neck."""
+    nk = t.get("neck", {})
+    c, (rx, rz) = np.asarray(nk.get("centre", [0.0, -0.039])), nk.get("r", [0.06, 0.059])
+    stand, fall, thick = t.get("stand", 0.035), t.get("fall", 0.03), t.get("thick", 0.003)
+    ease, gap, rows = t.get("ease", 0.006), t.get("gap", 0.02), 6
+    coarse = neckline(P, c, 96)                  # (the cloth's vertices are too far apart for a finer reading)
+    a96 = -np.pi + 2 * np.pi * np.arange(96) / 96
+    af = -np.pi + 2 * np.pi * np.arange(seg) / seg
+    ring = np.stack([np.interp(af, a96, coarse[:, i], period=2 * np.pi) for i in range(2)], 1)
+    A = -np.pi + 2 * np.pi * np.arange(seg + 1) / seg            # the last column the first again: a closed ring
+    ring = np.vstack([ring, ring[:1]])
+    D = np.stack([np.sin(A), np.zeros_like(A), np.cos(A)], 1)
+    rn = 1 / np.sqrt((np.sin(A) / rx) ** 2 + (np.cos(A) / rz) ** 2) + ease
+    base = np.stack([c[0] + ring[:, 1] * D[:, 0], ring[:, 0], c[1] + ring[:, 1] * D[:, 2]], 1)
+    top = np.stack([c[0] + rn * D[:, 0], ring[:, 0] + stand, c[1] + rn * D[:, 2]], 1)
+    body = Body()
+    if body.ok:                         # the top hugs the neck as it is (it slopes forward at the throat), `ease` off it
+        top = body.to(top, ease + LIFT)
+    else:
+        print("trims: collar: no body distance grid (raea clothes make measures it): the neck taken as an ellipse")
+    S = np.stack([base + (top - base) * i / (rows - 1) for i in range(rows)])          # rows x columns
+    if body.ok:                         # and nowhere between nearer the skin than that
+        S[1:] = body.to(S[1:].reshape(-1, 3), ease + LIFT, out_only=True).reshape(S[1:].shape)
+    S[:, -1] = S[:, 0]
+
+    def normals(G):
+        up = np.gradient(G, axis=0)
+        ar = (np.roll(G, -1, 1) - np.roll(G, 1, 1))
+        ar[:, 0] = ar[:, -1] = G[:, 1] - G[:, -2]
+        n = unit(np.cross(up, ar))
+        return np.where(((n * D[None]).sum(2) < 0)[..., None], -n, n)
+    Ns = normals(S)
+    # (slab() faces its outer layer by the grid's order: round the neck this way, the rows run down for it to face out)
+    mat = t.get("material", {})
+    out = [(S[::-1], Ns[::-1], np.ones(S.shape[:2], bool), "stand", mat, thick)]
+    # the fall: from the stand's top edge, folded over it, down its outside to `fall` below the top, flaring a little
+    lift = LIFT + thick + 0.0015
+    f = np.linspace(0, 1, 9)
+    at = (rows - 1) * (1 - np.clip(f * fall / stand, 0, 1))      # the stand's row each of the fall's rows lies over
+    lo = np.floor(at).astype(int).clip(0, rows - 2); w = (at - lo)[:, None, None]
+    over = S[lo] * (1 - w) + S[lo + 1] * w
+    nov = unit(Ns[lo] * (1 - w) + Ns[lo + 1] * w)
+    Fg = over + nov * (lift + 0.004 * f[:, None, None]) + np.array([0, 1, 0]) * (0.0012 * (1 - f))[:, None, None]
+    rf = rn[np.argmin(np.abs(A))]
+    open_ = np.abs(A) < (gap / 2) / max(rf, 1e-3)
+    inside = np.broadcast_to(~open_, Fg.shape[:2]).copy()
+    out.append((Fg, nov, inside, "fall", mat, thick))
+    pt = t.get("points")
+    if pt:
+        w, ln, pth = pt.get("w", 0.018), pt.get("len", 0.04), pt.get("thick", 0.002)
+        dk = (np.abs(A) * rf - gap / 2)[None, :]                    # along the foot from the point's front edge
+        vj = ((1 - f) * fall)[:, None]                              # up from the foot
+        on = Fg + nov * (thick + LIFT + 0.0003)
+        def L_(extra):
+            return inside & ((dk <= w + extra) | ((vj <= w + extra) & (dk <= ln + extra)))
+        if "piping" in pt:
+            pw = pt["piping"].get("w", 0.002)
+            out.append((on, nov, L_(pw), "points-piping", pt["piping"], pth * 0.85))
+        out.append((on, nov, L_(0.0), "points", pt.get("material", mat), pth))
+    return out
 
 
 def material(spec, base, name):
@@ -403,8 +530,12 @@ def main():
             Pg, Ng, ok = band(cl, t["y"], t.get("h", 0.05), t.get("thick", 0.004), t.get("axis", [0, -0.02]), t.get("within", 0.32))
             V, F, UV = slab(Pg.transpose(1, 0, 2), Ng.transpose(1, 0, 2), ok.T, t.get("thick", 0.004))
             emit(V, F, UV, t.get("material", {}), label, src)
+        elif kind == "collar":
+            for G, Ng, ok, part, mspec, th in collar(P, t):
+                V, F, UV = slab(G.transpose(1, 0, 2), Ng.transpose(1, 0, 2), ok.T, th)
+                emit(V, F, UV, mspec, f"{label}-{part}", src)
         else:
-            raise SystemExit(f"trims: {label}: kind {kind} is button, patch or band")
+            raise SystemExit(f"trims: {label}: kind {kind} is button, patch, band or collar")
         if src:
             print(f"trims: {label} ({src})")
     size = g.save(path)

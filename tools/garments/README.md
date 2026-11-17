@@ -39,7 +39,9 @@ the body's skin under worn garments for `raea clothes wear`.
 - `trims.py GARMENT.glb TRIMS.json` adds buttons, straps, flaps and a belt, each cast onto the draped cloth from
   outside and skinned as the cloth under it is (the format is at the top of the script; `--landmarks` prints the
   body's joints to place by). Made again, a set replaces the last; run it after a cover when a trim is in the
-  garment's cloth. `glbio.py` reads and rewrites the glb for both.
+  garment's cloth. A `collar` is a stiff stand-and-fall collar built up from the neckline and kept off SOMA's skin
+  by the drape's distance grid: sew such a garment with `collar.component.style=none`, since a sewn collar has
+  nothing to hold it up and falls open at the throat. `glbio.py` reads and rewrites the glb for both.
 
 ## Run
 
