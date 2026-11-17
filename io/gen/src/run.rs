@@ -73,7 +73,7 @@ impl<'a> Run<'a> {
     pub fn plan(&self, flow: &Flow) -> Result<J, String> {
         let made = Made::from_settings().ok();
         let cached = self.index();
-        let keys = flow.keys()?;
+        let keys = flow.keys_in(Some(&self.base))?;
         let (mut rows, mut total) = (Vec::new(), 0u64);
         // a text step's words aren't written yet: a stand-in prices the prompts that take them
         let words = |r: &str| flow.steps.get(r).filter(|t| t.op == "text.generate").map(|_| format!("(the words of step {r})"));
@@ -138,7 +138,7 @@ impl<'a> Run<'a> {
     /// The flow made: each output step's files.
     pub fn run(&self, flow: &Flow) -> Result<J, String> {
         std::fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
-        let keys = flow.keys()?;
+        let keys = flow.keys_in(Some(&self.base))?;
         let cached = self.index();
         let mut done: BTreeMap<String, Made1> = BTreeMap::new();
         let (mut spent, mut rows) = (0u64, Vec::new());
