@@ -17,9 +17,10 @@
 # "over": metres a button or patch stands further out (on a strap or a belt, not the cloth under it).
 #   {"kind": "band", "y": 1.0, "h": 0.05, "thick": 0.004, "axis": [x, z], "within": 0.32, "material": {...}}
 #      round the body at a height, on the outermost cloth nearer the axis than `within` (not the sleeves)
-#   {"kind": "collar", "stand": 0.035, "fall": 0.03, "gap": 0.02, "thick": 0.003, "ease": 0.006, "neck": {"centre": [x, z],
+#   {"kind": "collar", "stand": 0.035, "fall": 0.03, "gap": 0.02, "thick": 0.003, "ease": 0.006, "drop": 0.05, "neck": {"centre": [x, z],
 #      "r": [rx, rz]}, "points": {"w": 0.018, "len": 0.04, "material": {...}, "piping": {...}}, "material": {...}}
 #      a stand-and-fall collar from the garment's neckline up round the neck, stiff, an L of braid on each point if asked
+#      ("drop": its top at the throat no lower than this below its top at the back, over a neckline cut low in front)
 #      (sew the garment with no collar of its own: a sewn one has nothing to hold it up and falls open at the throat)
 # material: {"colour": "#rrggbb", "metal": 0..1, "rough": 0..1, "cloth": true (the garment's cloth maps under the
 #   colour)}. Any trim may carry "source": where it is attested (printed, kept in the glb's extras).
@@ -266,7 +267,14 @@ def collar(P, t, seg=192):
     D = np.stack([np.sin(A), np.zeros_like(A), np.cos(A)], 1)
     rn = 1 / np.sqrt((np.sin(A) / rx) ** 2 + (np.cos(A) / rz) ** 2) + ease
     base = np.stack([c[0] + ring[:, 1] * D[:, 0], ring[:, 0], c[1] + ring[:, 1] * D[:, 2]], 1)
-    top = np.stack([c[0] + rn * D[:, 0], ring[:, 0] + stand, c[1] + rn * D[:, 2]], 1)
+    top_y = ring[:, 0] + stand
+    if t.get("drop") is not None:
+        # `drop`: the stand's top closes at the throat no lower than `drop` below its top at the back of the neck, its
+        # height growing where the garment's neckline scoops lower in front (GarmentCode cuts no higher than its
+        # fc_depth 0.3: the woman build's coat scooped 10 cm below the back of its neckline, 11-17, a collar on it a
+        # ring round her collarbones)
+        top_y = np.maximum(top_y, top_y.max() - t["drop"] * (1 + np.cos(A)) / 2)
+    top = np.stack([c[0] + rn * D[:, 0], top_y, c[1] + rn * D[:, 2]], 1)
     body = Body()
     if body.ok:                         # the top hugs the neck as it is (it slopes forward at the throat), `ease` off it
         top = body.to(top, ease + LIFT)
