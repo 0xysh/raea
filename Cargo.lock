@@ -13927,6 +13927,7 @@ dependencies = [
 name = "raea-app-registry"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "oxc",
  "raea-core-facts",
  "serde_json",
@@ -13983,6 +13984,7 @@ dependencies = [
 name = "raea-app-workspace"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-app-check",
  "raea-app-registry",
  "raea-core-brief",
@@ -14280,6 +14282,7 @@ version = "0.1.0"
 name = "raea-core-facts"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-core-brief",
  "serde",
  "serde_json",

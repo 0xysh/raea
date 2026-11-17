@@ -22,7 +22,7 @@ fn a_spec_module_is_tidy_typescript() {
 
 #[test]
 fn up_finds_the_nearest_marker() {
-    let root = std::env::temp_dir().canonicalize().unwrap().join(format!("raea-ws-up-{}", std::process::id()));
+    let root = dunce::canonicalize(std::env::temp_dir()).unwrap().join(format!("raea-ws-up-{}", std::process::id()));
     let deep = root.join("projects/launch/media");
     std::fs::create_dir_all(&deep).unwrap();
     std::fs::create_dir_all(root.join(".raea")).unwrap();
@@ -137,6 +137,43 @@ fn the_root_with_none_set() {
     let synced = scratch("home-icloud");
     std::fs::create_dir_all(synced.join("Library/Mobile Documents/com~apple~CloudDocs/Documents")).unwrap();
     assert_eq!(default_root(&synced), synced.join("raea"));
+}
+
+#[test]
+fn a_workspace_reads_back_through_git() {
+    // Windows: canonicalize() gives \\?\C:\..., a path Git for Windows can neither read nor lock, and one that shares no
+    // prefix with the C:/... git prints, so the include climbed to the root (../../../../\\?\C:/...) and every git
+    // command in the workspace failed; ids were never written and nothing read back (0.1.5, 0.1.6)
+    let ws = scratch("plain");
+    let made = crate::workspace::workspace(&["adopt".into(), ws.display().to_string(), "--name".into(), "Plain".into()]);
+    assert!(made.is_ok(), "{made:?}");
+    let git = |dir: &Path, a: &[&str]| {
+        let o = std::process::Command::new("git").arg("-C").arg(dir).args(a).output().unwrap();
+        (o.status.success(), String::from_utf8_lossy(&o.stdout).trim().to_string(), String::from_utf8_lossy(&o.stderr).trim().to_string())
+    };
+    let (ok, inc, err) = git(&ws, &["config", "--get-all", "include.path"]);
+    assert!(ok && inc == "../.raea/workspace", "include.path {inc:?} {err}");
+    let (ok, id, err) = git(&ws, &["config", "workspace.id"]);
+    assert!(ok && id.starts_with("ws_"), "workspace.id {id:?} {err}");
+    let found = up(&ws.join("projects"), ".raea/workspace").expect("up finds the workspace");
+    assert!(!found.to_string_lossy().starts_with(r"\\?\"), "{}", found.display());
+    crate::workspace::new_project_in(&found, "Desk", None).unwrap();
+    let (ok, pid, err) = git(&ws.join("projects/desk"), &["config", "-f", ".raea/project", "project.id"]);
+    assert!(ok && pid.starts_with("pj_"), "project.id {pid:?} {err}");
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn an_include_path_is_relative_with_slashes() {
+    use crate::workspace::relative;
+    assert_eq!(relative(Path::new("/w/.git"), Path::new("/w/.raea/workspace")), "../.raea/workspace");
+    assert_eq!(relative(Path::new("/w/.git/modules/projects/p"), Path::new("/w/projects/p/.raea/project")), "../../../../projects/p/.raea/project");
+    #[cfg(windows)]
+    {
+        // git's C:/... and a plain C:\... are one root; another drive is named whole, not climbed to
+        assert_eq!(relative(Path::new("C:/w/.git"), Path::new(r"C:\w\.raea\workspace")), "../.raea/workspace");
+        assert_eq!(relative(Path::new(r"C:\w\.git"), Path::new(r"D:\o\.raea\workspace")), "D:/o/.raea/workspace");
+    }
 }
 
 #[test]

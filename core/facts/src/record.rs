@@ -44,15 +44,17 @@ pub struct Entry {
     pub despite: Vec<Despite>,
 }
 
-/// The nearest folder at or above `from` that holds `marker` (.raea/workspace, .raea/project).
+/// The nearest folder at or above `from` that holds `marker` (.raea/workspace, .raea/project). Plain on Windows
+/// (C:\..., through dunce): canonicalize() alone gives \\?\C:\..., a path Git for Windows can neither read nor lock, so
+/// every id raea kept in git config read back empty and was never written (0.1.5, 0.1.6).
 pub fn up(from: &Path, marker: &str) -> Option<PathBuf> {
-    let from = from.canonicalize().ok()?;
+    let from = dunce::canonicalize(from).ok()?;
     from.ancestors().find(|d| d.join(marker).is_file()).map(Path::to_path_buf)
 }
 
 /// A path made absolute through its nearest folder that exists (an output may not be written yet).
 fn real(p: &Path) -> PathBuf {
-    if let Ok(c) = p.canonicalize() {
+    if let Ok(c) = dunce::canonicalize(p) {
         return c;
     }
     match (p.parent().filter(|d| !d.as_os_str().is_empty()), p.file_name()) {
@@ -61,10 +63,11 @@ fn real(p: &Path) -> PathBuf {
     }
 }
 
-/// A path as the record names it: relative to the project when it's in it.
+/// A path as the record names it: relative to the project when it's in it, with '/' between its parts on Windows too (a
+/// project's record moves between machines, and `raea next` quotes it in commands).
 pub fn rel(project: &Path, p: &Path) -> String {
     let full = real(p);
-    full.strip_prefix(project).map(|r| r.display().to_string()).unwrap_or_else(|_| full.display().to_string())
+    full.strip_prefix(project).map(|r| r.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/")).unwrap_or_else(|_| full.display().to_string())
 }
 
 /// The project's commit, with "+" when `of` (a path from the project; "." for all of it) differs from it.

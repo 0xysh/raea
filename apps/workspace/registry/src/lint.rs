@@ -74,7 +74,10 @@ pub(super) fn lint(reg: &Registry, files: &[File], used_by: &BTreeMap<String, BT
     let comp_files: BTreeSet<&str> = reg.compositions.iter().map(|c| c.file.as_str()).collect();
     let controller_files: BTreeSet<&str> = reg.controllers.iter().map(|c| c.file.as_str()).collect();
     // the workspace's shared/, which a project reaches as @shared/
-    let shared = super::up(&reg.dir, ".raea/workspace").map(|w| w.join("shared")).map(|s| s.canonicalize().unwrap_or(s));
+    let shared = super::up(&reg.dir, ".raea/workspace").map(|w| {
+        let s = w.join("shared");
+        dunce::canonicalize(&s).unwrap_or(s)
+    });
 
     for f in files {
         if let Some(why) = &f.facts.broken {
@@ -102,7 +105,7 @@ pub(super) fn lint(reg: &Registry, files: &[File], used_by: &BTreeMap<String, BT
                         "outside",
                         format!("imports {} from outside the project", tilde(&to)),
                         &match in_shared {
-                            Some(r) => format!("import it by the workspace's name for it: \"@shared/{}\"", r.with_extension("").display()),
+                            Some(r) => format!("import it by the workspace's name for it: \"@shared/{}\"", r.with_extension("").to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/")),
                             None => "move it to the workspace's shared/ and import it as @shared/<kind>/<name>, or copy it into the project (raea component add, for raea's sets)".into(),
                         },
                     ))

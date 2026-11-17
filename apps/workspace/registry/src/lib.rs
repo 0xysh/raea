@@ -157,7 +157,7 @@ pub(crate) fn resolve(from: &Path, spec: &str) -> Option<PathBuf> {
     }
     tries.extend([base.join("index.tsx"), base.join("index.ts")]);
     let found = tries.into_iter().find(|p| p.is_file())?;
-    Some(std::fs::canonicalize(&found).unwrap_or(found))
+    Some(dunce::canonicalize(&found).unwrap_or(found))
 }
 
 /// An import of a file (not a package): relative, absolute, or the workspace's shared/ (@shared/...).
@@ -183,7 +183,7 @@ fn manifest(path: &Path) -> Option<Value> {
 /// The folder's registry. `overridden`: the controller ids the project's overrides name, each checked against the
 /// controllers there (the folder's and its workspace's controllers/).
 pub fn scan(dir: &Path, overridden: &[String]) -> Registry {
-    let dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let dir = dunce::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let project = up(&dir, ".raea/project").is_some();
     let mut found = Vec::new();
     sources(&dir, "", 0, &mut found);
@@ -192,7 +192,7 @@ pub fn scan(dir: &Path, overridden: &[String]) -> Registry {
         .map(|(path, rel)| {
             let src = std::fs::read_to_string(&path).unwrap_or_default();
             let facts = read::read(&src, rel.ends_with(".tsx"));
-            File { path: std::fs::canonicalize(&path).unwrap_or(path), rel, facts }
+            File { path: dunce::canonicalize(&path).unwrap_or(path), rel, facts }
         })
         .collect();
 

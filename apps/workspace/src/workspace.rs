@@ -92,7 +92,9 @@ pub(crate) fn new_id(prefix: &str) -> String {
 /// Where workspaces live on this machine: `git config --global raea.root`, else default_root.
 pub fn root() -> PathBuf {
     let set = config(None, &["--global", "raea.root"]).ok().filter(|s| !s.is_empty());
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    // HOME, else USERPROFILE: Windows sets no HOME for an app opened from the Start menu, which made the root
+    // Documents/raea under whatever folder raea ran in. git's global config is found the same way.
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
     match set {
         Some(s) if s.starts_with("~/") => home.join(&s[2..]),
         Some(s) => PathBuf::from(s),
@@ -116,8 +118,12 @@ pub fn default_root(home: &Path) -> PathBuf {
 /// The include in a repo's own config that makes `git config` read a committed file. Idempotent; the path is relative
 /// to the config file, which for a submodule lives under the workspace's .git/modules.
 pub(crate) fn include(repo: &Path, file: &Path) -> R<()> {
+    // both ends the same way, plain (dunce): on Windows git prints C:/... and canonicalize() alone gave \\?\C:\..., which
+    // share no root, so the include climbed to the drive and named the file by its \\?\ path, and every git command in
+    // the workspace failed ("Invalid argument") from its first commit (0.1.5, 0.1.6)
     let cfg = PathBuf::from(git(repo, &["rev-parse", "--path-format=absolute", "--git-path", "config"])?);
-    let file = file.canonicalize().map_err(|e| format!("{}: {e}", file.display()))?;
+    let cfg = dunce::canonicalize(&cfg).unwrap_or(cfg);
+    let file = dunce::canonicalize(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let rel = relative(cfg.parent().unwrap_or(Path::new("/")), &file);
     let have = config(Some(&cfg), &["--get-all", "include.path"]).unwrap_or_default();
     if have.lines().any(|l| l.trim() == rel) {
@@ -126,9 +132,14 @@ pub(crate) fn include(repo: &Path, file: &Path) -> R<()> {
     config(Some(&cfg), &["--add", "include.path", &rel]).map(drop)
 }
 
-fn relative(from: &Path, to: &Path) -> String {
+/// `to` from the folder `from`, '/' between its parts as git reads an include.path; `to` itself (with '/') when the two
+/// share no root, as two drives don't.
+pub(crate) fn relative(from: &Path, to: &Path) -> String {
     let (a, b): (Vec<_>, Vec<_>) = (from.components().collect(), to.components().collect());
     let same = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    if same == 0 {
+        return to.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+    }
     let mut out: Vec<String> = std::iter::repeat_n("..".to_string(), a.len() - same).collect();
     out.extend(b[same..].iter().map(|c| c.as_os_str().to_string_lossy().into_owned()));
     out.join("/")
@@ -213,7 +224,7 @@ fn init(name: Option<&str>, layout: Option<&str>) -> R<String> {
 /// An existing folder made a workspace in place: git when it isn't a repo, .raea/workspace, and each folder in it
 /// holding a brief.ts registered as an inline project. Nothing is moved or deleted.
 fn adopt(dir: &Path, name: Option<&str>, layout: Option<&str>) -> R<String> {
-    let dir = dir.canonicalize().map_err(|e| format!("{}: {e}", dir.display()))?;
+    let dir = dunce::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let name = name.map(String::from).unwrap_or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
     make_workspace(&dir, &name, layout_of(layout)?)?;
     let mut found = vec![];
@@ -244,7 +255,7 @@ pub(crate) fn make_workspace(dir: &Path, name: &str, layout: &str) -> R<()> {
     let parent = dir.parent().unwrap_or(Path::new("/"));
     if !dir.join(".git").exists() && parent.exists() {
         let top = git(parent, &["rev-parse", "--show-toplevel"]).ok().map(PathBuf::from);
-        if top.is_some_and(|t| t.canonicalize().ok() == parent.canonicalize().ok()) {
+        if top.is_some_and(|t| dunce::canonicalize(t).ok() == dunce::canonicalize(parent).ok()) {
             return Err(format!("{} would be a folder of the git repo {}: set where workspaces go, `git config --global raea.root ~/Documents/raea`", dir.display(), parent.display()));
         }
     }

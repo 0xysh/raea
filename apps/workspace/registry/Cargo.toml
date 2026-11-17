@@ -7,6 +7,7 @@ publish = false
 description = "A raea project's compositions, components and controllers, read from their source without running it, and lint for what isn't connected (docs/projects.feature PJ8)"
 
 [dependencies]
+dunce = "1"
 # the version engine/bundle parses TSX with
 oxc = { version = "=0.152.0", features = ["ast_visit"] }
 serde_json = "1"

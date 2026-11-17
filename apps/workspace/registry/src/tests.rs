@@ -35,7 +35,7 @@ mod tempdir {
             static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let d = std::env::temp_dir().join(format!("raea-registry-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
             std::fs::create_dir_all(&d).unwrap();
-            Dir(std::fs::canonicalize(&d).unwrap())
+            Dir(dunce::canonicalize(&d).unwrap())
         }
     }
     impl Drop for Dir {

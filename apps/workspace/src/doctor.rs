@@ -56,7 +56,7 @@ fn format(repo: &Path, file: &Path, keys: &[(&str, String)], out: &mut Vec<Findi
     }
     // only a folder that is its own repo includes its file (a workspace, a split project); an inline project shares
     // the workspace's repo, whose config must not take one project's keys
-    let own = git(repo, &["rev-parse", "--show-toplevel"]).ok().and_then(|t| Path::new(&t).canonicalize().ok()) == repo.canonicalize().ok();
+    let own = git(repo, &["rev-parse", "--show-toplevel"]).ok().and_then(|t| dunce::canonicalize(Path::new(&t)).ok()) == dunce::canonicalize(repo).ok();
     let first = keys.first().map(|(k, _)| *k).unwrap_or_default();
     let read = git(repo, &["config", first]).ok().filter(|v| !v.is_empty());
     if own && read.is_none() && get(file, first).is_some() {
@@ -107,7 +107,7 @@ pub fn registry_dir(from: &Path) -> Option<PathBuf> {
     if let Some(p) = up(from, ".raea/project") {
         return Some(p);
     }
-    let from = from.canonicalize().unwrap_or_else(|_| from.to_path_buf());
+    let from = dunce::canonicalize(from).unwrap_or_else(|_| from.to_path_buf());
     (up(&from, ".raea/workspace").as_deref() != Some(from.as_path())).then_some(from)
 }
 
