@@ -1,5 +1,9 @@
 # SOMA's body measured in GarmentCode's terms (docs/Body Measurements GarmentCode.pdf), in cm.
-#   python soma_measure.py BODY.glb SKELETON.json NEUTRAL.yaml OUT.yaml
+#   python soma_measure.py BODY.glb SKELETON.json NEUTRAL.yaml OUT.yaml [TEMPLATE_MEASURED.yaml]
+# TEMPLATE_MEASURED: this tool's own reading of the template body (the one NEUTRAL was written for). NEUTRAL holds a
+# few values set by hand where GarmentCode means something other than the tape (soma.yaml: neck_w 18.5 where the
+# template's neck reads 10.8, shoulder_w 35.5 for 32.2, bust 89.9 for 91.9); given it, a body of another build
+# (tools/clothes/body.py SHAPE=...) gets each such value scaled by its own reading over the template's.
 # Girths are convex-hull perimeters of the torso's horizontal slice (a tape measure lies over hollows).
 # The geodesic lengths (waist_line, bust lines) are read along the body's back or front midline profile.
 # What isn't measured here is the neutral body's value scaled by height, and printed as such.
@@ -123,6 +127,11 @@ scale = m["height"] / neutral["height"]
 for k, v in neutral.items():
     if k not in m:
         m[k] = v * scale; print(f"scaled from the neutral body: {k}")
+if len(sys.argv) > 5:
+    tm = yaml.safe_load(open(sys.argv[5]))["body"]
+    for k, v in neutral.items():
+        if k in tm and tm[k] and abs(v / tm[k] - 1) > 0.01 and k in m:
+            print(f"set by hand on the template, scaled: {k} {m[k]:.2f} -> {v * m[k] / tm[k]:.2f}"); m[k] = v * m[k] / tm[k]
 for k in sorted(m): print(f"{k:22s} SOMA {m[k]:7.2f}   neutral {neutral[k]:7.2f}")
 yaml.safe_dump({"body": {k: round(float(v), 4) for k, v in sorted(m.items())}}, open(out, "w"))
 print("wrote", out)

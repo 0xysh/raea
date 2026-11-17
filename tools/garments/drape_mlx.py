@@ -44,10 +44,14 @@ def body(p):
 
 # the pieces, placed round the body, and the flat cut
 LIFT_LOW = E("LIFT_LOW", 0.01)  # skirts, trousers and waistbands start nearer their place than tops
+# sleeves and cuffs start round the arm, where GarmentCode places them: lifted as a top's torso is (to fall onto the
+# shoulders), a woman's narrower sleeve (SOMA's woman build, 11-17) began with its under-seam 2 cm below the arm's
+# centreline, inside the arm, and draped as two flaps beside it; its seams to the armhole close the 6 cm between
+SLEEVE_LIFT = E("SLEEVE_LIFT", 0.01)
 X, F, FLAT, start = [], [], [], []
 for piece in P["pieces"]:
     start.append(len(X))
-    lift = LIFT_LOW if piece["name"].startswith(("skirt", "wb", "pant", "level")) else LIFT
+    lift = LIFT_LOW if piece["name"].startswith(("skirt", "wb", "pant", "level")) else SLEEVE_LIFT if ("sleeve" in piece["name"] or "cuff" in piece["name"]) else LIFT
     X += [(p[0] / 100, p[1] / 100 + lift, p[2] / 100 + SHIFT_Z) for p in piece["placed"]]
     FLAT += [(q[0] / 100, q[1] / 100) for q in piece["flat"]]
     F += [[start[-1] + i for i in f] for f in piece["faces"]]
@@ -157,9 +161,14 @@ if SMOOTH:
 gap, strain = stats()
 s, _ = body(Xm); inside = int(np.sum(np.array(s) < -0.001))
 Xd = np.array(Xm)
-# stayed: a top still hangs from the shoulders (SOMA's are at 1.45 m), anything else from the waist (1.05 m)
+# stayed: a top still hangs from the shoulders (SOMA's are at 1.45 m), anything else from the waist (1.05 m); on a
+# body of another build (BODY_YAML's measures) both heights scale with its height to the base of the neck (SOMA's
+# 145.8 cm): the woman build's coat (11-17), at her neck at 1.35 m, read as slid off against 1.38
+build = 1.0
+if BODY_YAML:
+    _b = yaml.safe_load(open(BODY_YAML))["body"]; build = (_b["height"] - _b["head_l"]) / 145.77
 has_top = any("torso" in p["name"] for p in P["pieces"])
-top_y = float(Xd[:, 1].max()); stayed = top_y > (1.38 if has_top else 0.95)
+top_y = float(Xd[:, 1].max()); stayed = top_y > (1.38 if has_top else 0.95) * build
 # closed: no seam left open more than 2 cm anywhere (a cuff whose side seam never closed hangs open below the elbow,
 # and passed on the 95th percentile alone: 23 of the first 139 lean drapes, 12 of them with cuffs)
 closed = bool(gap.max() < 20)

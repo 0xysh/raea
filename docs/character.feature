@@ -659,6 +659,26 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       Then a garment made once dresses SOMA bodies of different builds
 
     @done
+    Scenario: CH42d. A woman's build, its joints moved with it, and garments cut for it
+      # 11-17, for THE GAMBIT's tram conductress. SOMA's shape components measured on the torso (per +2 sigma):
+      # component 0 is size and sex together (at -1 sigma 9.5 cm shorter, the shoulders 3.6 cm narrower, the bust
+      # 1 cm forward), 5 (+) and 7 (-) add bust and hip and narrow the shoulders at the same height, 3 (+) makes
+      # stockier. SHAPE=0:-1.8,5:1.5,7:-1.5,3:1 on the 175.8 cm template is a sturdy woman of 159 cm (shoulders 34,
+      # bust forward 3.3, waist 31, hips 38 cm across). tools/clothes/body.py now moves each joint with the skin it
+      # carries (the skin-weighted mean of its move, nearer vertices counting more; a limb joint takes its two
+      # segments' twist joints' skin, as SOMA hangs none on the elbow or knee itself), CUT moves with the neck, the
+      # eyes with the head. A garment is cut for her by her own measures (soma_measure.py, given the template's own
+      # reading, scales the values soma.yaml sets by hand: neck_w 18.5 where the template reads 10.8), her distance
+      # grid and her body (sew.sh GARMENT_MEASURES, GARMENT_SDF, SOMA_BODY). Found on the way: her elbow had stayed
+      # at the template's distance from her shoulder; sleeves lifted 7 cm as a top's torso is began with the
+      # under-seam inside her narrower arm and draped as two flaps beside it (drape_mlx.py: sleeves start round the
+      # arm, SLEEVE_LIFT 0.01); the drape's "stayed on" read the template's shoulder height (now scaled by the
+      # measures); a collar trim on a neckline GarmentCode can cut no higher than its fc_depth 0.3 was a ring round
+      # her collarbones (trims.py's collar "drop": its top closes at the throat). Not done: a shaped headless body's
+      # on-skin covers (boots) need its template twin cut at the same place; the build is chosen by hand.
+      Then a woman's figure is a SOMA build whose joints, garments and head join are her own
+
+    @done
     Scenario: CH42c. A garment's colour is a picture in the body's own UVs
       # 11-15. `wear` bakes each garment's colour as a 2048 px picture in the body's first UV set (spread to
       # fill it): every texel of a covered triangle is a point of the body, looked up in the view that faces
