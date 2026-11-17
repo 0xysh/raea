@@ -986,6 +986,25 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       Then words make a helmet, a hat or armour that SOMA wears and moves with
       And each piece is its own part on the bone it covers, so pieces mix with sewn garments as layers
 
+    Scenario: CH49a. A sewn garment's cloth, panels and trims
+      # A sewn garment was one flat colour, so wool read as vinyl at a close-up, and a uniform had no buttons,
+      # straps, belt or collar facing. THE GAMBIT's 1917 greatcoat (M1915 Einheitsmantel) was the first case.
+      # 11-17, built in tools/garments (README):
+      #   - fabric.py: wool, serge, cotton or felt as tileable albedo, normal and roughness maps in the cut's UVs. The
+      #     UVs are laid flat in metres, so one tile is 1 m of cloth. Each material keeps its colour in its factor.
+      #   - bake_batch.py PANELS (sew.sh --panels): the pieces a key names (collar, cuff) in a colour of their own,
+      #     set per face before the seams are welded.
+      #   - trims.py: buttons, conformed patches (shoulder straps with piping, pocket flaps, a buckle) and a band (a
+      #     belt), each cast onto the draped cloth from outside. Each is skinned from the nearest cloth vertex and
+      #     carries the source it is attested by.
+      #   - glbio.py: rewrites the glb so a cover or trim set made again replaces the last.
+      # Open:
+      #   - `raea clothes make --cloth/--panels/--design` (the CLI and the manual);
+      #   - embossed detail (a button's crown, a buckle's motto) as a normal map;
+      #   - a trim on cloth that folds over itself (a turn-down collar's top layer is found, the layer under it not).
+      Then a sewn garment can be covered in a named cloth whose weave and fuzz show at a close-up
+      And a uniform's buttons, straps, belt and collar facing sit on its cloth and move with it
+
     Scenario: CH50. The people of a place, drawn from its roles
       # 11-17, sdk/character/src/people (raea/people), for a city's worth of characters (THE GAMBIT's Berlin): a
       # project lists roles (a profession, a rank in a service, a household part: the share of women, the ages, the

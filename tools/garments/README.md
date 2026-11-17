@@ -26,6 +26,21 @@ changes settings by path (`design.py`, which checks each against its options or 
 raea's models folder (`garments/`) the first time and calls it (engine/cli/src/sewn.ts); `hide_under.py` leaves out
 the body's skin under worn garments for `raea clothes wear`.
 
+    tools/garments/sew.sh OUT_DIR greatcoat "" --design old/design.yaml --set collar.component.depth=8 \
+      --colour "#66695a" --panels '{"collar": "#4a5543"}' --cloth wool
+
+- `--design FILE` starts from a saved design (a garment made again with a setting changed) instead of words.
+- `--panels` gives the pieces whose names hold a key a colour and material of their own (a uniform's collar in its
+  badge cloth); `bake_batch.py` reads it as `PANELS`, set per face before the seams are welded.
+- `--cloth wool|serge|cotton|felt` covers the garment in `fabric.py`'s cloth: a tileable weave, fibre fuzz and a
+  melange as albedo, normal and roughness maps in the cut's UVs (laid flat in metres, so 1 m of cloth is one tile).
+  The colour stays in each material's factor, so a `<MeshStandardMaterial color>` still recolours it. A garment
+  already made: `python tools/garments/fabric.py GARMENT.glb wool`.
+- `trims.py GARMENT.glb TRIMS.json` adds buttons, straps, flaps and a belt, each cast onto the draped cloth from
+  outside and skinned as the cloth under it is (the format is at the top of the script; `--landmarks` prints the
+  body's joints to place by). Made again, a set replaces the last; run it after a cover when a trim is in the
+  garment's cloth. `glbio.py` reads and rewrites the glb for both.
+
 ## Run
 
     tools/garments/engine.sh OUT_DIR 24 11     # 24 random designs, seed 11
@@ -42,6 +57,7 @@ stretch, cloth inside the skin, and whether it stayed on).
 - `sdf_igl.py`: the body as a 7 mm signed distance grid, signed by winding number
 - `drape_mlx.py`: the cloth (edges at their flat length, seams to a point, pins, pushed out of the skin)
 - `bake_batch.py`: seams welded, the flat cut as UVs, weights from the skin, glb, pictures (`raea blender run`)
+- `fabric.py`, `trims.py`, `glbio.py`: cloth maps, trims, and the glb they rewrite (above)
 - `make_garment.py`, `design.py`: one garment from settings by path (`sleeve.length=0.95`)
 - `render_pretty.py`: a garment to look at (EEVEE, fabric with sheen, soft studio light; `raea blender run`)
 - `sheet.py`, `grid.py`, `snaps_view.py`: contact sheets, and the drape's snapshots (`SNAP=1`) over the body

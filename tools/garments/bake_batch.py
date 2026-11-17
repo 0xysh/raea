@@ -29,6 +29,10 @@ cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); sc.collection.ob
 cam.data.type = "ORTHO"; cam.data.ortho_scale = 2.0
 VIEWS = {"front": (0, -4, 0.95), "threequarter": (2.8, -2.8, 0.95), "side": (4, 0, 0.95), "back": (0, 4, 0.95)}
 PICS = os.environ.get("PICTURES") == "1"
+# PANELS='{"collar": "#4d5a45"}': the pieces whose names hold a key, in that colour as a material of their own (a
+# uniform's collar in its badge cloth, cuffs in a facing colour); the rest in COLOUR. Set before the seams are welded,
+# while each face still knows its piece (the draped npz's start, the panels json's names)
+PANELS = json.loads(os.environ.get("PANELS") or "{}")
 if PICS: sc.render.image_settings.file_format = "JPEG"; sc.render.image_settings.quality = 88
 
 for d in dirs:
@@ -43,6 +47,17 @@ for d in dirs:
     bm = bmesh.new(); bm.from_mesh(me); uv = bm.loops.layers.uv.new("cut"); FLAT = Z["FLAT"]
     for fc in bm.faces:
         for l in fc.loops: l[uv].uv = FLAT[l.vert.index]
+    if PANELS:
+        names = [p["name"] for p in json.load(open(os.path.join(d, name + ".panels.json")))["pieces"]]
+        piece = np.searchsorted(np.asarray(Z["start"]), np.arange(len(X)), "right") - 1
+        keys, hit = list(PANELS), {}
+        for fc in bm.faces:
+            pn = names[piece[fc.verts[0].index]]
+            k = next((i for i, key in enumerate(keys) if key in pn), None)
+            if k is not None:
+                fc.material_index = k + 1; hit[keys[k]] = hit.get(keys[k], 0) + 1
+        for key in keys:
+            print(f"bake: {name}: {key} pieces {'in their own colour (%d faces)' % hit[key] if key in hit else 'NOT FOUND among ' + ', '.join(names)}", flush=True)
     bm.verts.ensure_lookup_table(); targets = {}
     for i, j in Z["seams"]:
         i, j = int(i), int(j)
@@ -70,6 +85,14 @@ for d in dirs:
     bsdf.inputs["Base Color"].default_value = (*[x ** 2.2 for x in rgb], 1); bsdf.inputs["Roughness"].default_value = 0.9
     mat.diffuse_color = (*[x ** 2.2 for x in rgb], 1)
     me.materials.append(mat)
+    extra = []
+    for key, c in PANELS.items():
+        pm = bpy.data.materials.new(f"{name}-{key}"); pm.use_nodes = True
+        prgb = [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        pb = next(x for x in pm.node_tree.nodes if x.type == "BSDF_PRINCIPLED")
+        pb.inputs["Base Color"].default_value = (*[x ** 2.2 for x in prgb], 1); pb.inputs["Roughness"].default_value = 0.9
+        pm.diffuse_color = (*[x ** 2.2 for x in prgb], 1)
+        me.materials.append(pm); extra.append(pm)
     if not PICS:
         for o in bpy.data.objects: o.select_set(o is g or o is arm)
         bpy.ops.export_scene.gltf(filepath=os.path.join(d, name + ".glb"), export_format="GLB", use_selection=True,
@@ -82,4 +105,5 @@ for d in dirs:
         json.dump({"name": name, "colour": colour, "views": list(VIEWS), "vertices": welded},
                   open(os.path.join(d, name + ".bake.json"), "w"))
     bpy.data.objects.remove(g); bpy.data.meshes.remove(me); bpy.data.materials.remove(mat)
+    for pm in extra: bpy.data.materials.remove(pm)
     print(f"bake: {name}: {len(X)} -> {welded} vertices, {colour}, {time.time() - t0:.1f} s", flush=True)
