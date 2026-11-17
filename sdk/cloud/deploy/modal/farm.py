@@ -64,7 +64,13 @@ image = (
     .pip_install("fastapi[standard]==0.121.2")
     .add_local_file(os.path.join(CLOUD, "image", "nvidia_icd.json"), "/usr/share/vulkan/icd.d/nvidia_icd.json", copy=True)
     .env({"WGPU_BACKEND": "vulkan", "NVIDIA_DRIVER_CAPABILITIES": "all", "RAEA_CLIP_CHECK": "0", "RAEA_AUDIO_MUTE": "1",
-          "RAEA_MODELS": "/models/raea", "RAEA_FEED_MODELS": "/models/feed", "RAEA_LIBRARY_MODELS": "/models/library"})
+          "RAEA_MODELS": "/models/raea", "RAEA_FEED_MODELS": "/models/feed", "RAEA_LIBRARY_MODELS": "/models/library",
+          # a render's sound pass, for a sound its project's store doesn't have yet: TokenSynth as
+          # deploy/modal/tokensynth.py installs it, its notes on the GPU (CR25); a model the volume doesn't have fails
+          # the job at once instead of installing it on a GPU's clock
+          "RAEA_TOKENSYNTH": "/models/tokensynth", "RAEA_TOKENSYNTH_DEVICE": "cuda", "RAEA_AUDIO_AUTOSETUP": "0",
+          # Stable Audio Open small on ONNX Runtime with CUDA, as deploy/modal/sao.py installs it (CR25)
+          "RAEA_SAO": "/models/sao"})
     .add_local_python_source("farm_plan", "farm_media", "prices")
 )
 
