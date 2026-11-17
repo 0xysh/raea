@@ -1,5 +1,5 @@
-//! The window at rest (RAEA_IDLE_GATE=1 while it's checked on screen). Bevy's default runs the whole frame 60 times a
-//! second, focused or behind other windows, though a page painted the same isn't drawn again (raea-sys-page draw.rs):
+//! The window at rest (on by default since 0.1.6; RAEA_IDLE_GATE=0 draws every frame). Bevy's default runs the whole
+//! frame 60 times a second, focused or behind other windows, though a page painted the same isn't drawn again (draw.rs):
 //! the page's step, its restyle and paint, and Bevy's render and present of a picture that didn't change were 0.29 of a
 //! core with the app's feed open and still (11-16). After half a second in which no page was drawn and none is
 //! animating, the window waits for input before its next frame (or 50 ms when focused, 250 ms behind other windows, so

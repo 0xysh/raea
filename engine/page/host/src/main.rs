@@ -108,19 +108,19 @@ fn main() {
     // every schedule on one thread: the window's ~290 systems a frame are each a few µs, and the multi-threaded executor
     // spent more waking its workers for them than they took (35% of the window's busy time at rest). On one thread, the
     // app's window used 34% less CPU at rest, 8% less through a drag and 4% less playing a film, its frames as long
-    // (11-16, three rounds each). Systems' own par_iter still use the task pools. RAEA_ST=1 (the environment, or raea's
-    // settings file: ~/.raea/env, read where the app's window has no shell to set it) until the window specs pass with
-    // it, then on by default (RAEA_ST=0 for Bevy's multi-threaded one). Open: playback's "a seek while it plays" shows
-    // one more frame from where it was after the seek (3 runs of 3; the multi-threaded run shows two, as the spec allows)
-    if raea_io_home::setting("RAEA_ST").as_deref() == Some("1") {
+    // (11-16, three rounds each). Systems' own par_iter still use the task pools. On by default since 0.1.6 (the
+    // developer, 11-16); RAEA_ST=0 for Bevy's multi-threaded one, in the environment or raea's settings file
+    // (~/.raea/env: the app's window has no shell to set it in). Known: playback's "a seek while it plays" shows one more
+    // frame from where it was after the seek (3 runs of 3; the multi-threaded run shows two, as the spec allows)
+    if raea_io_home::setting("RAEA_ST").as_deref() != Some("0") {
         // a schedule that's running is out of Schedules: First sets the rest, Last sets First (Main is one system)
         app.add_systems(First, single_threaded).add_systems(Last, single_threaded);
         app.sub_app_mut(bevy::render::RenderApp).add_systems(bevy::render::ExtractSchedule, single_threaded).add_systems(bevy::render::Render, single_threaded);
     }
-    // on screen, a window with nothing changing waits for input (raea_page_host::idle); RAEA_IDLE_GATE=1 (the
-    // environment or ~/.raea/env, as RAEA_ST) while it's checked on screen
+    // on screen, a window with nothing changing waits for input (raea_page_host::idle): on by default since 0.1.6 (the
+    // developer, 11-16), RAEA_IDLE_GATE=0 (the environment or ~/.raea/env, as RAEA_ST) for every frame drawn
     #[cfg(feature = "window")]
-    if a.window && raea_io_home::setting("RAEA_IDLE_GATE").as_deref() == Some("1") {
+    if a.window && raea_io_home::setting("RAEA_IDLE_GATE").as_deref() != Some("0") {
         app.add_plugins(raea_page_host::idle::IdlePlugin);
     }
     // on screen, bevy_winit's event loop is the runner (a ScheduleRunner here replaced it: no window, 11-04)
