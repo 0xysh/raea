@@ -107,7 +107,7 @@ pub(crate) fn root_on(world: &mut World, page: Entity, nodes: Nodes, w: u32, h: 
     }
     scripts.extend(preamble.iter().enumerate().map(|(i, s)| (s.clone(), format!("preamble{i}.js"))));
     scripts.push((code.to_string(), "bundle.js".into()));
-    let mut root = Root { page, js, out, nodes, queue: Vec::new(), ticking: false, clicks: 1, capture: None, hover_frozen: None, medias: Default::default(), views: Default::default(), fonts_wait: None, bevy_ui: false, placed_videos: false, frame, frames_seen: Default::default(), synced: false };
+    let mut root = Root { page, js, out, nodes, queue: Vec::new(), ticking: false, clicks: 1, capture: None, hover_frozen: None, medias: Default::default(), views: Default::default(), fonts_wait: None, bevy_ui: false, placed_videos: false, frame, frames_seen: Default::default(), synced: false, upkeep: raea_runtime_js::js::Upkeep::from_env() };
     for (src, name) in &scripts {
         root.js(world, |js| js.eval(src, name)).map_err(|e| format!("{name}: {e}"))?;
     }

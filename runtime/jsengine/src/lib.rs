@@ -15,6 +15,8 @@ use std::rc::Rc;
 pub mod jsc;
 #[cfg(any(feature = "portable", not(target_vendor = "apple")))]
 mod quickjs;
+mod upkeep;
+pub use upkeep::{Upkeep, inspect};
 
 /// An argument to a global function.
 pub enum Arg<'a> {
@@ -97,6 +99,11 @@ pub trait JsEngine {
     }
     /// Between frames: the engine's own upkeep (JavaScriptCore's GC timers live on the thread's run loop).
     fn idle(&mut self) {}
+    /// What its heap holds now, as one JSON object, for the heap log (Upkeep): JavaScriptCore's statistics (its size and
+    /// objects counted by type), QuickJS's memory usage. None where the engine can't say.
+    fn heap(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// Whether `error` is a run stopped by its time limit (JavaScriptCore's watchdog, QuickJS's interrupt).

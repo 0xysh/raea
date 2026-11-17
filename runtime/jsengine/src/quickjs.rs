@@ -158,4 +158,12 @@ impl JsEngine for Quick {
     fn collect(&mut self) {
         self.rt.run_gc();
     }
+
+    fn heap(&mut self) -> Option<String> {
+        let m = self.rt.memory_usage();
+        Some(format!(
+            r#"{{"mallocSize":{},"memoryUsed":{},"objectCount":{},"objectSize":{},"propertyCount":{},"stringCount":{},"stringSize":{},"arrayCount":{},"functionCount":{},"shapeCount":{},"binaryObjectCount":{},"binaryObjectSize":{}}}"#,
+            m.malloc_size, m.memory_used_size, m.obj_count, m.obj_size, m.prop_count, m.str_count, m.str_size, m.array_count, m.js_func_count, m.shape_count, m.binary_object_count, m.binary_object_size
+        ))
+    }
 }
