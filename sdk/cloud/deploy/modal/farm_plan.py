@@ -48,6 +48,23 @@ def gpus_for(frames, frame_s, start_s, most):
     return max(1, min(most, frames, k))
 
 
+# a GPU takes up to this many parts of a long job, one after another from the job's queue, so a slow card (an L4 among
+# L40Ss) ends up drawing fewer frames instead of holding up the job
+PARTS = 4
+
+
+def parts_per_gpu(frames, k, frame_s, start_s):
+    """How many parts each of `k` GPUs takes from the queue: the most (up to PARTS) that keep a part's own start
+    (start_s, more than a warm GPU needs) at most SHARE of the part. Above 1 only when the GPU limit capped `k`."""
+    if k <= 0 or frame_s <= 0:
+        return 1
+    least = start_s * (1 - SHARE) / SHARE / frame_s  # the frames a part needs for its start to be worth it
+    m = 1
+    while m < PARTS and frames / (k * (m + 1)) >= least:
+        m += 1
+    return m
+
+
 def runs(first, last, k, warm=0):
     """Frames first..last (inclusive) as `k` contiguous runs, each led by `warm` frames to drop (a renderer's history,
     Solari's light, settling): [(frames to render, the first one kept)]."""
@@ -120,9 +137,12 @@ def keep(frames_dir, out, start=0):
         shutil.move(os.path.join(frames_dir, name), os.path.join(out, f"frame-{i:05d}.png"))
 
 
-def spread(fn, kind, calls, log, what, bill=None):
-    """`calls` on `fn` at once; each finished run said in the log as it lands. The first failure's code, else 0."""
+def spread(fn, kind, calls, log, what, bill=None, most=None):
+    """`calls` on `fn`, at most `most` GPUs at once when there are more calls than that (each GPU takes the next call
+    as it finishes one); each finished run said in the log as it lands. The first failure's code, else 0."""
     code = 0
+    if most and len(calls) > most:
+        fn = fn.with_options(max_containers=most)
     for r in fn.starmap(calls, order_outputs=False, return_exceptions=True):
         if isinstance(r, Exception):
             log(f"raea farm: a run failed: {r!r}", err=True)
@@ -162,14 +182,16 @@ def raea_render(args, opts, work, log, render, cpu_env, run, reload=lambda: None
     start_s = max(0.0, r0["s"] - frame_s * n0)
     left = length - n0
     k = gpus_for(left, frame_s, start_s, opts["gpus"])
-    cost = price(kind, p["s"] + r0["s"] + k * start_s + left * frame_s)
-    log(f"raea farm: {frame_s * 1000:.0f} ms a frame, {start_s:.1f} s to start; {left} frames left on {k} {kind}s, about ${cost:.3f} in all")
+    m = parts_per_gpu(left, k, frame_s, start_s)
+    cost = price(kind, p["s"] + r0["s"] + k * m * start_s + left * frame_s)
+    parts = f" in {k * m} parts" if m > 1 else ""
+    log(f"raea farm: {frame_s * 1000:.0f} ms a frame, {start_s:.1f} s to start; {left} frames left on {k} {kind}s{parts}, about ${cost:.3f} in all")
     if opts.get("max_usd") is not None and cost > opts["max_usd"]:
         log(f"raea farm: about ${cost:.3f} is over max_usd ${opts['max_usd']:.3f}, so the rest don't start", err=True)
         return 3
     # a video's runs can't drop warm-up frames without encoding again, so they have none
     warm = 0 if video else opts.get("warm", 0)
-    code = spread(render, kind, [(id, rest, f, at, False, video) for f, at in runs(n0, length - 1, k, warm)], log, "frames", bill) if left else 0
+    code = spread(render, kind, [(id, rest, f, at, False, video) for f, at in runs(n0, length - 1, k * m, warm)], log, "frames", bill, k) if left else 0
     if code:
         return code
     reload()  # the other containers' frames
@@ -230,13 +252,15 @@ def blender(args, opts, work, log, render, run, reload=lambda: None, bill=None):
     start_s = max(0.0, r0["s"] - frame_s)
     left = last - first
     k = gpus_for(left, frame_s, start_s, opts["gpus"])
-    cost = price(kind, r0["s"] + k * start_s + left * frame_s)
-    log(f"raea farm: frame {first} on a {kind} in {r0['s']:.1f} s ({frame_s:.1f} s rendering); {left} left on {k} {kind}s, about ${cost:.3f} in all")
+    m = parts_per_gpu(left, k, frame_s, start_s)
+    cost = price(kind, r0["s"] + k * m * start_s + left * frame_s)
+    parts = f" in {k * m} parts" if m > 1 else ""
+    log(f"raea farm: frame {first} on a {kind} in {r0['s']:.1f} s ({frame_s:.1f} s rendering); {left} left on {k} {kind}s{parts}, about ${cost:.3f} in all")
     if opts.get("max_usd") is not None and cost > opts["max_usd"]:
         log(f"raea farm: about ${cost:.3f} is over max_usd ${opts['max_usd']:.3f}, so the rest don't start", err=True)
         return 3
-    calls = [(id, blend, f[0], f[-1], o) for f, _ in runs(first + 1, last, k)] if left else []
-    code = spread(render, kind, calls, log, "frames", bill) if calls else 0
+    calls = [(id, blend, f[0], f[-1], o) for f, _ in runs(first + 1, last, k * m)] if left else []
+    code = spread(render, kind, calls, log, "frames", bill, k) if calls else 0
     if code:
         return code
     reload()  # the other containers' frames

@@ -22,7 +22,7 @@ class FakeGpu:
     """raea_run's stand-in: a 60-frame piece, frame 0 in 12 s (the start), 0.5 s a frame after."""
 
     def __init__(self, root, length=60):
-        self.root, self.length, self.calls = root, length, []
+        self.root, self.length, self.calls, self.options = root, length, [], {}
 
     def png(self, path):
         # a 16x16 grey PNG, made once by ffmpeg
@@ -45,6 +45,10 @@ class FakeGpu:
             if f >= first:
                 self.png(f"{dest}/frame-{f:05d}.png")
         return {"code": 0, "out": "", "s": 12 + 0.5 * len(frames), "frames": len(frames), "ms": 500.0}
+
+    def with_options(self, **kw):
+        self.options = kw
+        return self
 
     def starmap(self, calls, order_outputs=False, return_exceptions=True):
         return [self.remote(*c) for c in calls]
@@ -98,6 +102,19 @@ out = os.listdir(os.path.join(root, "jobs", "j2", "work", "stills"))
 assert code == 0 and len(out) == 1000 and "frame-00999.png" in out, (code, len(out))
 assert len(long.calls) == 2 + 2 + 10, len(long.calls)
 ok("a 1000-frame render to a folder: 10 GPUs, the frames named as raea names them")
+
+# below the GPU limit each GPU already gets just enough frames for its start: one part each
+assert fp.parts_per_gpu(19, 10, 8, 5) == 1 and fp.parts_per_gpu(992, 9, 0.22, 6) == 1
+# capped by the limit, a long job goes in up to 4 parts a GPU while each part still pays for its start
+assert fp.parts_per_gpu(250, 10, 8, 5) == 4 and fp.parts_per_gpu(60, 10, 8, 5) == 2
+lines.clear()
+os.makedirs(os.path.join(root, "jobs", "j3", "work"))
+q = FakeGpu(root, length=1000)
+code = fp.raea_render(["render", "a.tsx", "-o", "stills"], {"id": "j3", "gpu": "L4", "gpus": 2}, os.path.join(root, "jobs", "j3", "work"), log, q, {}, run)
+out = os.listdir(os.path.join(root, "jobs", "j3", "work", "stills"))
+assert code == 0 and len(out) == 1000 and q.options == {"max_containers": 2} and len(q.calls) == 2 + 8, (code, len(out), q.options, len(q.calls))
+assert "on 2 L4s in 8 parts" in " ".join(lines), lines
+ok("a long job on too few GPUs: 4 parts a GPU from a queue of 2 at a time, every frame back")
 
 b = fp.Bill()
 t = b.t0
