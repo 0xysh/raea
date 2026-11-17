@@ -120,7 +120,9 @@ pub fn default_root(home: &Path) -> PathBuf {
 pub(crate) fn include(repo: &Path, file: &Path) -> R<()> {
     // both ends the same way, plain (dunce): on Windows git prints C:/... and canonicalize() alone gave \\?\C:\..., which
     // share no root, so the include climbed to the drive and named the file by its \\?\ path, and every git command in
-    // the workspace failed ("Invalid argument") from its first commit (0.1.5, 0.1.6)
+    // the workspace failed ("Invalid argument") from its first commit (0.1.5, 0.1.6). Such an include goes first: with
+    // it there, the rev-parse below fails too.
+    crate::repair::drop_verbatim_includes(repo)?;
     let cfg = PathBuf::from(git(repo, &["rev-parse", "--path-format=absolute", "--git-path", "config"])?);
     let cfg = dunce::canonicalize(&cfg).unwrap_or(cfg);
     let file = dunce::canonicalize(file).map_err(|e| format!("{}: {e}", file.display()))?;

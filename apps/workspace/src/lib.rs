@@ -8,6 +8,7 @@ use serde_json::json;
 mod controllers;
 pub mod doctor;
 mod literal;
+mod repair;
 pub mod next;
 pub mod registry;
 mod storage;

@@ -49,6 +49,11 @@ fn old_briefs(dir: &Path, depth: usize, out: &mut Vec<Finding>) {
 
 /// A committed git-config file's keys this version writes, and its include from the repo's config.
 fn format(repo: &Path, file: &Path, keys: &[(&str, String)], out: &mut Vec<Finding>) {
+    // first, so its fix runs before the others: with it there, every git command in the repo fails (#169)
+    if crate::repair::has_verbatim_include(repo) {
+        let says = format!("{}: its git config includes a \\\\?\\ path Git for Windows can't open (written by raea 0.1.5 or 0.1.6 on Windows), so every git command in it fails; --fix replaces it", repo.display());
+        out.push(Finding { says, fix: Fix::Include(repo.to_path_buf(), file.to_path_buf()) });
+    }
     for (k, v) in keys {
         if get(file, k).is_none() {
             out.push(Finding { says: format!("{}: no {k} (an older format); --fix sets it to {v}", file.display()), fix: Fix::Set(file.to_path_buf(), k.to_string(), v.clone()) });

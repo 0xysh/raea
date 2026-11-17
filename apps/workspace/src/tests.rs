@@ -203,3 +203,39 @@ fn a_new_workspace_and_project_have_the_layout() {
     assert!(tracked.contains("projects/desk-test/components/.gitkeep") && tracked.contains("shared/assets/.gitkeep"), "{tracked}");
     let _ = std::fs::remove_dir_all(&ws);
 }
+
+#[test]
+fn a_verbatim_include_is_dropped_and_nothing_else() {
+    // .git/config as raea 0.1.6 left it on Windows (#169, read off the test PC), with an [includeIf] and a good include
+    let text = "[core]\n\trepositoryformatversion = 0\n[include]\n\tpath = ../../../../../../../../\\\\\\\\?\\\\C:/\\\\/Users/you/Documents/raea/acme/.raea/workspace\n[includeIf \"gitdir:~/x/\"]\n\tpath = ../keep?\\\\x\n[include]\n\tpath = ../.raea/workspace\n";
+    let (fixed, dropped) = crate::repair::without_verbatim(text);
+    assert!(dropped);
+    assert_eq!(fixed, "[core]\n\trepositoryformatversion = 0\n[include]\n[includeIf \"gitdir:~/x/\"]\n\tpath = ../keep?\\\\x\n[include]\n\tpath = ../.raea/workspace\n");
+    assert_eq!(crate::repair::without_verbatim(&fixed).0, fixed);
+    assert!(!crate::repair::without_verbatim("[include]\r\n\tpath = ../.raea/workspace\r\n").1);
+}
+
+#[test]
+fn a_workspace_0_1_6_broke_is_repaired() {
+    // updated from 0.1.6: its include names a \\?\ path; doctor says so, and adopt (as init inside it) puts it right
+    let ws = scratch("repair");
+    crate::workspace::workspace(&["adopt".into(), ws.display().to_string(), "--name".into(), "Repair".into()]).unwrap();
+    let cfg = ws.join(".git/config");
+    let bad = "\tpath = ../../../../\\\\\\\\?\\\\C:/\\\\/Users/you/Documents/raea/repair/.raea/workspace\n";
+    let text = std::fs::read_to_string(&cfg).unwrap().replace("\tpath = ../.raea/workspace\n", bad);
+    std::fs::write(&cfg, text).unwrap();
+    // on Windows this is #169 itself: Git for Windows refuses the include, so every git command in the repo fails
+    let status = || std::process::Command::new("git").arg("-C").arg(&ws).args(["status", "--short"]).output().unwrap();
+    if cfg!(windows) {
+        assert!(!status().status.success(), "git ran in a repo whose include names a \\\\?\\ path");
+    }
+    assert!(crate::repair::has_verbatim_include(&ws));
+    let said: Vec<String> = crate::doctor::findings(&ws, &[], "test").into_iter().filter(|f| f.fixable()).map(|f| f.says).collect();
+    assert!(said.iter().any(|s| s.contains("Git for Windows can't open")), "{said:?}");
+    crate::workspace::workspace(&["adopt".into(), ws.display().to_string()]).unwrap();
+    assert!(!crate::repair::has_verbatim_include(&ws));
+    let o = std::process::Command::new("git").arg("-C").arg(&ws).args(["config", "--get-all", "include.path"]).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "../.raea/workspace");
+    assert!(status().status.success(), "git status after the repair: {}", String::from_utf8_lossy(&status().stderr));
+    let _ = std::fs::remove_dir_all(&ws);
+}
