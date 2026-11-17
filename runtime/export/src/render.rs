@@ -195,21 +195,34 @@ pub fn render_bundle(js: &Path, dir: &Path, out: &Path, wanted: Option<Vec<i64>>
     // a video: fed, its pages handed to the encoder on the GPU (B1d), until a frame holds 3D, which starts it again
     // with its 3D drawn live under each page
     let video = wanted.is_none() && matches!(ext.as_str(), "mp4" | "mov" | "txt") && how != "files" && raea_runtime_view::gpuview::paint_device().is_some();
+    // a bundle that can show 3D (it holds data-3d, the test live play opens its 3D engine on: runtime/live open.rs)
+    // starts with its 3D live; started as 2D, it threw its first frames away at the first 3D one and started again,
+    // ~300 ms of a warm 150-frame 3D render (11-16). RAEA_3D_FIRST=1 until checked against the probe's frames
+    if video && how != "program" && std::env::var("RAEA_3D_FIRST").as_deref() == Ok("1") && std::fs::read_to_string(js).is_ok_and(|t| t.contains("data-3d")) {
+        raea_runtime_react::startup_mark("the bundle holds 3D: the render starts with its 3D");
+        return live_3d(js, dir, out);
+    }
     BEVY_3D_PROBE.store(video, std::sync::atomic::Ordering::Relaxed);
     let r = render_bundle_with(js, dir, out, wanted, video, None, false);
     BEVY_3D_PROBE.store(false, std::sync::atomic::Ordering::Relaxed);
     if video && r.as_ref().err().is_some_and(|e| e.contains(FED_3D)) {
         raea_runtime_react::startup_mark("a 3D frame met: the render starts again with its 3D");
-        // its 3D made live as each frame steps, React once a frame (#26, #38); RAEA_3D=program makes its rows first
+        // RAEA_3D=program makes its rows first
         if how != "program" {
-            LIVE_CLIPS.store(true, std::sync::atomic::Ordering::Relaxed);
-            let r = render_bundle_with(js, dir, out, None, true, None, true);
-            LIVE_CLIPS.store(false, std::sync::atomic::Ordering::Relaxed);
-            return r;
+            return live_3d(js, dir, out);
         }
         let scene = scene_program_checked(js, dir, 0, None)?;
         return render_bundle_with(js, dir, out, None, scene.is_some(), scene, false);
     }
+    r
+}
+
+/// A video fed with its 3D made live as each frame steps, React once a frame (#26, #38), each frame's scene kept for the
+/// clipping check at its end.
+fn live_3d(js: &Path, dir: &Path, out: &Path) -> R<String> {
+    LIVE_CLIPS.store(true, std::sync::atomic::Ordering::Relaxed);
+    let r = render_bundle_with(js, dir, out, None, true, None, true);
+    LIVE_CLIPS.store(false, std::sync::atomic::Ordering::Relaxed);
     r
 }
 
