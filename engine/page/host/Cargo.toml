@@ -33,6 +33,8 @@ raea-page-window = { path = "../window" }
 raea-sys-page = { path = "../../../systems/page" }
 # headless, the system calls are scripted (docs/targets.feature T2d)
 raea-io-os = { path = "../../../io/os" }
+# raea's settings file (~/.raea/env): the window's perf switches, set where the app's window has no shell (main.rs)
+raea-io-home = { path = "../../../io/home" }
 raea-sys-fonts = { path = "../../../systems/fonts" }
 raea-runtime-dom = { path = "../../../runtime/dom" }
 raea-runtime-input = { path = "../../../runtime/input" }

@@ -14731,6 +14731,7 @@ dependencies = [
  "blitz-traits",
  "image",
  "keyboard-types",
+ "raea-io-home",
  "raea-io-media",
  "raea-io-net-calls",
  "raea-io-os",

@@ -31,7 +31,7 @@ mod snapshot;
 pub use snapshot::{OFFSET_BODY, OFFSET_NONE, OFFSETS, STRIDE, snapshot, snapshot_by};
 pub mod view3d;
 
-pub use draw::{Placed, view, view_at};
+pub use draw::{Placed, draws, view, view_at};
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

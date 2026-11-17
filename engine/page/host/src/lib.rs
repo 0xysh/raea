@@ -9,6 +9,8 @@ pub mod brp;
 pub use raea_page_window::{chrome, native};
 /// the live stage, in raea-page-stage
 pub use raea_page_stage as stage;
+#[cfg(feature = "window")]
+pub mod idle;
 pub mod inject;
 pub mod mcp;
 pub mod page;

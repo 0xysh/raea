@@ -13,6 +13,15 @@ pub struct Scenes {
     pub todo: Vec<Drawn>,
 }
 
+/// Pages drawn so far (each one Vello drew, not one skipped as painted the same): what the window reads to rest (draws).
+static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many pages have been drawn since the process started: unchanged from one frame to the next, nothing on any page
+/// changed (a playing video, a stage or a view draws its page every frame).
+pub fn draws() -> u64 {
+    DRAWS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The one Vello renderer on Bevy's device (not `Sync`: its shader cache holds cells, so it's held in a SyncCell and the
 /// render world can run on a thread of its own, as the engine's pipelined updates run it), made on first use; each page's
 /// storage texture Vello draws into; and the pass that premultiplies it into the page's image.
@@ -171,6 +180,7 @@ pub fn draw(mut scenes: ResMut<Scenes>, mut vello: ResMut<Vello>, device: Res<Re
             continue;
         }
         prints.insert(handle.id(), print);
+        DRAWS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // a bevy_ui page's renders (its layers' and its own) blend in linear light (vendor/vello_shaders fine.wgsl)
         vello::low_level::vello_encoding::set_blend_linear(linear);
         // each filtered layer drawn by Vello, filtered, and handed to Vello as its placeholder's pixels, an inner
