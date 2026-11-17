@@ -2,7 +2,9 @@
 //! scene can be measured on each path without editing it. `raster` takes SolariLighting and Pathtracer off the
 //! cameras; `solari` puts SolariLighting (Bevy's defaults) on each camera in place of a Pathtracer; `pathtracer`
 //! puts Pathtracer on each in place of SolariLighting, for the reference frame (with RAEA_LIGHT_SPP, runtime/export
-//! bevy_frame.rs draws each frame that many times, so it converges). Unset, nothing changes.
+//! bevy_frame.rs draws each frame that many times, so it converges, and starts each frame's accumulation afresh,
+//! `restart_pathtracer`, so a thing that moves under a held camera isn't smeared across frames). Unset, nothing
+//! changes.
 
 use bevy::prelude::*;
 use bevy::solari::pathtracer::Pathtracer;

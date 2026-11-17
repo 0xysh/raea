@@ -31,6 +31,14 @@ pub fn add_denoiser(app: &mut App) {
     let _ = app;
 }
 
+/// The path tracer starts its accumulation again on the next draw (a reference frame of its own, RAEA_LIGHT_SPP,
+/// docs/realism.feature LT1; it starts again by itself only when the camera moves).
+pub fn restart_pathtracer(world: &mut World) {
+    for mut p in world.query::<&mut bevy::solari::pathtracer::Pathtracer>().iter_mut(world) {
+        p.reset = true;
+    }
+}
+
 /// A cut to another camera (docs/rerender.feature RR2): Solari's and the path tracer's history start again, as on their
 /// first frame, so the last shot's light isn't carried into this one (Bevy's `reset`, for "sudden camera cuts").
 pub fn cut(world: &mut World) {

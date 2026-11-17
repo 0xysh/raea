@@ -81,7 +81,11 @@ pub(crate) fn bevy_over_3d(world: &mut World, page: &mut raea_runtime_page::Bevy
     e.set_view_box(view);
     let mats = page.set_ui_materials(e.world_mut())?;
     // one draw a frame, as the fed render draws it (drawn again, a frame's auto exposure and temporal passes move on);
-    // RAEA_LIGHT_SPP=N draws it N times, the last kept, so a path-traced reference converges (docs/realism.feature LT1)
+    // RAEA_LIGHT_SPP=N draws it N times, the last kept, so a path-traced reference converges (docs/realism.feature LT1),
+    // its accumulation started afresh so the frame before isn't in it
+    if spp() > 1 {
+        raea_render::restart_pathtracer(e.world_mut());
+    }
     for _ in 1..spp() {
         e.draw(cx.now);
     }

@@ -104,12 +104,37 @@ Feature: raea Light: one realism system for shading, ray tracing and occlusion, 
         room (interior, light jumps), a kitchen (gambit's first-person table, fp-lab-table: contact shadows and occlusion;
         the anything film's kitchen doesn't render on 11-17, every composition in content/anything throwing "Can't find
         variable: raea" before its first frame) and the glade (foliage, sun through leaves)
+      And the plan
+        | crate                 | file                       | lines | job                                                       |
+        | raea-light            | src/lib.rs                 | 260   | `raea light check`: scenes, references kept, paths, live  |
+        | raea-light            | src/metric.rs              | 190   | stops on 8x8 blocks, worst tile, flicker against the shot |
+        | raea-render-raytrace  | src/force.rs               | 70    | RAEA_LIGHT: every camera on one path                      |
+        | raea-render-raytrace  | src/lib.rs                 | 55    | restart_pathtracer, Solari wanted when forced             |
+        | raea-render           | src/lib.rs                 | 40    | restart_pathtracer for the frame loop                     |
+        | raea-runtime-export   | src/bevy_frame.rs          | 340   | RAEA_LIGHT_SPP: a frame drawn N times, accumulated afresh |
+        | bevy_solari           | src/pathtracer/extract.rs  | 40    | raea: the path tracer's reset one-shot, as Solari's       |
+        | raea-cli              | src/cli.rs                 | 384   | the `light` verb                                          |
       Then each has a converged <Pathtracer> frame as its reference, in the same units and exposure; gambit's, whose
         world is drawn by hooks the path tracer can't run (M5), only once LT2 and LT3 put them in the traced path
+      And Berlin (gambit's people-ingame) is the main scene, every step aimed at it first and shown on it before and
+        after (Shane, 11-17); the other three prove the check until the path tracer can draw Berlin
       And `raea light check` renders each with the current path and reports distance to the reference (mean and
         worst tile, in stops), temporal stability over a moving shot, and the live frame time at 1080p and half size
+        (half size waits on a switch that draws the 3D smaller: the live 3D draws at its composition's size whatever
+        the stage's, so `raea play --size` measured the same frame, 11-17)
       And the numbers for today's paths (flat ambient, captured environment, traced AO, Solari) are recorded here as
         the baseline before any step below lands
+      And measured 11-17 on this Mac: FLOOR3, stills 1500 and 4000 against a 2048-sample reference (44 s a frame), the
+        distance on 8x8-pixel blocks, flicker against the path-traced shot 1500-1504, live 6 s unthrottled at 1080p
+        | scene  | path      | mean stops | bias  | worst tile | flicker | live ms a frame |
+        | floor3 | raster    | 1.379      | -0.80 | 3.37       | 0.101   | 18.0            |
+        | floor3 | traced-ao | 1.379      | -0.80 | 3.37       | 0.101   | 18.6            |
+        | floor3 | solari    | 0.959      | -0.95 | 2.62       | 0.113   | 47.6            |
+      And what they say: Solari is nearer the truth than raster, its error almost all one bias (a stop dark, the
+        bounce an interior lives on), raster's patchy; but Solari costs 2.6 times raster's frame. traced-ao is raster
+        here (FLOOR3's camera has no <AmbientOcclusion>). The shot held still (raster's frames are identical), so its
+        flicker is the reference's own noise, about 0.10 stops at 2048 samples: a moving shot is still to pick. Berlin
+        and the kitchen have no reference yet (M5, M9); the glade waits on a re-run
 
   Rule: One material, one scene
 

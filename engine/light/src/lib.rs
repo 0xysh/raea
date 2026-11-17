@@ -1,11 +1,15 @@
 //! `raea light check SCENES.json -o DIR` (docs/realism.feature LT1): the bar raea Light is measured by. Each scene
 //! is rendered on each light path (RAEA_LIGHT, engine/render/raytrace force.rs) and against its reference, the path
 //! tracer held RAEA_LIGHT_SPP draws a frame: how far each path's stills are from it in stops (mean, bias, worst tile),
-//! how much its moving shot flickers, and what a frame costs. The numbers go to DIR/report.json and a table.
+//! how much its moving shot flickers against the shot path-traced, and what a frame costs. The numbers go to
+//! DIR/report.json and a table.
 //!
 //! A scene in SCENES.json: { "name", "dir" (its project, where its renders run; ~ is the home folder), "file" (in dir),
-//! "composition", "stills": [frame, ...], "shot": [first, last] (optional), "reference": false (optional: its
-//! reference can't be made yet, and why, in "why") }.
+//! "composition", "stills": [frame, ...], "shot": [first, last] (optional; a few frames are enough, each is
+//! path-traced), "spp": N (optional: its reference's samples a pixel, in place of --spp), "reference": false (optional: its
+//! reference can't be made yet, and why, in "why"), "live": true (optional: `raea play FILE` plays this composition,
+//! its file's first, so its live frame time is measured; false with "live_why" says why not), "size": [w, h] (the
+//! live stage, 1920x1080 by default) }.
 
 pub mod metric;
 
@@ -14,10 +18,19 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,solari] [--spp N] [--fresh]";
+pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari] [--spp N] [--fresh]";
 
-/// The light paths a check compares, as RAEA_LIGHT names them.
-const PATHS: [&str; 2] = ["raster", "solari"];
+/// The light paths a check compares: RAEA_LIGHT's, and traced-ao, raster with systems/rt's traced occlusion in place
+/// of SSAO (on a camera with <AmbientOcclusion>; on any other it draws as raster).
+const PATHS: [&str; 3] = ["raster", "traced-ao", "solari"];
+
+/// The switches a path is drawn with (the reference is `pathtracer`).
+fn switches(path: &str) -> Vec<(&'static str, String)> {
+    match path {
+        "traced-ao" => vec![("RAEA_LIGHT", "raster".into()), ("RAEA_TRACED_AO", "0.5".into())],
+        p => vec![("RAEA_LIGHT", p.to_string())],
+    }
+}
 
 struct Scene {
     name: String,
@@ -27,7 +40,13 @@ struct Scene {
     stills: Vec<i64>,
     shot: Option<(i64, i64)>,
     reference: Result<(), String>,
+    live: Result<(), String>,
+    size: (i64, i64),
+    spp: Option<u32>,
 }
+
+/// How long a live play runs, in seconds, its first second not counted.
+const LIVE_SECONDS: &str = "6";
 
 fn home(p: &str) -> PathBuf {
     match (p.strip_prefix("~/"), std::env::var_os("HOME")) {
@@ -46,7 +65,10 @@ fn scenes(path: &Path) -> R<Vec<Scene>> {
             let frames = |k: &str| s[k].as_array().map(|a| a.iter().filter_map(Value::as_i64).collect::<Vec<_>>());
             let shot = frames("shot").filter(|f| f.len() == 2).map(|f| (f[0], f[1]));
             let reference = if s["reference"] == json!(false) { Err(s["why"].as_str().unwrap_or("not yet").to_string()) } else { Ok(()) };
-            Ok(Scene { name: text("name")?, dir: home(&text("dir")?), file: text("file")?, composition: text("composition")?, stills: frames("stills").unwrap_or_default(), shot, reference })
+            let live = if s["live"] == json!(true) { Ok(()) } else { Err(s["live_why"].as_str().unwrap_or("not asked").to_string()) };
+            let size = frames("size").filter(|f| f.len() == 2).map_or((1920, 1080), |f| (f[0], f[1]));
+            let spp = s["spp"].as_u64().map(|n| n.max(1) as u32);
+            Ok(Scene { name: text("name")?, dir: home(&text("dir")?), file: text("file")?, composition: text("composition")?, stills: frames("stills").unwrap_or_default(), shot, reference, live, size, spp })
         })
         .collect()
 }
@@ -60,7 +82,7 @@ fn render(scene: &Scene, path: &str, spp: u32, at: &[i64], out: &Path) -> R<f64>
     let t = Instant::now();
     let run = std::process::Command::new(exe)
         .current_dir(&scene.dir)
-        .env("RAEA_LIGHT", path)
+        .envs(switches(path))
         .env("RAEA_LIGHT_SPP", spp.to_string())
         .args(["render", &scene.file, "--composition", &scene.composition, "--at", &at.join(","), "-o"])
         .arg(format!("{}/", out.display()))
@@ -74,6 +96,34 @@ fn render(scene: &Scene, path: &str, spp: u32, at: &[i64], out: &Path) -> R<f64>
     Ok(t.elapsed().as_secs_f64())
 }
 
+/// The scene played live on `path` at `size`, headless and unthrottled (`raea play --offscreen --no-vsync --3d`): what
+/// a frame costs, from play's report (DIR/PATH-live-WxH.json): the frames presented a second as milliseconds a frame,
+/// and each frame's work at the median and the 99th percentile.
+fn live(scene: &Scene, path: &str, size: (i64, i64), out: &Path) -> R<Value> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let size = format!("{}x{}", size.0, size.1);
+    let json_out = out.join(format!("{path}-live-{size}.json"));
+    let run = std::process::Command::new(exe)
+        .current_dir(&scene.dir)
+        .envs(switches(path))
+        .env("RAEA_AUDIO_MUTE", "1")
+        .args(["play", &scene.file, "--offscreen", "--no-vsync", "--3d", "--seconds", LIVE_SECONDS, "--size", &size, "--json"])
+        .arg(&json_out)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let text = std::fs::read_to_string(&json_out).map_err(|_| {
+        let err = String::from_utf8_lossy(&run.stderr);
+        format!("{} on {path}: play wrote no report: {}", scene.name, err.lines().rev().take(3).collect::<Vec<_>>().join(" | "))
+    })?;
+    let r: Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", json_out.display()))?;
+    let fps = r["presented_fps"].as_f64().unwrap_or(0.0);
+    Ok(json!({
+        "size": size,
+        "ms_a_frame": if fps > 0.0 { json!(((1000.0 / fps) * 10.0).round() / 10.0) } else { Value::Null },
+        "work_ms_p50": r["work_ms"]["p50"], "work_ms_p99": r["work_ms"]["p99"], "presented": r["presented"], "error": r["error"],
+    }))
+}
+
 fn frames(dir: &Path, n: usize) -> R<Vec<metric::Luma>> {
     (0..n).map(|k| metric::load(&dir.join(format!("frame-{k:05}.png")))).collect()
 }
@@ -82,24 +132,45 @@ fn round(x: f32, k: f32) -> f64 {
     ((x * k).round() / k) as f64
 }
 
-/// One scene: its reference (made once, kept unless --fresh), then each path's stills against it and its shot.
+/// Frames `at` path-traced at `spp` into `dir`, kept from an earlier check when it made the same frames of the same
+/// composition at the same samples (DIR/made.json) and --fresh isn't given; the frames, and how they were had.
+fn reference(scene: &Scene, spp: u32, at: &[i64], dir: &Path, fresh: bool) -> R<(Vec<metric::Luma>, Value)> {
+    let made = json!({ "file": scene.file, "composition": scene.composition, "frames": at, "spp": spp });
+    let kept = std::fs::read_to_string(dir.join("made.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let how = if !fresh && kept.as_ref() == Some(&made) {
+        json!({ "spp": spp, "kept": true })
+    } else {
+        let s = render(scene, "pathtracer", spp, at, dir)?;
+        std::fs::write(dir.join("made.json"), made.to_string()).map_err(|e| e.to_string())?;
+        json!({ "spp": spp, "seconds_a_frame": round(s as f32 / at.len().max(1) as f32, 10.0) })
+    };
+    Ok((frames(dir, at.len())?, how))
+}
+
+/// One scene: its reference stills and shot (kept as `reference` says), then each path's stills and shot against them,
+/// and each path live.
 fn check(scene: &Scene, paths: &[String], spp: u32, out: &Path, fresh: bool) -> R<Value> {
     let root = out.join(&scene.name);
-    let ref_dir = root.join("reference");
-    let mut report = json!({ "name": scene.name, "stills": scene.stills, "paths": {} });
-    let reference = match &scene.reference {
+    let spp = scene.spp.unwrap_or(spp);
+    let shot: Option<Vec<i64>> = scene.shot.map(|(a, b)| (a..=b).collect());
+    let mut report = json!({ "name": scene.name, "stills": scene.stills, "shot": shot, "paths": {} });
+    let (reference, ref_shot) = match &scene.reference {
         Err(why) => {
             report["reference"] = json!({ "made": false, "why": why });
-            None
+            (None, None)
         }
         Ok(()) => {
-            if fresh || !ref_dir.join("frame-00000.png").is_file() {
-                let s = render(scene, "pathtracer", spp, &scene.stills, &ref_dir)?;
-                report["reference"] = json!({ "made": true, "spp": spp, "seconds": round(s as f32, 10.0) });
-            } else {
-                report["reference"] = json!({ "made": true, "kept": true });
-            }
-            Some(frames(&ref_dir, scene.stills.len())?)
+            let (stills, how) = reference(scene, spp, &scene.stills, &root.join("reference"), fresh)?;
+            report["reference"] = json!({ "made": true, "stills": how });
+            let ref_shot = match &shot {
+                Some(at) => {
+                    let (frames, how) = reference(scene, spp, at, &root.join("reference-shot"), fresh)?;
+                    report["reference"]["shot"] = how;
+                    Some(frames)
+                }
+                None => None,
+            };
+            (Some(stills), ref_shot)
         }
     };
     for path in paths {
@@ -115,15 +186,24 @@ fn check(scene: &Scene, paths: &[String], spp: u32, out: &Path, fresh: bool) -> 
             r["worst_tile_stops"] = json!(round(d.iter().map(|x| x.worst).fold(0.0, f32::max), 1000.0));
             r["per_still"] = json!(d.iter().map(|x| json!({ "mean": round(x.mean, 1000.0), "bias": round(x.bias, 1000.0), "worst": round(x.worst, 1000.0), "worst_tile": [x.worst_at.0, x.worst_at.1] })).collect::<Vec<_>>());
         }
-        if let Some((a, b)) = scene.shot {
-            let at: Vec<i64> = (a..=b).collect();
-            let shot = root.join(format!("{path}-shot"));
-            let secs = render(scene, path, 1, &at, &shot)?;
-            r["flicker"] = json!(metric::flicker(&frames(&shot, at.len())?).map(|f| round(f, 1000.0)));
+        if let Some(at) = &shot {
+            let dir = root.join(format!("{path}-shot"));
+            let secs = render(scene, path, 1, at, &dir)?;
+            let got = frames(&dir, at.len())?;
+            // in stops, against the shot path-traced; and the frames' own second difference, in 8-bit steps, which
+            // counts the shot's motion as well
+            if let Some(refs) = &ref_shot {
+                r["flicker_stops"] = json!(metric::error_flicker(&got, refs)?.map(|f| round(f, 1000.0)));
+            }
+            r["flicker_raw"] = json!(metric::flicker(&got).map(|f| round(f, 100.0)));
             r["seconds_a_shot_frame"] = json!(round(secs as f32 / at.len() as f32, 100.0));
         }
-        // the live frame time is measured in play, not here: LT1 leaves it to `raea play`'s own numbers
-        r["live_ms"] = Value::Null;
+        r["live"] = match &scene.live {
+            // at the scene's size only: the live 3D draws at its composition's size whatever the stage's
+            // (runtime/live scene_3d), so a smaller stage measured the same frame (11-17), and no switch draws it smaller
+            Ok(()) => json!({ "full": live(scene, path, scene.size, &root)? }),
+            Err(why) => json!({ "measured": false, "why": why }),
+        };
         report["paths"][path] = r;
     }
     Ok(report)
@@ -131,13 +211,14 @@ fn check(scene: &Scene, paths: &[String], spp: u32, out: &Path, fresh: bool) -> 
 
 /// The table a person reads: a line a scene and path.
 fn table(reports: &[Value]) -> String {
-    let mut s = format!("{:<18} {:<8} {:>7} {:>7} {:>7} {:>8} {:>8}\n", "scene", "path", "mean", "bias", "worst", "flicker", "s/still");
+    let mut s = format!("{:<18} {:<9} {:>7} {:>7} {:>7} {:>8} {:>7} {:>8} {:>8}\n", "scene", "path", "mean", "bias", "worst", "flicker", "raw", "s/still", "live ms");
     for r in reports {
         let name = r["name"].as_str().unwrap_or("");
         let Some(paths) = r["paths"].as_object() else { continue };
         for (p, v) in paths {
             let f = |k: &str| v[k].as_f64().map_or("-".to_string(), |x| format!("{x:.3}"));
-            s += &format!("{name:<18} {p:<8} {:>7} {:>7} {:>7} {:>8} {:>8}\n", f("mean_stops"), f("bias_stops"), f("worst_tile_stops"), f("flicker"), f("seconds_a_still"));
+            let ms = |k: &str| v["live"][k]["ms_a_frame"].as_f64().map_or("-".to_string(), |x| format!("{x:.1}"));
+            s += &format!("{name:<18} {p:<9} {:>7} {:>7} {:>7} {:>8} {:>7} {:>8} {:>8}\n", f("mean_stops"), f("bias_stops"), f("worst_tile_stops"), f("flicker_stops"), f("flicker_raw"), f("seconds_a_still"), ms("full"));
         }
         if r["reference"]["made"] == json!(false) {
             s += &format!("{name:<18} (no reference: {})\n", r["reference"]["why"].as_str().unwrap_or(""));
@@ -155,7 +236,7 @@ pub fn light(args: &[String]) -> R<String> {
     let only = flag(args, "--scene");
     let paths: Vec<String> = flag(args, "--paths").map_or_else(|| PATHS.iter().map(|p| p.to_string()).collect(), |p| p.split(',').map(str::to_string).collect());
     if let Some(p) = paths.iter().find(|p| !PATHS.contains(&p.as_str())) {
-        return Err(format!("--paths: {p} isn't a light path to check (raster, solari)"));
+        return Err(format!("--paths: {p} isn't a light path to check ({})", PATHS.join(", ")));
     }
     let spp: u32 = flag(args, "--spp").map(|v| v.parse().map_err(|_| format!("--spp {v}: a count of samples"))).transpose()?.unwrap_or(256);
     let fresh = args.iter().any(|a| a == "--fresh");
