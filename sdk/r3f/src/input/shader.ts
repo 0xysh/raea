@@ -234,7 +234,10 @@ export function shaderPart(m: THREE.ShaderMaterial, points = false): Part {
     depthTest: m.depthTest,
     color: color ?? "#ffffff",
   };
-  if (m.transparent) props.transparent = true;
+  // what draws without the depth test (a face's decals on its shell, an outline) three draws over what it drew before,
+  // by renderOrder; raea's opaque pass has no order, so it goes with the transparent ones, after everything opaque
+  // (docs/img2raea.feature IR5). Its depthWrite stays the material's
+  if (m.transparent || !m.depthTest) props.transparent = true;
   if (m.blending === THREE.AdditiveBlending) props.blending = "additive";
   else if (m.blending === THREE.MultiplyBlending) props.blending = "multiply";
   if (m.alphaTest > 0) props.alphaTest = m.alphaTest;
@@ -271,19 +274,20 @@ export function ownAttributes(g: THREE.BufferGeometry): Record<string, { size: n
 }
 
 /**
- * A built-in material three draws with a program of its own that needs no lights (matcap, normal) as raea's
- * <ThreeShaderMaterial> of that same program: three's ShaderLib source, the defines its WebGLProgram would set for
- * this material (map, matcap, flat shading, sides) and its uniforms, so it looks as three draws it.
+ * A built-in material three draws with a program of its own that needs no lights (matcap, normal; a basic one drawn
+ * without the depth test, which raea's MeshBasicMaterial can't be) as raea's <ThreeShaderMaterial> of that same
+ * program: three's ShaderLib source, the defines its WebGLProgram would set for this material (map, matcap, flat
+ * shading, sides) and its uniforms, its depth test and write, so it looks as three draws it.
  */
-export function builtinPart(m: THREE.MeshMatcapMaterial | THREE.MeshNormalMaterial): Part {
-  const lib = m.type === "MeshMatcapMaterial" ? THREE.ShaderLib.matcap : THREE.ShaderLib.normal;
+export function builtinPart(m: THREE.MeshMatcapMaterial | THREE.MeshNormalMaterial | THREE.MeshBasicMaterial): Part {
+  const lib = m.type === "MeshMatcapMaterial" ? THREE.ShaderLib.matcap : m.type === "MeshBasicMaterial" ? THREE.ShaderLib.basic : THREE.ShaderLib.normal;
   const uniforms = THREE.UniformsUtils.clone(lib.uniforms) as Record<string, THREE.IUniform>;
   const defines: Record<string, string | boolean> = {};
-  if (m.flatShading) defines.FLAT_SHADED = true;
+  if ((m as { flatShading?: boolean }).flatShading) defines.FLAT_SHADED = true;
   if (m.side === THREE.DoubleSide) defines.DOUBLE_SIDED = true;
   if (m.side === THREE.BackSide) defines.FLIP_SIDED = true;
   uniforms.opacity.value = m.opacity;
-  if (m.type === "MeshMatcapMaterial") {
+  if (m.type === "MeshMatcapMaterial" || m.type === "MeshBasicMaterial") {
     const mc = m as THREE.MeshMatcapMaterial;
     uniforms.diffuse.value = mc.color.clone();
     if (mc.matcap) {
@@ -298,7 +302,7 @@ export function builtinPart(m: THREE.MeshMatcapMaterial | THREE.MeshNormalMateri
       uniforms.mapTransform.value = mc.map.matrix.clone();
     }
   }
-  const sm = new THREE.ShaderMaterial({ uniforms, vertexShader: lib.vertexShader, fragmentShader: lib.fragmentShader, defines, transparent: m.transparent, side: m.side, toneMapped: m.toneMapped });
+  const sm = new THREE.ShaderMaterial({ uniforms, vertexShader: lib.vertexShader, fragmentShader: lib.fragmentShader, defines, transparent: m.transparent, side: m.side, toneMapped: m.toneMapped, depthTest: m.depthTest, depthWrite: m.depthWrite, vertexColors: m.vertexColors });
   sm.opacity = m.opacity;
   return shaderPart(sm);
 }

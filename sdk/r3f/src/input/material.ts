@@ -169,6 +169,9 @@ export function materialOf(m: THREE.Material, vertexColors: boolean, at?: NodeAt
       return { type: "MeshToonMaterial", props: p };
     }
     case "MeshBasicMaterial":
+      // drawn without the depth test (a face's decals on its shell): three's own program, which can be (IR5)
+      if (!m.depthTest) return builtinPart(m as THREE.MeshBasicMaterial);
+    // falls through
     case "SpriteMaterial":
     case "PointsMaterial":
     case "LineBasicMaterial":

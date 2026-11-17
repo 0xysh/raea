@@ -231,3 +231,13 @@ describe("textures", () => {
     expect([...rows.subarray(1, 4), ...rows.subarray(6, 9)]).toEqual([255, 0, 0, 0, 0, 255]);
   });
 });
+
+describe("ambient light (docs/img2raea.feature IR2)", () => {
+  test("a scene with none gets one of 0, so a raea camera doesn't keep Bevy's default; a scene's own is kept alone", () => {
+    const none = flat(partsOf(() => <directionalLight position={[1, 2, 3]} />).parts).filter((p) => p.type === "AmbientLight");
+    expect(none.map((p) => p.props.intensity)).toEqual([0]);
+    const own = flat(partsOf(() => <ambientLight intensity={0.5} />).parts).filter((p) => p.type === "AmbientLight");
+    expect(own.length).toBe(1);
+    expect(own[0].props.intensity as number).toBeGreaterThan(0);
+  });
+});

@@ -451,5 +451,10 @@ export function convert(scene: THREE.Scene, camera: THREE.Camera, gl: THREE.WebG
   // compute's among them): the composer's own (the scene into its buffer, a bloom's mip chain) are raea's effects now,
   // and would draw the scene again
   const passes = passesOf(gl, composer.found ? [...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...drawn] : undefined);
-  return { parts: [...(cam ? [cam] : []), tone, ...(fog ? [fog] : []), ...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...passes, ...drawn], background: sky.background };
+  // a scene with no ambient light has none in three; a raea camera that sees no AmbientLight keeps Bevy's default (80),
+  // which lights every metal evenly where three leaves it black outside its highlights (docs/img2raea.feature IR2: the
+  // earbuds' case 0.83 to 0.996). One of 0 sends the camera's ambient column; raea sums a camera's ambient lights and
+  // takes no colour from a white one, so a composition's own AmbientLight beside the <R3F> is kept as it was
+  const ambient: Part[] = w.world.some((p) => p.type === "AmbientLight") ? [] : [{ type: "AmbientLight", props: { name: "r3f/no-ambient", color: "#ffffff", intensity: 0 } }];
+  return { parts: [...(cam ? [cam] : []), tone, ...(fog ? [fog] : []), ...sky.parts, ...post.parts, ...(computes ? [computes] : []), ...w.world, ...ambient, ...passes, ...drawn], background: sky.background };
 }

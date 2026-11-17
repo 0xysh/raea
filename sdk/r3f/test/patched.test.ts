@@ -86,3 +86,16 @@ describe("a material patched by onBeforeCompile", () => {
     expect(materialOf(new THREE.MeshStandardMaterial(), false).type).toBe("MeshStandardMaterial");
   });
 });
+
+describe("a material drawn without the depth test (docs/img2raea.feature IR5)", () => {
+  test("is three's own program, drawn after what is opaque, as three draws it over what it drew before", () => {
+    for (const m of [new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, depthWrite: false }), new THREE.MeshStandardMaterial({ depthTest: false })]) {
+      const part = materialOf(m, false);
+      expect(part.type).toBe("ThreeShaderMaterial");
+      expect(part.props.depthTest).toBe(false);
+      expect(part.props.transparent).toBe(true);
+    }
+    expect(props(new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false })).color).toBe("#ff0000");
+    expect(materialOf(new THREE.MeshBasicMaterial(), false).type).toBe("MeshBasicMaterial");
+  });
+});

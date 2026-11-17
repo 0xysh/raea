@@ -20,8 +20,9 @@ type Program = THREE.WebGLProgramParametersWithUniforms & { shaderName: string; 
 /** whether a material has an onBeforeCompile of its own (three's own is empty) */
 export const isPatched = (m: THREE.Material): boolean => m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile;
 
-/** whether raea draws a material as its patched program (a lit standard or physical one with a patch) */
-export const drawsPatched = (m: THREE.Material): boolean => (m.type === "MeshStandardMaterial" || m.type === "MeshPhysicalMaterial") && isPatched(m);
+/** whether raea draws a material as its patched program (a lit standard or physical one with a patch, or drawn without
+ * the depth test, which Bevy's standard material can't be: docs/img2raea.feature IR5) */
+export const drawsPatched = (m: THREE.Material): boolean => (m.type === "MeshStandardMaterial" || m.type === "MeshPhysicalMaterial") && (isPatched(m) || !m.depthTest);
 
 const LIGHTS_AT = "#include <lights_physical_fragment>";
 /** what follows the cut in three's own program: a patched program whose tail differs changed the light or output */

@@ -45,7 +45,7 @@ Feature: img2raea: a picture made into raea objects, props, environments and sce
         negative repeat is the first suspect) and the truck's ground ring loses its soft glow (additive blending is
         mapped, input/material.ts, so something else)
 
-    @needs
+    @done
     Scenario: IR2. No ambient light means none
       Given a three.js scene with no AmbientLight, HemisphereLight or LightProbe
       Then raea draws it with no ambient light either
@@ -56,6 +56,12 @@ Feature: img2raea: a picture made into raea objects, props, environments and sce
         0.996; the chest 0.88 to 0.94, the Gerber knife 0.94 to 0.98
       And the fix is one of: sdk/r3f's input/lights.ts sends AmbientLight 0 when the scene has none, or raea's engine
         sets GlobalAmbientLight to 0 (a raea scene without an ambient light would then be darker too: decide which)
+      And 11-16, built in sdk/r3f (input/scene.ts convert): a scene with no AmbientLight, HemisphereLight or LightProbe
+        gets an AmbientLight of 0, white so it lends no colour (raea sums a camera's ambient lights and takes the first
+        non-white one's colour, so a composition's own AmbientLight beside the <R3F> is kept as it was); the engine's
+        GlobalAmbientLight is unchanged (Shane's call, through the 0.1.6 release session). Measured: under the direct
+        rig the earbuds' case 0.83 to 0.996, the Gerber knife 0.94 to 0.98, the chest 0.88 to 0.94, the mascot 0.96
+        to 0.99; R3F8's 43 cases as before (one, in-drei, 0.9935 to 0.9943); test/input.test.tsx "ambient light"
 
     @needs
     Scenario: IR3. three.js's ambient lights only diffuse
@@ -83,6 +89,14 @@ Feature: img2raea: a picture made into raea objects, props, environments and sce
         the face is a small part of the box; IR1's sheet shows it); sdk/r3f passes depthTest on for a patched or
         shader material (input/patched.ts, input/shader.ts) but not for the standard ones (input/material.ts), and
         renderOrder is read only for render targets (input/targets.ts)
+      And 11-16, built in sdk/r3f: a basic material drawn without the depth test is three's own basic program
+        (shader.ts builtinPart, as matcap and normal are), a standard or physical one its patched program (patched.ts),
+        and any ThreeShaderMaterial without the depth test goes with the transparent ones, after everything opaque, as
+        raea's opaque pass has no order; the mascot's face is drawn (crop SSIM 0.96 to 0.99 under the direct rig);
+        test/patched.test.ts "a material drawn without the depth test"
+      And left: renderOrder among such overlays (the eye's highlight over the eye) is still raea's transparent sort,
+        by distance; three's order needs a sort bias from renderOrder in raea-sys-three-shader (Material::depth_bias),
+        an engine change
 
     @needs
     Scenario: IR6. A browser's globals a factory reads
