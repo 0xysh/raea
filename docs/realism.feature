@@ -317,6 +317,17 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         towers) are octahedral impostors; level 2 gets an HLOD over 1-2 km blocks with baked material atlases
       And crowds come in three rings: skinned near (up to 40 people, about 55 m), instanced vertex animation in the
         middle (up to 400, about 180 m), impostors beyond
+      And Berlin's frame is set by its geometry, not its pixels: on the walk (gambit light-walk) the 3D drawn at a
+        quarter of the pixels saves 5 of its 30 ms (11-17), so the levels and the culling are the lever, not resolution
+      And the levels are generated, not simplified: the city is ours, so the bake emits every level from the same rules
+        that made it (every front, its windows, cornices and sills are known): level 0 the full front, its repeated
+        parts (frames, sills, surrounds) as instanced kit pieces; level 1 the front flat, its detail baked into its
+        textures (colour, normal, depth) from level 0 drawn head-on; level 2 blocks merged over 1-2 km with one atlas
+      And far things are posters: the domes, towers, distant blocks, trees and the far crowd as octahedral impostors,
+        each rendered by raea from many angles at bake time, a card each when drawn; the rooms behind the windows stay
+        the window shader's (interior mapping)
+      And shadows are cast from a coarser level than the one drawn: the sun's cascades past the first draw level 1 or 2
+        (a cornice's shadow 300 m off is a pixel), since every shadow pass draws the city again
       And the ray scene is built from the same tiles as they stream in (LT3)
       And a walk down Leipziger Straße at 1440p out holds FRAME_BUDGET with no visible pop, measured frame by frame;
         virtual geometry (Nanite's cluster LOD) and virtual texturing follow once Bevy's meshlets or mesh shaders run
