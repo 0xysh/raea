@@ -47,7 +47,9 @@ def get(href, header, dest):
 
 def put(href, header, src, size):
     with open(src, "rb") as f:
-        req = urllib.request.Request(href, data=f, method="PUT", headers={**(header or {}), "content-length": str(size)})
+        # as git-lfs's basic transfer sends it
+        head = {"content-type": "application/octet-stream", **(header or {}), "content-length": str(size)}
+        req = urllib.request.Request(href, data=f, method="PUT", headers=head)
         with urllib.request.urlopen(req, timeout=1800) as r:
             r.read()
 
