@@ -7,7 +7,8 @@ sources: ["engine/light/src/lib.rs", "engine/light/src/metric.rs", "engine/rende
 
 `raea light check` is the bar raea's lighting is held to (docs/realism.feature LT1). Each scene in a list is
 rendered on each light path (raster as the composition has it; `traced-ao`, raster with traced occlusion in place of
-SSAO on a camera with `<AmbientOcclusion>`; and Solari) and against its reference: the same frames path-traced, each
+SSAO on a camera with `<AmbientOcclusion>`; Solari; and `gi`, raster with raea GI's probes traced, its GPU
+milliseconds a frame reported beside the frame's) and against its reference: the same frames path-traced, each
 drawn `--spp` times so it converges. For each path it reports:
 
 - how far the stills are from the reference, in stops: the mean, the bias (brighter is positive) and the worst
@@ -44,7 +45,7 @@ raea light check bench/light/scenes.json -o out/light/ --scene kitchen --paths s
 ## Usage
 
 ```sh
-raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari] [--spp N] [--fresh]   (each scene on each light path against its path-traced reference: distance in stops, the worst tile, a moving shot's flicker, a frame's cost; DIR/report.json)
+raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari,gi] [--spp N] [--fresh]   (each scene on each light path against its path-traced reference: distance in stops, the worst tile, a moving shot's flicker, a frame's cost; DIR/report.json)
 ```
 
 Headless: it needs nothing running and opens no window. Takes up to 2 arguments besides its flags.
@@ -54,7 +55,7 @@ Headless: it needs nothing running and opens no window. Takes up to 2 arguments 
 | Flag | Takes | What it does |
 | --- | --- | --- |
 | `--fresh` | – | Make the references again, even where they're kept from an earlier check. |
-| `--paths` | `raster,traced-ao,solari` | The light paths to measure, comma-separated (all three by default). |
+| `--paths` | `raster,traced-ao,solari,gi` | The light paths to measure, comma-separated (all four by default). |
 | `--scene` | `NAME` | Check only the scene with this name. |
 | `--spp` | `N` | How many times each reference frame is path-traced: its samples a pixel (256 by default). |
 | `-o` | `DIR` | The folder for each scene's frames and report.json. |

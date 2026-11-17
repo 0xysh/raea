@@ -53,6 +53,14 @@ pub struct Sun(pub Vec3);
 #[derive(Resource, Default)]
 struct Blases(HashMap<AssetId<Mesh>, Blas>);
 
+/// The ray scene's CPU cost so far, for raea GI's stats (gi.rs `report`; LT2): microseconds and calls of `gather`
+/// (the main world's instance list), `build_tlas` and `build_blas` (counted only when it builds), in that order.
+pub(crate) static CPU_US: [std::sync::atomic::AtomicU64; 6] = [const { std::sync::atomic::AtomicU64::new(0) }; 6];
+fn spent(k: usize, since: std::time::Instant) {
+    CPU_US[2 * k].fetch_add(since.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+    CPU_US[2 * k + 1].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// This frame's TLAS, for the traced passes to bind.
 #[derive(Resource)]
 pub struct Scene(pub Tlas);
@@ -92,6 +100,7 @@ fn gather(
     mut instances: ResMut<Instances>,
     mut sun: ResMut<Sun>,
 ) {
+    let t0 = std::time::Instant::now();
     instances.0.clear();
     for (mesh, t, vis, mat, no_shadow) in &meshes {
         if !vis.get() || mat.and_then(|m| mats.get(&m.0)).is_some_and(see_through) {
@@ -102,6 +111,7 @@ fn gather(
     if let Some((_, t)) = lights.iter().find(|(l, _)| l.shadow_maps_enabled).or_else(|| lights.iter().next()) {
         sun.0 = t.back().as_vec3();
     }
+    spent(0, t0);
     if std::env::var_os("RAEA_RT_DEBUG").is_some() {
         let all: Vec<_> = lights.iter().map(|(l, t)| (l.shadow_maps_enabled, t.back().as_vec3())).collect();
         let skipped = meshes.iter().filter(|(_, _, v, m, _)| v.get() && m.and_then(|m| mats.get(&m.0)).is_some_and(see_through)).count();
@@ -129,6 +139,7 @@ fn build_blas(
     if !device.features().contains(WgpuFeatures::EXPERIMENTAL_RAY_QUERY) {
         return;
     }
+    let t0 = std::time::Instant::now();
     for id in extracted.removed.iter().chain(extracted.modified.iter()) {
         blases.0.remove(id);
     }
@@ -193,6 +204,7 @@ fn build_blas(
     let mut enc = device.create_command_encoder(&CommandEncoderDescriptor { label: Some("raea rt blas") });
     enc.build_acceleration_structures(&entries, &[]);
     queue.submit([enc.finish()]);
+    spent(2, t0);
 }
 
 /// the TLAS: every instance whose mesh has a BLAS, rebuilt each frame (things move)
@@ -201,6 +213,7 @@ fn build_tlas(mut commands: Commands, instances: Option<Res<Instances>>, blases:
     if !device.features().contains(WgpuFeatures::EXPERIMENTAL_RAY_QUERY) {
         return;
     }
+    let t0 = std::time::Instant::now();
     let present: Vec<_> = instances.0.iter().filter_map(|(id, m, mask)| blases.0.get(id).map(|b| (b, m, *mask))).collect();
     if std::env::var_os("RAEA_RT_DEBUG").is_some() {
         for (id, _, _) in instances.0.iter().filter(|(id, _, _)| !blases.0.contains_key(id)) {
@@ -220,6 +233,7 @@ fn build_tlas(mut commands: Commands, instances: Option<Res<Instances>>, blases:
     let mut enc = device.create_command_encoder(&CommandEncoderDescriptor { label: Some("raea rt tlas") });
     enc.build_acceleration_structures(&[], [&tlas]);
     queue.submit([enc.finish()]);
+    spent(1, t0);
     if std::env::var_os("RAEA_RT_DEBUG").is_some() {
         eprintln!("raea rt: {} instances, {} with a BLAS ({} BLAS)", instances.0.len(), present.len(), blases.0.len());
     }

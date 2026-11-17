@@ -18,16 +18,18 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari] [--spp N] [--fresh]";
+pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari,gi] [--spp N] [--fresh]";
 
 /// The light paths a check compares: RAEA_LIGHT's, and traced-ao, raster with systems/rt's traced occlusion in place
 /// of SSAO (on a camera with <AmbientOcclusion>; on any other it draws as raster).
-const PATHS: [&str; 3] = ["raster", "traced-ao", "solari"];
+const PATHS: [&str; 4] = ["raster", "traced-ao", "solari", "gi"];
 
-/// The switches a path is drawn with (the reference is `pathtracer`).
+/// The switches a path is drawn with (the reference is `pathtracer`). `gi` is raster with raea GI's probes traced
+/// (systems/rt gi.rs; RAEA_GI_RAYS and the rest pass through from the check's own environment).
 fn switches(path: &str) -> Vec<(&'static str, String)> {
     match path {
         "traced-ao" => vec![("RAEA_LIGHT", "raster".into()), ("RAEA_TRACED_AO", "0.5".into())],
+        "gi" => vec![("RAEA_LIGHT", "raster".into()), ("RAEA_GI", "1".into())],
         p => vec![("RAEA_LIGHT", p.to_string())],
     }
 }
@@ -98,14 +100,17 @@ fn render(scene: &Scene, path: &str, spp: u32, at: &[i64], out: &Path) -> R<f64>
 
 /// The scene played live on `path` at `size`, headless and unthrottled (`raea play --offscreen --no-vsync --3d`): what
 /// a frame costs, from play's report (DIR/PATH-live-WxH.json): the frames presented a second as milliseconds a frame,
-/// and each frame's work at the median and the 99th percentile.
+/// and each frame's work at the median and the 99th percentile; on `gi`, the probe pass's own GPU time (RAEA_GI_STATS).
 fn live(scene: &Scene, path: &str, size: (i64, i64), out: &Path) -> R<Value> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let size = format!("{}x{}", size.0, size.1);
     let json_out = out.join(format!("{path}-live-{size}.json"));
+    let gi_out = out.join(format!("{path}-gi-{size}.json"));
+    let _ = std::fs::remove_file(&gi_out);
     let run = std::process::Command::new(exe)
         .current_dir(&scene.dir)
         .envs(switches(path))
+        .env("RAEA_GI_STATS", &gi_out)
         .env("RAEA_AUDIO_MUTE", "1")
         .args(["play", &scene.file, "--offscreen", "--no-vsync", "--3d", "--seconds", LIVE_SECONDS, "--size", &size, "--json"])
         .arg(&json_out)
@@ -121,6 +126,7 @@ fn live(scene: &Scene, path: &str, size: (i64, i64), out: &Path) -> R<Value> {
         "size": size,
         "ms_a_frame": if fps > 0.0 { json!(((1000.0 / fps) * 10.0).round() / 10.0) } else { Value::Null },
         "work_ms_p50": r["work_ms"]["p50"], "work_ms_p99": r["work_ms"]["p99"], "presented": r["presented"], "error": r["error"],
+        "gi": std::fs::read_to_string(&gi_out).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()),
     }))
 }
 
@@ -211,14 +217,15 @@ fn check(scene: &Scene, paths: &[String], spp: u32, out: &Path, fresh: bool) -> 
 
 /// The table a person reads: a line a scene and path.
 fn table(reports: &[Value]) -> String {
-    let mut s = format!("{:<18} {:<9} {:>7} {:>7} {:>7} {:>8} {:>7} {:>8} {:>8}\n", "scene", "path", "mean", "bias", "worst", "flicker", "raw", "s/still", "live ms");
+    let mut s = format!("{:<18} {:<9} {:>7} {:>7} {:>7} {:>8} {:>7} {:>8} {:>8} {:>8}\n", "scene", "path", "mean", "bias", "worst", "flicker", "raw", "s/still", "live ms", "gi gpu");
     for r in reports {
         let name = r["name"].as_str().unwrap_or("");
         let Some(paths) = r["paths"].as_object() else { continue };
         for (p, v) in paths {
             let f = |k: &str| v[k].as_f64().map_or("-".to_string(), |x| format!("{x:.3}"));
             let ms = |k: &str| v["live"][k]["ms_a_frame"].as_f64().map_or("-".to_string(), |x| format!("{x:.1}"));
-            s += &format!("{name:<18} {p:<9} {:>7} {:>7} {:>7} {:>8} {:>7} {:>8} {:>8}\n", f("mean_stops"), f("bias_stops"), f("worst_tile_stops"), f("flicker_stops"), f("flicker_raw"), f("seconds_a_still"), ms("full"));
+            let gi = v["live"]["full"]["gi"]["gpu_ms_p50"].as_f64().map_or("-".to_string(), |x| format!("{x:.2}"));
+            s += &format!("{name:<18} {p:<9} {:>7} {:>7} {:>7} {:>8} {:>7} {:>8} {:>8} {gi:>8}\n", f("mean_stops"), f("bias_stops"), f("worst_tile_stops"), f("flicker_stops"), f("flicker_raw"), f("seconds_a_still"), ms("full"));
         }
         if r["reference"]["made"] == json!(false) {
             s += &format!("{name:<18} (no reference: {})\n", r["reference"]["why"].as_str().unwrap_or(""));

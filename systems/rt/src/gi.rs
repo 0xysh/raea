@@ -2,10 +2,13 @@
 //! costs on this GPU, and the light they give through Bevy's irradiance volume. A grid of probes around the camera
 //! (RAEA_GI_GRID, 32x16x32 by default; RAEA_GI_SPACING metres apart, 2) is refreshed by a ray budget a frame
 //! (RAEA_GI_RAYS, 131072): 64 rays a probe, so the budget sets how many probes a frame (gi.wesl). The grid moves with
-//! the camera a probe at a time; when it moves, or the sun or the sky changes, its means start again and every probe
-//! traces RAEA_GI_WARM rounds (16) that frame, so a still is lit from its first frame. Those frames aren't timed.
+//! the camera a probe at a time, each probe kept by its place in the world, so what the probes still covered have
+//! learned stays; a probe new to the grid traces RAEA_GI_WARM rounds (16) when first reached. When the sun or the sky
+//! changes, every mean starts again and every probe traces the warm rounds that frame, so a still is lit from its
+//! first frame. Those frames aren't timed.
 //! RAEA_GI_STATS=FILE: the timed frames' GPU milliseconds (the pass's own timestamps), written there once a second.
-//! Unset, nothing changes.
+//! RAEA_GI_SHOW=volume: the probes light the scene through Bevy's irradiance volume (see `install`). Unset, nothing
+//! changes.
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -60,7 +63,14 @@ pub fn install(app: &mut App) {
     voxels.texture_descriptor.usage |= TextureUsages::STORAGE_BINDING;
     let voxels = app.world_mut().resource_mut::<Assets<Image>>().add(voxels);
     let spacing = env("RAEA_GI_SPACING", 2.0f32);
-    app.world_mut().spawn((Name::new("raea gi"), LightProbe::default(), IrradianceVolume { voxels: voxels.clone(), intensity: 1.0, affects_lightmapped_meshes: false }, Transform::from_scale(res.as_vec3() * spacing)));
+    // Shown through Bevy's irradiance volume only when asked: it takes one more sampler in every material's fragment
+    // stage, and a hooked material over StandardMaterial already has Metal's 16 (Bevy's view 9, StandardMaterial 6, the
+    // hook's own), so on the Mac the pipeline fails to build (11-17, Berlin). The deferred lighting pass (D4) has room.
+    if std::env::var("RAEA_GI_SHOW").as_deref() == Ok("volume") {
+        app.world_mut().spawn((Name::new("raea gi"), LightProbe::default(), IrradianceVolume { voxels: voxels.clone(), intensity: 1.0, affects_lightmapped_meshes: false }, Transform::from_scale(res.as_vec3() * spacing)));
+    } else {
+        eprintln!("raea gi: effect dropped (gi-not-shown): the probes are traced and timed but light nothing; Bevy's irradiance volume would take a 17th fragment sampler on Metal (RAEA_GI_SHOW=volume tries it)");
+    }
     app.insert_resource(Grid { center: Vec3::ZERO, spacing, res, voxels, sky: None, sun: Vec4::ZERO, sun_light: Vec3::ZERO })
         .add_plugins(ExtractResourcePlugin::<Grid>::default())
         .add_systems(PostUpdate, follow.after(bevy::transform::TransformSystems::Propagate));
@@ -135,7 +145,9 @@ struct Params {
 #[derive(Resource)]
 struct Pipeline {
     layout: BindGroupLayoutDescriptor,
+    /// the probes' rays (gi.wesl `main`), and their cubes into the volume (`resolve`)
     id: CachedComputePipelineId,
+    resolve: CachedComputePipelineId,
     sampler: Sampler,
 }
 
@@ -152,26 +164,25 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 sampler(SamplerBindingType::Filtering),
                 storage_buffer_sized(false, None),
                 texture_storage_3d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
+                storage_buffer_sized(false, None),
             ),
         ),
     );
-    let id = cache.queue_compute_pipeline(ComputePipelineDescriptor {
-        label: Some("raea_gi".into()),
-        layout: vec![layout.clone()],
-        shader: assets.load("embedded://raea_sys_rt/gi.wesl"),
-        entry_point: Some("main".into()),
-        ..default()
+    let shader = assets.load("embedded://raea_sys_rt/gi.wesl");
+    let [id, resolve] = ["main", "resolve"].map(|entry| {
+        cache.queue_compute_pipeline(ComputePipelineDescriptor { label: Some(format!("raea_gi_{entry}").into()), layout: vec![layout.clone()], shader: shader.clone(), entry_point: Some(entry.into()), ..default() })
     });
     let sampler = device.create_sampler(&SamplerDescriptor { label: Some("raea gi sky"), mag_filter: FilterMode::Linear, min_filter: FilterMode::Linear, ..default() });
-    commands.insert_resource(Pipeline { layout, id, sampler });
+    commands.insert_resource(Pipeline { layout, id, resolve, sampler });
 }
 
-/// The cache between frames: its means, where the next frame's probes start, what it was last lit by, and its timer.
+/// The cache between frames: its means and which probe each slot holds (gi.wesl's `cubes` and `tags`), where the next
+/// frame's probes start, what it was last lit by, and its timer.
 #[derive(Resource, Default)]
 struct State {
-    cubes: Option<(Buffer, u32)>,
+    cubes: Option<(Buffer, Buffer, u32)>,
     frame: u32,
-    key: Option<[u32; 12]>,
+    key: Option<[u32; 9]>,
     timer: Option<Timer>,
     seen: Vec<f64>,
     written: Option<std::time::Instant>,
@@ -186,12 +197,13 @@ struct Timer {
     pending: Option<Arc<AtomicBool>>,
 }
 
-/// what the grid is lit from: its place, the sun and the sky; any change starts its means again
-fn key(g: &Grid) -> [u32; 12] {
+/// what the grid is lit from: the sun and the sky (and its size); any change starts every mean again. Not its place:
+/// a probe is kept by where it is in the world, so the grid moving starts only the probes new to it (gi.wesl `tags`).
+fn key(g: &Grid) -> [u32; 9] {
     let (s, i) = g.sky.map(|(s, _, i, _)| (s, i)).unwrap_or((AssetId::default(), 0.0));
     let h = { use std::hash::{Hash, Hasher}; let mut h = std::collections::hash_map::DefaultHasher::new(); s.hash(&mut h); h.finish() as u32 };
     let f = |v: f32| v.to_bits();
-    [f(g.center.x), f(g.center.y), f(g.center.z), f(g.sun.x), f(g.sun.y), f(g.sun.z), f(g.sun_light.x), f(g.sun_light.y), f(g.sun_light.z), h, f(i), g.res.x ^ (g.res.y << 10) ^ (g.res.z << 20)]
+    [f(g.sun.x), f(g.sun.y), f(g.sun.z), f(g.sun_light.x), f(g.sun_light.y), f(g.sun_light.z), h, f(i), g.res.x ^ (g.res.y << 10) ^ (g.res.z << 20)]
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -207,7 +219,7 @@ fn update(
     mut state: ResMut<State>,
 ) {
     let (Some(grid), Some(scene), Some(p)) = (grid, scene, p) else { return };
-    let Some(pipeline) = cache.get_compute_pipeline(p.id) else { return };
+    let (Some(pipeline), Some(resolve)) = (cache.get_compute_pipeline(p.id), cache.get_compute_pipeline(p.resolve)) else { return };
     let Some(voxels) = images.get(grid.voxels.id()) else { return };
     let (sky, sky_diffuse) = match grid.sky {
         Some((s, d, _, _)) => match (images.get(s), images.get(d)) {
@@ -217,9 +229,9 @@ fn update(
         None => (&fallback.cube.texture_view, &fallback.cube.texture_view),
     };
     let total = grid.res.x * grid.res.y * grid.res.z;
-    if state.cubes.as_ref().is_none_or(|(_, n)| *n != total) {
-        let b = device.create_buffer(&BufferDescriptor { label: Some("raea gi cubes"), size: total as u64 * 6 * 16, usage: BufferUsages::STORAGE | BufferUsages::COPY_DST, mapped_at_creation: false });
-        state.cubes = Some((b, total));
+    if state.cubes.as_ref().is_none_or(|(_, _, n)| *n != total) {
+        let buffer = |label: &'static str, faces: u64| device.create_buffer(&BufferDescriptor { label: Some(label), size: total as u64 * faces * 16, usage: BufferUsages::STORAGE | BufferUsages::COPY_DST, mapped_at_creation: false });
+        state.cubes = Some((buffer("raea gi cubes", 6), buffer("raea gi tags", 1), total));
         state.key = None;
     }
     collect(&mut state);
@@ -227,13 +239,14 @@ fn update(
     let fresh = state.key != Some(k);
     state.key = Some(k);
     let budget = env("RAEA_GI_RAYS", 131072u32).max(RAYS);
-    let (start, probes, rounds) = if fresh { (0, total, env("RAEA_GI_WARM", 16u32).max(1)) } else { ((state.frame.wrapping_mul(budget / RAYS)) % total, (budget / RAYS).min(total), 1) };
+    let warm = env("RAEA_GI_WARM", 16u32).max(1);
+    let (start, probes, rounds) = if fresh { (0, total, warm) } else { ((state.frame.wrapping_mul(budget / RAYS)) % total, (budget / RAYS).min(total), 1) };
     state.frame = state.frame.wrapping_add(1);
     let (turn, intensity) = grid.sky.map(|(_, _, i, q)| (Vec4::from(q), i)).unwrap_or((Vec4::W, 0.0));
     let params = Params {
         grid: grid.center.extend(grid.spacing),
         res: grid.res.extend(total),
-        run: UVec4::new(start, rounds, state.frame, 0),
+        run: UVec4::new(start, rounds, state.frame, warm),
         sun_dir: grid.sun,
         sun: grid.sun_light.extend(intensity),
         sky_turn: turn,
@@ -243,24 +256,28 @@ fn update(
     if state.timer.is_none() && device.features().contains(WgpuFeatures::TIMESTAMP_QUERY) {
         state.timer = Some(timer(&device, &queue));
     }
-    let cubes = &state.cubes.as_ref().unwrap().0;
+    let (cubes, tags, _) = state.cubes.as_ref().unwrap();
     let group = device.create_bind_group(
         "raea_gi",
         &cache.get_bind_group_layout(&p.layout),
-        &BindGroupEntries::sequential((uniform.binding().unwrap(), scene.0.as_binding(), sky, sky_diffuse, &p.sampler, cubes.as_entire_binding(), &voxels.texture_view)),
+        &BindGroupEntries::sequential((uniform.binding().unwrap(), scene.0.as_binding(), sky, sky_diffuse, &p.sampler, cubes.as_entire_binding(), &voxels.texture_view, tags.as_entire_binding())),
     );
     // a steady frame is timed when the last one's times are in
     let timed = !fresh && state.timer.as_ref().is_some_and(|t| t.pending.is_none());
     let mut enc = device.create_command_encoder(&CommandEncoderDescriptor { label: Some("raea gi") });
     if fresh {
         enc.clear_buffer(cubes, 0, None);
+        enc.clear_buffer(tags, 0, None);
     }
     {
         let writes = state.timer.as_ref().filter(|_| timed).map(|t| wgpu::ComputePassTimestampWrites { query_set: &t.set, beginning_of_pass_write_index: Some(0), end_of_pass_write_index: Some(1) });
         let mut pass = enc.begin_compute_pass(&ComputePassDescriptor { label: Some("raea_gi"), timestamp_writes: writes });
-        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &group, &[]);
+        pass.set_pipeline(pipeline);
         pass.dispatch_workgroups(probes, 1, 1);
+        // every probe's cube into the volume (the grid may have moved), timed with the rays: it is the pass's cost too
+        pass.set_pipeline(resolve);
+        pass.dispatch_workgroups(total.div_ceil(64), 1, 1);
     }
     if let Some(t) = state.timer.as_ref().filter(|_| timed) {
         enc.resolve_query_set(&t.set, 0..2, &t.resolve, 0);
@@ -313,14 +330,23 @@ fn report(state: &mut State, budget: u32, total: u32) {
     let mut v = state.seen.clone();
     v.sort_by(f64::total_cmp);
     let at = |q: f64| v[((v.len() - 1) as f64 * q).round() as usize];
+    // the ray scene's CPU milliseconds a call: the instance list, the TLAS, a BLAS batch (lib.rs CPU_US)
+    let cpu = |k: usize| {
+        let (us, n) = (crate::CPU_US[2 * k].load(Ordering::Relaxed), crate::CPU_US[2 * k + 1].load(Ordering::Relaxed));
+        format!("{:.3}", us as f64 / n.max(1) as f64 / 1000.0)
+    };
     let text = format!(
-        "{{\"rays_a_frame\":{},\"probes\":{total},\"probes_a_frame\":{},\"frames\":{},\"gpu_ms_p50\":{:.3},\"gpu_ms_p90\":{:.3},\"gpu_ms_max\":{:.3}}}\n",
+        "{{\"rays_a_frame\":{},\"probes\":{total},\"probes_a_frame\":{},\"frames\":{},\"gpu_ms_p50\":{:.3},\"gpu_ms_p90\":{:.3},\"gpu_ms_max\":{:.3},\"cpu_ms_gather\":{},\"cpu_ms_tlas\":{},\"cpu_ms_blas_batch\":{},\"blas_batches\":{}}}\n",
         (budget / RAYS).min(total) * RAYS,
         (budget / RAYS).min(total),
         v.len(),
         at(0.5),
         at(0.9),
-        at(1.0)
+        at(1.0),
+        cpu(0),
+        cpu(1),
+        cpu(2),
+        crate::CPU_US[5].load(Ordering::Relaxed)
     );
     let _ = std::fs::write(path, text);
 }

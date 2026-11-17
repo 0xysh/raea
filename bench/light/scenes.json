@@ -18,10 +18,25 @@
       ],
       "reference": false,
       "why": "its city is drawn by shader hooks the path tracer can't run and its people aren't traced (M3, M5): after LT2, LT3 and LT5",
+      "live": false,
+      "live_why": "a contact sheet: every frame cuts to another view or sky, so its live frames are scene changes and its frames 0-4 are cuts, not a moving shot; gambit-walk measures both"
+    },
+    {
+      "name": "gambit-walk",
+      "dir": "~/Studio/raea/projects/gambit",
+      "file": "compositions/light-walk.tsx",
+      "composition": "light-walk-day",
+      "stills": [
+        0,
+        96,
+        191
+      ],
+      "reference": false,
+      "why": "as gambit-street: the city's shader hooks and the people (M3, M5), after LT2, LT3 and LT5",
       "live": true,
       "shot": [
-        0,
-        4
+        84,
+        107
       ]
     },
     {
