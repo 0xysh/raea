@@ -2,7 +2,7 @@
 # `raea render` (RAEA_CLOUD_GPU_URL, server/offload.ts) and the TypeScript client use it unchanged, with one render
 # split across many GPUs at once. From sdk/cloud:
 #
-#   MODAL_PROFILE=shane-25168 modal deploy deploy/modal/farm.py
+#   MODAL_PROFILE=raea modal deploy deploy/modal/farm.py
 #
 #   POST /v1/jobs?args=JSON[&gpus=N][&gpu=KIND][&max_usd=X]   body: the project as a tar. {id}
 #   GET  /v1/jobs/ID?from=N                                    {log, next, exit?}, held up to 20 s for more

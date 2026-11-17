@@ -2,7 +2,7 @@
 # The models raea runs on Linux, from this Mac into the Modal volume raea-models (docs/cloud-render.md, "Models"), for
 # the farm's GPUs and a cloud box to mount instead of fetching them on each cold start:
 #
-#   MODAL_PROFILE=shane-25168 deploy/modal/models.sh            # stage and upload
+#   MODAL_PROFILE=raea deploy/modal/models.sh            # stage and upload
 #   deploy/modal/models.sh --dry                                 # stage only, and list what would go
 #
 # /raea     perception's folder (RAEA_MODELS): the ONNX and data files no public source serves as raea runs them;
@@ -60,7 +60,8 @@ find "$stage" \( -name '*.mlpackage' -o -name '*.mlmodelc' -o -name coreml -o -n
 
 du -sh "$stage"/* | sed "s|$stage/||"
 [ "$dry" = --dry ] && { find "$stage" -type f | sed "s|$stage/||" | sort; exit 0; }
-[ "${MODAL_PROFILE:-}" = shane-25168 ] || { echo "models: run with MODAL_PROFILE=shane-25168 (raea's own Modal workspace)"; exit 2; }
+. "$(dirname "$0")/guard.sh"
+modal_guard
 modal volume create raea-models --version 2 2>/dev/null || true
 for top in raea feed library; do
   [ -d "$stage/$top" ] && modal volume put --force raea-models "$stage/$top" "/$top"

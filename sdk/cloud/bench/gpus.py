@@ -1,9 +1,9 @@
 # raea cloud's GPU bench (docs/cloud-render.feature CR2): the same raea renders and Blender Cycles scenes on each
 # Modal GPU kind, so a render's price per frame is measured, not guessed. From sdk/cloud:
 #
-#   MODAL_PROFILE=shane-25168 modal run bench/gpus.py                       # every kind in KINDS
-#   MODAL_PROFILE=shane-25168 modal run bench/gpus.py --gpus L4,L40S        # some
-#   MODAL_PROFILE=shane-25168 modal run bench/gpus.py --gpus none           # the CPU only (llvmpipe, Cycles on CPU)
+#   MODAL_PROFILE=raea modal run bench/gpus.py                       # every kind in KINDS
+#   MODAL_PROFILE=raea modal run bench/gpus.py --gpus L4,L40S        # some
+#   MODAL_PROFILE=raea modal run bench/gpus.py --gpus none           # the CPU only (llvmpipe, Cycles on CPU)
 #
 # Each kind runs in its own container at once, and writes bench/results/KIND.json:
 # - device: nvidia-smi's name, memory and driver; the Vulkan device raea opened
