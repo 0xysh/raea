@@ -75,3 +75,50 @@ test("an edit's scale of 1 changes nothing, and one outside (0, 1] fails", () =>
     expect(() => registerRoot(() => <Composition id="bad" component={Uses} width={1080} height={1920} fps={30} durationInFrames={9} edit={{ scale }} />)).toThrow(/edit.scale/);
   }
 });
+
+// A hook inside a component written inline (component={() => ...}) runs when React renders that component, not when
+// the root is called, so the root is still looked inside: before 11-17 its source's hook made the whole root content,
+// and every such program registered one composition, "main".
+test("a hook in an inline component doesn't hide the root's compositions", () => {
+  registerRoot(() => (
+    <>
+      <Composition id="block" component={() => { const f = useCurrentFrame(); return <>{f}</>; }} width={1080} height={1920} fps={30} durationInFrames={60} />
+      <Composition id="expr" component={() => <>{useVideoConfig().width}</>} width={1920} height={1080} fps={30} durationInFrames={90} />
+      <Composition id="fn" component={function Inline() { useCurrentFrame(); return null; }} width={720} height={720} fps={24} durationInFrames={48} />
+    </>
+  ));
+  expect(getCompositions().map((c) => c.id)).toEqual(["block", "expr", "fn"]);
+});
+
+test("a root that calls a hook itself is still content", () => {
+  registerRoot(() => { useCurrentFrame(); return <Composition id="never" component={Uses} width={1080} height={1920} fps={30} durationInFrames={60} />; });
+  expect(getCompositions().map((c) => c.id)).toEqual(["main"]);
+});
+
+test("a component in the tree with an inline render prop is expanded, and its own hook still stops the walk", () => {
+  function Shell({ children }: { children?: unknown }) { return <>{children}</>; }
+  function Clocked() { useCurrentFrame(); return <Composition id="hidden" component={Uses} width={1080} height={1920} fps={30} durationInFrames={60} />; }
+  registerRoot(() => (
+    <Shell>
+      <Composition id="shown" component={(p: { n?: number }) => <>{useCurrentFrame() + (p.n ?? 0)}</>} width={1080} height={1920} fps={30} durationInFrames={30} />
+      <Clocked />
+    </Shell>
+  ));
+  expect(getCompositions().map((c) => c.id)).toEqual(["shown"]);
+});
+
+test("braces and arrows in strings, a regex, a comment and a template don't throw the reading off", () => {
+  registerRoot(() => {
+    const label = "a { b => c ) ]";
+    const tick = `${label.length} } =>`;
+    const half = label.length / 2; // } => (
+    const braces = /[{}()]=>/g.test(label + tick + half);
+    return (
+      <>
+        <Composition id="one" component={() => { const f = useCurrentFrame(); return <>{f + (braces ? 1 : 0)}</>; }} width={1080} height={1920} fps={30} durationInFrames={60} />
+        <Composition id="two" component={() => <>{`${useVideoConfig().fps} }`}</>} width={1080} height={1920} fps={30} durationInFrames={60} />
+      </>
+    );
+  });
+  expect(getCompositions().map((c) => c.id)).toEqual(["one", "two"]);
+});

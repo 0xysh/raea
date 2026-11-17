@@ -166,11 +166,146 @@ const HOOKED: ReadonlySet<unknown> = new Set<unknown>([
 // A call to a hook in a component's source: `use(` or `useSomething(` (also after a dot, as bundlers write it).
 const HOOK_CALL = /\buse(?:[A-Z][\w$]*)?\s*\(/;
 
+const CLOSE: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
+// what a `/` follows when it starts a regex literal rather than dividing
+const REGEX_AFTER = /[(,=:[!&|?{};+\-*%<>~^]/;
+const REGEX_WORD = /\b(?:return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await)$/;
+
+/** Where the string, template literal, comment or regex literal at `i` ends (the index after it); -1 when it's code. */
+function opaqueEnd(s: string, i: number): number {
+  const c = s[i];
+  if (c === '"' || c === "'") {
+    for (let j = i + 1; j < s.length; j++) {
+      if (s[j] === "\\") j++;
+      else if (s[j] === c || s[j] === "\n") return j + 1;
+    }
+    return s.length;
+  }
+  if (c === "`") {
+    for (let j = i + 1; j < s.length; j++) {
+      if (s[j] === "\\") j++;
+      else if (s[j] === "`") return j + 1;
+      else if (s[j] === "$" && s[j + 1] === "{") j = closeOf(s, j + 1) - 1;
+    }
+    return s.length;
+  }
+  if (c !== "/") return -1;
+  if (s[i + 1] === "/") {
+    const e = s.indexOf("\n", i);
+    return e < 0 ? s.length : e + 1;
+  }
+  if (s[i + 1] === "*") {
+    const e = s.indexOf("*/", i + 2);
+    return e < 0 ? s.length : e + 2;
+  }
+  let k = i - 1;
+  while (k >= 0 && /\s/.test(s[k])) k--;
+  if (k >= 0 && !REGEX_AFTER.test(s[k]) && !REGEX_WORD.test(s.slice(Math.max(0, k - 7), k + 1))) return -1; // division
+  let inClass = false;
+  for (let j = i + 1; j < s.length; j++) {
+    if (s[j] === "\\") j++;
+    else if (s[j] === "[") inClass = true;
+    else if (s[j] === "]") inClass = false;
+    else if (s[j] === "/" && !inClass) {
+      let end = j + 1;
+      while (end < s.length && /[a-z]/i.test(s[end])) end++;
+      return end;
+    }
+    else if (s[j] === "\n") return j + 1;
+  }
+  return s.length;
+}
+
+/** The index after the bracket that closes the one at `i`, past strings, comments and the like. */
+function closeOf(s: string, i: number): number {
+  let depth = 0;
+  for (let j = i; j < s.length; ) {
+    const e = opaqueEnd(s, j);
+    if (e >= 0) {
+      j = e;
+      continue;
+    }
+    if (CLOSE[s[j]]) depth++;
+    else if (s[j] === ")" || s[j] === "]" || s[j] === "}") {
+      depth--;
+      if (depth === 0) return j + 1;
+    }
+    j++;
+  }
+  return s.length;
+}
+
+/** Where an arrow function's expression body starting at `i` ends: at a `,`, `;` or closing bracket outside brackets. */
+function expressionEnd(s: string, i: number): number {
+  for (let j = i; j < s.length; ) {
+    const e = opaqueEnd(s, j);
+    if (e >= 0) {
+      j = e;
+      continue;
+    }
+    if (CLOSE[s[j]]) {
+      j = closeOf(s, j);
+      continue;
+    }
+    if (s[j] === "," || s[j] === ";" || s[j] === ")" || s[j] === "]" || s[j] === "}") return j;
+    j++;
+  }
+  return s.length;
+}
+
+/**
+ * A function's source without the bodies of the functions written inside it: a component given inline
+ * (`component={() => ...}`), a render prop or a callback runs when React or the caller runs it, not when this function
+ * is called, so a hook there isn't this function's. Each inner `=>` body and `function` body becomes empty.
+ */
+function ownSource(s: string): string {
+  // this function's own body: after its first `=>`, or inside its first `{`, outside its parameters' brackets
+  let body = -1;
+  for (let j = 0; j < s.length && body < 0; ) {
+    const e = opaqueEnd(s, j);
+    if (e >= 0) j = e;
+    else if (s.startsWith("=>", j)) body = j + 2;
+    else if (s[j] === "{") body = j + 1;
+    else if (s[j] === "(" || s[j] === "[") j = closeOf(s, j);
+    else j++;
+  }
+  if (body < 0) return s;
+  let out = s.slice(0, body);
+  for (let j = body; j < s.length; ) {
+    const e = opaqueEnd(s, j);
+    if (e >= 0) {
+      out += s.slice(j, e);
+      j = e;
+      continue;
+    }
+    if (s.startsWith("=>", j)) {
+      let k = j + 2;
+      while (k < s.length && /\s/.test(s[k])) k++;
+      out += "=>0";
+      j = s[k] === "{" ? closeOf(s, k) : expressionEnd(s, k);
+      continue;
+    }
+    if (s.startsWith("function", j) && !/[\w$]/.test(s[j - 1] ?? "") && !/[\w$]/.test(s[j + 8] ?? "")) {
+      const open = s.indexOf("(", j);
+      let k = open < 0 ? s.length : closeOf(s, open);
+      while (k < s.length && /\s/.test(s[k])) k++;
+      if (s[k] === "{") {
+        out += "function(){}";
+        j = closeOf(s, k);
+        continue;
+      }
+    }
+    out += s[j];
+    j++;
+  }
+  return out;
+}
+
 function looksHooked(fn: Function): boolean {
   if (HOOKED.has(fn)) return true;
   let source = "";
   try {
-    source = Function.prototype.toString.call(fn);
+    source = ownSource(Function.prototype.toString.call(fn));
   } catch {
     return true; // can't read it: don't risk running it
   }
