@@ -53,6 +53,19 @@ test("a role's sex, ages, rank and gait hold for everyone drawn from it", () => 
   expect(new Set(ps.map((p) => (p.face.kind === "crowd" ? p.face.seed : 0))).size).toBe(ps.length);
 });
 
+test("headwear is drawn by the role's weights, and giving a role headwear draws everything else as before", () => {
+  const capped = roles.map((r) => (r.id === "sentry" ? { ...r, head: { "landsturm-cap": 2, feldmuetze: 1 } } : r.id === "housewife" ? { ...r, head: { headscarf: 1, none: 1 } } : r));
+  const a = populate({ roles, places, folk, mix, seed: 3 }), b = populate({ roles: capped, places, folk, mix, seed: 3 });
+  expect(b.map(({ head: _, ...p }) => p)).toEqual(a);
+  expect(a.every((p) => p.head === undefined)).toBe(true);
+  const sentries = b.filter((p) => p.role === "sentry"), wives = b.filter((p) => p.role === "housewife");
+  expect(sentries.every((p) => p.head === "landsturm-cap" || p.head === "feldmuetze")).toBe(true);
+  // "none" leaves some bareheaded, about as often as its weight says
+  const bare = wives.filter((p) => p.head === undefined).length / wives.length;
+  expect(bare).toBeGreaterThan(0.3); expect(bare).toBeLessThan(0.7);
+  expect(b.filter((p) => p.role === "munitions-worker").every((p) => p.head === undefined)).toBe(true);
+});
+
 test("a day covers 00:00 to 24:00 with no gaps, and a trip joins every change of place", () => {
   const ps = populate({ roles, places, folk, mix, seed: 5 });
   const d = cityDay(ps, roles, places, { key: "1917-12-03", weekday: 1 });

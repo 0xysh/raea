@@ -90,11 +90,13 @@ export function makePerson(id: string, role: Role, folk: Folk, home: Place, seed
   const [hm, hsd] = (folk.heights ?? DEFAULT_HEIGHT)[sex];
   const body: Body = { height: Math.round(r.normal(hm, hsd) * 100) / 100, build: Math.round(build * 10) / 10 };
   const dress = r.weighted(role.dress);
+  // (on its own fork, so a role given headwear draws everything else as it did)
+  const head = role.head ? r.fork("head").weighted(role.head) : "none";
   const carry = Object.entries(role.carry ?? {}).filter(([k, p]) => r.fork(`carry-${k}`).chance(p)).map(([k]) => k);
   const modes: Partial<Record<Mode, number>> = role.modes ?? { walk: 1 };
   return {
     id, name, sex, age, role: role.id, ...(role.rank ? { rank: role.rank } : {}), home: home.id, ...(work ? { work: work.id } : {}),
-    traits, habits, face, body, hair: { style, colour, grey: Math.round(grey * 100) / 100 }, dress, carry, modes,
+    traits, habits, face, body, hair: { style, colour, grey: Math.round(grey * 100) / 100 }, dress, ...(head === "none" ? {} : { head }), carry, modes,
     gait: gaitOf(role, age, traits, r.fork("gait")), seed,
   };
 }

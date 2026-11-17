@@ -91,6 +91,9 @@ export interface Role {
   rank?: string;
   /** the dress, by the project's kit ids: one is drawn per person, as likely as its weight */
   dress: Record<string, number>;
+  /** what they wear on the head, by the project's kit ids, drawn like the dress; a weight under "none" leaves some
+   *  bareheaded, and a role without it draws none */
+  head?: Record<string, number>;
   /** what they carry, by the project's thing ids, each with its chance */
   carry?: Record<string, number>;
   /** how they get about, by weight (walk unless said) */
@@ -156,6 +159,8 @@ export interface Person {
   body: Body;
   hair: { style: string; colour: string; grey: number };
   dress: string;
+  /** the kit id worn on the head, when the role draws one */
+  head?: string;
   carry: string[];
   modes: Partial<Record<Mode, number>>;
   gait: string;
