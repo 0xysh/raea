@@ -135,12 +135,14 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         N samples a frame, OIDN on the GPU, a fixed seed, so a frame renders the same every time. Until it lands (LT5),
         Bevy's <Pathtracer> stands in for scenes it can draw (no hooks: FLOOR3, the glade).
     D12. One set of units: lux, cd/m², EV, and one exposure model for every path.
-    D13. The game's budget, for Shane to confirm (M15): 60 fps at 1080p on an M-series Mac (16.7 ms a frame), with
-        raea GI's share at most 5 ms of it; 30 fps the floor; quality tiers (rays a frame, probe spacing, screen-probe
-        resolution) scale it down for smaller GPUs. The editor's live frame keeps docs/realtime.feature's budget.
-        Speed is designed in from LT2 on, not left to LT12: FLOOR3's raster frame alone is 18.0 ms. The frame is drawn
-        at 67-75% inside and upscaled by MetalFX at 2x or less, the GI is traced at that size or below, and the
-        G-buffer stays thin (on a tile-based GPU it can't be memoryless).
+    D13. The game's budget (Shane, 11-17: "60fps 2k. 4k if possible. i think we are trying do something phenomenal
+        here"): 60 fps (16.7 ms a frame) at 2560x1440 out on this Mac's M5 Pro, with raea GI's share at most 5 ms of
+        it, and 60 fps at 3840x2160 out as the stretch. Both are drawn inside at less and upscaled by MetalFX: 1440p
+        from about 1707x960 (67%), 4K from 1920x1080 to 2560x1440 (50-67%), so the inside frame is near today's 1080p
+        either way. Quality tiers (rays a frame, probe spacing, screen-probe resolution, the inside size) scale it down
+        for smaller GPUs. The editor's live frame keeps docs/realtime.feature's budget. Speed is designed in from LT2
+        on, not left to LT12: FLOOR3's raster frame alone is 18.0 ms at 1080p. The GI is traced at the inside size or
+        below, and the G-buffer stays thin (on a tile-based GPU it can't be memoryless).
     D18. On Metal, wgpu's ray queries become `intersection_query`, the slower of Apple's two paths, and wgpu can't
         refit an acceleration structure (ALLOW_UPDATE builds as normal). Once LT2 measures the gap, the hottest trace
         kernels may be raea's own Metal (`intersector`, refit) through passthrough, as docs/gpu.md already runs
@@ -355,10 +357,13 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
 
     Scenario: LT12. Speed and image
       Then the caches keep their own history, a temporal filter of ours steadies the frame, and MetalFX's temporal
-        upscaler draws it from 67-75% of its pixels on the Mac; frame interpolation is a bonus for 120 Hz screens,
-        never part of the budget; on Windows and Linux a denoiser slot takes DLSS-RR or FSR's in MetalFX's place
-      And the game meets D13's budget at 1080p on this Mac with raea GI on, measured live on Berlin, FLOOR3 and the
-        kitchen, and the editor's live frame meets docs/realtime.feature's
+        upscaler draws it from D13's inside size on the Mac; frame interpolation is a bonus for 120 Hz screens, never
+        part of the budget; on Windows and Linux a denoiser slot takes DLSS-RR or FSR's in MetalFX's place
+      And the live 3D draws at a size of its own, not its composition's (11-17: `raea play --size` drew the same
+        frame), so `raea light check` measures live at 1440p and 4K out, each with its inside size
+      And the game meets D13's budget, 60 fps at 1440p out on this Mac with raea GI on, measured live on Berlin,
+        FLOOR3 and the kitchen, and 4K out is measured beside it; the editor's live frame meets
+        docs/realtime.feature's
       And quality tiers scale it for smaller GPUs, each tier's numbers in LT1's table, down to a tier for GPUs with
         no ray-tracing hardware: screen traces and probes, the world cache filled by a compute traversal of the
         coarse ray scene, leaf translucency and the finish (LT19) intact, so the image degrades and never drops
