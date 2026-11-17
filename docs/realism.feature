@@ -112,7 +112,7 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         resolution) scale it down for smaller GPUs. The editor's live frame keeps docs/realtime.feature's budget.
     D14. One owner: the session that wrote this file, on lane `realism`. A change to light, shadow, occlusion,
         exposure or a shading model, in any lane, lands with its LT1 numbers before and after (LT14).
-    D15. The second bar is real photographs (LT15-LT17): full colour, high definition (at least 1920 pixels wide; the
+    D15. The second bar is real photographs (LT15-LT18): full colour, high definition (at least 1920 pixels wide; the
         camera's original where it can be had, raw where it exists), modern, under a licence that allows commercial
         use (public domain, CC0, CC BY, CC BY-SA; author and licence kept with each), each with what rebuilding it
         needs: focal length and camera (its field of view), shutter, aperture and ISO (its exposure in EV, D12), time
@@ -123,6 +123,12 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         occlusion, a shading model, tone) by turning them on one at a time, and fixed there or in a measured material
         value (fresh snow's albedo, sandstone's, brick's, skin's). Half the photos are held out by place and season;
         a change stays only if the held-out half comes nearer too.
+    D17. Each photo is recreated as a set of its own (Shane, 11-17: "you'll have to model completely new sets"):
+        modelled by raea from nothing, object for object, at the photo's season, day and hour, so it can be compared
+        pixel for pixel and not only by region. The realism lane makes and owns the sets, in gambit, for every
+        season. Berlin's world now has seasons: its look takes one (snow, autumn, summer, wet), and the lanes that
+        build the city and its rooms (exteriors, interiors, first person lab) keep what they make ready for every
+        season instead of fixing it to winter.
 
   Background:
     Given Bevy 0.20 on wgpu with ray queries (Apple silicon on Metal; RTX and RDNA2+ on Vulkan), systems/rt's TLAS
@@ -177,24 +183,27 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         Berg, Kreuzberg, Friedrichshain); every other scene kind has at least eight
       And half the set, by place and season, is held out (D16), and the set is shown to Shane before it's used
 
-    Scenario: LT16. A photo matched
-      Given Berlin has a look for each season from the exteriors lane's world (bare and leafed trees; dry, wet and
-        snowed ground; a summer and an autumn sun), set to the day and hour the photo was taken
-      Then `raea light check` takes a photo scene: the camera from the photo (its field of view from EXIF, its pose
-        from points marked on both the photo and the model, the city standing at its true coordinates), the sun from
-        its time and place, and the exposure from its EV
+    Scenario: LT16. A set for each photo
+      Given D17, and first eight Berlin photos (one fitted and one held out a season), then the rest of the set
+      Then each has a set in gambit, modelled by us (no downloaded models): its buildings, street, ground, trees,
+        cars, signs and people where they matter to the light, at the photo's true place where it's in the city, with
+        its materials' values measured (albedo, roughness) rather than picked by eye
+      And Berlin's look takes a season (snow, autumn, summer, wet: bare or leafed trees, fallen leaves, dry, wet or
+        snowed ground, the sun of that day), which the sets use and the city can use too
+      And each set is shown beside its photo before it's measured
+
+    Scenario: LT17. A photo matched
+      Then `raea light check` takes a photo and its set: the camera from the photo (its field of view from EXIF, its
+        pose solved from points marked on both), the sun from its time and place, and the exposure from its EV
       And it compares in linear light (a raw photo decoded linear, a JPEG's sRGB curve undone): first at the EXIF EV
         unchanged, a test of the units, then with one fitted exposure
-      And a place photo, with cars, signs and rebuilt fronts the model doesn't have, is compared by region: sky,
-        sunlit wall, wall in shade, ground, snow, foliage, glass and faces, masked on both by one local segmentation
-        model. Each region gets its luminance in stops and its colour (Oklab); the ratios between regions (sun to
-        shade, the shade's blue, lit snow to shaded snow); local contrast by scale; and the darkening into contacts
-        and across shadow edges
-      And a rebuilt photo (a table by a window, a facade's detail, rebuilt object for object) is compared on 8x8
-        blocks, as LT1's references are
+      And on 8x8 blocks, as LT1's references are, and by region: sky, sunlit wall, wall in shade, ground, snow,
+        foliage, glass and faces, masked on both by one local segmentation model. Each region gets its luminance in
+        stops and its colour (Oklab); the ratios between regions (sun to shade, the shade's blue, lit snow to shaded
+        snow); local contrast by scale; and the darkening into contacts and across shadow edges
       And each photo's numbers go into LT1's report and table beside the reference's, the fit and held-out halves apart
 
-    Scenario: LT17. Photos reverse-engineered
+    Scenario: LT18. Photos reverse-engineered
       Then each region whose residual is over a third of a stop, or whose colour is visibly off, has its cause found
         by passes (D16) and fixed in the renderer, a shading model or a measured material, with the photos' numbers
         before and after, fit and held out
