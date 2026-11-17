@@ -78,6 +78,8 @@ raea-sys-parity = "systems"  # the parity probe, in raea's App and the examples'
 raea-bench-swatch = "systems"  # a Blitz widget fixture (bench/bridge/swatch) the plugin catalog declares: a leaf on vendored crates, so a runtime crate may build it in
 raea-render = "runtime"
 raea-render-raytrace = "runtime"
+# `raea light check`: raea Light's measures (docs/realism.feature LT1)
+raea-light = "runtime"
 raea-bevy-plugins = "runtime"
 raea-bevy-calls = "runtime"
 raea-bevy-adapters = "runtime"

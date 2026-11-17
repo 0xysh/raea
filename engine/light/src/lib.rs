@@ -49,7 +49,7 @@ struct Scene {
 const LIVE_SECONDS: &str = "6";
 
 fn home(p: &str) -> PathBuf {
-    match (p.strip_prefix("~/"), std::env::var_os("HOME")) {
+    match (p.strip_prefix("~/"), raea_io_home::user_home()) {
         (Some(rest), Some(h)) => PathBuf::from(h).join(rest),
         _ => PathBuf::from(p),
     }
@@ -234,14 +234,14 @@ pub fn light(args: &[String]) -> R<String> {
     let list = scenes(Path::new(&args[1]))?;
     let out = PathBuf::from(flag(args, "-o").ok_or(format!("usage: {USAGE}"))?);
     let only = flag(args, "--scene");
-    let paths: Vec<String> = flag(args, "--paths").map_or_else(|| PATHS.iter().map(|p| p.to_string()).collect(), |p| p.split(',').map(str::to_string).collect());
+    let paths: Vec<String> = flag(args, "--paths").map_or_else(|| PATHS.map(String::from).to_vec(), |p| p.split(',').map(String::from).collect());
     if let Some(p) = paths.iter().find(|p| !PATHS.contains(&p.as_str())) {
         return Err(format!("--paths: {p} isn't a light path to check ({})", PATHS.join(", ")));
     }
     let spp: u32 = flag(args, "--spp").map(|v| v.parse().map_err(|_| format!("--spp {v}: a count of samples"))).transpose()?.unwrap_or(256);
     let fresh = args.iter().any(|a| a == "--fresh");
     let mut reports = Vec::new();
-    for s in list.iter().filter(|s| only.as_deref().is_none_or(|o| o == s.name)) {
+    for s in list.iter().filter(|s| match &only { Some(o) => *o == s.name, None => true }) {
         eprintln!("raea light: {} ...", s.name);
         reports.push(check(s, &paths, spp, &out, fresh)?);
     }
