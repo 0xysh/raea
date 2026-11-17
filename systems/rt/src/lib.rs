@@ -5,8 +5,16 @@
 //! Glass and other see-through materials stay out of it, so the sun and the sky reach through windows.
 //! Only built when a traced pass is asked for (passes::wanted), and only where the device has ray queries.
 
-// traced ambient occlusion, the TLAS's first reader
+// traced ambient occlusion, the TLAS's first reader; raea GI's world probes (RAEA_GI=1, docs/realism.feature LT2)
+pub mod gi;
 pub mod traced_ao;
+
+/// Every traced pass asked for: traced AO (RAEA_TRACED_AO), raea GI's probes (RAEA_GI). Nothing when neither is.
+pub fn passes(app: &mut App) {
+    for install in [traced_ao::install as fn(&mut App), gi::install] {
+        install(app);
+    }
+}
 
 use bevy::{
     asset::AssetId,

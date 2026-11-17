@@ -64,8 +64,6 @@ use raea_sys_text3d as text3d;
 use raea_sys_splat as splat;
 // 2D over the 3D, <Sprite> and <Shape2D> (raea-sys-sprite)
 use raea_sys_sprite as sprite2d;
-// traced ambient occlusion (raea-sys-rt)
-use raea_sys_rt::traced_ao;
 use raea_sys_grid as grid;
 // footage behind the 3D and a camera's window on a larger view (<Matchmove>)
 use raea_sys_matchmove as matchmove;

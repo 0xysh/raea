@@ -59,7 +59,7 @@ raea_plugin! {
     ProcMatPlugin: raea_sys_procmat::install, "Procedural surfaces: wood, stone, brick, tiles and the rest, with dust and dirt (systems/procmat).";
     PaintPlugin: super::paint::install, "The paint and cartoon looks' surfaces (paint.rs).";
     PassesPlugin: super::passes::install, "Render passes per view (passes.rs).";
-    TracedAoPlugin: super::traced_ao::install, "Traced ambient occlusion (raea-sys-rt's traced_ao.rs).";
+    TracedAoPlugin: raea_sys_rt::passes, "Traced passes: ambient occlusion and raea GI's world probes (raea-sys-rt).";
     VolumePlugin: super::volume::install, "Simulated smoke, clouds and contrails, raymarched (volume.rs).";
     GrassPlugin: raea_sys_grass::install, "Fields of grass, made in tiles as detailed as the camera's distance asks (systems/grass).";
     ShadowOnlyPlugin: super::shadow_only::install, "Meshes in the shadow maps only (shadow_only.rs).";
