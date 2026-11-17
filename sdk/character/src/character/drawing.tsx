@@ -6,7 +6,7 @@ import { SKIN_LOOK, SKIN_SURFACE, SKIN_WESL, type SkinLook, type SkinSurface } f
 import { ExtendedMaterial, LinearRgba, ShaderExtension, Srgba, StandardMaterial } from "@raea/render/bevy3d";
 import type { Glitch } from "@raea/physics/physics";
 import { staticFile } from "@raea/video/media";
-import { Goals, Pose, Side, Skeleton, add, eulerXYZ, eyesTo, faceWeights, lidsFor, pose, qmul, qrot, qyaw, rest, scale3, skinJoints, solve, sub, type Face } from "./all";
+import { Goals, Pose, Side, Skeleton, add, eulerXYZ, eyesTo, faceWeights, lidsFor, pose, qmul, qrot, qyaw, rest, scale3, skinJoints, solve, sub, type Face, type Quat } from "./all";
 
 // ---------------------------------------------------------------- placement
 
@@ -26,6 +26,19 @@ export function toBody(at: Placement, p: Vec3): Vec3 {
 /** A point of the body's frame in the scene. */
 export function toScene(at: Placement, p: Vec3): Vec3 {
   return add(at.position ?? [0, 0, 0], qrot(qyaw(at.yaw ?? 0), scale3(p, at.scale ?? 1)));
+}
+
+/**
+ * Where something carried on a joint goes as the body is posed (a slung rifle on RightShoulder, a lantern in a hand):
+ * `at` and `turn` place the thing against the joint as the body stands at rest (metres in the body's frame, which faces
+ * +z with its right at -x, and the thing's turn), and the joint's turn from rest carries both, as a cap rides Head. The
+ * result is a <Model>'s `position` and `rotation` in the scene, and the quaternion.
+ */
+export function onJoint(skel: Skeleton, p: Pose, joint: string, at: Vec3, turn: Quat = [0, 0, 0, 1], placement: Placement = {}): { position: Vec3; rotation: Vec3; quat: Quat } {
+  const j = skinJoints(skel, pose(skel, p)).find((q) => q.name === joint);
+  if (!j) throw new Error(`onJoint: ${skel.name} has no joint ${joint}`);
+  const q = qmul(qyaw(placement.yaw ?? 0), qmul(j.rot, turn));
+  return { position: toScene(placement, add(j.pos, qrot(j.rot, at))), rotation: eulerXYZ(q), quat: q };
 }
 
 /** Goals in the scene's coordinates brought into the body's frame (directions turned, points moved and turned). */
