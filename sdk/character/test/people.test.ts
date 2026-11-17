@@ -1,7 +1,7 @@
 // raea/people (src/people.ts, docs/character.feature CH50-CH53): people drawn from roles, their days, where they are
 // at a minute, the levels of detail and how they meet an event.
 import { expect, test } from "bun:test";
-import { census, cityDay, dayOf, Grid, levelAt, passersBy, populate, react, rng, snapshot, whereAt, type Walk, type Folk, type Place, type Role, type V3 } from "../src/people";
+import { census, cityDay, dayOf, Grid, levelAt, passersBy, populate, react, rng, snapshot, streetMix, whereAt, type Walk, type Folk, type Place, type Role, type V3 } from "../src/people";
 
 const folk: Folk = {
   names: { given: { f: ["Anna", "Martha", "Frieda"], m: ["Karl", "Otto", "Paul"] }, family: ["Schulz", "Müller", "Krüger"] },
@@ -303,4 +303,22 @@ test("passers-by by the hour's mix: the street's people change over the day and 
   expect(seen).toBeGreaterThan(500);
   // the same minute asked again gives the same street
   expect(passersBy([ring], 11 * 60 + 2, hourly)).toEqual(passersBy([ring], 11 * 60 + 2, hourly));
+});
+
+test("the street's mix by the hour comes from the city's days: who is walking then", () => {
+  const people = populate({ roles, places, folk, mix, people: 300, seed: "mix" });
+  const d = cityDay(people, roles, places, { key: "1917-12-03", weekday: 1 });
+  const at = streetMix(d);
+  // the housewives walk to the market at half past ten; at noon the workers are at the Works and the housewives home
+  // again, and only the sentries' patrols are walking
+  const share = (r: Record<string, number>, k: string) => (r[k] ?? 0) / Object.values(r).reduce((x, y) => x + y, 0);
+  expect(share(at(10 * 60 + 30), "housewife")).toBeGreaterThan(0.6);
+  expect(share(at(12 * 60), "munitions-worker")).toBeLessThan(0.05);
+  expect(share(at(12 * 60), "sentry")).toBeGreaterThan(0.8);
+  expect(Object.keys(at(3 * 60)).length).toBeGreaterThan(0);
+  // walked through passersBy: the noon street carries the patrols, though the mix is mostly housewives
+  const ring: Walk = { id: "m", closed: true, width: 4, perMetre: 0.3, path: [[0, 0, 0], [100, 0, 0], [100, 0, 60], [0, 0, 60]] };
+  const noon = passersBy([ring], 12 * 60 + 20, { roles, folk, mix, seed: "mix", mixAt: at });
+  expect(noon.length).toBeGreaterThan(20);
+  expect(noon.filter((p) => p.person.role === "sentry").length).toBeGreaterThan(0.8 * noon.length);
 });

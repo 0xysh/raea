@@ -51,7 +51,8 @@ export interface FlowInput {
   /** the street's mix by the minute of the day, when it changes over the day (the workers at the Works by day, the
    *  children in school till one): each round of a walker (out of a door, along the street, in at a door) is then its
    *  own person, drawn by the mix at the minute the round began, so the street's people change as the day goes and no
-   *  one changes on it (a passer's id is its round's). Without it every walker keeps one person by `mix` all day. */
+   *  one changes on it (a passer's id is its round's). Without it every walker keeps one person by `mix` all day; an
+   *  empty mix at a minute takes `mix`. streetMix(day) gives it from a city's own days. */
   mixAt?: (m: Minute) => Record<string, number>;
   seed: number | string;
   /** the hour profile (STREET_HOURS) */
@@ -191,7 +192,8 @@ export function passersBy(list: Walk[], m: Minute, f: FlowInput): Passer[] {
           round = most / ROUND_PACE / OUT_SHARE;
           const phase = r.next() * round, k0 = Math.floor((sec + phase) / round);
           tau = sec + phase;
-          p = passer(f, roles, slot, f.mixAt((k0 * round - phase) / 60), home, k0);
+          const mx = f.mixAt((k0 * round - phase) / 60);
+          p = passer(f, roles, slot, Object.keys(mx).length ? mx : f.mix, home, k0);
           id = p.id;
           v = walkSpeed(p, f.cold ?? 0.5) * pace;
         } else {

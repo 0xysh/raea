@@ -6,7 +6,7 @@ import { dayOf, whereAt, type DayInput } from "./day";
 import { gridOf } from "./near";
 import { makePerson, type Folk } from "./persona";
 import { hash, rng } from "./rng";
-import type { Activity, Level, Person, Place, Role, Router, Traits, V3 } from "./types";
+import type { Activity, Level, Minute, Person, Place, Role, Router, Traits, V3 } from "./types";
 
 /** How many of each role a place holds (or its share of the population, when `people` is given). */
 export type Mix = Record<string, number>;
@@ -136,6 +136,31 @@ export function census(d: Day): Map<string, number[]> {
     }
   }
   return out;
+}
+
+/** The street's mix by the hour from the city's own days: for each hour, the minutes each role spends walking (its
+ *  trips on foot) in it, so passersBy's walkers (FlowInput.mixAt) are the people whose days put them on the sidewalks
+ *  then: the shift going to the Works at half past five, the children out of school at one. An hour no one walks in
+ *  takes the day's mix. */
+export function streetMix(d: Day): (m: Minute) => Record<string, number> {
+  const role = new Map(d.people.map((p) => [p.id, p.role]));
+  const hours: Record<string, number>[] = Array.from({ length: 24 }, () => ({})), all: Record<string, number> = {};
+  for (const [id, day] of d.days) {
+    const r = role.get(id)!;
+    for (const a of day) {
+      if (a.kind !== "trip" || a.mode !== "walk") continue;
+      for (let h = Math.max(0, Math.floor(a.from / 60)); h < 24 && h * 60 < a.to; h++) {
+        const on = Math.min(a.to, h * 60 + 60) - Math.max(a.from, h * 60);
+        if (on <= 0) continue;
+        hours[h][r] = (hours[h][r] ?? 0) + on;
+        all[r] = (all[r] ?? 0) + on;
+      }
+    }
+  }
+  return (m) => {
+    const h = hours[Math.floor((((m / 60) % 24) + 24) % 24)];
+    return Object.keys(h).length ? h : all;
+  };
 }
 
 /** Something everyone near feels: a gun's report through the ground, a shout, a horse bolting. */

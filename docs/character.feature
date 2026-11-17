@@ -1020,7 +1020,8 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # street) and the hour's share; each a person by the street's mix at their own pace, keeping right, computed
       # for any minute alone. A street whose mix changes by the hour (mixAt: the workers at the Works by day, the
       # children in school till one) draws each round of a walker, out of a door and in at another, as its own
-      # person by the mix when the round began, so the street changes as the day goes and no one changes on it. Places are found by a grid (a slice of Berlin has 16,000 shops); a queue stands on the
+      # person by the mix when the round began, so the street changes as the day goes and no one changes on it;
+      # streetMix(day) gives that mix from the city's own days (each role's minutes walking in each hour). Places are found by a grid (a slice of Berlin has 16,000 shops); a queue stands on the
       # world's queue line when it gives one, everyone facing the door; a block with nowhere to happen (no post, no
       # workplace) is not lived that day.
       Then a city of thousands is placed at any minute, and only those near the camera are characters
