@@ -66,7 +66,7 @@ raea_bin=$bin/raea; [ -f "$raea_bin.exe" ] && raea_bin=$raea_bin.exe
 # checkout), and it counts for REF only when what the gate reads (the skills and guides, the glossary, the CLI's usage,
 # skills.sh) is the same at both. With neither, the release refuses (T1f, 11-07)
 # the raea skill lives in the raea-skills submodule (skills/), so its pointer stands for their text
-gate_inputs=(skills sdk/guides docs/skills.glossary.md engine/cli/src tools/skills.sh)
+gate_inputs=(skills sdk/guides docs/skills.glossary.md engine/cli/src tools/skills.sh tools/skills-app.sh)
 # raea-skills (skills/) at the commit REF pins, written into DIR: a submodule isn't in REF's own archive
 skills_at() {
   local pin; pin=$(git rev-parse "$ref:skills") || { echo "release.sh: $ref pins no raea-skills (skills/)" >&2; return 1; }
