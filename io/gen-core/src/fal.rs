@@ -137,7 +137,13 @@ pub fn body(inputs: &serde_json::Map<String, J>, media: &[(String, String)], fie
             _ => {}
         }
     }
-    let images: Vec<&String> = media.iter().map(|(_, u)| u).collect();
+    // a mask (image.edit's `mask`: where an inpainting model may paint) into the endpoint's mask field, not with the
+    // pictures (it went into image_urls beside the picture, and a fill model read no mask)
+    if let Some((_, u)) = media.iter().find(|(n, _)| n == "mask") {
+        let f = fields.iter().find(|(n, l)| !*l && n.contains("mask")).map(|(n, _)| n.clone()).unwrap_or_else(|| "mask_url".into());
+        b[f.as_str()] = json!(u);
+    }
+    let images: Vec<&String> = media.iter().filter(|(n, _)| n != "mask").map(|(_, u)| u).collect();
     if images.is_empty() {
         return b;
     }
@@ -156,6 +162,16 @@ pub fn body(inputs: &serde_json::Map<String, J>, media: &[(String, String)], fie
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_mask_goes_to_the_mask_field() {
+        let fields = vec![("image_url".to_string(), false), ("mask_url".to_string(), false), ("prompt".to_string(), false)];
+        let media = vec![("image".to_string(), "https://f/pic.png".to_string()), ("mask".to_string(), "https://f/mask.png".to_string())];
+        let b = body(&serde_json::Map::new(), &media, &fields);
+        assert_eq!(b["image_url"], json!("https://f/pic.png"));
+        assert_eq!(b["mask_url"], json!("https://f/mask.png"));
+        assert!(b.get("image_urls").is_none());
+    }
 
     #[test]
     fn settings_the_schema_names_go_through() {
