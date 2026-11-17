@@ -21,6 +21,7 @@ pub use sound::warm_audio;
 mod draw;
 mod react;
 pub use react::needs_react;
+mod props;
 
 type R<T> = Result<T, String>;
 
@@ -80,6 +81,10 @@ pub struct Live {
     /// this session's seed and the time (ms) its frame 0 is at: its Math.random and Date (motion/pure.ts), sent with each
     /// frame and kept in an input log, so a replay draws what was played
     session: (u32, f64),
+    /// frames told as `raea render` tells them (open_render): the composition's own seed, clock and length, no input
+    render: bool,
+    /// the props set over its defaults while it plays, and what they change that the 3D holds (props.rs)
+    props: props::Props,
 }
 
 /// A live session's seed and start: RAEA_SEED when it's set (a test), else from the clock and the process
@@ -205,6 +210,8 @@ impl Live {
     /// `step_at`, its sound synced too when `sound`.
     fn step_inner(&mut self, f: i64, keys: &[String], pointer: Option<(f64, f64, bool)>, lag: f64, sound: bool) -> R<()> {
         self.lag = (lag, std::time::Instant::now());
+        // the 3D's holds worked out after the last props (props.rs) were this frame's
+        self.props.base = None;
         self.frame = f;
         self.pads.clear();
         self.taken.clear();
@@ -243,16 +250,23 @@ impl Live {
                     self.app.world().resource::<ReactOutbox>().send(m);
                 }
             }
-            self.app.world().resource::<ReactOutbox>().send_raw(frame_event(f, keys, pointer, Some(self.session)));
+            self.app.world().resource::<ReactOutbox>().send_raw(if self.render { format!(r#"{{"t":"event","name":"raea-frame","value":{f}}}"#) } else { frame_event(f, keys, pointer, Some(self.session)) });
             // a layout read the composition makes (docs/layout-reads.feature LR2): the live page synced to the World as
             // it is mid-settle, laid out, and its boxes; the frame's draw syncs it again with the 3D's holders. Preview,
             // play, the app's stage and an exported game all step here
             let (page, brand) = (&mut self.page, self.brand.as_deref());
-            raea_runtime_react::scene::settle_with(&mut self.app, Some(f), 5.0, &mut |w, q| {
+            let mut lay = |w: &mut World, q: &str| {
                 page.sync(w, &std::collections::HashMap::new(), brand).map_err(|e| e.to_string())?;
                 page.lay_out();
                 Ok(page.layout_snapshot(q))
-            })?;
+            };
+            let seen = raea_runtime_react::flushed();
+            raea_runtime_react::scene::settle_with(&mut self.app, Some(f), 5.0, &mut lay)?;
+            // a props pass (set_props): the frame is taken once its marker says the props have landed, not at the mark
+            // the frame already had, which a paused stage drew again unchanged (docs/realtime.feature RT4e)
+            if let Some(n) = self.props.wanted.take() {
+                props::landed(&mut self.app, &mut self.props.marker, n, seen, &mut |app| raea_runtime_react::scene::settle_with(app, Some(f), 5.0, &mut lay).map(drop))?;
+            }
             // a game's 3D: this frame's scene, as it was just computed, set on the live engine
             if let Some(ls) = self.live3d.as_mut() {
                 let t = std::time::Instant::now();

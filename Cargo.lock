@@ -15332,6 +15332,7 @@ dependencies = [
  "raea-runtime-export",
  "raea-runtime-page",
  "raea-runtime-react",
+ "raea-runtime-scene",
  "raea-runtime-sound",
  "raea-sys-frame",
  "raea-sys-hold",

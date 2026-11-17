@@ -40,7 +40,7 @@ pub(super) fn calls(mut calls: ResMut<HostCalls>) {
                 _ => PathBuf::from(s),
             });
             let size = (num(&a, "w").unwrap_or(1280.0).round().max(1.0) as u32, num(&a, "h").unwrap_or(720.0).round().max(1.0) as u32);
-            settle(answer, send(w, Cmd::Show(src, size)));
+            settle(answer, send(w, Cmd::Show(src, size, a.get("render").and_then(Value::as_bool).unwrap_or(false))));
         })
         .on("stage.play", move |w, a, answer| settle(answer, send(w, Cmd::Play(a.get("on").and_then(Value::as_bool).unwrap_or(true)))))
         .on("stage.step", move |w, a, answer| settle(answer, send(w, Cmd::Step(num(&a, "n").unwrap_or(1.0).max(0.0) as i64))))
@@ -96,7 +96,7 @@ pub(super) fn calls(mut calls: ResMut<HostCalls>) {
             let tx = w.resource::<Stage>().tx.lock().unwrap().clone();
             match tx {
                 Some(tx) => {
-                    let _ = tx.send(Cmd::Props(a.get("props").cloned().unwrap_or(Value::Null), answer));
+                    let _ = tx.send(Cmd::Props(a.get("props").cloned().unwrap_or(Value::Null), answer, Instant::now()));
                 }
                 None => answer.err("the stage shows nothing"),
             }
@@ -138,6 +138,9 @@ pub(super) fn calls(mut calls: ResMut<HostCalls>) {
         })
         .on("stage.status", |w, _a, answer| {
             let s = w.resource::<Stage>().status.lock().unwrap().clone();
-            answer.ok(json!({"showing": s.showing, "frame": s.frame, "playing": s.playing, "fps": s.fps, "painted": s.painted, "size": [s.size.0, s.size.1], "error": s.error}));
+            let props = json!({"sent": s.props.sent, "drawn": s.props.drawn, "dropped": s.props.dropped, "ms": s.props.ms});
+            let last = s.last_show.map(|(how, ms)| json!({"how": how, "ms": ms}));
+            answer.ok(json!({"showing": s.showing, "frame": s.frame, "playing": s.playing, "fps": s.fps, "painted": s.painted, "size": [s.size.0, s.size.1], "error": s.error,
+                "render": s.render, "opens": s.opens, "adopted": s.adopted, "last_show": last, "props": props, "held": s.held, "controls": s.controls, "values": s.values}));
         });
 }

@@ -141,20 +141,6 @@ impl Live {
         Some(json!({"yaw": o.yaw, "pitch": o.pitch, "distance": o.distance, "target": o.target.to_array(), "radius": radius, "free": false}))
     }
 
-    /// The composition's props set over its defaults while it plays (the entry's raea-props): the frame it is on is
-    /// rendered again with them, so the next draw shows them. A game's state is kept; its props only change.
-    pub fn set_props(&mut self, props: Value) -> R<()> {
-        self.send("raea-props", props);
-        // the frame stepped again: its commit with the new props lands in the page as any frame's does
-        let f = self.frame;
-        self.step_world(f, &[], None, 0.0)
-    }
-
-    /// `set_props` before any frame is stepped: sent, and drawn with the first frame.
-    pub fn props_before(&mut self, props: Value) {
-        self.send("raea-props", props);
-    }
-
     /// Where parts (by key) and world points are on the page now, in page px: `{"parts": [[x, y, w, h] | null],
     /// "points": [[x, y] | null]}`, null for a part not drawn or a point behind the camera. A selection's box and a
     /// note's pin follow what they are on (raea-sys-frame pick.rs locate).
