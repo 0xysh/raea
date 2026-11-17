@@ -108,7 +108,10 @@ async function main() {
       throw new Error(`the GPU worker at ${url} didn't answer: ${(e as Error).message} (RAEA_CLOUD_GPU_FALLBACK=cpu renders here instead)`)
     }
     say(`rendering on ${new URL(url).host}, ${h.device.renders === "gpu" ? `GPU ${h.device.name}` : `its CPU (${h.device.name})`}: ${p.root} (${(folder.length / 1e6).toFixed(1)} MB) sent`)
-    const { exit, files } = await cloud.job(p.args, folder, { as: gnu ? "zst" : "gz", onOutput: (t, s) => (s === "out" ? process.stdout : process.stderr).write(t) })
+    // a render farm's choices (deploy/modal/farm.py): RAEA_CLOUD_GPUS, RAEA_CLOUD_GPU_KIND, RAEA_CLOUD_MAX_USD
+    const n = (v?: string) => (v ? Number(v) : undefined)
+    const farm = { gpus: n(process.env.RAEA_CLOUD_GPUS), gpu: process.env.RAEA_CLOUD_GPU_KIND, maxUsd: n(process.env.RAEA_CLOUD_MAX_USD) }
+    const { exit, files } = await cloud.job(p.args, folder, { as: gnu ? "zst" : "gz", farm, onOutput: (t, s) => (s === "out" ? process.stdout : process.stderr).write(t) })
 
     const back = path.join(tmp, "out.tar")
     writeFileSync(back, files)

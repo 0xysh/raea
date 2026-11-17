@@ -28,6 +28,14 @@ export interface Health {
   jobs: { id: string; running: boolean }[]
 }
 
+/** A render farm's choices for one job (deploy/modal/farm.py): at most `gpus` GPUs at once, of kind `gpu` (Modal's
+ *  names: L4, L40S, ...), and a price over `maxUsd` (estimated from the first frames) stops it before the rest. */
+export interface Farm {
+  gpus?: number
+  gpu?: string
+  maxUsd?: number
+}
+
 export interface JobLog {
   log: ({ out: string } | { err: string })[]
   next: number
@@ -105,9 +113,14 @@ export class RaeaCloud {
   }
 
   /** Starts `raea ARGS` on a folder sent as a tar (zstd, gzip or none), in a folder of its own on the server (a
-   *  render job): its id. */
-  async startJob(args: string[], folder: Uint8Array, signal?: AbortSignal): Promise<string> {
-    const r = await this.call(`/v1/jobs?args=${encodeURIComponent(JSON.stringify(args))}`, { method: "POST", body: new Blob([folder as BlobPart]), headers: { "content-type": "application/octet-stream" }, signal })
+   *  render job): its id. `farm` is for raea's render farm (deploy/modal/farm.py), which splits a render across GPUs;
+   *  a single server ignores it. */
+  async startJob(args: string[], folder: Uint8Array, signal?: AbortSignal, farm: Farm = {}): Promise<string> {
+    const q = new URLSearchParams({ args: JSON.stringify(args) })
+    if (farm.gpus !== undefined) q.set("gpus", String(farm.gpus))
+    if (farm.gpu) q.set("gpu", farm.gpu)
+    if (farm.maxUsd !== undefined) q.set("max_usd", String(farm.maxUsd))
+    const r = await this.call(`/v1/jobs?${q}`, { method: "POST", body: new Blob([folder as BlobPart]), headers: { "content-type": "application/octet-stream" }, signal })
     return ((await r.json()) as { id: string }).id
   }
 
@@ -124,8 +137,8 @@ export class RaeaCloud {
 
   /** A job from start to end: its output to onOutput as it comes; its exit code and the files it made or changed. A
    *  dropped follow request (a platform's proxy, a cold start) is tried again, up to five times in a row. */
-  async job(args: string[], folder: Uint8Array, o: { onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal; as?: "zst" | "gz" | "tar" } = {}): Promise<{ exit: number; files: Uint8Array }> {
-    const id = await this.startJob(args, folder, o.signal)
+  async job(args: string[], folder: Uint8Array, o: { onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal; as?: "zst" | "gz" | "tar"; farm?: Farm } = {}): Promise<{ exit: number; files: Uint8Array }> {
+    const id = await this.startJob(args, folder, o.signal, o.farm)
     let from = 0
     for (let misses = 0; ; ) {
       let f: JobLog
