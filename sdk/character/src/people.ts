@@ -13,3 +13,5 @@ export { rng, hash, type Rng } from "./people/rng";
 export { makePerson, gaitOf, leaned, TRAITS, type Folk, type Names } from "./people/persona";
 export { dayOf, whereAt, walkSpeed, straight, SPEED, WALK_UNDER, type DayInput } from "./people/day";
 export { populate, cityDay, snapshot, census, levelAt, react, type CityInput, type Mix, type Day, type Event } from "./people/city";
+export { Grid, gridOf } from "./people/near";
+export { passersBy, busyAt, STREET_HOURS, type Walk, type Passer, type FlowInput } from "./people/flow";

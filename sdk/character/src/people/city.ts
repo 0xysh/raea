@@ -3,6 +3,7 @@
 // no skinning, and beyond that only counts (how many are at each kind of place in each hour). A person moves between
 // levels by id, keeping their day.
 import { dayOf, whereAt, type DayInput } from "./day";
+import { gridOf } from "./near";
 import { makePerson, type Folk } from "./persona";
 import { hash, rng } from "./rng";
 import type { Activity, Level, Person, Place, Role, Router, Traits, V3 } from "./types";
@@ -34,6 +35,7 @@ export function populate(c: CityInput): Person[] {
   for (const h of homes) for (let k = 0; k < (h.holds ?? 3); k++) slots.push(h);
   for (let i = slots.length - 1; i > 0; i--) { const j = r.int(0, i); [slots[i], slots[j]] = [slots[j], slots[i]]; }
   const used = new Map<string, number>();
+  const kinds = kindsOf(c.places);
   const out: Person[] = [];
   let n = 0;
   for (const [rid, count] of counts) {
@@ -43,8 +45,8 @@ export function populate(c: CityInput): Person[] {
       const home = slots[n % slots.length];
       let work: Place | undefined;
       if (role.work) {
-        const cand = c.places.filter((p) => p.kind === role.work!.at && (used.get(p.id) ?? 0) < (p.holds ?? Infinity)
-          && Math.hypot(p.at[0] - home.at[0], p.at[2] - home.at[2]) <= (role.work!.within ?? Infinity));
+        const all = kinds.get(role.work.at) ?? [], within = role.work.within;
+        const cand = (within === undefined ? all : gridOf(all).within(home.at, within)).filter((p) => (used.get(p.id) ?? 0) < (p.holds ?? Infinity));
         work = cand.length ? cand[r.int(0, cand.length - 1)] : undefined;
         if (work) used.set(work.id, (used.get(work.id) ?? 0) + 1);
       }
@@ -69,10 +71,16 @@ export interface Day {
   places: Map<string, Place>;
 }
 
+/** Places by kind, in the order given. */
+function kindsOf(places: Place[]): Map<string, Place[]> {
+  const m = new Map<string, Place[]>();
+  for (const p of places) { const l = m.get(p.kind); if (l) l.push(p); else m.set(p.kind, [p]); }
+  return m;
+}
+
 /** Every person's day for a date. */
 export function cityDay(people: Person[], roles: Role[], places: Place[], date: DayInput["date"], router?: Router, cold?: number): Day {
-  const pm = new Map(places.map((p) => [p.id, p])), byKind = new Map<string, Place[]>();
-  for (const p of places) byKind.set(p.kind, [...(byKind.get(p.kind) ?? []), p]);
+  const pm = new Map(places.map((p) => [p.id, p])), byKind = kindsOf(places);
   const rm = new Map(roles.map((x) => [x.id, x]));
   const days = new Map<string, Activity[]>();
   for (const person of people) days.set(person.id, dayOf({ person, role: rm.get(person.role)!, date, places: pm, byKind, router, cold }));
@@ -95,11 +103,16 @@ export function snapshot(d: Day, m: number, camera: V3, range: { near: number; m
   const placed = new Map<number, { at: V3; facing: number }>();
   for (const [id, line] of lines) {
     const pl = d.places.get(id)!, f = pl.facing ?? 0;
-    // the front runs across the facing; the queue runs along it from the door, a step out from the wall
-    const out: V3 = [Math.sin(f), 0, Math.cos(f)], along: V3 = [Math.cos(f), 0, -Math.sin(f)];
+    // the world's queue line when it gives one; else the front runs across the facing and the queue runs along it from
+    // the door, a step out from the wall
+    const out: V3 = [Math.sin(f), 0, Math.cos(f)];
+    const start: V3 = pl.line?.at ?? [pl.at[0] + out[0] * QUEUE_OUT, pl.at[1], pl.at[2] + out[2] * QUEUE_OUT];
+    const along: V3 = pl.line?.along ?? [Math.cos(f), 0, -Math.sin(f)];
+    // each faces the one ahead, toward the door: back along the line
+    const facing = Math.atan2(-along[0], -along[2]);
     line.sort((a, b) => a.since - b.since || a.i - b.i).forEach((q, k) => {
-      const s = (k + 1) * QUEUE_GAP;
-      placed.set(q.i, { at: [pl.at[0] + out[0] * QUEUE_OUT + along[0] * s, pl.at[1], pl.at[2] + out[2] * QUEUE_OUT + along[2] * s], facing: f + Math.PI / 2 });
+      const s = (k + (pl.line ? 0 : 1)) * QUEUE_GAP;
+      placed.set(q.i, { at: [start[0] + along[0] * s, start[1], start[2] + along[2] * s], facing });
     });
   }
   return rows.map(({ p, w }, i) => {

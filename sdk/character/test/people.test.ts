@@ -1,7 +1,7 @@
 // raea/people (src/people.ts, docs/character.feature CH50-CH53): people drawn from roles, their days, where they are
 // at a minute, the levels of detail and how they meet an event.
 import { expect, test } from "bun:test";
-import { census, cityDay, dayOf, levelAt, populate, react, snapshot, whereAt, type Folk, type Place, type Role } from "../src/people";
+import { census, cityDay, dayOf, Grid, levelAt, passersBy, populate, react, rng, snapshot, whereAt, type Walk, type Folk, type Place, type Role, type V3 } from "../src/people";
 
 const folk: Folk = {
   names: { given: { f: ["Anna", "Martha", "Frieda"], m: ["Karl", "Otto", "Paul"] }, family: ["Schulz", "Müller", "Krüger"] },
@@ -162,5 +162,77 @@ test("people inside are counted, not drawn; a queue stands in a line along the f
   for (const door of new Set(q.map((x) => (x.activity.kind === "stay" ? x.activity.at : "")))) {
     const at = q.filter((x) => x.activity.kind === "stay" && x.activity.at === door).map((x) => x.at[0]).sort((a, b) => a - b);
     for (let k = 1; k < at.length; k++) expect(at[k] - at[k - 1]).toBeCloseTo(0.65, 5);
+  }
+  // each faces the door: from the bakery's door (facing 0, so the front runs along x) back along the line
+  for (const x of q) {
+    const door = inside.find((p) => x.activity.kind === "stay" && p.id === x.activity.at)!;
+    const toDoor = Math.atan2(door.at[0] - x.at[0], door.at[2] + 1.1 - x.at[2]);
+    expect(Math.abs(Math.atan2(Math.sin(x.facing - toDoor), Math.cos(x.facing - toDoor)))).toBeLessThan(0.01);
+  }
+  // a world's queue line is followed: its first place, then 0.65 m apart along it
+  const lined = inside.map((p) => (p.kind === "bakery" ? { ...p, line: { at: [p.at[0], 0, p.at[2] + 2] as V3, along: [0, 0, 1] as V3 } } : p));
+  const dl = cityDay(ps, queueRoles, lined, { key: "1917-12-03", weekday: 1 });
+  const ql = snapshot(dl, 7 * 60 + 15, [0, 0, 0], { near: 150, middle: 1500 }).filter((x) => x.doing === "queue for bread");
+  for (const door of lined.filter((p) => p.line)) {
+    const zs = ql.filter((x) => x.activity.kind === "stay" && x.activity.at === door.id).map((x) => x.at[2] - door.at[2]).sort((a, b) => a - b);
+    zs.forEach((z, k) => expect(z).toBeCloseTo(2 + 0.65 * k, 5));
+  }
+  expect(ql.every((x) => Math.abs(x.facing - Math.PI) < 1e-9 || Math.abs(x.facing + Math.PI) < 1e-9)).toBe(true);
+});
+
+test("the nearest places of a kind come from a grid, the same as sorting them all", () => {
+  const r = rng(91);
+  const many: Place[] = Array.from({ length: 3000 }, (_, i) => ({ id: `s${i}`, kind: "shop", at: [r.next() * 4000 - 2000, 0, r.next() * 4000 - 2000] as V3 }));
+  const g = new Grid(many, 250);
+  for (let t = 0; t < 200; t++) {
+    const at: V3 = [r.next() * 5000 - 2500, 0, r.next() * 5000 - 2500];
+    const d = (p: Place) => Math.hypot(p.at[0] - at[0], p.at[2] - at[2]);
+    const want = [...many].sort((a, b) => d(a) - d(b)).slice(0, 4).map(d);
+    expect(g.nearest(at, 4).map(d)).toEqual(want);
+    const reach = 50 + r.next() * 600;
+    expect(new Set(g.within(at, reach).map((p) => p.id))).toEqual(new Set(many.filter((p) => d(p) <= reach).map((p) => p.id)));
+  }
+  expect(g.nearest([0, 0, 0], 5000).length).toBe(3000);
+});
+
+test("a block with nowhere to happen is not lived: no workplace, no shift; no post, no patrol at the front door", () => {
+  const bare = places.filter((p) => p.kind !== "post" && p.kind !== "munitions");
+  const ps = populate({ roles, places: bare, folk, mix, seed: 5 });
+  const d = cityDay(ps, roles, bare, { key: "1917-12-03", weekday: 1 });
+  const workers = ps.filter((x) => x.role === "munitions-worker"), sentries = ps.filter((x) => x.role === "sentry");
+  expect(workers.length).toBeGreaterThan(0);
+  expect(sentries.length).toBeGreaterThan(0);
+  for (const p of workers) expect(p.work).toBeUndefined();
+  for (const p of [...workers, ...sentries]) {
+    const day = d.days.get(p.id)!;
+    expect(day.every((a) => a.kind === "stay" ? a.at === p.home || !["shift", "patrol"].includes(a.what) : true)).toBe(true);
+    expect(day.some((a) => a.kind === "stay" && a.what === "patrol")).toBe(false);
+  }
+});
+
+test("passers-by: as many as the line and the hour say, on it, keeping right, the same each time, moving at a walk", () => {
+  const walk: Walk = { id: "w", path: [[0, 0, 0], [200, 0, 0], [200, 0, 100]], perMetre: 0.3, width: 3 };
+  const f = { roles, folk, mix, seed: "flow" };
+  const at17 = passersBy([walk], 17 * 60, f), at3 = passersBy([walk], 3 * 60, f);
+  // 300 m at 0.3 a metre at the busiest hour (5 pm), a fiftieth of that at 3 am
+  expect(Math.abs(at17.length - 90)).toBeLessThan(15);
+  expect(at3.length).toBeLessThan(8);
+  expect(passersBy([walk], 17 * 60, f)).toEqual(at17);
+  for (const p of at17) {
+    const onFirst = Math.abs(p.at[2]) <= 1.5 && p.at[0] >= -1e-6 && p.at[0] <= 200 + 1.5;
+    const onSecond = Math.abs(p.at[0] - 200) <= 1.5 && p.at[2] >= -1.5 && p.at[2] <= 100;
+    expect(onFirst || onSecond).toBe(true);
+  }
+  // on the first leg (along +x), those walking +x keep to one side and those walking -x to the other
+  const leg = at17.filter((p) => p.at[0] < 190 && Math.abs(p.at[2]) < 2);
+  const east = leg.filter((p) => Math.sin(p.facing) > 0.5), west = leg.filter((p) => Math.sin(p.facing) < -0.5);
+  expect(east.length + west.length).toBe(leg.length);
+  expect(east.every((p) => p.at[2] > 0) && west.every((p) => p.at[2] < 0)).toBe(true);
+  // a second later each has moved about a walking pace along the line
+  const later = new Map(passersBy([walk], 17 * 60 + 1 / 60, f).map((p) => [p.id, p]));
+  for (const p of leg.slice(0, 20)) {
+    const q = later.get(p.id)!;
+    const d = Math.hypot(q.at[0] - p.at[0], q.at[2] - p.at[2]);
+    if (d < 5) expect(d).toBeGreaterThan(0.7), expect(d).toBeLessThan(1.8);
   }
 });

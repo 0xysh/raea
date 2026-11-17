@@ -1,6 +1,7 @@
 // A person's day: the role's blocks that apply on that date, at real places, at times moved by how punctual the person
 // is, with the trips between them (a mode drawn by the person's own leanings and the distance), and habits slotted in
 // where they fit. The same person and date give the same day.
+import { gridOf } from "./near";
 import { leaned } from "./persona";
 import { rng } from "./rng";
 import type { Activity, Block, Habit, Minute, Mode, Person, Place, Role, Router, V3 } from "./types";
@@ -43,8 +44,8 @@ function placeFor(at: string, p: Person, inp: DayInput, near: Place, r: ReturnTy
   const all = inp.byKind.get(at);
   if (!all || all.length === 0) return undefined;
   // the nearest few, one of them (people do not all use the one nearest shop)
-  const ranked = [...all].sort((a, b) => Math.hypot(a.at[0] - near.at[0], a.at[2] - near.at[2]) - Math.hypot(b.at[0] - near.at[0], b.at[2] - near.at[2]));
-  return ranked[Math.min(ranked.length - 1, Math.floor(Math.pow(r.next(), 2) * Math.min(4, ranked.length)))];
+  const ranked = gridOf(all).nearest(near.at, 4);
+  return ranked[Math.min(ranked.length - 1, Math.floor(Math.pow(r.next(), 2) * ranked.length))];
 }
 
 function modeFor(p: Person, metres: number, cold: number, r: ReturnType<typeof rng>): Mode {
@@ -79,7 +80,10 @@ export function dayOf(inp: DayInput): Activity[] {
     let from = b.from + Math.round(r.normal(0, (b.jitter ?? 10) * keep));
     const end = b.to ?? from + (b.minutes ?? 60);
     for (let s = 0; s < stops; s++) {
-      const at = placeFor(b.at, p, inp, here, r) ?? here;
+      // a block with nowhere to happen (no workplace was found for the person, no place of its kind in the city) is
+      // not lived that day: a sentry with no post stays home rather than standing guard at their own door
+      const at = placeFor(b.at, p, inp, here, r);
+      if (!at) break;
       const to = b.round ? Math.min(end, from + b.round.dwell) : end + Math.round(r.normal(0, (b.jitter ?? 10) * keep * 0.5));
       stays.push({ what: b.what, at, from, to: Math.max(from + 1, to), acts: b.acts, outside: b.outside });
       here = at;
@@ -92,7 +96,8 @@ export function dayOf(inp: DayInput): Activity[] {
     if (!r.fork(h.id).chance(leaned(h.chance, p.traits, h.leans))) continue;
     const start = h.from + Math.floor(r.next() * Math.max(1, h.to - h.from - h.minutes));
     const host = [...stays].reverse().find((s) => s.from <= start) ?? stays[0];
-    const at = h.at === "here" && host ? host.at : placeFor(h.at, p, inp, host?.at ?? home, r) ?? home;
+    const at = h.at === "here" && host ? host.at : placeFor(h.at, p, inp, host?.at ?? home, r);
+    if (!at) continue;
     stays.push({ what: h.act, at, from: start, to: start + h.minutes, outside: h.outside });
   }
   stays.sort((a, b) => a.from - b.from);

@@ -121,6 +121,9 @@ export interface Place {
   /** being there hides a person (a home, a works, a school): no character is drawn for them unless their block is
    *  `outside`. Unset: a place out of doors (a corner, a post, a courtyard, a square) */
   inside?: boolean;
+  /** where a queue at this door forms, when the world says (a tile's queue line): its first place and the way it runs.
+   *  Unset: a step out from the door, along the front */
+  line?: { at: V3; along: V3 };
 }
 
 /** A face: a hero's own head (made from its pictures) or a crowd head drawn from a face model by these numbers. */
