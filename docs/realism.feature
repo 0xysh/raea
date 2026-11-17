@@ -333,6 +333,24 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         virtual geometry (Nanite's cluster LOD) and virtual texturing follow once Bevy's meshlets or mesh shaders run
         on Metal
 
+    Scenario: LT21. Detail, draw distance and culling for anything made in raea
+      Given anything raea draws: a Model, a Mesh3d, Instances, a generated set or a baked city
+      Then any part says where it is drawn (`detail`): between distances in metres, or between sizes on screen in
+        pixels, turned into distances for each camera from the part's size, the camera's field of view and its inside
+        height (D13), so 1440p and 4K out keep one look; a level cross-fades into the next (Bevy's VisibilityRange
+        dither) instead of popping; past its last level a part isn't drawn at all
+      And a level can leave its shadow to a coarser one (`shadow: false`), so the shadow passes draw the coarse level
+      And `detail: "auto"` makes the levels itself: the mesh simplified (meshoptimizer) to an error of about a pixel at
+        each level's nearest distance, cached beside its source
+      And a poster of any part (an octahedral impostor) is baked by raea's own renderer, `raea bake poster`, and drawn
+        as one card showing the view nearest the camera's, as the part's last level
+      And Instances drop each copy by distance and size on screen on the GPU, not the whole set at once
+      And a scene that doesn't move bakes what each cell of it can see (`raea bake visibility`), and draws only that
+      And the generators (the city's bake, the interiors, the foliage) emit their own levels and give their ranges,
+        so raea's own levels are the fallback for what nobody made levels for
+      And measured on Berlin's walk at 1440p out: triangles and draws a frame and frame time, before and after, with
+        no pop to see (the shot's flicker no worse)
+
   Rule: Every light, everything in it
 
     Scenario: LT6. Every light feeds the GI
