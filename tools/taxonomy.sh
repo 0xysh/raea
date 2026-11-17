@@ -14,6 +14,16 @@
 set -euo pipefail
 export LC_ALL=C
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+mods=${RAEA_MODULES:-$ROOT}
+if [ "$mods" != "$ROOT" ]; then
+  # an export (tools/agents/check --lane runs the export's own copy, so other lanes' uncommitted SDK edits in the shared
+  # tree can't fail a lane): the SDK's imports resolve through the checkout's node_modules, linked in where missing
+  for m in "$mods"/sdk/*/node_modules; do
+    d=$ROOT/${m#"$mods"/}
+    [ -d "$(dirname "$d")" ] || continue
+    [ -e "$d" ] || { rm -f "$d"; ln -s "$m" "$d"; }
+  done
+fi
 LIST=$ROOT/tools/taxonomy.list
 check=0
 [ "${1:-}" = "--check" ] && check=1
