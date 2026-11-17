@@ -8,6 +8,8 @@
 //      it comes;
 //   3. the files it made or changed land back here: an output path outside the folder (-o /tmp/x.mp4) is written
 //      there under .raea-cloud-out and moved to its place after.
+// In a raea repo, with this box signed in, the project's media goes by hash instead (media.ts, CR23): the farm fetches
+// it from R2, and the media the render makes goes to R2 from the farm, here only as pointer files.
 //
 // A render that reads a path outside its project (an input, --words, ...) can't go: it runs here, on the CPU, and
 // says why. So does every render when the worker can't be reached and RAEA_CLOUD_GPU_FALLBACK=cpu; otherwise that
@@ -19,6 +21,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { RaeaCloud } from "../src/index.ts"
+import { excludes as mediaExcludes, inputs, lfsOf, outputs } from "./media.ts"
 
 const REAL = process.env.RAEA_REAL ?? "/opt/raea/bin/raea"
 // flags whose value is a path raea writes; the rest of a render's path arguments are read
@@ -94,7 +97,16 @@ async function main() {
     // zstd with GNU tar (the image's); gzip with another tar (a Mac's), whose zstd needs a program of its own
     const gnu = spawnSync("tar", ["--version"], { encoding: "utf8" }).stdout?.includes("GNU")
     const sent = path.join(tmp, "in.tar")
-    const pack = spawnSync("tar", [gnu ? "--zstd" : "-z", "-cf", sent, ...excludes.map((e) => `--exclude=${e}`), "-C", p.root, "."], { encoding: "utf8" })
+    // the media that goes by hash: out of the tar, named in its manifest
+    const lfs = lfsOf(p.root)
+    const byHash = typeof lfs === "string" ? [] : await inputs(p.root, lfs)
+    const extra: string[] = []
+    if (byHash.length) {
+      writeFileSync(path.join(tmp, "media-excludes"), mediaExcludes(byHash))
+      writeFileSync(path.join(tmp, ".raea-cloud-media.json"), JSON.stringify({ objects: byHash }))
+      extra.push("-X", path.join(tmp, "media-excludes"))
+    }
+    const pack = spawnSync("tar", [gnu ? "--zstd" : "-z", "-cf", sent, ...excludes.map((e) => `--exclude=${e}`), ...extra, "-C", p.root, ".", ...(byHash.length ? ["-C", tmp, ".raea-cloud-media.json"] : [])], { encoding: "utf8" })
     if (pack.status !== 0) throw new Error(`the project didn't pack: ${pack.stderr.trim()}`)
     const folder = new Uint8Array(readFileSync(sent))
 
@@ -108,10 +120,18 @@ async function main() {
       throw new Error(`the GPU worker at ${url} didn't answer: ${(e as Error).message} (RAEA_CLOUD_GPU_FALLBACK=cpu renders here instead)`)
     }
     say(`rendering on ${new URL(url).host}, ${h.device.renders === "gpu" ? `GPU ${h.device.name}` : `its CPU (${h.device.name})`}: ${p.root} (${(folder.length / 1e6).toFixed(1)} MB) sent`)
+    if (byHash.length) say(`${byHash.length} media files (${(byHash.reduce((n, m) => n + m.size, 0) / 1e6).toFixed(1)} MB) go by hash: the farm fetches them from R2`)
+    else if (typeof lfs === "string" && existsSync(path.join(p.root, ".lfsconfig"))) say(`media goes in the tar: ${lfs}`)
     // a render farm's choices (deploy/modal/farm.py): RAEA_CLOUD_GPUS, RAEA_CLOUD_GPU_KIND, RAEA_CLOUD_MAX_USD
     const n = (v?: string) => (v ? Number(v) : undefined)
-    const farm = { gpus: n(process.env.RAEA_CLOUD_GPUS), gpu: process.env.RAEA_CLOUD_GPU_KIND, maxUsd: n(process.env.RAEA_CLOUD_MAX_USD) }
-    const { exit, files } = await cloud.job(p.args, folder, { as: gnu ? "zst" : "gz", farm, onOutput: (t, s) => (s === "out" ? process.stdout : process.stderr).write(t) })
+    const farm = { gpus: n(process.env.RAEA_CLOUD_GPUS), gpu: process.env.RAEA_CLOUD_GPU_KIND, maxUsd: n(process.env.RAEA_CLOUD_MAX_USD), media: typeof lfs !== "string" }
+    let finish: (() => Promise<number>) | undefined
+    const media = typeof lfs === "string" ? undefined : async (made: Parameters<typeof outputs>[2]) => {
+      const o = await outputs(p.root, lfs, made)
+      finish = o.done
+      return o.send
+    }
+    const { exit, files } = await cloud.job(p.args, folder, { as: gnu ? "zst" : "gz", farm, media, onOutput: (t, s) => (s === "out" ? process.stdout : process.stderr).write(t) })
 
     const back = path.join(tmp, "out.tar")
     writeFileSync(back, files)
@@ -129,6 +149,10 @@ async function main() {
       }
     }
     rmSync(path.join(p.root, ".raea-cloud-out"), { recursive: true, force: true })
+    if (finish) {
+      const bytes = await finish()
+      say(`its media (${(bytes / 1e6).toFixed(1)} MB) went from the farm to R2; here it's pointers (git lfs pull PATH brings one here)`)
+    }
     say(`done on the GPU worker in ${((performance.now() - t0) / 1000).toFixed(1)} s, exit ${exit}`)
     process.exitCode = exit
   } finally {

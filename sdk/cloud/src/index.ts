@@ -34,6 +34,17 @@ export interface Farm {
   gpus?: number
   gpu?: string
   maxUsd?: number
+  /** the job's media outputs stay on the farm for `media` to send to R2 (docs/cloud-render.feature CR23) */
+  media?: boolean
+}
+
+/** A media file a farm job made, by its Git LFS object id; with `href`, where in R2 it goes (signed for it) */
+export interface Media {
+  path: string
+  oid: string
+  size: number
+  href?: string
+  header?: Record<string, string>
 }
 
 export interface JobLog {
@@ -120,6 +131,7 @@ export class RaeaCloud {
     if (farm.gpus !== undefined) q.set("gpus", String(farm.gpus))
     if (farm.gpu) q.set("gpu", farm.gpu)
     if (farm.maxUsd !== undefined) q.set("max_usd", String(farm.maxUsd))
+    if (farm.media) q.set("media", "1")
     const r = await this.call(`/v1/jobs?${q}`, { method: "POST", body: new Blob([folder as BlobPart]), headers: { "content-type": "application/octet-stream" }, signal })
     return ((await r.json()) as { id: string }).id
   }
@@ -135,9 +147,22 @@ export class RaeaCloud {
     return new Uint8Array(await (await this.call(`/v1/jobs/${id}/out?as=${as}`)).arrayBuffer())
   }
 
+  /** A finished job's media outputs (a job started with farm.media), held on the farm until sendMedia. */
+  async jobMedia(id: string): Promise<Media[]> {
+    return ((await (await this.call(`/v1/jobs/${id}/media`)).json()) as { objects: Media[] }).objects
+  }
+
+  /** Sends a job's media outputs to R2: each with an href goes there (a signed PUT), straight from the farm. */
+  async sendMedia(id: string, objects: Media[]): Promise<{ uploaded: number; bytes: number }> {
+    const r = await this.call(`/v1/jobs/${id}/media`, { method: "POST", body: JSON.stringify({ objects }), headers: { "content-type": "application/json" } })
+    return r.json()
+  }
+
   /** A job from start to end: its output to onOutput as it comes; its exit code and the files it made or changed. A
-   *  dropped follow request (a platform's proxy, a cold start) is tried again, up to five times in a row. */
-  async job(args: string[], folder: Uint8Array, o: { onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal; as?: "zst" | "gz" | "tar"; farm?: Farm } = {}): Promise<{ exit: number; files: Uint8Array }> {
+   *  dropped follow request (a platform's proxy, a cold start) is tried again, up to five times in a row. With
+   *  `media` (and farm.media), the job's media outputs are handed to it first: it answers where in R2 each goes, the
+   *  farm sends them there, and they come back in `media`, not in `files`. */
+  async job(args: string[], folder: Uint8Array, o: { onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal; as?: "zst" | "gz" | "tar"; farm?: Farm; media?: (m: Media[]) => Promise<Media[]> } = {}): Promise<{ exit: number; files: Uint8Array; media: Media[] }> {
     const id = await this.startJob(args, folder, o.signal, o.farm)
     let from = 0
     for (let misses = 0; ; ) {
@@ -152,7 +177,16 @@ export class RaeaCloud {
       }
       for (const l of f.log) "out" in l ? o.onOutput?.(l.out, "out") : o.onOutput?.(l.err, "err")
       from = f.next
-      if (f.exit !== undefined) return { exit: f.exit, files: await this.jobFiles(id, o.as) }
+      if (f.exit === undefined) continue
+      let media: Media[] = []
+      if (o.farm?.media && o.media) {
+        const made = await this.jobMedia(id)
+        if (made.length) {
+          media = await o.media(made)
+          await this.sendMedia(id, media)
+        }
+      }
+      return { exit: f.exit, files: await this.jobFiles(id, o.as), media }
     }
   }
 

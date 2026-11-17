@@ -7,6 +7,11 @@
 #   POST /v1/jobs?args=JSON[&gpus=N][&gpu=KIND][&max_usd=X]   body: the project as a tar. {id}
 #   GET  /v1/jobs/ID?from=N                                    {log, next, exit?}, held up to 20 s for more
 #   GET  /v1/jobs/ID/out?as=zst|gz|tar                         the files the job made or changed; the job is removed
+#   GET  /v1/jobs/ID/media                                     with media=1: the job's media outputs [{path, oid, size}],
+#                                                              left out of /out
+#   POST /v1/jobs/ID/media {objects: [{path, oid, href, header}]}   PUTs each to its signed URL in R2 (farm_media.py)
+# A job's folder may hold .raea-cloud-media.json: its media by Git LFS object id with URLs signed for it, fetched from
+# R2 through a cache on the volume keyed by hash instead of coming in the tar (docs/cloud-render.feature CR23).
 #
 # - `raea render X.tsx -o OUT.mp4|DIR`: frame 0 renders first on one GPU, to learn the piece's length and the price of
 #   a frame; the frames then go out in runs to up to `gpus` GPUs (farm_plan.py sizes them), come back as PNGs, and the
@@ -60,7 +65,7 @@ image = (
     .add_local_file(os.path.join(CLOUD, "image", "nvidia_icd.json"), "/usr/share/vulkan/icd.d/nvidia_icd.json", copy=True)
     .env({"WGPU_BACKEND": "vulkan", "NVIDIA_DRIVER_CAPABILITIES": "all", "RAEA_CLIP_CHECK": "0", "RAEA_AUDIO_MUTE": "1",
           "RAEA_MODELS": "/models/raea", "RAEA_FEED_MODELS": "/models/feed", "RAEA_LIBRARY_MODELS": "/models/library"})
-    .add_local_python_source("farm_plan", "prices")
+    .add_local_python_source("farm_plan", "farm_media", "prices")
 )
 
 app = modal.App(os.environ.get("RAEA_FARM_APP", "raea-farm"), image=image)
@@ -222,12 +227,20 @@ def blender_run(id: str, blend: str, start: int, end: int, opts: dict) -> dict:
 
 @app.function(cpu=2, memory=4096, volumes={ROOT: vol}, timeout=24 * 3600, secrets=[secret])
 def coordinate(id: str, args: list[str], opts: dict):
+    import farm_media
     import farm_plan
 
     log = Log(id)
     log(f"raea farm: raea {' '.join(args)}")
     vol.reload()
     work = f"{JOBS}/{id}/work"
+    try:
+        farm_media.fetch(work, f"{ROOT}/blobs", log)
+    except Exception as e:  # a file that didn't come, or came back as another: the job doesn't run
+        log(f"raea farm: {e}", err=True)
+        vol.commit()
+        log.end(1)
+        return
     before = snapshot(work)
     try:
         code = farm_plan.dispatch(args, {**opts, "id": id}, work, log, raea_run, blender_run, CPU_ENV, run, vol.reload)
@@ -236,8 +249,16 @@ def coordinate(id: str, args: list[str], opts: dict):
         code = 1
     vol.commit()
     after = snapshot(work)
+    changed = [p for p, v in after.items() if before.get(p) != v]
+    if opts.get("media"):
+        # the job's media stays here until the box names where in R2 it goes (POST media); the rest comes back in /out
+        media = farm_media.outputs(work, changed)
+        with open(f"{JOBS}/{id}/media.json", "w") as f:
+            json.dump(media, f)
+        kept = {m["path"] for m in media}
+        changed = [p for p in changed if p not in kept]
     with open(f"{JOBS}/{id}/changed.txt", "w") as f:
-        f.write("".join(p + "\n" for p, v in after.items() if before.get(p) != v))
+        f.write("".join(p + "\n" for p in changed))
     shutil.rmtree(f"{JOBS}/{id}/frames", ignore_errors=True)
     vol.commit()
     log.end(code)
@@ -276,7 +297,7 @@ def api():
         if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
             raise HTTPException(400, "args must be a JSON array of strings: raea's own arguments")
         q = req.query_params
-        opts = {"gpus": min(int(q.get("gpus", GPUS)), GPUS), "gpu": q.get("gpu"), "max_usd": float(q["max_usd"]) if "max_usd" in q else None}
+        opts = {"gpus": min(int(q.get("gpus", GPUS)), GPUS), "gpu": q.get("gpu"), "max_usd": float(q["max_usd"]) if "max_usd" in q else None, "media": q.get("media") == "1"}
         id = str(uuid.uuid4())
         work = f"{JOBS}/{id}/work"
         os.makedirs(work)
@@ -309,6 +330,33 @@ def api():
                 body = {"log": lines[start:], "next": len(lines)}
                 return JSONResponse(body if code is None else {**body, "exit": code})
             await asyncio.sleep(0.5)
+
+    @web.get("/v1/jobs/{id}/media")
+    def media_list(id: str, req: Request):
+        check(req)
+        if logs.get(f"{id}:exit") is None:
+            raise HTTPException(404, "no such finished job")
+        vol.reload()
+        p = f"{JOBS}/{id}/media.json"
+        return {"objects": json.load(open(p)) if os.path.exists(p) else []}
+
+    @web.post("/v1/jobs/{id}/media")
+    async def media_send(id: str, req: Request):
+        import farm_media
+
+        check(req)
+        if logs.get(f"{id}:exit") is None:
+            raise HTTPException(404, "no such finished job")
+        await vol.reload.aio()
+        body = await req.json()
+        objects = body.get("objects") if isinstance(body, dict) else None
+        if not isinstance(objects, list):
+            raise HTTPException(400, "objects: [{path, oid, href, header}]")
+        # said in this container's log, not the job's (its log is done, and Log would start it again)
+        try:
+            return await asyncio.to_thread(farm_media.upload, f"{JOBS}/{id}/work", objects, print)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     @web.get("/v1/jobs/{id}/out")
     def out(id: str, req: Request):
