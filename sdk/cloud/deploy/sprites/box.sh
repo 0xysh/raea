@@ -7,6 +7,9 @@
 #   deploy/sprites/box.sh up NAME      the Sprite, made or completed, and its server started
 #   deploy/sprites/box.sh status NAME  its URL, raea, the server's health
 #   deploy/sprites/box.sh token NAME   its RAEA_CLOUD_TOKEN, for the TypeScript client
+#   deploy/sprites/box.sh key NAME     a raea agent key (repos and storage scopes) from stdin, or the clipboard, onto
+#                                      the box as RAEA_AGENT_KEY: its agents clone raea projects (raea-repo clone OWNER
+#                                      PROJECT DIR, deploy/git/repo.sh), push, and send renders' media by hash (CR22, CR23)
 #
 # RAEA_VERSION (0.1.6) and AGENTS ("kimi-code claude-acp") pick what goes on; the farm comes from
 # ~/.config/raea-cloud/farm.env (RAEA_CLOUD_GPU_URL, RAEA_CLOUD_GPU_TOKEN). The Sprite's URL stays private to the org.
@@ -44,7 +47,7 @@ up)
   sprite list -o "$ORG" | grep -qx "$NAME" || sprite create -o "$ORG" --skip-console --label raea --label raea-cloud "$NAME"
   # raea's runtime libraries, and Mesa's lavapipe: the box draws previews on its CPU, its renders go to the farm
   x "sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-     ca-certificates curl git zstd xz-utils procps ripgrep libasound2t64 libfontconfig1 libvulkan1 mesa-vulkan-drivers vulkan-tools >/dev/null"
+     ca-certificates curl git git-lfs zstd xz-utils procps ripgrep libasound2t64 libfontconfig1 libvulkan1 mesa-vulkan-drivers vulkan-tools >/dev/null"
   x "node -v 2>/dev/null | grep -q '^v24' || { curl -fsSL https://nodejs.org/dist/v$NODE/node-v$NODE-linux-x64.tar.xz | sudo tar -xJ -C /opt \
      && sudo ln -sf /opt/node-v$NODE-linux-x64/bin/node /opt/node-v$NODE-linux-x64/bin/npm /opt/node-v$NODE-linux-x64/bin/npx /usr/local/bin/; }"
   x "[ \"\$(/opt/raea/bin/raea --version 2>/dev/null)\" = $RAEA_VERSION ] || { set -e; f=raea-$RAEA_VERSION-linux-x86_64.tar.gz; \
@@ -52,12 +55,15 @@ up)
      && sha256sum -c \$f.sha256 && sudo rm -rf /opt/raea && sudo mkdir -p /opt/raea && sudo tar -xzf \$f -C /opt/raea --strip-components=1 && rm -f \$f \$f.sha256; }"
   # sdk/cloud's server, client and wrapper, as the image has them (image/Dockerfile)
   pack=$(mktemp)
-  COPYFILE_DISABLE=1 tar -czf "$pack" --no-mac-metadata -C "$HERE" server src image package.json package-lock.json
+  COPYFILE_DISABLE=1 tar -czf "$pack" --no-mac-metadata -C "$HERE" server src image deploy/git package.json package-lock.json
   put "$pack" /tmp/raea-cloud.tgz
   rm -f "$pack"
   x "sudo mkdir -p /opt/raea-cloud && sudo chown \$(id -u):\$(id -g) /opt/raea-cloud && tar -xzf /tmp/raea-cloud.tgz -C /opt/raea-cloud && rm /tmp/raea-cloud.tgz \
      && cd /opt/raea-cloud && npm ci --omit=dev --no-fund --no-audit --loglevel=error && node server/agents.ts install $AGENTS \
-     && chmod +x image/*.sh && sudo ln -sf /opt/raea-cloud/image/raea.sh /usr/local/bin/raea"
+     && chmod +x image/*.sh deploy/git/* && sudo ln -sf /opt/raea-cloud/image/raea.sh /usr/local/bin/raea \
+     && sudo ln -sf /opt/raea-cloud/deploy/git/repo.sh /usr/local/bin/raea-repo && git lfs install --skip-repo >/dev/null"
+  # the box's commits say which box made them
+  x "git config --global user.name 'raea cloud $NAME' && git config --global user.email '$NAME@box.raea.io' && git config --global init.defaultBranch main"
   # the box's own token, made once and kept on its disk; the farm's, from this Mac
   x "[ -s ~/.raea-cloud.env ] || { umask 077; echo RAEA_CLOUD_TOKEN=\$(openssl rand -hex 32) > ~/.raea-cloud.env; }"
   put "$FARM" /tmp/farm.env
@@ -86,8 +92,20 @@ status)
   x "/opt/raea/bin/raea --version; . ~/.raea-cloud.env; curl -fsS -H \"authorization: Bearer \$RAEA_CLOUD_TOKEN\" localhost:8080/v1/health | head -c 600; echo"
   ;;
 token) x ". ~/.raea-cloud.env; echo \$RAEA_CLOUD_TOKEN" ;;
+key)
+  # never echoed: from a pipe, or the clipboard when there's none
+  if [ -t 0 ]; then k=$(pbpaste); else k=$(cat); fi
+  k=$(printf %s "$k" | tr -d '[:space:]')
+  case "$k" in raea_ak_*) ;; *) echo "box: that isn't a raea agent key (raea_ak_...)"; exit 2 ;; esac
+  f=$(mktemp)
+  (umask 077; printf 'RAEA_AGENT_KEY=%s\n' "$k" >"$f")
+  put "$f" /tmp/agent.env
+  rm -f "${f:?}"
+  x "umask 077; grep -v '^RAEA_AGENT_KEY=' ~/.raea-cloud.env > ~/.raea-cloud.env.new; cat /tmp/agent.env >> ~/.raea-cloud.env.new; rm /tmp/agent.env; mv ~/.raea-cloud.env.new ~/.raea-cloud.env \
+     && sprite-env services restart raea-cloud >/dev/null && echo 'box: agent key on, the server restarted'"
+  ;;
 *)
-  sed -n '2,13p' "$0"
+  sed -n '2,16p' "$0"
   exit 2
   ;;
 esac
