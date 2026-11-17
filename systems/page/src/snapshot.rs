@@ -39,11 +39,13 @@ pub fn snapshot_by(doc: &BaseDocument, nodes: &Nodes, id: impl Fn(u64) -> Option
     let (vp, dpr) = (doc.viewport().logical_size(), doc.viewport().scale());
     let mut n = String::new();
     let mut o = String::new();
+    // what each element's rect asks of its ancestors, kept for the next (display: none, a transform on the way up)
+    let mut memo = blitz_dom::RectMemo::default();
     for (page_id, node) in &nodes.by_id {
         let Some(sid) = id(*page_id) else { continue };
         // (text nodes have no layout data of their own to ask)
         let Some(el) = doc.get_node(*node).filter(|n| n.is_element()) else { continue };
-        let Some(b) = doc.get_client_bounding_rect(*node) else { continue };
+        let Some(b) = doc.get_client_bounding_rect_in(*node, &mut memo) else { continue };
         let l = el.final_layout();
         let s = el.scroll_offset();
         num(&mut n, sid as f64);

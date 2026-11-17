@@ -2583,17 +2583,7 @@ impl BaseDocument {
         // raea: most chains carry no transform and no projection, and then the walk below multiplies a matrix at every
         // step only to answer None. Asked first without the math (a page's every element's rect is taken each frame:
         // the twins' boxes and the JS's layout snapshot; with 400 timeline clips this was the frame's busiest leaf)
-        let mut c = Some(node_id);
-        let mut any = false;
-        while let Some(id) = c {
-            let Some(node) = self.nodes.get(id) else { break };
-            if self.projections.contains_key(&id) || node.transform().is_some() {
-                any = true;
-                break;
-            }
-            c = node.containing_block();
-        }
-        if !any {
+        if !walk_up(node_id, |id| self.turned_up(id)) {
             return None;
         }
         // a 3x3 on column vectors (x, y, w), row-major, in CSS px
@@ -2686,21 +2676,39 @@ impl BaseDocument {
         })
     }
 
-    /// raea: whether `node_id` or an ancestor is `display: none`, so it generates no box (#108).
-    fn in_display_none(&self, node_id: NodeId) -> bool {
-        let mut current = Some(node_id);
-        while let Some(id) = current {
-            let Some(node) = self.nodes.get(id) else { return false };
-            if node.primary_styles().is_some_and(|s| stylo_taffy::convert::display(s.get_box().display) == taffy::Display::None) {
-                return true;
-            }
-            current = node.parent;
+    /// raea: one step of the walk up the DOM for `display: none` (an element with no box, #108): this node is, or the
+    /// next to ask. A node gone from the tree ends the walk, as a missing one did.
+    fn none_up(&self, id: NodeId) -> Up {
+        match self.nodes.get(id) {
+            None => Up::No,
+            Some(n) if n.primary_styles().is_some_and(|s| stylo_taffy::convert::display(s.get_box().display) == taffy::Display::None) => Up::Yes,
+            Some(n) => n.parent.map_or(Up::No, Up::Next),
         }
-        false
+    }
+
+    /// raea: one step of the walk up the containing blocks for a transform or a projection (transformed_rect's
+    /// first question).
+    fn turned_up(&self, id: NodeId) -> Up {
+        match self.nodes.get(id) {
+            None => Up::No,
+            Some(n) if self.projections.contains_key(&id) || n.transform().is_some() => Up::Yes,
+            Some(n) => n.containing_block().map_or(Up::No, Up::Next),
+        }
     }
 
     /// Computes the size and position of the `Node` relative to the viewport
     pub fn get_client_bounding_rect(&self, node_id: NodeId) -> Option<BoundingRect> {
+        self.client_rect(node_id, None)
+    }
+
+    /// raea: [`get_client_bounding_rect`](Self::get_client_bounding_rect) for one of many elements taken in one pass
+    /// over a page laid out once (the layout snapshot's every element, each frame): what an element asks of its
+    /// ancestors is kept in `memo` for the next. The same rect, without two walks to the root for each element.
+    pub fn get_client_bounding_rect_in(&self, node_id: NodeId, memo: &mut RectMemo) -> Option<BoundingRect> {
+        self.client_rect(node_id, Some(memo))
+    }
+
+    fn client_rect(&self, node_id: NodeId, mut memo: Option<&mut RectMemo>) -> Option<BoundingRect> {
         // Non-atomic inline elements have no layout box of their own: return
         // the union of their per-line-box fragment rects.
         if let Some(rects) = self.inline_fragment_rects(node_id) {
@@ -2710,7 +2718,11 @@ impl BaseDocument {
         let node = self.get_node(node_id)?;
         // raea: an element with no box (it or an ancestor is `display: none`) answers Chrome's zero rect, not whatever
         // its last layout left (#108)
-        if self.in_display_none(node_id) {
+        let none = match memo.as_deref_mut() {
+            Some(m) => remembered(&mut m.none, &mut m.path, node_id, |id| self.none_up(id)),
+            None => walk_up(node_id, |id| self.none_up(id)),
+        };
+        if none {
             return Some(BoundingRect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 });
         }
         // raea: a table row or row group has no box of its own (its cells are the table grid's items): its rect is
@@ -2728,12 +2740,14 @@ impl BaseDocument {
                 .children
                 .iter()
                 .filter(|c| self.get_node(**c).is_some_and(|n| n.is_element()))
-                .filter_map(|c| self.get_client_bounding_rect(*c))
+                .filter_map(|c| self.client_rect(*c, memo.as_deref_mut()))
                 .reduce(BoundingRect::union);
         }
         // raea: under a transform (its own or a containing block's) the rect is the transformed box's bounds, as
-        // Chrome's getBoundingClientRect is (a skewed or rotated box was its untransformed layout box)
-        if let Some(r) = self.transformed_bounds(node_id) {
+        // Chrome's getBoundingClientRect is (a skewed or rotated box was its untransformed layout box). Without a memo
+        // transformed_bounds asks for itself whether there's one on the way up.
+        let turned = memo.is_none_or(|m| remembered(&mut m.turned, &mut m.path, node_id, |id| self.turned_up(id)));
+        if turned && let Some(r) = self.transformed_bounds(node_id) {
             return Some(r);
         }
         let (mut pos, layout) = self.physical_unrounded_geometry(node_id);
@@ -3216,6 +3230,72 @@ pub struct BoundingRect {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+
+/// raea: what one pass over a page's elements' rects remembers from one element to the next
+/// ([`BaseDocument::get_client_bounding_rect_in`]): whether a node or an ancestor is `display: none`, and whether a
+/// node's containing-block chain carries a transform or a projection. Each was a walk to the root for every element,
+/// and the layout snapshot takes every element's rect each frame: on a big page, with the rect's position walk, a third
+/// of the app's main thread (11-16). Kept, each node is asked once a pass. Good for one layout: a new one after a resolve.
+#[derive(Default)]
+pub struct RectMemo {
+    /// by a node's slot in the tree: the node asked about and its answer. The whole id is kept, as a stale id (a freed
+    /// node's, still a containing-block link) shares its slot with whatever lives there now, and answers otherwise.
+    none: Vec<Option<(NodeId, bool)>>,
+    turned: Vec<Option<(NodeId, bool)>>,
+    /// the nodes one walk passed, given its answer when it ends
+    path: Vec<NodeId>,
+}
+
+/// A node's slot in the tree: its id's low 32 bits (blitz-traits' NodeId packs the slot there, its version above).
+fn slot(id: NodeId) -> usize {
+    id.as_u64() as u32 as usize
+}
+
+/// One step of a walk up a chain of nodes: the answer is here, or ask the next.
+enum Up {
+    Yes,
+    No,
+    Next(NodeId),
+}
+
+/// The answer a walk from `start` comes to, `up` taking each step.
+fn walk_up(start: NodeId, mut up: impl FnMut(NodeId) -> Up) -> bool {
+    let mut id = start;
+    loop {
+        match up(id) {
+            Up::Yes => return true,
+            Up::No => return false,
+            Up::Next(next) => id = next,
+        }
+    }
+}
+
+/// [`walk_up`], stopping at a node `seen` already has an answer for and giving every node it passed the answer: a
+/// node's is its chain's, so the nodes below one on the same chain share it.
+fn remembered(seen: &mut Vec<Option<(NodeId, bool)>>, path: &mut Vec<NodeId>, start: NodeId, mut up: impl FnMut(NodeId) -> Up) -> bool {
+    path.clear();
+    let yes = walk_up(start, |id| match seen.get(slot(id)).copied().flatten() {
+        Some((asked, yes)) if asked == id => {
+            if yes {
+                Up::Yes
+            } else {
+                Up::No
+            }
+        }
+        _ => {
+            path.push(id);
+            up(id)
+        }
+    });
+    for &id in path.iter() {
+        let s = slot(id);
+        if s >= seen.len() {
+            seen.resize(s + 1, None);
+        }
+        seen[s] = Some((id, yes));
+    }
+    yes
 }
 
 impl BoundingRect {
