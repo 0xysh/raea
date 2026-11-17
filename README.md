@@ -32,14 +32,44 @@
 
 ---
 
-> **v0.1.1** is raea's first full release: the engine and, for the first time, the desktop app, on macOS (Apple
-> Silicon), Linux (x86_64) and, newest and least tested, Windows (x86_64). raea is young: expect rough edges and gaps
-> in the docs.
+> **0.1.6** (17 November 2026) is the latest release: the engine and the desktop app on macOS (Apple Silicon), Linux
+> (x86_64) and, newest and least tested, Windows 10 and 11 (x86_64). raea is young and moves fast, with a release most
+> days since 0.1.1 on 11 November: expect rough edges, and tell us what you hit in an
+> [issue](https://github.com/shinyobjectz/raea/issues), or from your agent with `raea bug`.
 
 ## The app
 
-The raea app is where you make video and games with your AI. Download it from [raea.io](https://raea.io) for the Mac,
-Windows or Linux. It tells you when a new version is out; on the Mac it updates itself.
+The raea app is where you make video, 3D and games with your AI. You ask in a chat; your own AI (Claude, ChatGPT, Kimi
+or a local model) writes the raea code and renders it; what it makes lands in the project's feed, where you watch it,
+scrub it, mark it up and send it back with notes. Download it from [raea.io](https://raea.io) for the Mac, Windows or
+Linux. It tells you when a new version is out; on the Mac it updates itself.
+
+<p align="center">
+  <a href="https://media.raea.io/#goose-learns-raea"><img src="docs/readme/goose-learns-raea.jpg" width="720" alt="Goose Learns raea, the tutorial: the raea app with Goose on its stage"></a>
+</p>
+
+**[Goose Learns raea](https://media.raea.io/#goose-learns-raea)** (5:50) is the tutorial: a dry narrator walks Goose
+through the app while he makes his own music video, from the first ask to the finished film. It was made in raea too,
+and its source is in [raea-films](https://github.com/shinyobjectz/raea-films/tree/main/swamp-side-mayor).
+
+What the app does now:
+
+- **The chat comes first** (0.1.5): your projects in a rail, the conversation in the middle, and `/goal` to keep an
+  agent going until a condition you set holds.
+- **A timeline you edit by hand** (0.1.4): trim, split and move clips, speed curves, freeze frames and keys, the way
+  CapCut works, under every film, sound and scene.
+- **Scenes you walk around in** (0.1.3): your agent posts a 3D scene and you walk through it, pin comments in it and
+  move its parts by hand; every change is written into the scene's own code.
+- **Index** (0.1.5): your folders, drives and Apple Photos made searchable by what's in them, on your Mac. On an M5 Pro,
+  10,000 pictures were searchable in under a minute.
+- **Review** (0.1.6): each project has a Review tab, every comment you leave reaches the agent, and export is one
+  window.
+- **Lighter** (0.1.6): the window gives back memory it's finished with and rests when nothing changes, 34% less CPU
+  at rest.
+
+The app and the engine are free. Pro adds cloud storage, search across your computers and publishing; Team puts up to
+five people on one plan ([pricing](https://raea.io/pricing/)). Each release's notes are on the
+[releases page](https://github.com/shinyobjectz/raea/releases).
 
 ## Install
 
@@ -92,11 +122,18 @@ floor (`raea check hello.mp4`). `raea init` starts a project, and `raea --help` 
 - **Games.** Input, physics, sound and 3D, played live with `raea play`, and exported as a program of their own
   (`raea export-game`).
 - **3D.** Scenes in TypeScript drawn by [Bevy](https://bevyengine.org) 0.20: cameras, lights, materials, glTF models,
-  Gaussian splats, and Bevy plugins compiled into the engine.
+  Gaussian splats, and Bevy plugins compiled into the engine. three.js work runs as it's written: a React Three Fiber
+  scene inside `<R3F>`, or a three.js page's script inside `<Three program>`.
 - **Sound.** One mixer for live play and offline render, instruments and effects, and local models for foley and
   instrument notes (`raea sao`, `raea tokensynth`).
 - **Built for agents.** Everything it draws stays queryable as data, so an agent can render a frame, look at it, and
   fix what's wrong without a person in the loop.
+
+## Made in raea
+
+Films, music videos, a tutorial and a game made with raea are on [media.raea.io](https://media.raea.io). Six of them
+come with their source in [raea-films](https://github.com/shinyobjectz/raea-films): each project's code under
+Apache-2.0, to read, render and take apart, and its models, textures and sound for anyone with a free raea account.
 
 ## Use it from your agent
 
@@ -108,6 +145,9 @@ floor (`raea check hello.mp4`). `raea init` starts a project, and `raea --help` 
   folder of raea-skills, and `/plugin marketplace add shinyobjectz/raea` installs the same one.
 - **Craft guides.** `raea guide` prints the floor every edit is held to and the guides for pitches, explainers, stories,
   games, motion, music and layout. `raea context PROJECT` says what to read before working on a project.
+- **Bug reports.** When an agent finds a bug in raea itself, `raea bug TITLE --text TEXT` sends it to raea's server
+  with raea's version and the OS, no account needed. It sends words only: paths, emails and keys are taken out before
+  it goes, and `--dry-run` prints what would go.
 
 ## Build from source
 
