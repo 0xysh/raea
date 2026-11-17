@@ -24,6 +24,8 @@ MEDIA = set(
 )
 LARGE = 4 * 1024 * 1024
 CHUNK = 1 << 20
+# Cloudflare refuses Python's own User-Agent (Python-urllib) on raea's domains with a 403, signed URL or not
+AGENT = {"user-agent": "raea-farm/1"}
 
 
 def sha256(path):
@@ -40,7 +42,7 @@ def inside(work, rel):
 
 
 def get(href, header, dest):
-    req = urllib.request.Request(href, headers=header or {})
+    req = urllib.request.Request(href, headers={**AGENT, **(header or {})})
     with urllib.request.urlopen(req, timeout=600) as r, open(dest, "wb") as f:
         shutil.copyfileobj(r, f, CHUNK)
 
@@ -48,7 +50,7 @@ def get(href, header, dest):
 def put(href, header, src, size):
     with open(src, "rb") as f:
         # as git-lfs's basic transfer sends it
-        head = {"content-type": "application/octet-stream", **(header or {}), "content-length": str(size)}
+        head = {**AGENT, "content-type": "application/octet-stream", **(header or {}), "content-length": str(size)}
         req = urllib.request.Request(href, data=f, method="PUT", headers=head)
         with urllib.request.urlopen(req, timeout=1800) as r:
             r.read()

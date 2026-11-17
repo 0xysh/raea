@@ -238,6 +238,7 @@ def coordinate(id: str, args: list[str], opts: dict):
         farm_media.fetch(work, f"{ROOT}/blobs", log)
     except Exception as e:  # a file that didn't come, or came back as another: the job doesn't run
         log(f"raea farm: {e}", err=True)
+        open(f"{JOBS}/{id}/changed.txt", "w").close()  # nothing made: /out answers with an empty tar
         vol.commit()
         log.end(1)
         return
