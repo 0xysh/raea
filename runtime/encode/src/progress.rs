@@ -26,10 +26,15 @@ pub struct Progress {
 }
 
 fn dir() -> Option<PathBuf> {
-    match std::env::var_os("RAEA_RENDERS") {
-        Some(v) if v == "off" => None,
-        Some(v) if !v.is_empty() => Some(PathBuf::from(v)),
-        _ => std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".raea").join("renders")),
+    let named = std::env::var_os("RAEA_RENDERS").filter(|v| !v.is_empty());
+    if named.as_deref() == Some(std::ffi::OsStr::new("off")) {
+        return None;
+    }
+    // unset: ~/.raea/renders, the home being USERPROFILE on Windows, which has no HOME
+    match (named, std::env::var_os("HOME").or(std::env::var_os("USERPROFILE"))) {
+        (Some(d), _) => Some(PathBuf::from(d)),
+        (None, Some(home)) => Some(Path::new(&home).join(".raea/renders")),
+        (None, None) => None,
     }
 }
 
