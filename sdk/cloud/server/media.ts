@@ -72,13 +72,26 @@ const isPointer = (file: string) => {
   }
 }
 
-/** The project's media that can go by hash: each with its signed download URL. */
-export async function inputs(root: string, lfs: Lfs): Promise<Media[]> {
+/** tar --exclude patterns (./out/*, ./.git) as a test of a path in the project, the way tar applies them: its
+ *  wildcards cross /, and a folder left out takes its files with it */
+export function excluded(patterns: string[]): (p: string) => boolean {
+  const res = patterns.map((e) => new RegExp("^" + e.replace(/^\.\//, "").replace(/[.+^${}()|\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$"))
+  return (p) => {
+    const parts = p.split("/")
+    for (let i = 1; i <= parts.length; i++) if (res.some((r) => r.test(parts.slice(0, i).join("/")))) return true
+    return false
+  }
+}
+
+/** The project's media that can go by hash, each with its signed download URL: all but what `skip` leaves out (the
+ *  tar's excludes, so an old render in out/ isn't fetched for a new one). */
+export async function inputs(root: string, lfs: Lfs, skip: (p: string) => boolean = () => false): Promise<Media[]> {
   const ls = spawnSync("git", ["-C", root, "lfs", "ls-files", "--json"], { encoding: "utf8", maxBuffer: 64 << 20 })
   if (ls.status !== 0) return []
   const files = ((JSON.parse(ls.stdout || "{}") as { files?: { name: string; oid: string; size: number }[] }).files ?? [])
   const same: { path: string; oid: string; size: number }[] = []
   for (const f of files) {
+    if (skip(f.name)) continue
     const p = path.join(root, f.name)
     if (!existsSync(p)) continue
     if (isPointer(p) || (await sha256(p)) === f.oid) same.push({ path: f.name, oid: f.oid, size: f.size })

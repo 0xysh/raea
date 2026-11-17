@@ -9,7 +9,10 @@
 #   repo.sh clone OWNER PROJECT DIR   the project's Git, then its media (git lfs pull)
 #   repo.sh sign DIR OWNER PROJECT    a clone made another way signed in like the above
 set -euo pipefail
-here=$(cd "$(dirname "$0")" && pwd)
+# beside this script itself, run through a link or not (the box runs it as /usr/local/bin/raea-repo)
+self=$0
+[ -L "$self" ] && self=$(readlink -f "$self" 2>/dev/null || readlink "$self")
+here=$(cd "$(dirname "$self")" && pwd)
 api=${RAEA_API_ORIGIN:-https://raea.io}
 # git runs a helper named by its absolute path directly, so a clone keeps working after this script is done
 helper=$here/git-credential-raea

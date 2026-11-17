@@ -21,7 +21,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { RaeaCloud } from "../src/index.ts"
-import { excludes as mediaExcludes, inputs, lfsOf, outputs } from "./media.ts"
+import { excluded, excludes as mediaExcludes, inputs, lfsOf, outputs } from "./media.ts"
 
 const REAL = process.env.RAEA_REAL ?? "/opt/raea/bin/raea"
 // flags whose value is a path raea writes; the rest of a render's path arguments are read
@@ -99,7 +99,7 @@ async function main() {
     const sent = path.join(tmp, "in.tar")
     // the media that goes by hash: out of the tar, named in its manifest
     const lfs = lfsOf(p.root)
-    const byHash = typeof lfs === "string" ? [] : await inputs(p.root, lfs)
+    const byHash = typeof lfs === "string" ? [] : await inputs(p.root, lfs, excluded(excludes))
     const extra: string[] = []
     if (byHash.length) {
       writeFileSync(path.join(tmp, "media-excludes"), mediaExcludes(byHash))

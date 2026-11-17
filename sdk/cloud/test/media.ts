@@ -11,7 +11,7 @@ import { createHash, randomBytes } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { inputs, lfsOf, outputs } from "../server/media.ts"
+import { excluded, inputs, lfsOf, outputs } from "../server/media.ts"
 
 const clone = process.argv[2]
 if (!clone) throw new Error("node test/media.ts CLONE")
@@ -28,6 +28,10 @@ const farm = (fn: string, ...args: unknown[]) => {
   return JSON.parse(r.stdout)
 }
 const sha = (f: string) => createHash("sha256").update(readFileSync(f)).digest("hex")
+
+// the tar's excludes leave the same media out of the hash list
+const skip = excluded(["./.git", "./out/*", "./.raea-cloud-out"])
+if (!skip("out/a.mp4") || !skip("out/x/b.png") || !skip(".git/lfs/x") || skip("media/plate.png") || skip("outro.mp4")) fail("excluded() doesn't match tar's excludes")
 
 const lfs = lfsOf(clone)
 if (typeof lfs === "string") fail(`the clone's media would go in the tar: ${lfs}`)
