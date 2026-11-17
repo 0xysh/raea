@@ -46,9 +46,13 @@ fn surface(in: VertexOutput, pbr: ptr<function, PbrInput>) {
   let dtex = skin_stored(textureSample(tex_detail, samp_detail, in.uv).rgb) * 2.0 - 1.0;
   // (the shader's textures share one sampler, which clamps: the tile wraps by fract, its mip level kept from the
   // unwrapped coordinates' derivatives, so no seam line where it wraps)
+  // (@if takes the one statement after it: with the tile off (microMap: false), mtex and grain read an msamp that
+  // was never declared, and the shader didn't compile, 11-17)
 @if(SKIN_MICRO)
   let msamp = textureSampleGrad(tex_micro, samp_micro, fract(p), dq1, dq2);
+@if(SKIN_MICRO)
   let mtex = skin_stored(msamp.rgb) * 2.0 - 1.0;
+@if(SKIN_MICRO)
   let grain = msamp.a * 2.0 - 1.0;                      // (alpha is never colour-decoded)
   var N = normalize((*pbr).N);
   // the directions in which u and v grow on the surface (Schuler, "Normal Mapping Without Precomputed Tangents"),

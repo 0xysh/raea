@@ -133,6 +133,10 @@ export interface CharacterPart {
   morphs?: Record<string, number>;
   /** its cloth: a baked simulation of its vertices in its bind pose and the frame drawn (<Model cloth>, docs/cloth.md) */
   cloth?: { src: string; frame: number };
+  /** its "skin" material's settings over the Character's `skin` (its maps and the fine relief's scale are its own: a
+   *  head's UVs aren't the body's), drawn when the Character's `skin` is on. A head part (one with eye joints) is drawn
+   *  as skin then without it, with the Character's settings and maps beside its own glb */
+  skin?: Exclude<CharacterProps["skin"], boolean | undefined>;
   /** <MeshStandardMaterial> re-covering its materials, as the body's children do */
   children?: ReactNode;
 }
@@ -229,9 +233,12 @@ export function Character(props: CharacterProps) {
         const head = part.joints?.some((j) => j === "LeftEye" || j === "eye_l") ?? false;
         const lids = props.gaze && head ? lidsFor(skel, p) : 0;
         const pm = lids > 0 ? { ...part.morphs, blink_left: Math.min(1, (part.morphs?.blink_left ?? 0) + lids), blink_right: Math.min(1, (part.morphs?.blink_right ?? 0) + lids) } : part.morphs;
+        // (a head worn as a part is the skin most seen: drawn as the body's is, or its face was plain plastic, 11-17)
+        const sk = props.skin && !ghost && (part.skin || head) ? { ...(typeof props.skin === "object" ? props.skin : {}), ...part.skin } : undefined;
         return (
           <Model key={id} name={`${name}-${id}`} src={part.src} bones={part.joints ? Object.fromEntries(part.joints.filter((j) => j in bones).map((j) => [j, bones[j]])) : bones} scale={k} {...(glitch ? { glitch } : {})} {...pass} {...(pm && Object.keys(pm).length ? { morphs: pm } : {})} {...(part.cloth ? { cloth: part.cloth } : {})}>
             {head && !ghost && cornea()}
+            {sk && skinMaterial(sk, part.src.replace(/\/[^/]*$/, ""))}
             {part.children}
             {id.includes("hair") && props.hair !== false && hairMaterial(props.hair)}
           </Model>
