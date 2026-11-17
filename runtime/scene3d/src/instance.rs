@@ -7,6 +7,8 @@
 //! material, each copy's MeshTag its number, and the buffer of colours follows the frame's list.
 
 use super::*;
+use bevy::ecs::component::ComponentId;
+use bevy::ecs::entity::EntityCloner;
 use bevy::camera::visibility::RenderLayers;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::skinning::SkinnedMesh;
@@ -129,8 +131,15 @@ fn markers(world: &World, e: Entity) -> (bool, bool, Option<RenderLayers>) {
     (world.get::<NotShadowCaster>(e).is_some(), world.get::<NotShadowReceiver>(e).is_some(), world.get::<RenderLayers>(e).cloned())
 }
 
-fn spawn_copy<M: Material>(world: &mut World, parent: Entity, mesh: Mesh3d, mat: MeshMaterial3d<M>, at: Transform, (no_cast, no_receive, layers): &(bool, bool, Option<RenderLayers>)) -> Entity {
-    let mut c = world.spawn((mesh, mat, at, ChildOf(parent)));
+fn spawn_copy<M: Material>(world: &mut World, parent: Entity, mesh: Mesh3d, mat: MeshMaterial3d<M>, at: Transform, m: &(bool, bool, Option<RenderLayers>)) -> Entity {
+    let c = spawn_bare(world, parent, mesh, at, m);
+    world.entity_mut(c).insert(mat);
+    c
+}
+
+/// A copy with its mesh, place and the parent's markers, its material still to put on.
+fn spawn_bare(world: &mut World, parent: Entity, mesh: Mesh3d, at: Transform, (no_cast, no_receive, layers): &(bool, bool, Option<RenderLayers>)) -> Entity {
+    let mut c = world.spawn((mesh, at, ChildOf(parent)));
     if *no_cast {
         c.insert(NotShadowCaster);
     }
@@ -143,24 +152,38 @@ fn spawn_copy<M: Material>(world: &mut World, parent: Entity, mesh: Mesh3d, mat:
     c.id()
 }
 
-/// A mesh row with `inst`, after its spawn (shadows and layers on): its Mesh3d onto one child a copy.
+/// Every MeshMaterial3d<M> on an entity, whatever M: the standard surface, or one raea extends (procedural, worn, grid,
+/// a shadow catcher). Found by type path, since each MaterialPlugin registers its MeshMaterial3d's type.
+fn materials_of(world: &World, e: Entity) -> Vec<ComponentId> {
+    let (Some(reg), Ok(er)) = (world.get_resource::<AppTypeRegistry>(), world.get_entity(e)) else { return vec![] };
+    let reg = reg.read();
+    let material = |id: &ComponentId| {
+        let ty = world.components().get_info(*id).and_then(|i| i.type_id());
+        ty.and_then(|ty| reg.get_type_info(ty)).is_some_and(|ti| ti.type_path().contains("::MeshMaterial3d<"))
+    };
+    er.archetype().components().iter().filter(|id| material(id)).copied().collect()
+}
+
+/// A mesh row with `inst`, after its spawn (shadows and layers on): its Mesh3d onto one child a copy, each sharing the
+/// row's material, whatever its kind (a procedural or worn surface instances as a standard one does).
 pub fn instance_mesh(world: &mut World, e: Entity, t: &Tup) -> Result<(), String> {
     let Some(V::S(s)) = t.vals.get("inst") else { return Ok(()) };
     let Copies { at, tint } = copies(&t.id, s, stride_of(t))?;
     if t.vals.contains_key("shader") {
         return Err(format!("mesh {}: instances take a standard surface (a shader over them isn't instanced yet)", t.id));
     }
-    let Some(mat) = world.get::<MeshMaterial3d<StandardMaterial>>(e).cloned() else {
-        return Err(format!("mesh {}: instances take a MeshStandardMaterial, MeshPhysicalMaterial or MeshBasicMaterial (not toon, grid, wear or shadow-only)", t.id));
-    };
+    let mats = materials_of(world, e);
+    if mats.is_empty() {
+        return Err(format!("mesh {}: instances take a mesh material: standard, physical, basic, procedural, worn or grid (not toon)", t.id));
+    }
+    let std = world.get::<MeshMaterial3d<StandardMaterial>>(e).cloned();
+    if !tint.is_empty() && std.is_none() {
+        return Err(format!("mesh {}: a colour a copy tints a standard surface (a procedural or worn one is not tinted per copy yet)", t.id));
+    }
     let Some(mesh) = world.entity_mut(e).take::<Mesh3d>() else { return Err(format!("mesh {}: no mesh to instance", t.id)) };
     let m = markers(world, e);
     let mut pl = Placements { parts: vec![Mat4::IDENTITY], ..Placements::of(t) };
-    if tint.is_empty() {
-        for tr in at {
-            spawn_copy(world, e, mesh.clone(), mat.clone(), tr, &m);
-        }
-    } else {
+    if let (Some(mat), false) = (std.as_ref(), tint.is_empty()) {
         // a colour a copy: one TintMaterial over the row's standard material, each copy's number in its MeshTag
         let base = world.resource::<Assets<StandardMaterial>>().get(&mat.0).cloned().unwrap_or_default();
         let colours = world.resource_mut::<Assets<ShaderBuffer>>().add(tint::colour_buffer(&tint));
@@ -170,6 +193,17 @@ pub fn instance_mesh(world: &mut World, e: Entity, t: &Tup) -> Result<(), String
             world.entity_mut(c).insert(MeshTag::new(tint::copy_tag(i, 0)));
         }
         pl.tint = Some(Tinted { colours, mat: tm, base: mat.0.id() });
+    } else {
+        // the row's material component(s) cloned onto each copy: the same handle, so Bevy still batches the set
+        let mut cloner = EntityCloner::build_opt_in(world);
+        cloner.without_required_components(|b| {
+            b.allow_by_ids(mats);
+        });
+        let mut cloner = cloner.finish();
+        for tr in at {
+            let c = spawn_bare(world, e, mesh.clone(), tr, &m);
+            cloner.clone_entity(world, e, c);
+        }
     }
     world.entity_mut(e).insert((Instanced, pl));
     Ok(())
@@ -256,5 +290,51 @@ pub fn model_shadow_markers(
                 commands.entity(d).insert(NotShadowReceiver);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A mesh row with `inst` (10 numbers a copy: position, rotation as x y z w, scale), two copies.
+    fn row() -> Tup {
+        let inst = "0 0 0 0 0 0 1 1 1 1  2 0 0 0 0 0 1 1 1 1";
+        Tup { kind: "mesh".into(), id: "m".into(), vals: [("inst".to_string(), V::S(inst.into()))].into_iter().collect() }
+    }
+
+    fn world() -> World {
+        let mut world = World::new();
+        let reg = AppTypeRegistry::default();
+        // as MaterialPlugin<M> does for every material raea draws with (the tint extension stands in for a procedural
+        // or worn one: any MeshMaterial3d<M> that isn't the standard surface)
+        reg.write().register::<MeshMaterial3d<TintMaterial>>();
+        world.insert_resource(reg);
+        world
+    }
+
+    #[test]
+    fn copies_share_any_mesh_material() {
+        let mut world = world();
+        let mat = MeshMaterial3d::<TintMaterial>(Handle::default());
+        let e = world.spawn((Mesh3d(Handle::default()), mat.clone(), Transform::default())).id();
+        instance_mesh(&mut world, e, &row()).unwrap();
+        let kids: Vec<Entity> = world.get::<Children>(e).expect("copies").iter().collect();
+        assert_eq!(kids.len(), 2);
+        for k in kids {
+            assert_eq!(world.get::<MeshMaterial3d<TintMaterial>>(k).map(|m| m.0.id()), Some(mat.0.id()));
+            assert!(world.get::<Mesh3d>(k).is_some());
+        }
+        // the mesh moved onto the copies; the parent keeps its material (sync_meshes recolours the set through it)
+        assert!(world.get::<Mesh3d>(e).is_none());
+        assert!(world.get::<MeshMaterial3d<TintMaterial>>(e).is_some());
+    }
+
+    #[test]
+    fn a_mesh_with_no_material_is_refused() {
+        let mut world = world();
+        let e = world.spawn((Mesh3d(Handle::default()), Transform::default())).id();
+        let err = instance_mesh(&mut world, e, &row()).unwrap_err();
+        assert!(err.contains("instances take a mesh material"), "{err}");
     }
 }
