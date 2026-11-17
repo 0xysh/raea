@@ -221,6 +221,7 @@ pub fn items_of(scene: &[Node3]) -> Vec<Item> {
         out.retain(|i| i.kind != "ambient" || own(i));
     }
     raea_core_review::camera_override(&mut out); // a review's fixed camera in place of the scene's own (RAEA_CAMERA)
+    out.retain(|i| raea_sys_layers::draws_part(std::env::var("RAEA_LAYER").ok().as_deref(), i.kind)); // an export's layer (LA2a)
     out
 }
 
