@@ -28,6 +28,50 @@ order = named + [b for b in bones if "Twist" in b.name]
 idx = {b.name: i for i, b in enumerate(order)}
 head = {b.name: W @ b.head_local for b in bones}  # Blender world, metres
 
+# SHAPE="k:sigmas,k:sigmas": the body moved along SOMA's own shape model (SOMA_neutral.npz: component k by so many
+# of its standard deviations; centimetres, Y up), for a person of another build. Each joint moves with the skin it
+# carries: the mean of that skin's move, each vertex counted by its weight on the joint and by its nearness (a
+# vertex 8 cm off counts 0.6 of one at the joint), so a limb narrowed round its bone leaves its joint where it was
+# and a body made shorter takes its joints down with it (SOMA's own layer regresses them from the shaped mesh; this
+# stands in for it; THE GAMBIT's compositions/people-body-build.tsx shows a shaped body beside the template, an arm
+# raised). A joint carrying no skin (the eyes, the ends) moves as its parent does; the feet are kept on the floor.
+SHAPE = [(int(a), float(b)) for a, b in (kv.split(":") for kv in os.environ.get("SHAPE", "").split(",") if kv)]
+shape_d = None
+if SHAPE:
+    zz = np.load(npz)
+    d = sum(c * float(np.sqrt(zz["eigenvalues"][k])) * zz["shapedirs"][k].reshape(-1, 3) for k, c in SHAPE) / 100.0
+    shape_d = np.stack([d[:, 0], -d[:, 2], d[:, 1]], 1)                     # SOMA's axes (Y up, +Z ahead) to Blender's world
+    sk0 = next(o for o in keep if o.name.startswith("c_skin") and len(o.data.vertices) == 18056)
+    V0 = np.array([tuple(sk0.matrix_world @ v.co) for v in sk0.data.vertices])
+    shape_d[:, 2] -= (V0[:, 2] + shape_d[:, 2]).min() - V0[:, 2].min()     # the soles where they were
+    gname0 = {g.index: g.name for g in sk0.vertex_groups}
+    by_joint = {}
+    for v in sk0.data.vertices:
+        for g in v.groups:
+            if g.weight > 1e-3:
+                by_joint.setdefault(gname0[g.group], []).append((v.index, g.weight))
+    moved = {}
+    for b in bones:                                                          # parents first
+        # SOMA hangs a limb's skin on its twist joints, none on the elbow, knee, shoulder or hip joint itself: a joint
+        # takes the skin of the two segments that meet at it (its own twist joints and its parent's). Without them the
+        # woman's elbow (11-17) moved as her shoulder did, 3 cm off her shortened arm, and sleeves cut for the arm's
+        # angle hung beside it.
+        near = {b.name} | {c.name for c in b.children if "Twist" in c.name} | ({c.name for c in b.parent.children if "Twist" in c.name} if b.parent else set())
+        acc = {}
+        for n_ in near:
+            for i, w_ in by_joint.get(n_, []):
+                acc[i] = acc.get(i, 0.0) + w_
+        vw = list(acc.items())
+        if vw:
+            ii = np.array([i for i, _ in vw]); w = np.array([w_ for _, w_ in vw])
+            w = w * np.exp(-np.sum((V0[ii] - np.array(head[b.name])) ** 2, 1) / (2 * 0.08 ** 2))
+            moved[b.name] = (shape_d[ii] * w[:, None]).sum(0) / max(w.sum(), 1e-12) if w.sum() > 1e-9 else None
+        if moved.get(b.name) is None:
+            moved[b.name] = moved.get(b.parent.name, np.zeros(3)) if b.parent else np.zeros(3)
+    for n, m in moved.items():
+        head[n] = head[n] + Vector(tuple(float(x) for x in m))
+    print("shaped joints: Head moved", [round(float(x) * 100, 1) for x in moved["Head"]], "cm, LeftArm", [round(float(x) * 100, 1) for x in moved["LeftArm"]], "cm")
+
 
 def R(v):  # Blender's world (Z up, facing -Y) to raea's (Y up, facing +Z)
     return [round(v[0], 5), round(v[2], 5), round(-v[1], 5)]
@@ -63,20 +107,17 @@ for b in order:
     e.head = head[b.name]; e.tail = head[b.name] + Vector((0, 0, 0.02)); e.roll = 0
 bpy.ops.object.mode_set(mode="OBJECT")
 
-# SHAPE="k:sigmas,k:sigmas": the body moved along SOMA's own shape model (SOMA_neutral.npz: component k by so many
-# of its standard deviations; centimetres, Y up), for a person of another build. The joints stay where the
-# template has them (SOMA's own layer moves them with the shape; that is not read here), so keep the change small.
-SHAPE = [(int(a), float(b)) for a, b in (kv.split(":") for kv in os.environ.get("SHAPE", "").split(",") if kv)]
+# (SHAPE, above: the skin moved by the shape, its joints already moved with it)
 skin = None
 for o in keep:
     me = o.data
     me.transform(o.matrix_world)
-    if SHAPE and o.name.startswith("c_skin") and len(me.vertices) == 18056:
-        zz = np.load(npz)
-        d = sum(c * float(np.sqrt(zz["eigenvalues"][k])) * zz["shapedirs"][k].reshape(-1, 3) for k, c in SHAPE) / 100.0
-        for v, dv in zip(me.vertices, d):
-            v.co += Vector((float(dv[0]), float(-dv[2]), float(dv[1])))
-        print("shaped", SHAPE, "largest move mm", round(float(np.linalg.norm(d, axis=1).max()) * 1000, 1))
+    if shape_d is not None and o.name.startswith("c_skin") and len(me.vertices) == 18056:
+        for v, dv in zip(me.vertices, shape_d):
+            v.co += Vector(tuple(float(x) for x in dv))
+        print("shaped", SHAPE, "largest move mm", round(float(np.linalg.norm(shape_d, axis=1).max()) * 1000, 1))
+    elif shape_d is not None:                                                # the eyes: with the head
+        me.transform(Matrix.Translation(Vector(tuple(float(x) for x in moved["Head"]))))
     o.parent = None
     o.matrix_world = Matrix.Identity(4)
     for m in list(o.modifiers):
@@ -91,6 +132,8 @@ for o in keep:
 # CUT=height (metres): the body without its own head, for a head delivered as a part (docs/character.feature CH20):
 # the skin is cut level at that height through the neck, and the eyes go. SKIN="r,g,b" (sRGB) is the skin's colour.
 CUT = float(os.environ.get("CUT", "0")) or None
+if CUT and shape_d is not None:                                              # the template's cut height, moved with the neck
+    CUT = round(CUT + float(moved["Neck1"][2] + moved["Neck2"][2]) / 2, 4)
 if CUT:
     import bmesh
     for o in [o for o in keep if o is not skin]:
