@@ -48,6 +48,11 @@ export interface FlowInput {
   folk: Folk;
   /** the roles' shares among people on the street */
   mix: Record<string, number>;
+  /** the street's mix by the minute of the day, when it changes over the day (the workers at the Works by day, the
+   *  children in school till one): each round of a walker (out of a door, along the street, in at a door) is then its
+   *  own person, drawn by the mix at the minute the round began, so the street's people change as the day goes and no
+   *  one changes on it (a passer's id is its round's). Without it every walker keeps one person by `mix` all day. */
+  mixAt?: (m: Minute) => Record<string, number>;
   seed: number | string;
   /** the hour profile (STREET_HOURS) */
   hours?: number[];
@@ -122,6 +127,30 @@ function stretchShare(a: number, b: number, doors: number[]): number {
   return sum / 256;
 }
 const stretch = new Map<string, number>();
+/** A round when walkers come and go by the hour's mix: as long as the slowest walker's (an old man in the cold, 0.68 m/s)
+ *  takes over its longest stretch, so anyone's walk fits in it; walkers are out less of it than of their own round, by
+ *  the street's mean pace over it, so a walk has that many more slots */
+const ROUND_PACE = 0.65, MEAN_PACE = 1.2;
+const rounds = new Map<string, { n: number; p: Person }>();
+
+/** The person a slot (or one round of it, `n`) is: drawn by the mix, the same on every call */
+function passer(f: FlowInput, roles: Map<string, Role>, id: string, mix: Record<string, number>, home: Place, n?: number): Person {
+  if (n === undefined) {
+    let p = people.get(`${f.seed}-${id}`);
+    if (!p) {
+      // who they are from a draw of their own, so a walker made earlier walks the same way
+      p = makePerson(id, roles.get(rng(`${f.seed}-${id}-who`).weighted(mix))!, f.folk, home, hash(`${f.seed}-${id}`));
+      people.set(`${f.seed}-${id}`, p);
+    }
+    return p;
+  }
+  // (a slot keeps only its latest round's person: rounds go by, and a minute asked again draws the same one again)
+  const key = `${f.seed}-${id}`, had = rounds.get(key);
+  if (had?.n === n) return had.p;
+  const rid = `${id}~${n}`, p = makePerson(rid, roles.get(rng(`${f.seed}-${rid}-who`).weighted(mix))!, f.folk, home, hash(`${f.seed}-${rid}`));
+  rounds.set(key, { n, p });
+  return p;
+}
 
 /** Everyone walking the given sidewalks at minute `m` (fractional minutes are seconds): who, where, which way. */
 export function passersBy(list: Walk[], m: Minute, f: FlowInput): Passer[] {
@@ -147,23 +176,32 @@ export function passersBy(list: Walk[], m: Minute, f: FlowInput): Passer[] {
       const key = `${w.id}:${j}`;
       let share = stretch.get(key);
       if (share === undefined) stretch.set(key, (share = stretchShare(a, b, doors)));
-      const slots = Math.round((len * leg.perMetre * (f.busy ?? 1)) / (OUT_SHARE * share));
+      const slots = Math.round(((len * leg.perMetre * (f.busy ?? 1)) / (OUT_SHARE * share)) * (f.mixAt ? MEAN_PACE / ROUND_PACE : 1));
       for (let k = 0; k < slots; k++) {
-        const id = `${w.id}:${j}:${k}`, r = rng(`${f.seed}-${id}`);
+        const slot = `${w.id}:${j}:${k}`, r = rng(`${f.seed}-${slot}`);
         if (r.next() >= busy) continue;
-        let p = people.get(`${f.seed}-${id}`);
-        if (!p) {
-          // who they are from a draw of their own, so a walker made earlier walks the same way
-          const role = roles.get(rng(`${f.seed}-${id}-who`).weighted(f.mix))!;
-          const home: Place = { id: `passing-${w.id}`, kind: "street", at: w.path[0] };
-          p = makePerson(id, role, f.folk, home, hash(`${f.seed}-${id}`));
-          people.set(`${f.seed}-${id}`, p);
-        }
-        const v = walkSpeed(p, f.cold ?? 0.5) * (0.9 + 0.2 * r.next());
+        const home: Place = { id: `passing-${w.id}`, kind: "street", at: w.path[0] };
         // a round: out of a door, along the leg (and round its corner by up to SPILL metres), in at a door, a while
         // inside. The longest stretch sets the round; a shorter one leaves them inside longer that round.
-        const most = longest(r.next(), len), round = most / v / OUT_SHARE;
-        const tau = sec + r.next() * round, n = Math.floor(tau / round), u = tau - n * round;
+        let p: Person, v: number, most: number, round: number, tau: number, id = slot;
+        if (f.mixAt) {
+          // (the round at the slowest pace; its person by the mix when it began, at the round's start in minutes)
+          const pace = 0.9 + 0.2 * r.next();
+          most = longest(r.next(), len);
+          round = most / ROUND_PACE / OUT_SHARE;
+          const phase = r.next() * round, k0 = Math.floor((sec + phase) / round);
+          tau = sec + phase;
+          p = passer(f, roles, slot, f.mixAt((k0 * round - phase) / 60), home, k0);
+          id = p.id;
+          v = walkSpeed(p, f.cold ?? 0.5) * pace;
+        } else {
+          p = passer(f, roles, slot, f.mix, home);
+          v = walkSpeed(p, f.cold ?? 0.5) * (0.9 + 0.2 * r.next());
+          most = longest(r.next(), len);
+          round = most / v / OUT_SHARE;
+          tau = sec + r.next() * round;
+        }
+        const n = Math.floor(tau / round), u = tau - n * round;
         const { s0, dir, D } = stretchOf(rng(`${f.seed}-${id}-${n}`), a, b, doors, most);
         if (u > D / v) continue;
         let s = s0 + dir * v * u;

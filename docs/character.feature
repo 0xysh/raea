@@ -1018,11 +1018,14 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
       # A street carries more than its residents: passersBy() puts walkers on a city's sidewalks by each line's
       # length, how busy it is at its busiest hour (THE GAMBIT: 0.3 a metre on a tram street at 5 pm, 0.08 on a side
       # street) and the hour's share; each a person by the street's mix at their own pace, keeping right, computed
-      # for any minute alone. Places are found by a grid (a slice of Berlin has 16,000 shops); a queue stands on the
+      # for any minute alone. A street whose mix changes by the hour (mixAt: the workers at the Works by day, the
+      # children in school till one) draws each round of a walker, out of a door and in at another, as its own
+      # person by the mix when the round began, so the street changes as the day goes and no one changes on it. Places are found by a grid (a slice of Berlin has 16,000 shops); a queue stands on the
       # world's queue line when it gives one, everyone facing the door; a block with nowhere to happen (no post, no
       # workplace) is not lived that day.
       Then a city of thousands is placed at any minute, and only those near the camera are characters
       And a main street at its busiest holds about the people its tile's budget allows, on its sidewalks
+      And a street's people at noon are those its mix puts out at noon, and a walker keeps who they are until they go in
 
     Scenario: CH53. How a person meets an event
       # react(): a shock underfoot (a mine's blast felt through the ground), a gun's report, a shout. Felt

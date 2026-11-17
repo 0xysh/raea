@@ -268,3 +268,39 @@ test("passers-by round a block: no one jumps; they come out of doors and go in a
   const avenue = at.filter((p) => p.s < 100).length / 100, quiet = at.filter((p) => p.s >= 100).length / 220;
   expect(avenue).toBeGreaterThan(2.5 * quiet);
 });
+
+test("passers-by by the hour's mix: the street's people change over the day and no one changes on it", () => {
+  const ring: Walk = {
+    id: "h", closed: true, width: 4, perMetre: 0.3,
+    path: [[0, 0, 0], [100, 0, 0], [100, 0, 60], [0, 0, 60]],
+    doors: Array.from({ length: 26 }, (_, i) => 6 + i * 12),
+  };
+  // the workers on the street until eleven, then the housewives
+  const mixAt = (m: number) => (m < 11 * 60 ? { "munitions-worker": 1 } : { housewife: 1 });
+  const plain = { roles, folk, mix, seed: "hour" }, hourly = { ...plain, mixAt };
+  // about as many out at an hour as without it
+  const a = passersBy([ring], 17 * 60, plain).length, b = passersBy([ring], 17 * 60, hourly).length;
+  expect(b).toBeGreaterThan(0.75 * a);
+  expect(b).toBeLessThan(1.33 * a);
+  // well before the change only workers, well after only housewives
+  expect(passersBy([ring], 10 * 60 + 30, hourly).every((p) => p.person.role === "munitions-worker")).toBe(true);
+  expect(passersBy([ring], 11 * 60 + 30, hourly).every((p) => p.person.role === "housewife")).toBe(true);
+  // across the change, a twenty-fourth of a second at a time: anyone still out is the same person a step on; anyone new came out of a door
+  const near = (p: { s: number }) => ring.doors!.some((d) => Math.abs(d - p.s) < 0.15 || Math.abs(Math.abs(d - p.s) - 320) < 0.15);
+  let seen = 0;
+  for (let t = -240; t < 240; t += 4) {
+    const m = 11 * 60 + t / 60, now = passersBy([ring], m, hourly), next = new Map(passersBy([ring], m + 1 / (24 * 60), hourly).map((p) => [p.id, p]));
+    const was = new Set(now.map((p) => p.id));
+    for (const p of now) {
+      const q = next.get(p.id);
+      if (!q) continue;
+      seen++;
+      expect(q.person.role).toBe(p.person.role);
+      expect(Math.hypot(q.at[0] - p.at[0], q.at[2] - p.at[2])).toBeLessThan(0.12);
+    }
+    for (const [id, q] of next) if (!was.has(id)) expect(near(q)).toBe(true);
+  }
+  expect(seen).toBeGreaterThan(500);
+  // the same minute asked again gives the same street
+  expect(passersBy([ring], 11 * 60 + 2, hourly)).toEqual(passersBy([ring], 11 * 60 + 2, hourly));
+});
