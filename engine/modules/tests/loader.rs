@@ -38,8 +38,8 @@ fn imports_resolve_inside_the_space_and_refuse_outside() {
     let d = space("resolve", &[("edit.tsx", ""), ("parts/index.ts", "export const x = 1;"), ("a/b.ts", "")]);
     let l = Loader::new(&d, libs()).unwrap();
     let entry = d.join("edit.tsx").display().to_string();
-    assert_eq!(l.resolve("./parts", &entry).unwrap(), ModuleId::File(d.canonicalize().unwrap().join("parts/index.ts")));
-    let b = d.canonicalize().unwrap().join("a/b.ts").display().to_string();
+    assert_eq!(l.resolve("./parts", &entry).unwrap(), ModuleId::File(dunce::canonicalize(&d).unwrap().join("parts/index.ts")));
+    let b = dunce::canonicalize(&d).unwrap().join("a/b.ts").display().to_string();
     assert!(matches!(l.resolve("../edit", &b).unwrap(), ModuleId::File(_)));
     let out = l.resolve("../../etc/passwd", &entry).unwrap_err().message;
     assert!(out.contains("outside the space"), "{out}");
@@ -103,7 +103,7 @@ fn shared_imports_resolve_to_the_workspaces_shared_folder() {
         ("shared/components/props/index.ts", "export const p = 1;"),
         ("projects/a/compositions/main.tsx", ""),
     ]);
-    let root = w.canonicalize().unwrap();
+    let root = dunce::canonicalize(&w).unwrap();
     let l = Loader::new(&w.join("projects/a"), libs()).unwrap();
     let entry = root.join("projects/a/compositions/main.tsx").display().to_string();
     assert_eq!(l.resolve("@shared/components/desk", &entry).unwrap(), ModuleId::File(root.join("shared/components/desk.tsx")));

@@ -7,6 +7,7 @@ publish = false
 description = "A composition's frames read into worlds of facts (docs/direction.feature DR1): React stepped with nothing drawn, its 3D, its page laid out and its timeline as entities with components"
 
 [dependencies]
+dunce = "1"
 raea-core-facts = { path = "../../core/facts" }
 raea-core-scene = { path = "../../core/scene" }
 raea-runtime-scene = { path = "../scene" }

@@ -7,8 +7,7 @@ use serde_json::{Value, json};
 use super::*;
 
 fn goo_dir() -> PathBuf {
-    std::env::var_os("RAEA_GOO").filter(|v| !v.is_empty()).map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".cache/raea-goo"))
+    raea_io_home::env_path("RAEA_GOO", ".cache/raea-goo")
 }
 
 /// the goo tool's scripts (tools/goo): run.py (MPM) and sph.py (SPlisHSPlasH, a spec's "solver": "sph"); a bake is

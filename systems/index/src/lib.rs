@@ -69,7 +69,7 @@ pub fn root_of(path: &str) -> Result<PathBuf> {
     if path == PHOTOS {
         return Ok(PathBuf::from(PHOTOS));
     }
-    let root = std::fs::canonicalize(path).map_err(|e| anyhow::anyhow!("{path}: {e}"))?;
+    let root = dunce::canonicalize(path).map_err(|e| anyhow::anyhow!("{path}: {e}"))?;
     anyhow::ensure!(root.is_dir(), "{path} isn't a folder");
     Ok(root)
 }

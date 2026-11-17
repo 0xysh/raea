@@ -53,7 +53,7 @@ fn run(args: &[String]) -> Result<()> {
         "remove" => {
             let which = f.rest.first().ok_or_else(|| anyhow!("remove takes a source id or the folder"))?;
             let mut store = Store::open(&home)?;
-            let canon = std::fs::canonicalize(which).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| which.clone());
+            let canon = dunce::canonicalize(which).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| which.clone());
             let source = store.find(which)?.or(store.find(&canon)?).ok_or_else(|| anyhow!("no source {which}"))?;
             let n = store.remove(&source)?;
             println!("removed {source}: {n} items");
@@ -119,7 +119,7 @@ fn find(f: &Flags, home: &std::path::Path) -> Result<()> {
     let store = Store::open(home)?;
     let source = match &f.source {
         Some(s) => {
-            let canon = std::fs::canonicalize(s).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| s.clone());
+            let canon = dunce::canonicalize(s).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| s.clone());
             Some(store.find(s)?.or(store.find(&canon)?).ok_or_else(|| anyhow!("no source {s}"))?)
         }
         None => None,

@@ -42,7 +42,7 @@ pub fn render(args: &[String]) -> Option<R<String>> {
 /// mastered by its <Mix>, written as 48 kHz WAV, with what it measures.
 fn sound(args: &[String], out: &Path) -> R<String> {
     let edit = args.get(1).filter(|a| !a.starts_with('-')).ok_or("raea render EDIT.tsx -o OUT.wav")?;
-    let tsx = PathBuf::from(edit).canonicalize().map_err(|e| format!("{edit}: {e}"))?;
+    let tsx = dunce::canonicalize(&PathBuf::from(edit)).map_err(|e| format!("{edit}: {e}"))?;
     let dir = tsx.parent().ok_or("the edit has no folder")?.to_path_buf();
     let js = std::env::temp_dir().join(format!("raea-sound-{}.js", std::process::id()));
     raea_runtime_bundle::bundle_composition(&tsx, &js, &raea_runtime_bundle::comp_opts(args)?, None)?;

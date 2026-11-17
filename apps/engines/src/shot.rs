@@ -113,7 +113,7 @@ pub fn blender(args: &[String]) -> R<String> {
     let entry = if is_blend {
         format!("{shoot}Promise.resolve().then(() => shoot({opts})){}\n", blender_ts::CLOSE)
     } else {
-        let ts = src.canonicalize().map_err(|e| format!("{}: {e}", s.src))?;
+        let ts = dunce::canonicalize(&src).map_err(|e| format!("{}: {e}", s.src))?;
         format!("import * as M from {};\n{shoot}{}.then(() => shoot({opts})){}\n", blender_ts::spec(&ts), blender_ts::DEFAULT, blender_ts::CLOSE)
     };
     let mut rest = s.rest.clone();

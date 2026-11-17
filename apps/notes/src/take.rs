@@ -27,7 +27,7 @@ pub(crate) struct New {
 fn inbox_dir() -> PathBuf {
     match std::env::var_os("RAEA_INBOX_DIR") {
         Some(dir) => dir.into(),
-        None => Path::new(&std::env::var_os("HOME").unwrap_or_default()).join(".raea/inbox"),
+        None => raea_io_home::user_home().unwrap_or_default().join(".raea/inbox"),
     }
 }
 

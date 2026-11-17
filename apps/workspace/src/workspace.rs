@@ -94,7 +94,7 @@ pub fn root() -> PathBuf {
     let set = config(None, &["--global", "raea.root"]).ok().filter(|s| !s.is_empty());
     // HOME, else USERPROFILE: Windows sets no HOME for an app opened from the Start menu, which made the root
     // Documents/raea under whatever folder raea ran in. git's global config is found the same way.
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
+    let home = raea_io_home::user_home().unwrap_or_default();
     match set {
         Some(s) if s.starts_with("~/") => home.join(&s[2..]),
         Some(s) => PathBuf::from(s),

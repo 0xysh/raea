@@ -26,7 +26,7 @@ pub fn perceive() -> Option<PathBuf> {
     }
     let name = if cfg!(windows) { "raea-perceive.exe" } else { "raea-perceive" };
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe().and_then(|e| e.canonicalize()) {
+    if let Ok(exe) = std::env::current_exe().and_then(|e| dunce::canonicalize(&e)) {
         dirs.extend(exe.parent().map(Path::to_path_buf));
     }
     if let Some(path) = std::env::var_os("PATH") {

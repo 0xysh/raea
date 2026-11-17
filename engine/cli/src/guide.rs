@@ -91,7 +91,7 @@ fn brief_at(project: &str) -> R<PathBuf> {
     let path = Path::new(project);
     let brief_path = if path.is_dir() {
         // from anywhere inside a project: the nearest folder up with a brief.ts or a .raea/project
-        let dir = path.canonicalize().ok().and_then(|d| d.ancestors().find(|a| a.join("brief.ts").is_file() || a.join(".raea/project").is_file()).map(Path::to_path_buf));
+        let dir = dunce::canonicalize(&path).ok().and_then(|d| d.ancestors().find(|a| a.join("brief.ts").is_file() || a.join(".raea/project").is_file()).map(Path::to_path_buf));
         dir.unwrap_or_else(|| path.to_path_buf()).join("brief.ts")
     } else {
         path.to_path_buf()

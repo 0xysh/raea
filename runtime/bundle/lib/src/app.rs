@@ -49,9 +49,9 @@ pub const SCREEN: &str = "{ width: innerWidth, height: innerHeight }";
 pub fn bundle(app: &Path, home: &Path, props: &str) -> Result<(String, String), String> {
     // canonical, and on Windows without canonicalize()'s verbatim \\?\ prefix: Rolldown can't resolve an entry that
     // imports a path written with it (T1f: the Windows release check, 11-07)
-    let app = raea_io_home::plain(app.canonicalize().map_err(|e| format!("{}: {e}", app.display()))?);
+    let app = raea_io_home::plain(dunce::canonicalize(&app).map_err(|e| format!("{}: {e}", app.display()))?);
     // one path per file: a module reached by two spellings of its path is bundled twice (two wires, two call ids)
-    let home = &raea_io_home::plain(home.canonicalize().map_err(|e| format!("{}: {e}", home.display()))?);
+    let home = &raea_io_home::plain(dunce::canonicalize(&home).map_err(|e| format!("{}: {e}", home.display()))?);
     // one work folder per call: tests bundle on several threads of one process
     static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let work = std::env::temp_dir().join(format!("raea-app-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));

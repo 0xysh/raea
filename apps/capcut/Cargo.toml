@@ -7,6 +7,7 @@ publish = false
 description = "`raea export capcut`: a composition as a CapCut draft ready in its timeline, its footage and sounds as clips of their files and what raea draws as transparent overlays (docs/capcut.feature)"
 
 [dependencies]
+dunce = "1"
 raea-runtime-bundle = { path = "../../runtime/bundle" }
 raea-io-capcut = { path = "../../io/capcut" }
 raea-io-alpha = { path = "../../io/alpha" }

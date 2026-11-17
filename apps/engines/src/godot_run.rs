@@ -38,7 +38,7 @@ fn opts(args: &[String]) -> R<Opts> {
     let script = args.get(2).ok_or("raea godot run SCRIPT.ts [--project DIR] [--window] [--movie FILE [--fps N] [--frames N]] [--scene res://X.tscn] [--size WxH] [--timeout S] [ARGS...]")?;
     // no script, only flags: the project's --scene plays with nothing of yours added (sdk/godot/src/host/none.ts)
     let bare = script.starts_with("--");
-    let script = if bare { raea_io_home::home().join("sdk/godot/src/host/none.ts") } else { PathBuf::from(script).canonicalize().map_err(|e| format!("{script}: {e}"))? };
+    let script = if bare { raea_io_home::home().join("sdk/godot/src/host/none.ts") } else { dunce::canonicalize(&PathBuf::from(script)).map_err(|e| format!("{script}: {e}"))? };
     let mut o = Opts { script, project: None, window: false, timeout: 3600.0, movie: None, fps: 30, size: None, frames: None, scene: None, rest: Vec::new() };
     let mut it = args[if bare { 2 } else { 3 }..].iter();
     while let Some(a) = it.next() {
@@ -176,7 +176,7 @@ pub fn run(args: &[String]) -> R<String> {
     }
     // the project: --project, the nearest project.godot above the script, else an empty one for this run
     let found = match &o.project {
-        Some(p) => Some(p.canonicalize().map_err(|e| format!("{}: {e}", p.display()))?),
+        Some(p) => Some(dunce::canonicalize(&p).map_err(|e| format!("{}: {e}", p.display()))?),
         None => nearest_project(o.script.parent().unwrap_or(Path::new("."))),
     };
     let temp = std::env::temp_dir().join(format!("raea-godot-{}", std::process::id()));

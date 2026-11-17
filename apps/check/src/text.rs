@@ -22,7 +22,7 @@ pub(crate) struct Run {
 pub(crate) fn brand_kit(near: &[&str], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
     let mut seen = std::collections::HashSet::new();
     for start in near.iter().filter(|p| !p.is_empty()) {
-        let abs = std::path::Path::new(start).canonicalize().unwrap_or_else(|_| std::path::PathBuf::from(start));
+        let abs = dunce::canonicalize(&std::path::Path::new(start)).unwrap_or_else(|_| std::path::PathBuf::from(start));
         let mut d = abs.parent();
         for _ in 0..5 {
             let Some(here) = d else { break };

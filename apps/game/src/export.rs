@@ -14,7 +14,7 @@ pub(crate) fn keep_dsym(player: &Path) {
     let Ok(o) = std::process::Command::new("dwarfdump").arg("--uuid").arg(&dsym).output() else { return };
     let text = String::from_utf8_lossy(&o.stdout);
     let Some(uuid) = text.split_whitespace().nth(1).filter(|u| u.len() == 36) else { return };
-    let Some(home) = std::env::var_os("HOME") else { return };
+    let Some(home) = raea_io_home::user_home() else { return };
     let to = Path::new(&home).join("Library/Caches/raea/dsym").join(uuid).join("raea-game.dSYM");
     if to.exists() {
         return;
@@ -34,7 +34,7 @@ pub const USAGE: &str = "raea export-game EDIT.tsx -o OUT [--target mac-app|mac-
 pub fn export(args: &[String]) -> R<String> {
     let usage = USAGE;
     let tsx = PathBuf::from(args.get(1).filter(|a| !a.starts_with("--")).ok_or(usage)?);
-    let tsx = tsx.canonicalize().map_err(|e| format!("{}: {e}", tsx.display()))?;
+    let tsx = dunce::canonicalize(&tsx).map_err(|e| format!("{}: {e}", tsx.display()))?;
     let dir = tsx.parent().unwrap().to_path_buf();
     let out = PathBuf::from(flag(args, "-o").ok_or(usage)?);
     let target = flag(args, "--target").unwrap_or_else(|| if out.extension().is_some_and(|x| x == "app") { "mac-app".into() } else { "mac-cli".into() });

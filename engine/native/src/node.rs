@@ -324,7 +324,7 @@ pub fn call(op: &str, a: &[Value]) -> Value {
         }
         "rename" => std::fs::rename(s(0), s(1)).map(|_| Value::Null).unwrap_or_else(|e| io_err(e, "rename", &s(0))),
         "copyFile" => std::fs::copy(s(0), s(1)).map(|_| Value::Null).unwrap_or_else(|e| io_err(e, "copyfile", &s(0))),
-        "realpath" => std::fs::canonicalize(s(0)).map(|p| json!(p.display().to_string())).unwrap_or_else(|e| io_err(e, "realpath", &s(0))),
+        "realpath" => dunce::canonicalize(s(0)).map(|p| json!(p.display().to_string())).unwrap_or_else(|e| io_err(e, "realpath", &s(0))),
         "mkdtemp" => {
             let prefix = s(0);
             for _ in 0..100 {
@@ -359,7 +359,7 @@ pub fn call(op: &str, a: &[Value]) -> Value {
         }
         "spawn" => spawn(&s(0), a.get(1), a.get(2).unwrap_or(&Value::Null)),
         "tmpdir" => json!(std::env::temp_dir().display().to_string().trim_end_matches('/')),
-        "homedir" => json!(std::env::var("HOME").unwrap_or_default()),
+        "homedir" => json!(raea_io_home::user_home().unwrap_or_default().display().to_string()),
         "cwd" => json!(std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()),
         "resolve" => resolve_file(&s(0), Path::new(&s(1)), false).map(|p| json!(p.display().to_string())).unwrap_or_else(|e| err("MODULE_NOT_FOUND", e)),
         // a CommonJS file's source for require (JSON as an expression, TypeScript transpiled to CommonJS)

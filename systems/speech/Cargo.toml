@@ -7,6 +7,7 @@ description = "Speech on raea's ONNX facility: Pocket TTS streamed sentence by s
 license = "FSL-1.1-ALv2"
 
 [dependencies]
+raea-io-home = { path = "../../io/home" }
 raea-sys-ml = { path = "../ml" }
 ort = { version = "=2.0.0-rc.13", features = ["half"] }
 anyhow = "1"

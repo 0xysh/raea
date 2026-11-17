@@ -20,7 +20,7 @@ fn exact() {
 }
 
 fn cache() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap()).join(".cache/raea-kimodo/mlx")
+    raea_io_home::user_home().unwrap().join(".cache/raea-kimodo/mlx")
 }
 
 fn fixture(name: &str) -> Option<HashMap<String, Array>> {

@@ -83,7 +83,7 @@ fn build_app(app: &Path) -> Result<(), String> {
 impl Opts {
     pub fn parse(args: &[String]) -> Result<Opts, String> {
         let here = crate::here();
-        let repo = here.join("../../..").canonicalize().unwrap_or(here.join("../../.."));
+        let repo = dunce::canonicalize(&here.join("../../..")).unwrap_or(here.join("../../.."));
         let mut o = Opts {
             bin: repo.join("target/release/raea-page-host"),
             substrate: "current".into(),

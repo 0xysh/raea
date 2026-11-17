@@ -178,5 +178,5 @@ pub fn lay(kind: Kind, name: &str, clips: Vec<Clip>) -> Vec<Track> {
 /// media/, then the project's media/ and assets/; else absolute; else relative to the composition's folder.
 pub fn resolve(dir: &Path, src: &str) -> PathBuf {
     let p = raea_core_scene::media_path(dir, src);
-    p.canonicalize().unwrap_or(p)
+    dunce::canonicalize(&p).unwrap_or(p)
 }

@@ -7,6 +7,7 @@ publish = false
 description = "raea solid info and raea solid view: a solid file run, its parts measured (raea-core-solidinfo), and its review sheets in colour and clay"
 
 [dependencies]
+dunce = "1"
 raea-core-solidinfo = { path = "../../core/solidinfo" }
 # what solid info finds, as raea's one Finding (docs/direction.feature DR3)
 raea-core-facts = { path = "../../core/facts" }

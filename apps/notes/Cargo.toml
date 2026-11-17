@@ -9,6 +9,7 @@ description = "A person's notes on a project as files the work is held to (docs/
 [dependencies]
 # Note and Ask, the project found by its .raea/project, and the world a note is an entity in
 raea-core-facts = { path = "../../core/facts" }
+raea-io-home = { path = "../../io/home" }
 # when a run of an ask's check was (UTC), as raea check stamps its record
 raea-io-trace = { path = "../../io/trace" }
 # what each ask has been through, kept as JSON (state.rs)

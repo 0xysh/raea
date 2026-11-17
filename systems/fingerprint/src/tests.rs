@@ -141,7 +141,7 @@ fn about_extends_and_applies_round_trip() {
 #[test]
 #[ignore]
 fn word_heads_score_noise_and_clipping_from_words_alone() {
-    let spike = std::env::var_os("FP_SPIKE").map(std::path::PathBuf::from).unwrap_or_else(|| std::path::PathBuf::from(std::env::var("HOME").unwrap()).join("films/fingerprint-spike"));
+    let spike = std::env::var_os("FP_SPIKE").map(std::path::PathBuf::from).unwrap_or_else(|| raea_io_home::user_home().unwrap().join("films/fingerprint-spike"));
     let items: Vec<serde_json::Value> = serde_json::from_slice(&std::fs::read(spike.join("clap/items.json")).unwrap()).unwrap();
     let mut enc = raea_sys_columns::Encoders::load().unwrap();
     let w = Words::build(&mut enc, &base("me")).unwrap();

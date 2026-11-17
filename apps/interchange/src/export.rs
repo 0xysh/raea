@@ -237,7 +237,7 @@ pub fn scene(all: &[Vec<Item>], frames: &[i64], dir: &Path, out: &Path) -> R<Val
 /// `raea scene export ...`: scene.json written, and its value.
 pub fn export(args: &[String]) -> R<(PathBuf, Value)> {
     let edit = args.get(2).ok_or(USAGE)?;
-    let tsx = PathBuf::from(edit).canonicalize().map_err(|e| format!("{edit}: {e}"))?;
+    let tsx = dunce::canonicalize(&PathBuf::from(edit)).map_err(|e| format!("{edit}: {e}"))?;
     let dir = tsx.parent().ok_or("the edit's folder")?.to_path_buf();
     let out = args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1)).ok_or(USAGE)?;
     let out = std::path::absolute(out).map_err(|e| e.to_string())?;

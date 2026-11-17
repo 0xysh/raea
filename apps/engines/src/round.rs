@@ -69,7 +69,7 @@ pub fn godot_export(args: &[String]) -> R<String> {
 }
 
 pub fn godot_back(args: &[String]) -> R<String> {
-    let dir = PathBuf::from(args.get(2).ok_or(USAGE)?).canonicalize().map_err(|e| format!("{}: {e}", args[2]))?;
+    let dir = dunce::canonicalize(&PathBuf::from(args.get(2).ok_or(USAGE)?)).map_err(|e| format!("{}: {e}", args[2]))?;
     let media = media_of(&dir)?;
     let now = dir.join(".raea-now.json");
     let script = raea_io_home::home().join("sdk/godot/src/host/back.ts");
@@ -129,7 +129,7 @@ pub fn blender_open(args: &[String]) -> R<String> {
 }
 
 pub fn blender_back(args: &[String]) -> R<String> {
-    let blend = PathBuf::from(args.get(2).filter(|a| a.ends_with(".blend")).ok_or(USAGE)?).canonicalize().map_err(|e| format!("{}: {e}", args[2]))?;
+    let blend = dunce::canonicalize(&PathBuf::from(args.get(2).filter(|a| a.ends_with(".blend")).ok_or(USAGE)?)).map_err(|e| format!("{}: {e}", args[2]))?;
     let dir = blend.parent().ok_or("the .blend's folder")?.to_path_buf();
     if !dir.join("scene.json").is_file() {
         return Err(format!("{} has no scene.json beside it: raea blender back reads a .blend raea blender open made", blend.display()));

@@ -104,7 +104,7 @@ pub fn command(args: &[String], local: Option<&dyn Local>) -> Result<String, Str
             let images: Vec<&str> = args.windows(2).filter(|w| w[0] == "--image").map(|w| w[1].as_str()).collect();
             let mut flow = Flow::default();
             for (k, f) in images.iter().enumerate() {
-                let abs = std::fs::canonicalize(f).map_err(|e| format!("{f}: {e}"))?;
+                let abs = dunce::canonicalize(f).map_err(|e| format!("{f}: {e}"))?;
                 flow.steps.insert(format!("in{k}"), Step::new("media.load", json!({"path": abs})));
             }
             let refs: Vec<J> = (0..images.len()).map(|k| json!(format!("@in{k}"))).collect();

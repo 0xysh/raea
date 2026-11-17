@@ -84,7 +84,7 @@ pub fn read(v: &Value) -> (Map<String, Value>, Vec<Value>, Value) {
 /// said on stderr as it comes, so a watcher sees it working through a judgement that can take minutes.
 pub fn ask(by: &str, dir: &Path, brief: &Value, target: Option<&Path>) -> Result<Value, String> {
     use std::io::BufRead as _;
-    let dir = dir.canonicalize().map_err(|e| format!("judge: {}: {e}", dir.display()))?;
+    let dir = dunce::canonicalize(&dir).map_err(|e| format!("judge: {}: {e}", dir.display()))?;
     let p = prompt(&dir, brief, target);
     let mut cmd = match by {
         "kimi" => {

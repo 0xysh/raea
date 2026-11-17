@@ -54,7 +54,7 @@ pub fn cloud_only(_: &std::fs::Metadata) -> bool {
 /// Whether a file lives in iCloud Drive (a link is followed to where it lives): its cloud-only files go in from Quick
 /// Look's thumbnail (cloud.rs) without a download
 pub fn in_icloud(path: &Path) -> bool {
-    cfg!(target_os = "macos") && std::fs::canonicalize(path).is_ok_and(|p| p.to_string_lossy().contains("/Library/Mobile Documents/"))
+    cfg!(target_os = "macos") && dunce::canonicalize(path).is_ok_and(|p| p.to_string_lossy().contains("/Library/Mobile Documents/"))
 }
 
 /// Every picture and video under `root`, `on` called with each batch of `every` as they're found; says how many it

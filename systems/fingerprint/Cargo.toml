@@ -13,3 +13,6 @@ raea-sys-columns = { path = "../columns" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
+
+[dev-dependencies]
+raea-io-home = { path = "../../io/home" }

@@ -7,6 +7,7 @@ publish = false
 description = "raea judge: a review's sheets judged by clef-omni on a frozen rubric, the pass decided in code, calibrated against the person's eye before it gates"
 
 [dependencies]
+dunce = "1"
 raea-io-home = { path = "../../io/home" }
 # what a judge saw, as raea's one Finding (docs/direction.feature DR3)
 raea-core-facts = { path = "../../core/facts" }

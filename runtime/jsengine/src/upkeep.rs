@@ -74,7 +74,7 @@ impl Upkeep {
 
 fn open_log() -> Option<File> {
     static N: AtomicU32 = AtomicU32::new(0);
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    let home = raea_io_home::user_home()?;
     let dir = PathBuf::from(home).join(".raea").join("logs");
     if let Err(e) = std::fs::create_dir_all(&dir) {
         eprintln!("raea-runtime-jsengine: no heap log in {}: {e}", dir.display());

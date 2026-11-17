@@ -22,7 +22,7 @@ use objc2_image_io::{
     kCGImageSourceCreateThumbnailFromImageIfAbsent, kCGImageSourceCreateThumbnailWithTransform, kCGImageSourceShouldCache,
     kCGImageSourceShouldCacheImmediately, kCGImageSourceThumbnailMaxPixelSize,
 };
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::ptr::NonNull;
 
 /// SigLIP 2 B/16-256's side
@@ -135,7 +135,7 @@ impl Model {
         if !package.exists() {
             return Err(format!("{}: not installed", package.display()));
         }
-        let caches = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Caches/raea-index");
+        let caches = raea_io_home::user_home().unwrap_or_default().join("Library/Caches/raea-index");
         std::fs::create_dir_all(&caches).map_err(|e| e.to_string())?;
         let name = package.file_stem().and_then(|s| s.to_str()).unwrap_or("model");
         let compiled = caches.join(format!("{name}.mlmodelc"));

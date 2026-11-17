@@ -7,10 +7,12 @@ publish = false
 description = "`raea check`: the floor's measurable lines on an export, ranked P0-P3"
 
 [dependencies]
+dunce = "1"
 # taste.ts rules, as the raea CLI evaluates them (docs/projects.feature PJ0)
 raea-core-brief = { path = "../../core/brief" }
 # a transcript's words, read as `raea world` reads them (docs/direction.feature DR1)
 raea-core-facts = { path = "../../core/facts" }
+raea-io-home = { path = "../../io/home" }
 # a check's record named by when it was (UTC, DR3)
 raea-io-trace = { path = "../../io/trace" }
 # ffmpeg's flag for every decoded frame, by its version

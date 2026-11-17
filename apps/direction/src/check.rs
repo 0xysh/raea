@@ -32,7 +32,7 @@ pub struct Host {
 
 /// The person's taste folder: RAEA_TASTE, else ~/.raea/taste.
 pub fn taste_dir() -> Option<PathBuf> {
-    std::env::var_os("RAEA_TASTE").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".raea/taste")))
+    std::env::var_os("RAEA_TASTE").map(PathBuf::from).or_else(|| raea_io_home::user_home().map(|h| h.join(".raea/taste")))
 }
 
 /// The .ts files `--taste` names: the file, or every .ts in the folder. A file named under the person's taste folder
@@ -133,12 +133,12 @@ fn held(project: &Path, given: Vec<PathBuf>, host: &Host) -> (Vec<Rule>, Vec<Fin
 /// The compositions `target` names: each (its file, its id when the file registers several).
 fn compositions(target: &Path, args: &[String]) -> R<Vec<(PathBuf, Option<String>)>> {
     let one = flag(args, "--composition");
-    let (dir, file) = if target.is_dir() { (target.to_path_buf(), None) } else { (target.parent().unwrap_or(Path::new(".")).to_path_buf(), Some(target.canonicalize().map_err(|e| format!("{}: {e}", target.display()))?)) };
+    let (dir, file) = if target.is_dir() { (target.to_path_buf(), None) } else { (target.parent().unwrap_or(Path::new(".")).to_path_buf(), Some(dunce::canonicalize(&target).map_err(|e| format!("{}: {e}", target.display()))?)) };
     let reg = raea_app_registry::scan(&dir, &[]);
     let mut out: Vec<(PathBuf, Option<String>)> = Vec::new();
     for c in &reg.compositions {
         let path = reg.dir.join(&c.file);
-        let path = path.canonicalize().unwrap_or(path);
+        let path = dunce::canonicalize(&path).unwrap_or(path);
         let id = (c.how == raea_app_registry::How::Registered).then(|| c.id.clone());
         if file.as_ref().is_none_or(|f| *f == path) && one.as_ref().is_none_or(|o| Some(o) == id.as_ref()) {
             out.push((path, id));
@@ -325,7 +325,7 @@ pub fn check(args: &[String], host: &Host) -> R<(String, bool)> {
     let target = raea_app_check::words(args, &TAKES).first().map_or_else(|| PathBuf::from("."), PathBuf::from);
     // the folder it is in, made whole (`lyric.tsx`'s is the empty path): a rule's check is a path from it
     let here = if target.is_dir() { target.clone() } else { target.parent().filter(|p| !p.as_os_str().is_empty()).map_or_else(|| PathBuf::from("."), Path::to_path_buf) };
-    let here = here.canonicalize().map_err(|e| format!("{}: {e}", here.display()))?;
+    let here = dunce::canonicalize(&here).map_err(|e| format!("{}: {e}", here.display()))?;
     let project = record::up(&here, ".raea/project").unwrap_or(here);
     let (mut rules, unread, notes) = rules(&project, taste_files(args), host);
     if let Some(only) = flag(args, "--only") {

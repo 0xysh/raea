@@ -30,7 +30,7 @@ impl EditResolve {
     /// importer was ever under the work folder, so a live game's own `import "react"` went to the engine's React instead of
     /// the live runtime its tsconfig paths name, and `raea play` threw "not a function" before the first frame
     pub fn new(e: Edit) -> Self {
-        let real = |p: PathBuf| p.canonicalize().map(raea_io_home::plain).unwrap_or(p);
+        let real = |p: PathBuf| dunce::canonicalize(&p).map(raea_io_home::plain).unwrap_or(p);
         EditResolve(Edit { dir: real(e.dir), js: real(e.js), work: real(e.work) })
     }
 
@@ -40,7 +40,7 @@ impl EditResolve {
     /// work folder and every live play threw "not a function" (the engine's React, with no `__h`) before its first frame
     fn from_edit(&self, imp: &str) -> bool {
         let named = Path::new(imp);
-        let imp = named.canonicalize().map(raea_io_home::plain).unwrap_or_else(|_| named.to_path_buf());
+        let imp = dunce::canonicalize(&named).map(raea_io_home::plain).unwrap_or_else(|_| named.to_path_buf());
         imp.starts_with(&self.0.work) && !imp.components().any(|c| c.as_os_str() == "node_modules")
     }
 
@@ -48,7 +48,7 @@ impl EditResolve {
     /// not the SDK's copies beside them
     fn own_source(&self, imp: &str) -> bool {
         let named = Path::new(imp);
-        let imp = named.canonicalize().map(raea_io_home::plain).unwrap_or_else(|_| named.to_path_buf());
+        let imp = dunce::canonicalize(&named).map(raea_io_home::plain).unwrap_or_else(|_| named.to_path_buf());
         self.from_edit(&imp.to_string_lossy()) && ["src", "ext"].iter().any(|d| imp.starts_with(self.0.work.join(d)))
     }
 

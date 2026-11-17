@@ -173,7 +173,7 @@ fn canonical(j: &J, whole: bool) -> J {
 pub fn install_dir(model: &str) -> PathBuf {
     let (var, name) = install_var(model);
     std::env::var_os(var).filter(|v| !v.is_empty()).map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".cache").join(name))
+        .unwrap_or_else(|| raea_io_home::user_home().unwrap_or_default().join(".cache").join(name))
 }
 
 /// A local model's install variable and default folder name.
@@ -189,7 +189,7 @@ fn install_var(model: &str) -> (&'static str, &'static str) {
 pub fn setup_script(model: &str) -> PathBuf {
     let tools = std::env::var_os("RAEA_TOOLS").map(PathBuf::from).unwrap_or_else(|| raea_io_home::home().join("tools"));
     let p = tools.join(model).join("setup.sh");
-    p.canonicalize().unwrap_or(p)
+    dunce::canonicalize(&p).unwrap_or(p)
 }
 
 /// Whether a local model can run from `dir`. SAO: the venv and either run.py with setup.sh's `.ready`, or the
@@ -270,7 +270,7 @@ pub fn matchmove_params(p: &J) -> Result<J, String> {
 pub fn perceive_bin() -> PathBuf {
     // raea-perceive.exe on Windows (#43)
     const NAME: &str = if cfg!(windows) { "raea-perceive.exe" } else { "raea-perceive" };
-    let beside = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| Some(e.parent()?.join(NAME)));
+    let beside = std::env::current_exe().ok().and_then(|e| dunce::canonicalize(&e).ok()).and_then(|e| Some(e.parent()?.join(NAME)));
     let found = beside.into_iter().chain([PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/release")).join(NAME)]).chain(std::env::var_os("PATH").iter().flat_map(std::env::split_paths).map(|d| d.join(NAME))).find(|p| p.is_file());
     std::env::var_os("RAEA_PERCEIVE").filter(|v| !v.is_empty()).map(PathBuf::from).or(found).unwrap_or_else(|| NAME.into())
 }

@@ -398,7 +398,7 @@ fn name_output(dir: &Path, name: &str, files: &[PathBuf]) -> Result<Vec<PathBuf>
     let copy = |from: &Path, to: &Path| {
         // a name that already is the file (a link to it, or the file itself) is left alone: copying a file onto itself
         // truncates it to nothing (11-05: four Tripo models lost their step files so). A link elsewhere is replaced.
-        if let (Ok(a), Ok(b)) = (std::fs::canonicalize(from), std::fs::canonicalize(to)) {
+        if let (Ok(a), Ok(b)) = (dunce::canonicalize(from), dunce::canonicalize(to)) {
             if a == b {
                 return Ok(to.to_path_buf());
             }

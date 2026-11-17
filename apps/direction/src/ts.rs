@@ -69,7 +69,7 @@ pub fn run(files: &[PathBuf], plan: &[Planned], worlds: &[Facts], host: &Host) -
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     let data = work.join("worlds.json");
     std::fs::write(&data, serde_json::to_string(worlds).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    let imports: String = files.iter().enumerate().map(|(i, f)| format!("import c{i} from {:?};\n", f.canonicalize().unwrap_or_else(|_| f.clone()).display().to_string())).collect();
+    let imports: String = files.iter().enumerate().map(|(i, f)| format!("import c{i} from {:?};\n", dunce::canonicalize(&f).unwrap_or_else(|_| f.clone()).display().to_string())).collect();
     let checks = (0..files.len()).map(|i| format!("c{i}")).collect::<Vec<_>>().join(", ");
     let planned: Vec<Value> = plan.iter().map(|p| json!({"check": p.check, "frames": p.frames, "values": p.values, "level": p.level, "by": p.by})).collect();
     let entry = format!(

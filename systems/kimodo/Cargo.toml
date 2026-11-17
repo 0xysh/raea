@@ -17,3 +17,6 @@ raea-sys-mlx = { path = "../mlx" }
 raea-sys-ml = { path = "../ml" }
 mlx-rs = "=0.34.0"
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
+
+[dev-dependencies]
+raea-io-home = { path = "../../io/home" }

@@ -11,8 +11,7 @@ use super::*;
 
 /// Where the splat trainer is installed: $RAEA_SPLAT, else ~/.cache/raea-splat.
 pub fn splat_dir() -> PathBuf {
-    std::env::var_os("RAEA_SPLAT").filter(|v| !v.is_empty()).map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".cache/raea-splat"))
+    raea_io_home::env_path("RAEA_SPLAT", ".cache/raea-splat")
 }
 
 fn splat_installed(dir: &Path) -> bool {

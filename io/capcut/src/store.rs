@@ -14,7 +14,7 @@ pub fn store_root() -> Option<PathBuf> {
         let local = std::env::var_os("LOCALAPPDATA")?;
         return Some(PathBuf::from(local).join("CapCut/User Data/Projects/com.lveditor.draft"));
     }
-    let home = std::env::var_os("HOME")?;
+    let home = raea_io_home::user_home()?;
     cfg!(target_os = "macos").then(|| PathBuf::from(home).join("Movies/CapCut/User Data/Projects/com.lveditor.draft"))
 }
 

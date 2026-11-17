@@ -9,7 +9,7 @@ use std::sync::atomic::Ordering;
 
 /// The default export of a spec module, as the JSON it evaluates to.
 pub fn spec_json(ts: &Path) -> R<String> {
-    let ts = ts.canonicalize().map_err(|e| format!("{}: {e}", ts.display()))?;
+    let ts = dunce::canonicalize(&ts).map_err(|e| format!("{}: {e}", ts.display()))?;
     let out = std::env::temp_dir().join(format!("raea-spec-{}.js", std::process::id()));
     bundle_module(&ts, &out, PRINT_DEFAULT)?;
     // the JSON is ours to read, not the person's to see: the run prints nothing to the terminal

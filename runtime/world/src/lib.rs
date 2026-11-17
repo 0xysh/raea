@@ -49,7 +49,7 @@ struct Snap {
 /// The frames of `tsx`'s composition (`o` picks it) as worlds, one a frame, in `ask.frames`' order. The same frame
 /// gives the same world each time: frames are pure.
 pub fn read(tsx: &Path, o: &CompOpts, ask: &Ask) -> R<Vec<Facts>> {
-    let tsx = tsx.canonicalize().map_err(|e| format!("{}: {e}", tsx.display()))?;
+    let tsx = dunce::canonicalize(&tsx).map_err(|e| format!("{}: {e}", tsx.display()))?;
     let js =std::env::temp_dir().join(format!("raea-world-{}.js", std::process::id()));
     // every element and part stamped with its place in the code, so each entity has its Source (as the stage's
     // picks have their keys, engine/page/stage); RAEA_SOURCE_STAMPS=0 in the environment keeps them off

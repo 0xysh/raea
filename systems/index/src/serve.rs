@@ -154,7 +154,7 @@ fn answer(sh: &Shared, store: &mut Store, jobs: &mpsc::Sender<PathBuf>, finds: &
         }
         "remove" => {
             let which = s("source").or_else(|| s("path")).ok_or_else(|| anyhow!("remove needs a source"))?;
-            let canon = std::fs::canonicalize(&which).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| which.clone());
+            let canon = dunce::canonicalize(&which).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| which.clone());
             let Some(source) = store.find(&which)?.or(store.find(&canon)?) else { anyhow::bail!("no source {which}") };
             let root: String = store.db.query_row("SELECT root FROM sources WHERE id = ?1", [&source], |r| r.get(0))?;
             sh.waiting.lock().unwrap().retain(|r| *r != root);

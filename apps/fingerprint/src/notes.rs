@@ -23,7 +23,7 @@ pub const INBOX: &str = "fingerprint";
 /// A post's video on this machine: the renders library, else the project's own folder
 fn media(project: &Path, m: &Value) -> Option<PathBuf> {
     let p = m["path"].as_str()?;
-    let home = PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    let home = raea_io_home::user_home().unwrap_or_default();
     [home.join(".raea/feed/media").join(p), project.join(p)].into_iter().find(|f| f.is_file())
 }
 
@@ -208,7 +208,7 @@ pub(crate) fn readings_here(args: &[String], cwd: &Path) -> i32 {
     }
     if has(args, "--tally") {
         let asked: serde_json::Map<String, Value> = std::fs::read(dir.dir.join("asked.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
-        let inbox = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(format!(".raea/inbox/{INBOX}.jsonl"));
+        let inbox = raea_io_home::user_home().unwrap_or_default().join(format!(".raea/inbox/{INBOX}.jsonl"));
         for line in std::fs::read_to_string(inbox).unwrap_or_default().lines() {
             let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
             let Some(batch) = v["item"].as_str().and_then(|i| asked.get(i)).and_then(Value::as_array) else { continue };

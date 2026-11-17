@@ -6,6 +6,7 @@ description = "Matchmove: a clip's camera solved for <Matchmove>, as `raea track
 license = "FSL-1.1-ALv2"
 
 [dependencies]
+dunce = "1"
 raea-io-assets = { path = "../../io/assets" }
 raea-native = { path = "../../engine/native", default-features = false }
 raea-runtime-bundle = { path = "../../runtime/bundle" }

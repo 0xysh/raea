@@ -13,7 +13,7 @@ pub fn home() -> std::path::PathBuf {
         if let Some(h) = std::env::var_os("RAEA_HOME").filter(|v| !v.is_empty()) {
             return std::path::PathBuf::from(h);
         }
-        let installed = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).map(plain).and_then(|e| e.parent()?.parent().map(|p| p.join("share/raea")));
+        let installed = std::env::current_exe().ok().and_then(|e| dunce::canonicalize(&e).ok()).map(plain).and_then(|e| e.parent()?.parent().map(|p| p.join("share/raea")));
         if let Some(d) = installed.filter(|d| d.join("sdk/raea/src").is_dir()) {
             return d;
         }
@@ -22,7 +22,7 @@ pub fn home() -> std::path::PathBuf {
             return std::path::PathBuf::from("/nonexistent/raea");
         }
         let tree = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        tree.canonicalize().map(plain).unwrap_or(tree)
+        dunce::canonicalize(&tree).map(plain).unwrap_or(tree)
     })
     .clone()
 }
@@ -38,9 +38,23 @@ pub fn plain(p: std::path::PathBuf) -> std::path::PathBuf {
     }
 }
 
+/// `p` canonical (links resolved, and on Windows plain C:\..., through dunce), or `p` as given when it can't be read
+/// (it doesn't exist yet).
+pub fn real(p: std::path::PathBuf) -> std::path::PathBuf {
+    dunce::canonicalize(&p).unwrap_or(p)
+}
+
 /// a verbatim drive path's plain form (`\\?\C:\x` is `C:\x`); None for any other path
 fn drive(s: &str) -> Option<&str> {
     s.strip_prefix(r"\\?\").filter(|r| r.as_bytes().get(1) == Some(&b':'))
+}
+
+/// The person's home folder: $HOME, else %USERPROFILE%, the order Git for Windows reads them in. Windows gives an app
+/// opened from the Start menu or Explorer no HOME, so a read of HOME alone found nothing there and put ~/.raea, the
+/// caches and the inbox under whatever folder raea ran in. None when neither is set (an empty one counts as unset).
+/// Every read of the home folder goes through here (tools/windows-paths.sh).
+pub fn user_home() -> Option<std::path::PathBuf> {
+    ["HOME", "USERPROFILE"].into_iter().find_map(|k| std::env::var_os(k).filter(|v| !v.is_empty())).map(std::path::PathBuf::from)
 }
 
 /// Where raea's models are kept (Beat This!, Demucs, TransNet, Silero, the Core ML ones): ~/.local/share/raea-models on
@@ -50,7 +64,7 @@ pub fn models() -> std::path::PathBuf {
     let var = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
     match var("LOCALAPPDATA").filter(|_| cfg!(windows)) {
         Some(d) => d.join("raea").join("models"),
-        None => var("HOME").unwrap_or_default().join(".local/share/raea-models"),
+        None => user_home().unwrap_or_default().join(".local/share/raea-models"),
     }
 }
 
@@ -73,7 +87,7 @@ fn user_dir(apple: &str, xdg: &str, xdg_default: &str, windows: &str) -> Option<
     if cfg!(windows) {
         return std::env::var_os("LOCALAPPDATA").filter(|d| !d.is_empty()).map(|d| PathBuf::from(d).join("raea").join(windows));
     }
-    let home = PathBuf::from(std::env::var_os("HOME").filter(|h| !h.is_empty())?);
+    let home = user_home()?;
     if cfg!(target_vendor = "apple") {
         return Some(home.join(apple));
     }
@@ -86,7 +100,7 @@ fn user_dir(apple: &str, xdg: &str, xdg_default: &str, windows: &str) -> Option<
 pub fn env_path(var: &str, under_home: &str) -> std::path::PathBuf {
     match std::env::var_os(var).filter(|v| !v.is_empty()) {
         Some(p) => p.into(),
-        None => std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(under_home),
+        None => user_home().unwrap_or_default().join(under_home),
     }
 }
 
@@ -183,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn caches_and_logs_follow_the_platform() {
+    fn caches_logs_and_the_home_folder_follow_the_platform() {
         // one test, so nothing else reads these variables while it sets them
         unsafe {
             std::env::set_var("HOME", "/h");
@@ -197,6 +211,21 @@ mod tests {
             // a relative XDG_CACHE_HOME is ignored, as the spec says
             assert_eq!((c.to_str().unwrap(), l.to_str().unwrap()), ("/h/.cache/raea", "/state/raea"));
         }
+        // the home folder: HOME, else USERPROFILE (an app opened from Windows' Start menu has no HOME); empty is unset
+        let was = std::env::var_os("USERPROFILE");
+        unsafe { std::env::set_var("USERPROFILE", r"C:\Users\Ada") };
+        assert_eq!(super::user_home().unwrap().to_str(), Some("/h"));
+        unsafe { std::env::set_var("HOME", "") };
+        assert_eq!(super::user_home().unwrap().to_str(), Some(r"C:\Users\Ada"));
+        assert_eq!(super::env_path("RAEA_NO_SUCH_VAR", ".raea/env"), std::path::Path::new(r"C:\Users\Ada").join(".raea/env"));
+        unsafe { std::env::remove_var("USERPROFILE") };
+        assert_eq!(super::user_home(), None);
+        unsafe {
+            std::env::set_var("HOME", "/h");
+            if let Some(w) = was {
+                std::env::set_var("USERPROFILE", w);
+            }
+        }
     }
 }
 
@@ -209,7 +238,7 @@ pub fn offline(what: &str) -> Result<(), String> {
     let set = match std::env::var("RAEA_OFFLINE") {
         Ok(v) => on(&v),
         Err(_) => {
-            let file = std::env::var_os("RAEA_ENV_FILE").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".raea/env")));
+            let file = std::env::var_os("RAEA_ENV_FILE").map(std::path::PathBuf::from).or_else(|| user_home().map(|h| h.join(".raea/env")));
             file.and_then(|f| std::fs::read_to_string(f).ok()).is_some_and(|s| {
                 s.lines().filter(|l| !l.trim_start().starts_with('#')).filter_map(|l| l.split_once('=')).any(|(k, v)| k.trim() == "RAEA_OFFLINE" && on(v.trim().trim_matches('"')))
             })

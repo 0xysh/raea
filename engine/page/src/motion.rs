@@ -217,7 +217,7 @@ impl BlitzPage {
         let at = Page { size: UVec2::new(self.w, self.h), scale: 1.0 };
         let mut config = raea_sys_page::config(at);
         config.net_provider = Some(Arc::new(raea_sys_page::net::FileNet { roots: root.map(Path::to_path_buf).into_iter().collect() }));
-        let abs = std::fs::canonicalize(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let abs = dunce::canonicalize(path).map_err(|e| format!("{}: {e}", path.display()))?;
         config.base_url = Some(url::Url::from_file_path(&abs).map_err(|_| format!("{}: not a file URL", abs.display()))?.to_string());
         config.font_ctx = self.fonts.clone();
         // a byte order mark is the decoder's, never the document's (it also hid `<?xml` from Blitz's sniffing); the

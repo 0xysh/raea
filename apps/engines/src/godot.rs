@@ -197,7 +197,7 @@ pub fn setup(args: &[String]) -> R<String> {
 /// The project folder: DIR, else the current folder; it needs its project.godot.
 fn project(arg: Option<&String>) -> R<PathBuf> {
     let dir = arg.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    let dir = dir.canonicalize().map_err(|e| format!("{}: {e}", dir.display()))?;
+    let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     if !dir.join("project.godot").is_file() {
         return Err(format!("{} has no project.godot", dir.display()));
     }

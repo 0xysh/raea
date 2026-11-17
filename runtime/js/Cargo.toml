@@ -19,6 +19,7 @@ media = ["dep:raea-io-media", "dep:cpal"]
 [dependencies]
 # images
 bevy = { version = "=0.20.0", default-features = false, features = ["std", "default_app", "bevy_render", "bevy_image"] }
+dunce = "1"
 # the op wire to and from a page's script
 raea-core-wire = { path = "../../core/wire" }
 raea-io-net = { path = "../../io/net", features = ["ws"] }

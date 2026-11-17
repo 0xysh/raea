@@ -7,6 +7,7 @@ publish = false
 description = "Generation flows: made.app's models at provider cost, ComfyUI workflows read and written, and the runner that routes each step to made, fal, Replicate, OpenRouter, Modal, a ComfyUI server or a local model"
 
 [dependencies]
+dunce = "1"
 raea-io-gen-comfy = { path = "../gen-comfy" }
 raea-io-gen-core = { path = "../gen-core" }
 raea-io-home = { path = "../home" }

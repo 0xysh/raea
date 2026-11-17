@@ -219,7 +219,7 @@ pub(crate) fn text_model(model: &Path, tokenizer: &Path, what: &str) -> Result<(
 pub fn under(var: &str, rel: &str) -> PathBuf {
     match std::env::var_os(var) {
         Some(p) => p.into(),
-        None => Path::new(&std::env::var_os("HOME").unwrap_or_default()).join(rel),
+        None => raea_io_home::user_home().unwrap_or_default().join(rel),
     }
 }
 

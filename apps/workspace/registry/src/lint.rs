@@ -56,7 +56,7 @@ impl Lint {
 
 /// A path with the home folder as ~, as a person reads it.
 fn tilde(p: &Path) -> String {
-    match std::env::var_os("HOME").map(PathBuf::from) {
+    match raea_io_home::user_home() {
         Some(h) if p.starts_with(&h) => format!("~/{}", p.strip_prefix(&h).unwrap_or(p).display()),
         _ => p.display().to_string(),
     }

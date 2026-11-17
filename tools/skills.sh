@@ -196,7 +196,8 @@ gen_files() {
         my ($f, $text) = /^([^:]+):\d+:(.*)$/ or next;
         while ($text =~ m{(?<![\w.-]/)(?<![\w-])\.raea(?:/|", ")([A-Za-z][A-Za-z0-9_.-]*(?:/[A-Za-z][A-Za-z0-9_.-]*)?)}g) {
           my $p = $1; $p =~ s/\.$//; next if $p =~ /^(workspace|project)\b/;
-          my $env = $text =~ /(?:process\.env\.(RAEA_\w+)\s*\?\?|env::var(?:_os)?\("(RAEA_\w+)"\))/ ? ($1 // $2) : "";
+          # the variable that moves it: process.env.X ??, env::var("X"), or raea_io_home::env_path("X", ".raea/...")
+          my $env = $text =~ /(?:process\.env\.(RAEA_\w+)\s*\?\?|env::var(?:_os)?\("(RAEA_\w+)"\)|env_path\("(RAEA_\w+)",)/ ? ($1 // $2 // $3) : "";
           $env{$p} ||= $env; $files{$p}{$f} = 1;
         }
         END { for my $p (sort keys %files) { printf "| `~/.raea/%s` | %s | %s |\n", $p, $env{$p} ? "`$env{$p}`" : "", join(", ", sort keys %{$files{$p}}) } }'

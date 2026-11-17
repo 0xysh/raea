@@ -126,7 +126,7 @@ fn lexical(p: &Path) -> PathBuf {
 impl Loader {
     /// `root` is the space folder; `prebuilt` the libraries the prebuilt bundle serves.
     pub fn new(root: &Path, prebuilt: Vec<Prebuilt>) -> Result<Loader, Refusal> {
-        let root = root.canonicalize().map_err(|e| Refusal::new(RefusalKind::Space, format!("the space {} can't be opened: {e}", root.display()), None, None))?;
+        let root = dunce::canonicalize(&root).map_err(|e| Refusal::new(RefusalKind::Space, format!("the space {} can't be opened: {e}", root.display()), None, None))?;
         Ok(Loader { root, prebuilt: prebuilt.into_iter().map(|p| (p.specifier.clone(), p)).collect(), cache: HashMap::new(), transpiled: 0 })
     }
 
@@ -147,7 +147,7 @@ impl Loader {
         // the importing file's folder by its real path (macOS's /var is /private/var; spaces link folders in), and the
         // import joined to it without following links, so a linked media/ inside the space stays inside it
         let base = if referrer.starts_with("raea:") { self.root.clone() } else { Path::new(from).parent().map(Path::to_path_buf).unwrap_or_else(|| self.root.clone()) };
-        let base = base.canonicalize().unwrap_or(base);
+        let base = dunce::canonicalize(&base).unwrap_or(base);
         let raw = specifier.strip_prefix("file://").unwrap_or(specifier);
         let want = lexical(&if raw.starts_with('/') { PathBuf::from(raw) } else { base.join(raw) });
         // inside the space, or inside its workspace's shared/ (a file there imports its neighbours relatively)

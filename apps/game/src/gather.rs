@@ -85,7 +85,7 @@ pub(crate) fn gather(bundle: &mut String, dir: &Path, game: &Path, got: &mut Gat
             }
         }
     }
-    let inside = |p: &Path| -> Option<String> { p.canonicalize().ok().and_then(|c| c.strip_prefix(dir.canonicalize().ok()?).ok().map(|r| r.to_string_lossy().to_string())) };
+    let inside = |p: &Path| -> Option<String> { dunce::canonicalize(&p).ok().and_then(|c| c.strip_prefix(dunce::canonicalize(&dir).ok()?).ok().map(|r| r.to_string_lossy().to_string())) };
     let mut rewrites: Vec<(String, String)> = Vec::new();
     for s in &lits {
         if s.contains("://") || s.starts_with("data:") || s.len() < 2 || s.contains('\u{0}') {
@@ -134,7 +134,7 @@ pub(crate) fn gather(bundle: &mut String, dir: &Path, game: &Path, got: &mut Gat
                 }
             }
             None => {
-                let canon = file.canonicalize().unwrap_or(file.clone());
+                let canon = dunce::canonicalize(&file).unwrap_or(file.clone());
                 let h = twox_hash::XxHash3_64::oneshot(canon.to_string_lossy().as_bytes());
                 let rel = format!("media/_ext/{:08x}-{}", h as u32, file.file_name().unwrap().to_string_lossy());
                 put(&file, &rel, game, got)?;

@@ -13745,6 +13745,7 @@ checksum = "019b4b213425016d7d84a153c4c73afb0946fbb4840e4eece7ba8848b9d6da22"
 name = "raea-app-capcut"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "image",
  "raea-core-scene",
  "raea-io-alpha",
@@ -13759,11 +13760,13 @@ dependencies = [
 name = "raea-app-check"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-app-check-flash",
  "raea-app-check-inbox",
  "raea-core-brief",
  "raea-core-facts",
  "raea-io-ffmpeg",
+ "raea-io-home",
  "raea-io-trace",
  "raea-sys-measure",
  "serde_json",
@@ -13794,11 +13797,13 @@ dependencies = [
 name = "raea-app-direction"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-app-check",
  "raea-app-notes",
  "raea-app-registry",
  "raea-core-brief",
  "raea-core-facts",
+ "raea-io-home",
  "raea-io-trace",
  "raea-runtime-bundle",
  "raea-runtime-react",
@@ -13826,8 +13831,10 @@ name = "raea-app-fingerprint"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dunce",
  "fastrand",
  "raea-app-check",
+ "raea-io-home",
  "raea-sys-columns",
  "raea-sys-fingerprint",
  "raea-sys-fingerprint-things",
@@ -13841,6 +13848,7 @@ name = "raea-app-game"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "dunce",
  "raea-gpu-device",
  "raea-io-home",
  "raea-io-media",
@@ -13859,6 +13867,7 @@ dependencies = [
 name = "raea-app-interchange"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-core-scene",
  "raea-core-shape",
  "raea-runtime-bundle",
@@ -13872,6 +13881,7 @@ name = "raea-app-judge"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "dunce",
  "image",
  "raea-core-facts",
  "raea-io-home",
@@ -13899,6 +13909,7 @@ name = "raea-app-notes"
 version = "0.1.0"
 dependencies = [
  "raea-core-facts",
+ "raea-io-home",
  "raea-io-trace",
  "serde",
  "serde_json",
@@ -13930,6 +13941,7 @@ dependencies = [
  "dunce",
  "oxc",
  "raea-core-facts",
+ "raea-io-home",
  "serde_json",
 ]
 
@@ -13937,6 +13949,7 @@ dependencies = [
 name = "raea-app-solid"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-app-judge",
  "raea-core-facts",
  "raea-core-meshcheck",
@@ -13950,6 +13963,7 @@ dependencies = [
 name = "raea-app-sound"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-io-media",
  "raea-runtime-bundle",
  "raea-runtime-export",
@@ -13961,6 +13975,7 @@ name = "raea-app-targets"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "dunce",
  "raea-io-home",
  "raea-runtime-bundle",
  "serde_json",
@@ -13970,6 +13985,7 @@ dependencies = [
 name = "raea-app-tools"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-io-assets",
  "raea-io-gen",
  "raea-io-home",
@@ -13989,6 +14005,7 @@ dependencies = [
  "raea-app-registry",
  "raea-core-brief",
  "raea-core-facts",
+ "raea-io-home",
  "serde_json",
 ]
 
@@ -14060,6 +14077,7 @@ dependencies = [
  "chacha20 0.10.2",
  "indexmap",
  "nonmax",
+ "raea-io-home",
  "raea-sys-parity",
  "rand 0.10.3",
 ]
@@ -14143,6 +14161,7 @@ name = "raea-bridge-bench"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "dunce",
  "image",
  "raea-core-alloc",
  "raea-core-wire",
@@ -14167,6 +14186,7 @@ name = "raea-bundle"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dunce",
  "lightningcss",
  "oxc",
  "raea-io-home",
@@ -14202,6 +14222,7 @@ name = "raea-cli"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "dunce",
  "raea-app-capcut",
  "raea-app-check",
  "raea-app-ci",
@@ -14460,6 +14481,7 @@ dependencies = [
 name = "raea-io-assets"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "image",
  "raea-io-home",
  "ruzstd",
@@ -14482,6 +14504,7 @@ dependencies = [
 name = "raea-io-capcut"
 version = "0.1.0"
 dependencies = [
+ "raea-io-home",
  "serde_json",
 ]
 
@@ -14510,6 +14533,7 @@ dependencies = [
 name = "raea-io-gen"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "image",
  "raea-io-gen-comfy",
  "raea-io-gen-core",
@@ -14549,6 +14573,7 @@ dependencies = [
 name = "raea-io-home"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "serde_json",
  "url",
 ]
@@ -14626,6 +14651,7 @@ dependencies = [
 name = "raea-io-shell"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "flate2",
  "htmd",
  "raea-core-calls",
@@ -14666,6 +14692,7 @@ name = "raea-modules"
 version = "0.1.0"
 dependencies = [
  "deno_ast",
+ "dunce",
 ]
 
 [[package]]
@@ -14673,10 +14700,12 @@ name = "raea-native"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "dunce",
  "flate2",
  "getrandom 0.3.4",
  "libc",
  "raea-core-calls",
+ "raea-io-home",
  "raea-io-shell",
  "raea-modules",
  "raea-runtime-jsengine",
@@ -14701,6 +14730,7 @@ dependencies = [
  "bevy",
  "blitz-dom",
  "blitz-html",
+ "dunce",
  "image",
  "parley",
  "raea-core-wire",
@@ -15046,6 +15076,7 @@ dependencies = [
 name = "raea-runtime-bundle-lib"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "libloading",
  "raea-io-home",
  "serde_json",
@@ -15234,6 +15265,7 @@ dependencies = [
  "base64 0.22.1",
  "bevy",
  "cpal 0.15.3",
+ "dunce",
  "raea-bevy-world",
  "raea-core-wire",
  "raea-io-home",
@@ -15252,6 +15284,7 @@ name = "raea-runtime-jsengine"
 version = "0.1.0"
 dependencies = [
  "objc2 0.6.5",
+ "raea-io-home",
  "rquickjs",
 ]
 
@@ -15466,6 +15499,7 @@ dependencies = [
 name = "raea-runtime-track"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "raea-io-assets",
  "raea-native",
  "raea-runtime-bundle",
@@ -15519,6 +15553,7 @@ name = "raea-runtime-world"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "dunce",
  "image",
  "raea-core-facts",
  "raea-core-scene",
@@ -15583,6 +15618,7 @@ name = "raea-sys-bake"
 version = "0.1.0"
 dependencies = [
  "image",
+ "raea-io-home",
  "rapier3d",
  "serde_json",
  "sha2 0.10.9",
@@ -15621,6 +15657,7 @@ dependencies = [
  "half",
  "image",
  "ort",
+ "raea-io-home",
  "raea-io-media",
  "raea-sys-ml",
  "rustfft",
@@ -15694,6 +15731,7 @@ name = "raea-sys-fingerprint"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "raea-io-home",
  "raea-sys-columns",
  "serde",
  "serde_json",
@@ -15717,6 +15755,7 @@ name = "raea-sys-fingerprint-use"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dunce",
  "fastrand",
  "image",
  "raea-sys-columns",
@@ -15769,7 +15808,9 @@ dependencies = [
 name = "raea-sys-footage"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "image",
+ "raea-io-home",
  "raea-io-media",
  "raea-sys-layout",
  "raea-sys-song",
@@ -15854,6 +15895,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
+ "dunce",
  "half",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -15896,6 +15938,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "mlx-rs",
+ "raea-io-home",
  "raea-sys-ml",
  "raea-sys-mlx",
  "serde_json",
@@ -16014,6 +16057,7 @@ name = "raea-sys-ml"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dunce",
  "half",
  "ort",
  "raea-io-home",
@@ -16060,6 +16104,7 @@ dependencies = [
  "bevy",
  "blitz-dom",
  "blitz-traits",
+ "dunce",
  "percent-encoding",
  "raea-io-net",
  "raea-sys-image",
@@ -16210,6 +16255,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ort",
+ "raea-io-home",
  "raea-sys-ml",
  "serde_json",
  "tokenizers",
@@ -16302,6 +16348,7 @@ dependencies = [
  "objc2-core-video",
  "objc2-foundation 0.3.2",
  "objc2-vision",
+ "raea-io-home",
  "raea-io-media",
  "raea-sys-layout",
  "serde",

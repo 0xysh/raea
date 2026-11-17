@@ -102,7 +102,7 @@ pub fn verb(args: &[String]) -> Option<Result<String, String>> {
 
 pub fn cli(args: &[String]) -> Result<String, String> {
     let (Some(verb @ ("info" | "view" | "export")), Some(file)) = (args.get(1).map(String::as_str), args.get(2)) else { return Err(USAGE.into()) };
-    let file = PathBuf::from(file).canonicalize().map_err(|e| format!("{file}: {e}"))?;
+    let file = dunce::canonicalize(&PathBuf::from(file)).map_err(|e| format!("{file}: {e}"))?;
     let json_out = args.iter().any(|a| a == "--json");
     let set = flag(args, "--set").map(|s| parse_set(&s)).transpose()?.unwrap_or_default();
     let expect_path = flag(args, "--expect").map(PathBuf::from).or_else(|| {

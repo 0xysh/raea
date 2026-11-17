@@ -154,7 +154,7 @@ pub fn hook(args: &[String]) -> R<String> {
     }
     let after_tool = matches!(event, "PostToolUse" | "AfterTool");
     if let Some(cmd) = shell_command(&v).filter(|_| !after_tool) {
-        let home = std::env::var("HOME").unwrap_or_default();
+        let home = raea_io_home::user_home().unwrap_or_default().display().to_string();
         let files = opened_media(cmd);
         let key = format!("{}\n{}\n{cmd}", v["session_id"].as_str().unwrap_or(""), v["cwd"].as_str().unwrap_or(""));
         if !files.is_empty() && app_installed(&home) && !tried_before(&PathBuf::from(&home).join(".raea/hooks/again"), &key) {

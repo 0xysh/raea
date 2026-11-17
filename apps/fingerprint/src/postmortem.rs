@@ -10,7 +10,7 @@ use raea_sys_fingerprint::evidence::{Row, features};
 use raea_sys_fingerprint::retrain;
 use raea_sys_fingerprint_use::postmortem::{self as pm, MOST};
 use raea_sys_fingerprint_use::score::{Scored, score};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub(crate) fn run(enc: &mut Encoders, args: &[String], cwd: &Path, eval: Eval) -> Result<(String, i32)> {
     let project = crate::pick::piece_in(args, cwd).parent().map(Path::to_path_buf).unwrap_or_else(|| cwd.to_path_buf());
@@ -18,7 +18,7 @@ pub(crate) fn run(enc: &mut Encoders, args: &[String], cwd: &Path, eval: Eval) -
     let (dir, fp, w) = crate::verbs::open(enc, args, eval, Some(&crate::pick::piece_in(args, cwd)))?;
     let before = dir.trained()?.map(|t| t.0).ok_or_else(|| anyhow!("{} has no trained heads yet: `raea fingerprint bootstrap` or teach it first", fp.name))?;
     if has(args, "--tally") {
-        let inbox = std::fs::read_to_string(PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(format!(".raea/inbox/{}.jsonl", pm::INBOX))).unwrap_or_default();
+        let inbox = std::fs::read_to_string(raea_io_home::user_home().unwrap_or_default().join(format!(".raea/inbox/{}.jsonl", pm::INBOX))).unwrap_or_default();
         let answers = pm::answered(&dir.dir, &inbox);
         let mut l = dir.ledger()?;
         // every tally adds every answer again, so tallying twice is safe

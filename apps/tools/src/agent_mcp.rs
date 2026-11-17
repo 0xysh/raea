@@ -14,7 +14,7 @@ type R<T> = Result<T, String>;
 
 /// The person's home folder (HOME, or USERPROFILE on Windows).
 pub fn user_home() -> R<PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).ok_or_else(|| "no home folder (HOME)".into())
+    raea_io_home::user_home().ok_or_else(|| "no home folder (HOME)".into())
 }
 
 /// The JSON file holding `mcpServers` for agents configured that way (Kimi Code, Gemini CLI, Claude Code's own file).

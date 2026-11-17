@@ -108,8 +108,8 @@ pub struct FrameNet {
 impl FrameNet {
     /// `path`, or its root-absolute form under a root, if it resolves inside that root
     pub fn confined(&self, path: &std::path::Path) -> Option<std::path::PathBuf> {
-        self.roots.iter().filter_map(|r| r.canonicalize().ok()).find_map(|root| {
-            let at = |p: std::path::PathBuf| p.canonicalize().ok().filter(|c| c.starts_with(&root));
+        self.roots.iter().filter_map(|r| dunce::canonicalize(&r).ok()).find_map(|root| {
+            let at = |p: std::path::PathBuf| dunce::canonicalize(&p).ok().filter(|c| c.starts_with(&root));
             at(path.to_path_buf()).or_else(|| at(root.join(root_relative(path)?)))
         })
     }

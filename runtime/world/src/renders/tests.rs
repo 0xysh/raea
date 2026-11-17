@@ -9,7 +9,7 @@ fn project(name: &str) -> (PathBuf, PathBuf) {
     std::fs::write(dir.join(".raea/project"), "").unwrap();
     let tsx = dir.join("piece.tsx");
     std::fs::write(&tsx, "export default 1").unwrap();
-    let dir = dir.canonicalize().unwrap();
+    let dir = dunce::canonicalize(&dir).unwrap();
     (dir.clone(), dir.join("piece.tsx"))
 }
 

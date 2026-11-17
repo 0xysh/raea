@@ -77,7 +77,7 @@ fn a_static_file_is_found_in_the_edits_media_folder() {
     let dir = std::env::temp_dir().join(format!("raea-capcut-resolve-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("media")).unwrap();
     std::fs::write(dir.join("media/a.mp4"), "").unwrap();
-    let want = dir.join("media/a.mp4").canonicalize().unwrap();
+    let want = dunce::canonicalize(&dir.join("media/a.mp4")).unwrap();
     assert_eq!(resolve(&dir, "/media/a.mp4"), want);
     assert_eq!(resolve(&dir, "media/a.mp4"), want);
     assert_eq!(resolve(&dir, want.to_str().unwrap()), want);

@@ -111,7 +111,7 @@ fn notes_run(project: &Path, rules: &[raea_app_notes::check::Rule], args: &[Stri
 /// worlds, print). The script's default export, if a function, is called; what it prints goes to stdout; a throw
 /// ends the run with exit 1.
 pub fn run_script(args: &[String]) -> R<i32> {
-    let ts = PathBuf::from(&args[1]).canonicalize().map_err(|e| format!("{}: {e}", args[1]))?;
+    let ts = dunce::canonicalize(&PathBuf::from(&args[1])).map_err(|e| format!("{}: {e}", args[1]))?;
     let out = std::env::temp_dir().join(format!("raea-cli-{}.js", std::process::id()));
     bundle_script(&ts, &out)?;
     let secs: f64 = flag(args, "--timeout").and_then(|t| t.parse().ok()).unwrap_or(120.0);
@@ -277,7 +277,7 @@ pub fn run(args: &[String]) -> R<String> {
         .to_string());
     }
     if args.first().map(String::as_str) == Some("bundle") && args.len() >= 2 {
-        let ts = PathBuf::from(&args[1]).canonicalize().map_err(|e| format!("{}: {e}", args[1]))?;
+        let ts = dunce::canonicalize(&PathBuf::from(&args[1])).map_err(|e| format!("{}: {e}", args[1]))?;
         let out = PathBuf::from(flag(args, "-o").ok_or("raea bundle SCRIPT.ts -o OUT.js")?);
         if args.iter().any(|a| a == "--composition-bundle") {
             let portable = flag(args, "--portable").map(PathBuf::from);
@@ -319,7 +319,7 @@ pub fn run(args: &[String]) -> R<String> {
                 i += 2;
                 continue;
             }
-            files.push(PathBuf::from(&args[i]).canonicalize().map_err(|e| format!("{}: {e}", args[i]))?);
+            files.push(dunce::canonicalize(&PathBuf::from(&args[i])).map_err(|e| format!("{}: {e}", args[i]))?);
             i += 1;
         }
         let extra: Vec<&str> = owned.iter().map(String::as_str).collect();
@@ -331,7 +331,7 @@ pub fn run(args: &[String]) -> R<String> {
         }
         // the repo root for fixtures (tests read RAEA_ROOT through host.env)
         if std::env::var_os("RAEA_ROOT").is_none() {
-            unsafe { std::env::set_var("RAEA_ROOT", raea_io_home::home().canonicalize().unwrap_or_default()) };
+            unsafe { std::env::set_var("RAEA_ROOT", dunce::canonicalize(&raea_io_home::home()).unwrap_or_default()) };
         }
         let out = std::env::temp_dir().join(format!("raea-cli-t{}.js", std::process::id()));
         bundle_tests(&files, &out, flag(args, "--filter").as_deref(), &extra)?;

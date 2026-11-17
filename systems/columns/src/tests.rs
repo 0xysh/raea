@@ -6,7 +6,7 @@ use super::*;
 use std::path::PathBuf;
 
 fn spike() -> PathBuf {
-    std::env::var_os("FP_SPIKE").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap()).join("films/fingerprint-spike"))
+    std::env::var_os("FP_SPIKE").map(PathBuf::from).unwrap_or_else(|| raea_io_home::user_home().unwrap().join("films/fingerprint-spike"))
 }
 
 fn cos(a: &[f32], b: &[f32]) -> f32 {

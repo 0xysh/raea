@@ -64,7 +64,7 @@ fn render(args: &[String], env: &[(&str, &str)]) -> R<()> {
 
 fn export(args: &[String]) -> R<String> {
     let tsx = args.first().filter(|a| !a.starts_with('-')).ok_or(USAGE)?;
-    let tsx = PathBuf::from(tsx).canonicalize().map_err(|e| format!("{tsx}: {e}"))?;
+    let tsx = dunce::canonicalize(&PathBuf::from(tsx)).map_err(|e| format!("{tsx}: {e}"))?;
     let dir = tsx.parent().unwrap().to_path_buf();
     let codec = flag(args, "--alpha-codec").map_or(Ok(raea_io_alpha::Codec::default_here()), |c| raea_io_alpha::Codec::parse(&c))?;
     let (root, in_store) = match flag(args, "-o") {

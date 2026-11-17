@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn the_host_runs_as_the_launchers_child() {
         // canonical, so the launcher's own `pwd` names Resources as this test does (macOS's temp folder is a link)
-        let dir = std::env::temp_dir().canonicalize().unwrap().join(format!("raea-macapp-launcher-{}", std::process::id()));
+        let dir = dunce::canonicalize(&std::env::temp_dir()).unwrap().join(format!("raea-macapp-launcher-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let (macos, res) = (dir.join("T.app/Contents/MacOS"), dir.join("T.app/Contents/Resources"));
         std::fs::create_dir_all(&macos).unwrap();

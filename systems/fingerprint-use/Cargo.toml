@@ -7,6 +7,7 @@ publish = false
 description = "Using a fingerprint (docs/fingerprint.feature FP3, FP6e, FP8b, FP12a, FP14c): a piece scored per moment and drawn as a sheet, patch heads that say where, which fingerprint judges a piece, where two differ, and profiles of admired work"
 
 [dependencies]
+dunce = "1"
 # the fingerprint: its taxonomy, folder, evidence, heads and words
 raea-sys-fingerprint = { path = "../fingerprint" }
 # a piece's columns, and the frames and sound the sheet draws

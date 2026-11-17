@@ -187,7 +187,7 @@ pub(crate) fn sounds_get(args: &[String]) -> R<String> {
     let base = PathBuf::from(flag(args, "--dir").unwrap_or_else(|| ".".into()));
     let out = flag(args, "-o").map(PathBuf::from).unwrap_or_else(|| base.join("media/sounds").join(format!("{pid}-{iid}")));
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let cache = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".cache/raea-sounds").join(pid).join(iid);
+    let cache = raea_io_home::user_home().unwrap_or_default().join(".cache/raea-sounds").join(pid).join(iid);
     let template = pack["url"].as_str().unwrap_or_default();
     let mut bytes = 0u64;
     for (file, name, _) in &chosen {

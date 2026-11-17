@@ -47,7 +47,7 @@ pub(crate) fn spec(p: &Path) -> String {
 }
 
 pub fn run(args: &[String]) -> R<String> {
-    let ts = PathBuf::from(&args[2]).canonicalize().map_err(|e| format!("{}: {e}", args[2]))?;
+    let ts = dunce::canonicalize(&PathBuf::from(&args[2])).map_err(|e| format!("{}: {e}", args[2]))?;
     let file = args.get(3).filter(|a| a.ends_with(".blend")).map(PathBuf::from);
     // ARGS for Blender's sys.argv, without raea's own --timeout SECS
     let mut rest = args[if file.is_some() { 4 } else { 3 }..].to_vec();

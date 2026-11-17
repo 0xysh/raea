@@ -8,6 +8,7 @@ description = "Index's fast pass (docs/index.feature IX1-IX3): every picture, an
 
 [dependencies]
 anyhow = "1"
+dunce = "1"
 half = "2"
 rayon = "1"
 rusqlite = { version = "0.37", features = ["bundled"] }

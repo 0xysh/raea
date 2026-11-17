@@ -7,6 +7,7 @@ publish = false
 description = "HTML, CSS and React pages in Bevy (docs/blitz-bevy.feature): Blitz works out what a page looks like, Vello paints it on Bevy's own GPU device into a Bevy Image"
 
 [dependencies]
+dunce = "1"
 # the layers under it
 raea-sys-page = { path = "../../systems/page" }
 raea-sys-fonts = { path = "../../systems/fonts" }

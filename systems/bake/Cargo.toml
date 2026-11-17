@@ -7,6 +7,7 @@ publish = false
 description = "Rigid bodies, glTF parts and goo baked once per request into a composition's asset store"
 
 [dependencies]
+raea-io-home = { path = "../../io/home" }
 serde_json = "1"
 sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["png"] }

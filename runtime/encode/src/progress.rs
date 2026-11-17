@@ -31,7 +31,7 @@ fn dir() -> Option<PathBuf> {
         return None;
     }
     // unset: ~/.raea/renders, the home being USERPROFILE on Windows, which has no HOME
-    match (named, std::env::var_os("HOME").or(std::env::var_os("USERPROFILE"))) {
+    match (named, raea_io_home::user_home()) {
         (Some(d), _) => Some(PathBuf::from(d)),
         (None, Some(home)) => Some(Path::new(&home).join(".raea/renders")),
         (None, None) => None,

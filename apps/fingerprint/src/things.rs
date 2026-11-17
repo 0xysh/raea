@@ -12,10 +12,10 @@ use std::path::{Path, PathBuf};
 pub(crate) fn run(enc: &mut Encoders, args: &[String], cwd: &Path) -> Result<(String, i32)> {
     let file = cwd.join(args.first().filter(|a| !a.starts_with("--")).ok_or_else(|| anyhow::anyhow!("things FILE"))?);
     let project = flag(args, "--project").map_or_else(|| cwd.to_path_buf(), |p| cwd.join(p));
-    let me = file.canonicalize().ok();
+    let me = dunce::canonicalize(&file).ok();
     let marks: Vec<Mark> = crate::notes::pinned(&project)
         .into_iter()
-        .filter(|r| r.media.canonicalize().ok() == me)
+        .filter(|r| dunce::canonicalize(&r.media).ok() == me)
         .filter_map(|r| Some(Mark { name: r.text.chars().take(40).collect(), t: r.t, a: (r.t - 1.0).max(0.0), b: r.to.unwrap_or(r.t + 1.0), region: r.region? }))
         .collect();
     let t = things(enc, &file, &marks)?;

@@ -70,7 +70,7 @@ fn answer(store: &raea_io_assets::Store, a: &raea_io_assets::Asset) -> R<Value> 
 /// `raea track CLIP ...`: the clip's camera solved once and kept; what it found.
 pub fn track(args: &[String]) -> R<String> {
     let (clip, params) = parse(args)?;
-    let clip = clip.canonicalize().map_err(|e| format!("{}: {e}", clip.display()))?;
+    let clip = dunce::canonicalize(&clip).map_err(|e| format!("{}: {e}", clip.display()))?;
     let dir = PathBuf::from(flag(args, "--dir").unwrap_or_else(|| ".".into()));
     let store = raea_io_assets::Store::beside(&dir.join("edit.tsx"));
     let t0 = std::time::Instant::now();
