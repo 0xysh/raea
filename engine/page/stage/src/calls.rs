@@ -35,7 +35,7 @@ pub(super) fn calls(mut calls: ResMut<HostCalls>) {
                 return answer.err("the stage needs the shared device (RAEA_SHARED_DEVICE=0 turned it off)");
             }
             // a feed item names its game as the app's host does (host/make.ts resolve): ~/ is the home
-            let src = a.get("src").and_then(Value::as_str).map(|s| match (s.strip_prefix("~/"), std::env::var_os("HOME")) {
+            let src = a.get("src").and_then(Value::as_str).map(|s| match (s.strip_prefix("~/"), raea_io_home::user_home()) {
                 (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
                 _ => PathBuf::from(s),
             });

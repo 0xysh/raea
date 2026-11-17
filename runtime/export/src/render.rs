@@ -28,7 +28,7 @@ pub fn render(args: &[String]) -> R<String> {
     if args.iter().any(|a| a == "--clay") {
         raea_runtime_scene3d::clay::CLAY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-    let tsx = PathBuf::from(&args[1]).canonicalize().map_err(|e| format!("{}: {e}", args[1]))?;
+    let tsx = dunce::canonicalize(&PathBuf::from(&args[1])).map_err(|e| format!("{}: {e}", args[1]))?;
     let out = PathBuf::from(flag(args, "-o").ok_or("-o OUT.mp4|OUT.png|DIR")?);
     let dir = tsx.parent().unwrap().to_path_buf();
     let js = std::env::temp_dir().join(format!("raea-cli-{}.js", std::process::id()));
@@ -121,7 +121,7 @@ pub fn render(args: &[String]) -> R<String> {
                 if let Some(d) = c.parent() {
                     prune_cache(d, "mp4", 16);
                     // this export is an output: later keys leave it out of the edit's folder
-                    if let Ok(abs) = std::fs::canonicalize(&out) {
+                    if let Ok(abs) = dunce::canonicalize(&out) {
                         use std::io::Write as _;
                         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(d.join("outputs.list")) {
                             let _ = writeln!(f, "{}", abs.display());

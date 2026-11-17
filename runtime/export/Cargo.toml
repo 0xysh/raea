@@ -7,6 +7,7 @@ publish = false
 description = "A composition rendered to frames and files: React stepped frame by frame, its pages, 3D and sound made into one raea-render program; and its commits baked by frame"
 
 [dependencies]
+dunce = "1"
 raea-runtime-view = { path = "../view" }
 raea-io-assets = { path = "../../io/assets" }
 raea-runtime-react = { path = "../../runtime/react", default-features = false }

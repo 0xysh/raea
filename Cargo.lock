@@ -14803,6 +14803,7 @@ dependencies = [
  "bevy",
  "blitz-dom",
  "raea-gpu-device",
+ "raea-io-home",
  "raea-runtime-bake",
  "raea-runtime-dom",
  "raea-runtime-js",
@@ -15196,6 +15197,7 @@ name = "raea-runtime-export"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "dunce",
  "image",
  "raea-core-facts",
  "raea-core-program",
@@ -15294,6 +15296,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "cpal 0.15.3",
+ "dunce",
  "image",
  "raea-core-program",
  "raea-gpu-device",

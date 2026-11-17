@@ -17,7 +17,7 @@ impl Live {
         // the thread that steps and presents live frames, at the frame threads' QoS (as the JS thread)
         raea_runtime_react::interactive_thread();
         raea_io_trace::event("open", serde_json::json!({"composition": tsx, "stage": [stage.0, stage.1]}));
-        let tsx = tsx.canonicalize().map_err(|e| format!("{}: {e}", tsx.display()))?;
+        let tsx = dunce::canonicalize(&tsx).map_err(|e| format!("{}: {e}", tsx.display()))?;
         let dir = tsx.parent().unwrap().to_path_buf();
         let js = std::env::temp_dir().join(format!("raea-live-{}-{:x}.js", std::process::id(), rand_id()));
         // the project's words and perception, as a render passes them (captions, regions)
@@ -46,7 +46,7 @@ impl Live {
         raea_runtime_react::interactive_thread();
         let tmp = std::env::temp_dir().join(format!("raea-live-{}-{:x}.js", std::process::id(), rand_id()));
         std::fs::copy(js, &tmp).map_err(|e| format!("{}: {e}", js.display()))?;
-        Self::from_bundle(tmp, dir.canonicalize().map_err(|e| format!("{}: {e}", dir.display()))?, stage, responsive)
+        Self::from_bundle(tmp, dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?, stage, responsive)
     }
 
     /// The game's master as worked out ahead of time (an exported game carries it): no second React at run time.
@@ -88,7 +88,7 @@ impl Live {
     /// it, then the frames after). The page is the composition's own size.
     pub fn open_baked(tsx: &Path) -> R<Live> {
         warm_audio();
-        let tsx = tsx.canonicalize().map_err(|e| format!("{}: {e}", tsx.display()))?;
+        let tsx = dunce::canonicalize(&tsx).map_err(|e| format!("{}: {e}", tsx.display()))?;
         let dir = tsx.parent().unwrap().to_path_buf();
         *raea_runtime_react::native::ASSET_DIR.lock().unwrap() = Some(dir.clone());
         let js = std::env::temp_dir().join(format!("raea-live-{}-{:x}.js", std::process::id(), rand_id()));

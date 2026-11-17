@@ -68,7 +68,7 @@ pub fn rewrite_into(src: &str, from_dir: &Path, motion_src: &Path, to_motion: &s
             if !path.exists() {
                 return Err(format!("line {line}: {spec} doesn't exist (imported media resolves beside the edit)"));
             }
-            let path = path.canonicalize().map_err(|e| e.to_string())?;
+            let path = dunce::canonicalize(&path).map_err(|e| e.to_string())?;
             match portable {
                 Some(dir) => {
                     let name = path.file_name().unwrap().to_string_lossy().to_string();

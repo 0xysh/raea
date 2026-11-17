@@ -7,6 +7,7 @@ publish = false
 description = "A composition stepped live at the display's rate: its page, 3D and sound each frame, with the person's keys and pointer"
 
 [dependencies]
+dunce = "1"
 raea-runtime-react = { path = "../../runtime/react", default-features = false }
 raea-runtime-page = { path = "../page" }
 raea-runtime-sound = { path = "../sound", default-features = false }

@@ -10,7 +10,7 @@ use crate::scene::items;
 use raea_core_review::{TILE_W, VIEWS, boxes_of, cameras, ceiling, inside, parts_box, passed, whole};
 
 pub fn review(args: &[String], dir_out: &Path) -> R<String> {
-    let tsx = PathBuf::from(&args[1]).canonicalize().map_err(|e| format!("{}: {e}", args[1]))?;
+    let tsx = dunce::canonicalize(&PathBuf::from(&args[1])).map_err(|e| format!("{}: {e}", args[1]))?;
     let dir = tsx.parent().unwrap().to_path_buf();
     let frame = crate::scene::frame_of(args)?;
     std::fs::create_dir_all(dir_out).map_err(|e| format!("{}: {e}", dir_out.display()))?;

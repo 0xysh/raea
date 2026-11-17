@@ -102,7 +102,7 @@ pub fn bundle_fresh(tsx: &Path, out_js: &Path, o: &CompOpts, portable: Option<&P
     remove_work(&work);
     copy_dir(&dir, &work.join("src"), 0)?;
     drop_tsconfigs(&work.join("src"), 0);
-    let motion_src = raea_io_home::home().join("sdk/raea/src").canonicalize().map_err(|e| format!("raea/motion/src: {e}"))?;
+    let motion_src = dunce::canonicalize(&raea_io_home::home().join("sdk/raea/src")).map_err(|e| format!("raea/motion/src: {e}"))?;
     copy_dir(&motion_src, &work.join("motion"), 0)?;
     let sdks = sdks();
     for rel in sources(&work.join("motion"))? {

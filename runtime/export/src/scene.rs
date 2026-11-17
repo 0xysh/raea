@@ -41,7 +41,7 @@ pub fn cli(args: &[String]) -> Result<String, String> {
     if mode != "lint" && mode != "explain" {
         return Err(usage.into());
     }
-    let tsx = std::path::PathBuf::from(edit).canonicalize().map_err(|e| format!("{edit}: {e}"))?;
+    let tsx = dunce::canonicalize(&std::path::PathBuf::from(edit)).map_err(|e| format!("{edit}: {e}"))?;
     let dir = tsx.parent().unwrap().to_path_buf();
     let frame = frame_of(args)?;
     let js = std::env::temp_dir().join(format!("raea-scene-{}.js", std::process::id()));
@@ -91,7 +91,7 @@ fn frames_of(args: &[String], tsx: &std::path::Path, comp: &str) -> Result<(Vec<
 fn light(args: &[String]) -> Result<String, String> {
     let usage = "raea scene light EDIT.tsx [--composition ID[,ID...]] [--frame N|last] [--part NAME] [--json]";
     let Some(edit) = args.get(2) else { return Err(usage.into()) };
-    let tsx = std::path::PathBuf::from(edit).canonicalize().map_err(|e| format!("{edit}: {e}"))?;
+    let tsx = dunce::canonicalize(&std::path::PathBuf::from(edit)).map_err(|e| format!("{edit}: {e}"))?;
     let flag = |k: &str| flag(args, k);
     let comps: Vec<String> = flag("--composition").map(|c| c.split(',').map(str::to_string).collect()).unwrap_or_else(|| vec![String::new()]);
     let part = flag("--part");

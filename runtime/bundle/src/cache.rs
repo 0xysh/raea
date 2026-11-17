@@ -32,7 +32,7 @@ pub fn export_cache(tsx: &Path, js: &Path, out: &Path, args: &[String]) -> Optio
     eat(&bundle);
     eat(ext.as_bytes());
     // this build (its binary's modification time and size): another engine paints other bytes
-    if let Some(m) = std::env::current_exe().ok().and_then(|e| std::fs::canonicalize(e).ok()).and_then(|e| e.metadata().ok()) {
+    if let Some(m) = std::env::current_exe().ok().and_then(|e| dunce::canonicalize(e).ok()).and_then(|e| e.metadata().ok()) {
         let t = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()).unwrap_or(0);
         eat(&t.to_le_bytes());
         eat(&m.len().to_le_bytes());
@@ -48,7 +48,7 @@ pub fn export_cache(tsx: &Path, js: &Path, out: &Path, args: &[String]) -> Optio
             continue;
         }
         // a path by where it really is (/var and /private/var are one folder)
-        match std::fs::canonicalize(a) {
+        match dunce::canonicalize(a) {
             Ok(p) => eat(p.as_os_str().as_encoded_bytes()),
             Err(_) => eat(a.as_bytes()),
         }
@@ -79,7 +79,7 @@ pub fn export_cache(tsx: &Path, js: &Path, out: &Path, args: &[String]) -> Optio
             }
         }
     }
-    let out_abs = std::fs::canonicalize(out).unwrap_or_else(|_| out.to_path_buf());
+    let out_abs = dunce::canonicalize(out).unwrap_or_else(|_| out.to_path_buf());
     walk(tsx.parent()?, 0, &out_abs, &mut files);
     // exports this cache wrote (an earlier render's OUT.mp4 beside the edit) are outputs, not inputs, unless the
     // composition plays them: a cut laid from its shots' renders (anything/cut/intro.tsx over intro/renders/*.mp4)
@@ -92,14 +92,14 @@ pub fn export_cache(tsx: &Path, js: &Path, out: &Path, args: &[String]) -> Optio
     // (a file is one of them only if its name is one of theirs, or it is a link to one: only those are resolved)
     let names: std::collections::HashSet<&std::ffi::OsStr> = made.iter().filter_map(|m| m.file_name()).collect();
     let may_be_made = |p: &Path| p.file_name().is_some_and(|n| names.contains(n)) || p.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink());
-    files.retain(|p| !may_be_made(p) || !made.contains(&std::fs::canonicalize(p).unwrap_or_else(|_| p.clone())) || p.file_stem().is_some_and(|n| text.contains(&*n.to_string_lossy())));
+    files.retain(|p| !may_be_made(p) || !made.contains(&dunce::canonicalize(p).unwrap_or_else(|_| p.clone())) || p.file_stem().is_some_and(|n| text.contains(&*n.to_string_lossy())));
     // absolute media paths the bundle names (an import from outside the edit's folder becomes its path)
     for q in text.split('"').skip(1).step_by(2) {
         if q.starts_with('/') && q.len() < 4096 && Path::new(q).extension().and_then(|x| x.to_str()).is_some_and(|x| MEDIA_EXTS.contains(&x.to_ascii_lowercase().as_str())) {
             files.push(PathBuf::from(q));
         }
     }
-    files.push(std::env::current_exe().ok().and_then(|e| std::fs::canonicalize(e).ok())?);
+    files.push(std::env::current_exe().ok().and_then(|e| dunce::canonicalize(e).ok())?);
     files.sort();
     files.dedup();
     // the optimized copies there are, listed once: asking each media file for its own read its first and last MiB and
