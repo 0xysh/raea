@@ -5,9 +5,16 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
   use. right now we seem completely misaligned and need to centralize the strategy to get SOTA results"; then "what if
   we could build our own thing for raea that was a complete realism like system like unreal engine"; and, once FLOOR3
   measured Solari at 2.6 times raster's frame: "i want our own version our own raea realism renderer then that doesnt
-  use solari ... if solari is too slow then we need to look elsewhere".
+  use solari ... if solari is too slow then we need to look elsewhere". Then, on what to aim it at: "another strategy
+  we should ink into the plan is looking for realistic photos we want to model after and try to recreate them exactly
+  and reverse engineer realistic photos by configuring the rendering system, shaders, raytracing, ambient occlusion
+  etc"; "they should be full color high definition color photos. real photos that correctly test the realism and
+  especially for the berlin environment, snow/fall/summer looks equally not just winter".
 
-  This file is that renderer's one strategy, its owner's backlog and its bar. It replaces choosing a lighting path per
+  This file is that renderer's one strategy, its owner's backlog and its two bars. raea's own path tracer says whether
+  raea draws a scene correctly; real photographs say whether the scene, its materials, its light and its camera
+  together look real. A match to one photo found by tuning that shot proves nothing, so what a photo teaches goes into
+  the renderer, a shading model or a measured material, and has to hold on photos it wasn't found on (D15, D16). It replaces choosing a lighting path per
   project. docs/raytracing.feature (RT1-RT6) and docs/shaders.feature (SH0-SH11) keep the steps they recorded;
   anything about light, occlusion, reflections or how a surface is shaded is decided here first. The first version of
   this file (11-17, commits ttn, xok, quu on branch `realism`) built on Solari; this one replaces it.
@@ -105,6 +112,17 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         resolution) scale it down for smaller GPUs. The editor's live frame keeps docs/realtime.feature's budget.
     D14. One owner: the session that wrote this file, on lane `realism`. A change to light, shadow, occlusion,
         exposure or a shading model, in any lane, lands with its LT1 numbers before and after (LT14).
+    D15. The second bar is real photographs (LT15-LT17): full colour, high definition (at least 1920 pixels wide; the
+        camera's original where it can be had, raw where it exists), modern, under a licence that allows commercial
+        use (public domain, CC0, CC BY, CC BY-SA; author and licence kept with each), each with what rebuilding it
+        needs: focal length and camera (its field of view), shutter, aperture and ISO (its exposure in EV, D12), time
+        and place (the sun) and the weather. Berlin first, and every season equally: snow, autumn, summer and a wet
+        day, at several hours, in streets and squares whose buildings stand from before 1918. Then faces in daylight,
+        a kitchen table by a window, a room and a glade, so each LT1 scene has photos of its kind.
+    D16. A photo teaches the renderer, never one shot. A residual is traced to its pass (direct, sky, GI, reflections,
+        occlusion, a shading model, tone) by turning them on one at a time, and fixed there or in a measured material
+        value (fresh snow's albedo, sandstone's, brick's, skin's). Half the photos are held out by place and season;
+        a change stays only if the held-out half comes nearer too.
 
   Background:
     Given Bevy 0.20 on wgpu with ray queries (Apple silicon on Metal; RTX and RDNA2+ on Vulkan), systems/rt's TLAS
@@ -146,6 +164,42 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         is patchy. traced-ao is raster here (FLOOR3's camera has no <AmbientOcclusion>). The shot held still, so its
         flicker is the reference's own noise, about 0.10 stops at 2048 samples: a moving shot is still to pick.
         Berlin and the kitchen have no reference yet (M2, M8); the glade waits on a re-run
+
+  Rule: The second bar: real photographs
+
+    Scenario: LT15. The photo set
+      Given D15
+      Then bench/light/photos.json lists each photo: its source page and file URL, author, licence, size, season,
+        place, hour and weather, its EXIF (camera, focal length, shutter, aperture, ISO, time, position where given)
+        and a checksum; `raea light photos` fetches the files into raea's cache, outside git
+      And Berlin has at least 32, eight a season (snow, autumn, summer, wet): half where the model stands (the
+        Gendarmenmarkt, the Friedrichstadt, Unter den Linden), half in tenement streets of the same age (Prenzlauer
+        Berg, Kreuzberg, Friedrichshain); every other scene kind has at least eight
+      And half the set, by place and season, is held out (D16), and the set is shown to Shane before it's used
+
+    Scenario: LT16. A photo matched
+      Given Berlin has a look for each season from the exteriors lane's world (bare and leafed trees; dry, wet and
+        snowed ground; a summer and an autumn sun), set to the day and hour the photo was taken
+      Then `raea light check` takes a photo scene: the camera from the photo (its field of view from EXIF, its pose
+        from points marked on both the photo and the model, the city standing at its true coordinates), the sun from
+        its time and place, and the exposure from its EV
+      And it compares in linear light (a raw photo decoded linear, a JPEG's sRGB curve undone): first at the EXIF EV
+        unchanged, a test of the units, then with one fitted exposure
+      And a place photo, with cars, signs and rebuilt fronts the model doesn't have, is compared by region: sky,
+        sunlit wall, wall in shade, ground, snow, foliage, glass and faces, masked on both by one local segmentation
+        model. Each region gets its luminance in stops and its colour (Oklab); the ratios between regions (sun to
+        shade, the shade's blue, lit snow to shaded snow); local contrast by scale; and the darkening into contacts
+        and across shadow edges
+      And a rebuilt photo (a table by a window, a facade's detail, rebuilt object for object) is compared on 8x8
+        blocks, as LT1's references are
+      And each photo's numbers go into LT1's report and table beside the reference's, the fit and held-out halves apart
+
+    Scenario: LT17. Photos reverse-engineered
+      Then each region whose residual is over a third of a stop, or whose colour is visibly off, has its cause found
+        by passes (D16) and fixed in the renderer, a shading model or a measured material, with the photos' numbers
+        before and after, fit and held out
+      And Berlin's held-out photos come within 0.33 stops on every region ratio in every season, and Shane sees each
+        season's photos beside their renders
 
   Rule: The world radiance cache first
 
@@ -237,4 +291,4 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
 
     Scenario: LT14. A lighting change shows its numbers
       Then a commit that changes light, shadow, occlusion, exposure or a shading model, in any lane, says LT1's numbers
-        before and after in its message, and the owner is told (M6)
+        (references and photos, held out apart) before and after in its message, and the owner is told (M6)
