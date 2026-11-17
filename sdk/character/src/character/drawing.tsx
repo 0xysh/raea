@@ -148,6 +148,13 @@ function hairMaterial(h: CharacterProps["hair"]) {
   return <ExtendedMaterial base={base} extension={<ShaderExtension wesl={HAIR_WESL} uniforms={{ ...HAIR_LOOK, ...look } as Record<string, number | number[]>} />} />;
 }
 
+/** A head's cornea drawn as one: the clear shell over the eye reflects light and adds no colour of its own. A hero's
+ *  head (sheet3d's gnm_headglb.py) has it as a white glTF material at alpha 0.08 under BLEND, which Bevy lights as it
+ *  does skin and lays 8% of over the eye: a grey film that hid chars/gb-sapper's brown irises in any real light (11-17;
+ *  chars/teal's before, then put down to the iris's own shine). Premultiplied over black at alpha 0 adds the
+ *  reflection alone. A part with no material of that name is left as it is. */
+const cornea = () => <StandardMaterial material="cornea" base_color={Srgba.hex("#000000").with_alpha(0)} alpha_mode="Premultiplied" perceptual_roughness={0.03} />;
+
 /** the body's "skin" material shaded as skin (character/skin.ts) */
 function skinMaterial(sk: CharacterProps["skin"], src: string) {
   const { mask, detailMap, microMap, clearcoat, clearcoatRoughness, reflectance, ...look } = typeof sk === "object" ? sk : ({} as Exclude<CharacterProps["skin"], boolean | undefined>);
@@ -206,10 +213,12 @@ export function Character(props: CharacterProps) {
       {(props.parts ?? []).map((part) => {
         const id = part.src.split("/").pop()!.replace(/\.glb$/, "");
         // (a head's lids ride its eyes down: character/eyes.ts)
-        const lids = props.gaze && part.joints?.some((j) => j === "LeftEye" || j === "eye_l") ? lidsFor(skel, p) : 0;
+        const head = part.joints?.some((j) => j === "LeftEye" || j === "eye_l") ?? false;
+        const lids = props.gaze && head ? lidsFor(skel, p) : 0;
         const pm = lids > 0 ? { ...part.morphs, blink_left: Math.min(1, (part.morphs?.blink_left ?? 0) + lids), blink_right: Math.min(1, (part.morphs?.blink_right ?? 0) + lids) } : part.morphs;
         return (
           <Model key={id} name={`${name}-${id}`} src={part.src} bones={part.joints ? Object.fromEntries(part.joints.filter((j) => j in bones).map((j) => [j, bones[j]])) : bones} scale={k} {...(glitch ? { glitch } : {})} {...pass} {...(pm && Object.keys(pm).length ? { morphs: pm } : {})} {...(part.cloth ? { cloth: part.cloth } : {})}>
+            {head && !ghost && cornea()}
             {part.children}
             {id.includes("hair") && props.hair !== false && hairMaterial(props.hair)}
           </Model>
