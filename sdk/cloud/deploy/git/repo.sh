@@ -17,7 +17,13 @@ helper=$here/git-credential-raea
 call() {
   local t=${RAEA_AGENT_KEY:-${RAEA_TOKEN:-}}
   [ -n "$t" ] || t=$(/usr/bin/security find-generic-password -s "${RAEA_KEYCHAIN:-raea}" -a device-token -w 2>/dev/null) || { echo "repo: no raea sign-in" >&2; exit 1; }
-  curl -fsS -m 60 -X "$1" -H "authorization: Bearer $t" -H 'content-type: application/json' ${3:+-d "$3"} "$api$2"
+  # a refusal says why (402 enterprise_required: Git on raea's servers is raea Enterprise's for now)
+  local out
+  out=$(curl -sS --fail-with-body -m 60 -X "$1" -H "authorization: Bearer $t" -H 'content-type: application/json' ${3:+-d "$3"} "$api$2") || {
+    echo "repo: raea said no to $1 $2: ${out:-no answer}" >&2
+    exit 1
+  }
+  printf %s "$out"
 }
 field() { python3 -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"; }
 hostof() { local u=${1#*://}; printf '%s://%s' "${1%%://*}" "${u%%/*}"; }
