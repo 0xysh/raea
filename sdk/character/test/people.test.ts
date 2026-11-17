@@ -214,8 +214,9 @@ test("passers-by: as many as the line and the hour say, on it, keeping right, th
   const walk: Walk = { id: "w", path: [[0, 0, 0], [200, 0, 0], [200, 0, 100]], perMetre: 0.3, width: 3 };
   const f = { roles, folk, mix, seed: "flow" };
   const at17 = passersBy([walk], 17 * 60, f), at3 = passersBy([walk], 3 * 60, f);
-  // 300 m at 0.3 a metre at the busiest hour (5 pm), a fiftieth of that at 3 am
-  expect(Math.abs(at17.length - 90)).toBeLessThan(15);
+  // 300 m at 0.3 a metre at the busiest hour (5 pm) less those walked off the open ends; a fiftieth of that at 3 am
+  expect(at17.length).toBeGreaterThan(65);
+  expect(at17.length).toBeLessThan(105);
   expect(at3.length).toBeLessThan(8);
   expect(passersBy([walk], 17 * 60, f)).toEqual(at17);
   for (const p of at17) {
@@ -228,11 +229,42 @@ test("passers-by: as many as the line and the hour say, on it, keeping right, th
   const east = leg.filter((p) => Math.sin(p.facing) > 0.5), west = leg.filter((p) => Math.sin(p.facing) < -0.5);
   expect(east.length + west.length).toBe(leg.length);
   expect(east.every((p) => p.at[2] > 0) && west.every((p) => p.at[2] < 0)).toBe(true);
-  // a second later each has moved about a walking pace along the line
+  // a second later each still out has moved about a walking pace along the line
   const later = new Map(passersBy([walk], 17 * 60 + 1 / 60, f).map((p) => [p.id, p]));
-  for (const p of leg.slice(0, 20)) {
-    const q = later.get(p.id)!;
+  for (const p of leg) {
+    const q = later.get(p.id);
+    if (!q) continue;
     const d = Math.hypot(q.at[0] - p.at[0], q.at[2] - p.at[2]);
-    if (d < 5) expect(d).toBeGreaterThan(0.7), expect(d).toBeLessThan(1.8);
+    expect(d).toBeGreaterThan(0.7);
+    expect(d).toBeLessThan(1.8);
   }
+});
+
+test("passers-by round a block: no one jumps; they come out of doors and go in at doors; a busy leg stays busy", () => {
+  // a 100 x 60 block: the avenue side (y = 0, 100 m) busy, the other three quiet; doors every 12 m
+  const ring: Walk = {
+    id: "b", closed: true, width: 4, perMetre: 0.08,
+    path: [[0, 0, 0], [100, 0, 0], [100, 0, 60], [0, 0, 60]],
+    legs: [{ to: 100, perMetre: 0.5 }, { to: 160, perMetre: 0.08 }, { to: 260, perMetre: 0.08 }, { to: 320, perMetre: 0.08 }],
+    doors: Array.from({ length: 26 }, (_, i) => 6 + i * 12),
+  };
+  const f = { roles, folk, mix, seed: "ring" };
+  let seen = 0, came = 0, went = 0;
+  const near = (p: { s: number }) => ring.doors!.some((d) => Math.abs(d - p.s) < 0.15 || Math.abs(Math.abs(d - p.s) - 320) < 0.15);
+  for (let t = 0; t < 48; t++) {
+    const m = 17 * 60 + t / (24 * 60), now = passersBy([ring], m, f), next = passersBy([ring], m + 1 / (24 * 60), f);
+    const a = new Map(now.map((p) => [p.id, p])), b = new Map(next.map((p) => [p.id, p]));
+    for (const [id, p] of a) {
+      const q = b.get(id);
+      if (q) { seen++; expect(Math.hypot(q.at[0] - p.at[0], q.at[2] - p.at[2])).toBeLessThan(0.12); }
+      else { went++; }
+    }
+    for (const [id, q] of b) if (!a.has(id)) { came++; expect(near(q)).toBe(true); }
+  }
+  expect(seen).toBeGreaterThan(1000);
+  expect(came + went).toBeGreaterThan(0);
+  // the avenue side holds more a metre than the quiet sides
+  const at = passersBy([ring], 17 * 60, f);
+  const avenue = at.filter((p) => p.s < 100).length / 100, quiet = at.filter((p) => p.s >= 100).length / 220;
+  expect(avenue).toBeGreaterThan(2.5 * quiet);
 });
