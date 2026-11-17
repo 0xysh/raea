@@ -128,6 +128,9 @@ pub fn apply_rows(world: &mut World, dir: &Path, rows: &[Tup]) -> Result<bool, S
     }
     // a <BevyComponent> or <BevyResource> whose value a live frame changed (or a new one): set on its part
     plugins::apply_live_rows(world, &reflected)?;
+    // a mesh spawned here with a shader over its surface: put on now that this frame's rows are in (scene3d's
+    // shade_meshes), not only when a model came with it
+    scene3d::shade_meshes(world)?;
     Ok(spawned)
 }
 

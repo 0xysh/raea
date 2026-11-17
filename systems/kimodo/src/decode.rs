@@ -82,8 +82,14 @@ fn round(v: f64, places: i32) -> f64 {
 /// The clip file sdk/body/tools/fromkimodo.ts reads: {fps, names (the 77), root (the hips' place a frame), turns (each
 /// joint's world turn from SOMA's T-pose, x y z w), contacts, seed, steps, source, prompt}.
 pub fn clip_json(m: &Motion, sk: &Skeleton, seed: u64, steps: usize, prompt: &str, constrained: bool) -> serde_json::Value {
+    clip_json_on(m, sk, seed, steps, prompt, constrained, "on this Mac (raea-sys-kimodo, MLX)")
+}
+
+/// clip_json, its source saying where it was made (`made_on`: "on this Mac (raea-sys-kimodo, MLX)", or PyTorch's
+/// device), for one file whichever backend made the clip.
+pub fn clip_json_on(m: &Motion, sk: &Skeleton, seed: u64, steps: usize, prompt: &str, constrained: bool, made_on: &str) -> serde_json::Value {
     let source = format!(
-        "Kimodo-SOMA-RP-v1 (nv-tlabs/kimodo), NVIDIA Open Model License, on this Mac (raea-sys-kimodo, MLX); {}",
+        "Kimodo-SOMA-RP-v1 (nv-tlabs/kimodo), NVIDIA Open Model License, {made_on}; {}",
         match (prompt.trim().is_empty(), constrained) {
             (false, true) => format!("text: {prompt:?}, and constraints"),
             (false, false) => format!("text: {prompt:?}"),

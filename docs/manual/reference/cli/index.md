@@ -111,7 +111,7 @@ Generated media, physics bakes, clothes and motion for SOMA's body, Blender and 
 | [`raea gen`](gen.md) | Generate images, video, music, sound, speech, 3D models and text through made.app, fal, Replicate, OpenRouter, Modal or ComfyUI. |
 | [`raea physics`](physics.md) | Make the bakes <Physics> and <Goo> play: rigid bodies, soft goo, and parts cut out of a .glb. |
 | [`raea clothes`](clothes.md) | Clothes for SOMA's body from words: make sews a garment from a sewing pattern (GarmentCode, MIT), cut to SOMA's measurements and draped by raea's own cloth, as assets/clothes/NAME.json and its .glb; cover lays one on the skin by procedure; wear puts garments on a body. |
-| [`raea motion`](motion.md) | Body motion made on this Mac by Kimodo (NVIDIA, on MLX): a SOMA clip from a line of words and, with --keys, Kimodo constraints (full-body keyframes, hand or foot targets, a root path, as sdk/body/tools/between.ts writes them), as the clip sdk/body/tools/fromkimodo.ts reads. |
+| [`raea motion`](motion.md) | Body motion made on this machine by Kimodo (NVIDIA), on MLX on a Mac and on PyTorch on Linux and Windows: a SOMA clip from a line of words and, with --keys, Kimodo constraints (full-body keyframes, hand or foot targets, a root path, as sdk/body/tools/between.ts writes them), as the clip sdk/body/tools/fromkimodo.ts reads. |
 | [`raea blender`](blender.md) | Run a Blender Python script headless, with raea's library of mesh scripts: convert, decimate, repair, split, bake, rig, cloth. |
 | [`raea godot`](godot.md) | Run a TypeScript script against Godot's whole API in a headless Godot with GodotJS, record what it draws as frames, or open the editor on the project. |
 

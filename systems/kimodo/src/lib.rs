@@ -9,12 +9,14 @@
 //! is not here: clips are post_processing=False, and raea's own foot planting runs on them downstream.
 //!
 //! The skeleton, the constraints, features to joints and the clip file are plain Rust and build everywhere; the
-//! networks only on macOS.
+//! networks only on macOS. Elsewhere (Linux, Windows) torch.rs runs upstream Kimodo on PyTorch in an environment raea
+//! makes, and decode.rs turns its features into the same clip.
 
 pub mod constraints;
 pub mod decode;
 pub mod skeleton;
 pub mod stats;
+pub mod torch;
 
 #[cfg(target_os = "macos")]
 pub mod net;
@@ -70,6 +72,20 @@ mod model {
             ("McGill-NLP/LLM2Vec-Meta-Llama-3-8B-Instruct-mntp", "tokenizer.json", "llm2vec/tokenizer.json"),
         ],
     };
+
+    /// Each model's folder in the models folder, and whether every file it needs is there (`raea setup motion --check`).
+    pub fn installed() -> [(&'static str, PathBuf, bool); 2] {
+        [&MOTION, &TEXT].map(|s| {
+            let d = raea_sys_ml::models::root().join(s.name);
+            let all = s.files.iter().all(|f| d.join(f.2).exists());
+            (s.name, d, all)
+        })
+    }
+
+    /// Both models fetched where missing (`raea setup motion`): the motion model, then the text encoder.
+    pub fn fetch_all(progress: &mut dyn FnMut(&str, u64)) -> Result<[PathBuf; 2]> {
+        Ok([ensure(&MOTION, progress)?, ensure(&TEXT, progress)?])
+    }
 
     /// What a clip is made from.
     pub struct Ask<'a> {

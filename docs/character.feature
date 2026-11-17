@@ -314,6 +314,24 @@ Feature: The character SDK as one system: SOMA bodies, Kimodo motion, generated 
         tolerance
       And its cost is a one-off download and seconds a line
 
+    Scenario: CH15d. Kimodo on every machine raea ships to: MLX on a Mac, PyTorch elsewhere
+      # Shane, 11-17: `raea motion` picks its backend by the machine, so it is part of the system, not a Mac feature.
+      # On Linux and Windows it runs upstream Kimodo (nv-tlabs/kimodo at e1c219c, the commit the MLX port was checked
+      # against) on PyTorch, in an environment `raea setup motion [--check]` makes in raea's models folder
+      # (kimodo-torch): Python 3.11 by uv, PyTorch as uv picks it for the machine's driver, upstream's own pins for the
+      # rest; then the same Kimodo-SOMA-RP-v1 checkpoint, LLM2Vec's two adapters, and Llama 3 8B Instruct in bf16 from
+      # NousResearch's ungated copy, whose four weight files have Meta's SHA-256 (read with the account's access, 11-17)
+      # and are checked against it. The runner (systems/kimodo/torch/run.py, kept in the binary) calls Kimodo as its
+      # generate script does (post_processing=False) and hands back the sampler's features; decode.rs makes the clip,
+      # so both backends write one file. The denoiser runs on CUDA with an NVIDIA GPU, else the CPU; the text encoder
+      # beside it on a GPU of 18 GB or more, else the CPU (about 18 GB of memory, refused below 17). 11-17: the Rust
+      # half checked on MLX's own features through a stand-in runner (every field of the clip equal to MLX's but
+      # its source; fromkimodo.ts keeps both), and the code checked for Linux and Windows. Not yet run on a machine:
+      # the CUDA box's link fell to 1.5 MB/s mid-install, so the environment, the weights and a clip there are open.
+      Then `raea motion` makes a clip on Linux and Windows with the same line and seed options as on a Mac, after
+        `raea setup motion`, and says what is missing and that command when it isn't set up
+      And the clip is the file fromkimodo.ts reads, in the format the MLX path writes
+
     Scenario: CH16. Staging: a performance is a list of steps
       # Built on the old rig: matching.ts `perform(lib, {at, facing, steps})` with walk, face, wait; course.ts;
       # the take (docs/hands.feature). This is the one vocabulary for all of them.
