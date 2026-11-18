@@ -6,7 +6,7 @@ import { Audio, Video } from "./media";
 import { Region } from "./region";
 import { Freeze, Loop, Sequence, Series } from "./timeline";
 import { validControls, type Control, type Controls, type ControlCost, type RegisteredControl } from "./controls";
-export * from "./controls";
+export type { ChoiceControl, ColourControl, Control, ControlCost, Controls, NumberControl, RegisteredControl, SwitchControl, TextControl } from "./controls";
 
 export interface CompositionProps<P extends Record<string, unknown> = Record<string, unknown>> {
   /** the composition's id: letters, digits and dashes (`raea render --composition` picks it) */

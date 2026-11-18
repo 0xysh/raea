@@ -38,7 +38,7 @@ See [Your first video](../../start/first-video.md) for the whole loop, and
 import { AbsoluteFill, ACTION_KEY, actionsIn, Animate } from "raea"
 ```
 
-`raea` exports 20 components, 8 hooks, 62 functions, 11 values, 98 types. Source: [sdk/raea/src/index.tsx](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/index.tsx).
+`raea` exports 20 components, 9 hooks, 62 functions, 11 values, 107 types. Source: [sdk/raea/src/index.tsx](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/index.tsx).
 
 ## Components
 
@@ -106,6 +106,7 @@ Declares a composition inside the root. It draws nothing itself; a renderer find
 | `fps` (required) | `number` | frames a second |
 | `durationInFrames` (required) | `number` | its length in frames |
 | `defaultProps` | `P` | the props it's rendered with (JSON-like values only) |
+| `controls` | `Controls<P>` | the composition's controls: which of its defaultProps a person may tune, and how. Each names a defaultProps key, whose value is the control's; the feed's Controls panel shows them on the timeline and a change reaches the live picture as that prop |
 | `edit` | `Edit` | a hand edit laid over the composition (docs/craft-system.md, L): written back by the app's timeline |
 
 Used in: [ui/images/image_node](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/images/image_node.tsx), [ui/images/ui_texture_slice_flip_and_tile](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/images/ui_texture_slice_flip_and_tile.tsx), [ui/images/image_node_resizing](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/images/image_node_resizing.tsx), [ui/images/ui_texture_atlas_slice](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/images/ui_texture_atlas_slice.tsx), [ui/images/ui_texture_slice](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/images/ui_texture_slice.tsx), [ui/images/ui_texture_atlas](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/images/ui_texture_atlas.tsx), [ui/layout/grid](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/layout/grid.tsx), [ui/layout/ghost_nodes](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/ui/layout/ghost_nodes.tsx), and 153 more.
@@ -288,6 +289,16 @@ A video clip in step with the frame; `data-source-time` is the source time (seco
 Also takes the props of [`MediaProps`](video.md#mediaprops).
 
 ## Hooks
+
+### `useControl`
+
+A control's value as the frame is drawn: the composition's prop of that name, the
+value a person set on the live stage or, in a render, its defaultProps. For a part deep in the tree, so the value
+needn't be passed down as a prop; the root component can read its props as any component does.
+
+```ts
+function useControl<T = unknown>(name: string): T
+```
 
 ### `useCurrentFrame`
 
@@ -1069,6 +1080,19 @@ type AssetKind = "lyria" | "sao" | "tokensynth"
 
 The props of [`Audio`](#audio), tabled there.
 
+### `ChoiceControl`
+
+One of a list: a string or a number from `options`.
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `kind` (required) | `"choice"` | what it is: one of a list |
+| `options` (required) | `readonly (string \| number)[]` | what it may be, in the order the panel lists them (at least one, none twice) |
+| `label` | `string` | what the panel calls it (the key when left out) |
+| `group` | `string` | the panel's group it sits in ("Grade", "Camera"); ungrouped controls come first |
+| `cost` | `ControlCost` | how a change reaches the picture: "live" unless said |
+| `about` | `string` | one line on what it changes, for the panel's tooltip and an agent reading the code |
+
 ### `ChoicePoint`
 
 A choice point as a decider sees it: which machine, where, and the candidates whose guards hold.
@@ -1087,9 +1111,46 @@ A choice point as a decider sees it: which machine, where, and the candidates wh
 
 The props of [`Clock`](#clock), tabled there.
 
+### `ColourControl`
+
+A colour: a hex string, "#rgb", "#rgba", "#rrggbb" or "#rrggbbaa".
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `kind` (required) | `"colour"` | what it is: a colour |
+| `label` | `string` | what the panel calls it (the key when left out) |
+| `group` | `string` | the panel's group it sits in ("Grade", "Camera"); ungrouped controls come first |
+| `cost` | `ControlCost` | how a change reaches the picture: "live" unless said |
+| `about` | `string` | one line on what it changes, for the panel's tooltip and an agent reading the code |
+
 ### `CompositionProps`
 
 The props of [`Composition`](#composition), tabled there.
+
+### `Control`
+
+```ts
+type Control = NumberControl | SwitchControl | ChoiceControl | ColourControl | TextControl
+```
+
+### `ControlCost`
+
+How a change to a control reaches the picture. `live` (the default): the running stage draws it at once, as a
+prop. `reopen`: the stage opens the file again first, for what a running 3D world keeps from its first frame (a
+shape, a model's file, an instance count, a picture map, a shader). `resim`: everything from the frame it changes
+on is worked out again, for state carried from frame to frame (physics, particles, a game's fold).
+
+```ts
+type ControlCost = "live" | "reopen" | "resim"
+```
+
+### `Controls`
+
+A composition's controls, by the defaultProps key each one tunes.
+
+```ts
+type Controls = { readonly [K in keyof P & string]?: Control }
+```
 
 ### `Curve`
 
@@ -1364,6 +1425,22 @@ type MoveName = "rise" | "pop" | "slam" | "slide" | "wipe" | "fill" | "strike" |
 
 The props of [`Nudge`](#nudge), tabled there.
 
+### `NumberControl`
+
+A number, dragged on a slider when it has both ends.
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `kind` (required) | `"number"` | what it is: a number |
+| `min` | `number` | the least it may be |
+| `max` | `number` | the most it may be |
+| `step` | `number` | what one step of the slider or an arrow key moves it by (above 0) |
+| `unit` | `string` | its unit, shown after it ("px", "°", "s") |
+| `label` | `string` | what the panel calls it (the key when left out) |
+| `group` | `string` | the panel's group it sits in ("Grade", "Camera"); ungrouped controls come first |
+| `cost` | `ControlCost` | how a change reaches the picture: "live" unless said |
+| `about` | `string` | one line on what it changes, for the panel's tooltip and an agent reading the code |
+
 ### `PanelAction`
 
 One action: what it does (for the agent), its arguments by name with a few words each, and what it does to the
@@ -1491,6 +1568,15 @@ The props of [`Region`](#region), tabled there.
 | `fps` (required) | `number` | frames a second |
 | `durationInFrames` (required) | `number` | its length in frames |
 | `defaultProps` (required) | `Record<string, unknown>` | the props it's rendered with (JSON-like values only) |
+| `controls` (required) | `Readonly<Record<string, RegisteredControl>>` | its controls, by defaultProps key, in the order they're declared ({} when it has none) |
+
+### `RegisteredControl`
+
+A control as a registered composition holds it: its cost said.
+
+```ts
+type RegisteredControl = Control & { cost: ControlCost }
+```
 
 ### `SequenceLayout`
 
@@ -1775,6 +1861,32 @@ What a step may be given besides the context and env.
 | `events` | `readonly string[]` | named events this step (an `on` edge waits for one) |
 | `decide` | `Decider` | picks at choice points (default firstDecider) |
 | `trace` | `(r: TransitionRecord) => void` | receives every transition this step takes, as a row |
+
+### `SwitchControl`
+
+On or off: a boolean.
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `kind` (required) | `"switch"` | what it is: on or off |
+| `label` | `string` | what the panel calls it (the key when left out) |
+| `group` | `string` | the panel's group it sits in ("Grade", "Camera"); ungrouped controls come first |
+| `cost` | `ControlCost` | how a change reaches the picture: "live" unless said |
+| `about` | `string` | one line on what it changes, for the panel's tooltip and an agent reading the code |
+
+### `TextControl`
+
+A string: a title, a caption, a name.
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `kind` (required) | `"text"` | what it is: a string |
+| `multiline` | `boolean` | a box of several lines rather than one |
+| `maxLength` | `number` | the most characters it may hold |
+| `label` | `string` | what the panel calls it (the key when left out) |
+| `group` | `string` | the panel's group it sits in ("Grade", "Camera"); ungrouped controls come first |
+| `cost` | `ControlCost` | how a change reaches the picture: "live" unless said |
+| `about` | `string` | one line on what it changes, for the panel's tooltip and an agent reading the code |
 
 ### `TimelineWord`
 
