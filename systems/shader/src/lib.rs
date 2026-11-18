@@ -151,7 +151,8 @@ pub fn module(source: &str, uniforms: &[(String, &'static str)], textures: &[Str
          import bevy_pbr::render::pbr_fragment::pbr_input_from_standard_material;\n\
          import bevy_pbr::render::pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing};\n\
          import bevy_pbr::render::forward_io::{VertexOutput, FragmentOutput};\n\
-         import bevy_pbr::render::mesh_view_bindings::{view, globals};\n\n",
+         import bevy_pbr::render::mesh_view_bindings::{view, globals};\n\
+         @if(VISIBILITY_RANGE_DITHER) import bevy_pbr::render::pbr_functions::visibility_range_dither;\n\n",
     );
     m += &format!("struct RaeaSlots {{ s: array<vec4<f32>, 16> }};\n@group({group}) @binding(100) var<uniform> raea_slots: RaeaSlots;\n");
     if !textures.is_empty() || array.is_some() {
@@ -177,6 +178,7 @@ pub fn module(source: &str, uniforms: &[(String, &'static str)], textures: &[Str
     m += &format!(
         "\n\n@fragment\n\
          fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {{\n\
+         \x20   @if(VISIBILITY_RANGE_DITHER) visibility_range_dither(in.position, in.visibility_range_dither);\n\
          \x20   var pbr_input = pbr_input_from_standard_material(in, is_front);\n\
          \x20   pbr_input.material.base_color = alpha_discard(pbr_input.material.flags, pbr_input.material.alpha_cutoff, pbr_input.material.base_color);\n\
          {surface}\
@@ -406,6 +408,8 @@ mod tests {
     fn the_entry_calls_the_hooks_it_has() {
         let both = super::module("fn surface(in: VertexOutput, pbr: ptr<function, PbrInput>) {}\nfn lit(in: VertexOutput, pbr: PbrInput, color: vec4<f32>) -> vec4<f32> { return u_tint(); }", &[("tint".into(), "vec4<f32>")], &["pic".into()], None);
         assert!(both.contains("surface(in, &pbr_input);"));
+        // a detail's levels cross-fade (docs/realism.feature LT21)
+        assert!(both.contains("@if(VISIBILITY_RANGE_DITHER) visibility_range_dither(in.position, in.visibility_range_dither);"));
         assert!(both.contains("color = lit(in, pbr_input, color);"));
         assert!(both.contains("@binding(100) var<uniform> raea_slots"));
         assert!(both.contains("@binding(101) var tex_pic: texture_2d<f32>;"));
