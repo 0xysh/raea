@@ -14926,6 +14926,7 @@ dependencies = [
  "raea-sys-fog-half",
  "raea-sys-frame",
  "raea-sys-framepass",
+ "raea-sys-gi",
  "raea-sys-grass",
  "raea-sys-grid",
  "raea-sys-hold",
@@ -15975,6 +15976,15 @@ dependencies = [
  "raea-sys-sampler",
  "raea-sys-shader",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-gi"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-sys-compose",
+ "raea-sys-rt",
 ]
 
 [[package]]

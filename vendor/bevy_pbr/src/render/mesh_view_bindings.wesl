@@ -133,6 +133,10 @@ struct RaeaFarSun {
 @group(0) @binding(39) var raea_far_sun_map: texture_2d<f32>;
 @group(0) @binding(40) var<uniform> raea_far_sun: RaeaFarSun;
 
+// raea: the view's indirect diffuse light from raea GI (mesh_view_bindings.rs RaeaGiScreen; raea's raea-sys-gi), a texel
+// a pixel: the light arriving (rgb, as the irradiance volume's) and 1 where it holds any (a)
+@group(0) @binding(41) var raea_gi: texture_2d<f32>;
+
 @if(ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) {
 @group(1) @binding(0) var diffuse_environment_maps: binding_array<texture_cube<f32>, 8u>;
 @group(1) @binding(1) var specular_environment_maps: binding_array<texture_cube<f32>, 8u>;

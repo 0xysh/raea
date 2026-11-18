@@ -7,8 +7,8 @@
 
 // traced ambient occlusion, the TLAS's first reader; raea GI's world probes (RAEA_GI=1, docs/realism.feature LT2)
 pub mod gi;
-// raea GI's world cache: a hash grid of the light on the surfaces rays hit (LT3)
-pub(crate) mod cache;
+// raea GI's world cache: a hash grid of the light on the surfaces rays hit (LT3); its layout read by raea-sys-gi
+pub mod cache;
 // the sun's far shadow map, past the last cascade (RAEA_SUN_FAR, LT21)
 pub mod far;
 pub mod traced_ao;

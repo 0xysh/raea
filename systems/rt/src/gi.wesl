@@ -5,7 +5,7 @@
 // by the sun through one shadow ray and the sky's diffuse light, unshadowed. Each probe keeps a running mean of its
 // ambient cube (the light arriving along +-x, +-y, +-z) and writes it into Bevy's irradiance volume, which every
 // standard material samples in place of its environment's diffuse light. `learn` and `blend` are the cache's update.
-import raea_sys_rt::cache::{read, rand, hash, radiance, cells, deltas, life, live, count, learned, upkeep, LIFE};
+import raea_sys_rt::cache::{read, rand, hash, radiance, cells, deltas, life, live, count, learned, sunlit, upkeep, LIFE};
 
 enable wgpu_ray_query;
 
@@ -259,9 +259,11 @@ fn learn(@builtin(global_invocation_id) id: vec3<u32>) {
     let n = c.n.xyz;
     let o = c.at.xyz + n * 0.02;
     var e = vec3(0.0);
+    var seen = 0.0;
     let ndl = dot(n, p.sun_dir.xyz);
     if (ndl > 0.0 && sees_sun(o, p.sun_dir.xyz)) {
         e = p.sun.xyz * ndl;
+        seen = 1.0;
     }
     let d = cosine(n, &seed);
     let t = first_hit(o, d);
@@ -272,7 +274,8 @@ fn learn(@builtin(global_invocation_id) id: vec3<u32>) {
         // the cell met lives as long as the one reading it
         e += ALBEDO * irradiance_at(o + d * t, -d, atomicLoad(&life[cell]), &seed);
     }
-    learned[id.x] = vec4(e, 1.0);
+    // the light (rgb) and whether the sun was seen (a)
+    learned[id.x] = vec4(e, seen);
 }
 
 // Each cell that learned this frame takes its new light into its mean: up to upkeep.size.z frames, fewer while its
@@ -297,4 +300,5 @@ fn blend(@builtin(global_invocation_id) id: vec3<u32>) {
     let mixed = mix(old.rgb, now, w);
     deltas[cell] = select(mix(delta, luma(mixed) - luma(old.rgb), 1.0 / 8.0), 0.0, reset);
     radiance[cell] = vec4(mixed, n);
+    sunlit[cell] = mix(sunlit[cell], learned[id.x].a, w);
 }

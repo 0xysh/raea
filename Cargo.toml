@@ -126,6 +126,7 @@ members = [
     "systems/sprite",
     "systems/stage",
     "systems/rt",
+    "systems/gi",
     "systems/text3d",
     "runtime/gpuframe",
     "runtime/scene3d",

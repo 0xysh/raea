@@ -300,6 +300,19 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         measure. LT2's probes cost 0.253 ms at 131072 rays. Open: the cache lights nothing on screen yet (as LT2's
         grid: Metal's sampler limit), so its light is unchecked; the persistent TLAS, compaction and the screen's
         8x8-tile paths are still to build
+      And the cache's light reaches the screen (11-18, raea-sys-gi, behind RAEA_GI=1), a measuring step as LT2's grid
+        was meant to be: each pixel reads the cache at its own surface, from the depth and normal prepasses, with the
+        sun's share taken out by each cell's mean of seeing it (cache.wesl `sunlit`, 4 MiB more), since raster draws
+        the sun with its shadows. It's written a texel a pixel and drawn by the main pass in place of the irradiance
+        volume, the environment map's diffuse and the ambient (raea's bevy_pbr RaeaGiScreen, binding 41, read by
+        textureLoad: no sampler, so a hooked material at Metal's 16 still builds). A cell is read by hundreds of
+        pixels, so the cache's reads load before they write. With raea's temporal filter on both, raster against
+        gi: the glade's mean 1.750/1.474 stops, bias 1.532/1.241, worst 2.953/2.948, flicker 0.788/0.780, its
+        undergrowth darker where cells see less sky. But the glade's reference (Solari's path tracer) is near black,
+        unconverged and without its fog, so its numbers measure the reference more than the GI (LT5). FLOOR3 goes black
+        but for its ceiling panels, 4.8 stops under its reference: it is lit by their emission alone, which no cell
+        knows yet (LT4's first tier, a hit's record's albedo and emission); live 14.5/16.3 ms, the cache and its
+        probes 0.92 ms of GPU
 
     Scenario: LT4. What a ray hit sees
       Given every MaterialExtension writes the deferred G-buffer with its own surface code (D4; procmat's is first,

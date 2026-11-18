@@ -926,7 +926,7 @@ pub fn check_prepass_views_need_specialization(
         Option<&DepthPrepass>,
         Option<&NormalPrepass>,
         Option<&MotionVectorPrepass>,
-        bevy_ecs::query::Has<TemporalJitter>,
+        Has<TemporalJitter>,
     )>,
 ) {
     for (view, msaa, depth_prepass, normal_prepass, motion_vector_prepass, jitter) in views.iter_mut() {

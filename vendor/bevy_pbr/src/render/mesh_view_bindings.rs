@@ -497,6 +497,8 @@ fn layout_entries(
         (39, texture_2d(TextureSampleType::Float { filterable: false })),
         (40, uniform_buffer_sized(false, NonZero::new(RAEA_FAR_SUN_BYTES))),
     ));
+    // raea: the view's indirect light from raea GI (RaeaGiScreen)
+    entries = entries.extend_with_indices(((41, texture_2d(TextureSampleType::Float { filterable: false })),));
 
     let mut binding_array_entries = DynamicBindGroupLayoutEntries::new(ShaderStages::FRAGMENT);
     if layout_key.contains(MeshPipelineViewLayoutKey::ENVIRONMENT_MAP) {
@@ -553,6 +555,13 @@ pub struct RaeaFarSun {
 
 /// raea: the uniform's size (six vec4s: mesh_view_bindings.wesl's RaeaFarSun)
 pub const RAEA_FAR_SUN_BYTES: u64 = 96;
+
+/// raea: a view's indirect diffuse light from raea GI (raea's raea-sys-gi, docs/realism.feature LT3 and LT8), a texel a
+/// pixel, read where the pixel is: the light arriving (rgb, as the irradiance volume's, which a diffuse colour turns
+/// into the light sent back) and 1 where it holds any (a). In place of the irradiance volume, the environment map's
+/// diffuse and the ambient light where it does. Bound at 41 of every mesh view group; where a view has none, zeros.
+#[derive(Component, Clone)]
+pub struct RaeaGiScreen(pub TextureView);
 
 #[derive(Resource, Clone)]
 pub struct MeshPipelineViewLayouts {
@@ -688,6 +697,7 @@ pub fn prepare_mesh_view_bind_groups(
             Option<&ViewContactShadowsUniformOffset>,
             Option<&OrderIndependentTransparencySettingsOffset>,
             Has<ScreenSpaceTransmission>,
+            Option<&RaeaGiScreen>,
         ),
     )>,
     (images, fallback_image, fallback_image_zero): (
@@ -767,6 +777,7 @@ pub fn prepare_mesh_view_bind_groups(
                 view_contact_shadows_offset,
                 view_oit_settings_offset,
                 has_transmission,
+                raea_gi,
             ),
         ) in &views
         {
@@ -947,6 +958,8 @@ pub fn prepare_mesh_view_bind_groups(
                 None => (&fallback_image.d2.texture_view, raea_far_sun_none),
             };
             entries = entries.extend_with_indices(((39, far_map), (40, far_params.as_entire_binding())));
+            // raea: the view's raea GI (RaeaGiScreen), or zeros: none
+            entries = entries.extend_with_indices(((41, raea_gi.map_or(&fallback_image_zero.texture_view, |g| &g.0)),));
 
             let environment_map_bind_group_entries =
                 render_view_environment_maps.map(|render_view_environment_maps| {

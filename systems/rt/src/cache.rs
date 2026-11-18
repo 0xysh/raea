@@ -1,5 +1,5 @@
 //! raea GI's world cache, its buffers and passes (docs/realism.feature LT3; cache.wesl, compact.wesl, and gi.wesl's
-//! `learn` and `blend`): 2^20 cells of 84 bytes (84 MiB) on the surfaces rays hit. Each frame, before the probes, every
+//! `learn` and `blend`): 2^20 cells of 88 bytes (88 MiB) on the surfaces rays hit. Each frame, before the probes, every
 //! cell ages and the live ones are listed (compact.wesl); about RAEA_GI_UPDATES of them (40000) learn one bounce more
 //! and take it into their means. The probes then read it where their rays hit (gi.wesl). The list's length becomes the
 //! update's dispatch on the GPU: wgpu won't take a buffer as a dispatch's arguments while that dispatch binds it for
@@ -23,9 +23,10 @@ use bevy::{
 /// cells in all: 1024 blocks of 1024 (cache.wesl's CELLS; compact.wesl lists them in two levels)
 pub(crate) const CELLS: u64 = 1 << 20;
 
-/// the cache's buffers in binding order, each `(label, bytes)`: a cell's 84 bytes are a checksum, a life, its light,
-/// where it is and its side, its light's change, its place in the list's block sum, its place in the list, its new light
-const BUFFERS: [(&str, u64); 11] = [
+/// the cache's buffers in binding order, each `(label, bytes)`: a cell's 88 bytes are a checksum, a life, its light,
+/// where it is and its side, its light's change, its place in the list's block sum, its place in the list, its new
+/// light, and how much of the time it sees the sun (so a pixel can take the sun out: raea-sys-gi, whose raster has it)
+const BUFFERS: [(&str, u64); 12] = [
     ("raea gi cache checksums", 4 * CELLS),
     ("raea gi cache life", 4 * CELLS),
     ("raea gi cache radiance", 16 * CELLS),
@@ -37,6 +38,7 @@ const BUFFERS: [(&str, u64); 11] = [
     ("raea gi cache count", 4),
     ("raea gi cache dispatch", 16),
     ("raea gi cache learned", 16 * CELLS),
+    ("raea gi cache sunlit", 4 * CELLS),
 ];
 /// where the list's length and its dispatch are among BUFFERS
 pub(crate) const COUNT: usize = 8;
@@ -63,10 +65,10 @@ impl Upkeep {
     }
 }
 
-/// the cache's bindings: group 1 of every pass that reads or keeps it
-pub(crate) fn layout() -> BindGroupLayoutDescriptor {
+/// the cache's bindings: group 1 of every pass that reads or keeps it (raea-sys-gi's screen pass among them)
+pub fn layout() -> BindGroupLayoutDescriptor {
     let s = || storage_buffer_sized(false, None);
-    BindGroupLayoutDescriptor::new("raea_gi_cache_layout", &BindGroupLayoutEntries::sequential(ShaderStages::COMPUTE, (s(), s(), s(), s(), s(), s(), s(), s(), s(), s(), s(), uniform_buffer::<Upkeep>(false))))
+    BindGroupLayoutDescriptor::new("raea_gi_cache_layout", &BindGroupLayoutEntries::sequential(ShaderStages::COMPUTE, (s(), s(), s(), s(), s(), s(), s(), s(), s(), s(), s(), s(), uniform_buffer::<Upkeep>(false))))
 }
 
 /// the cache's six passes, in the order they run

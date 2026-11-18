@@ -39,7 +39,10 @@ struct Upkeep {
 @group(1) @binding(9) var<storage, read_write> dispatch: vec3<u32>;
 // each listed cell's new light this frame, before the blend
 @group(1) @binding(10) var<storage, read_write> learned: array<vec4<f32>>;
-@group(1) @binding(11) var<uniform> upkeep: Upkeep;
+// how much of the time the cell sees the sun, a mean as its light's: the sun's share of its light, which a pixel
+// whose raster draws the sun itself takes out (raea-sys-gi)
+@group(1) @binding(11) var<storage, read_write> sunlit: array<f32>;
+@group(1) @binding(12) var<uniform> upkeep: Upkeep;
 
 /// cells in all (cache.rs CELLS): 1024 blocks of 1024
 const CELLS: u32 = 1048576u;
@@ -48,6 +51,8 @@ const LIFE: u32 = 10u;
 /// the most cells tried after a collision
 const SEARCH: u32 = 3u;
 const EMPTY: u32 = 0u;
+/// no cell: one claimed new this frame, or none to be had
+const NONE: u32 = 0xffffffffu;
 
 fn hash(v: u32) -> u32 {
     let s = v * 747796405u + 2891336453u;
@@ -93,9 +98,19 @@ fn key_of(at: vec3<f32>, n: vec3<f32>, size: f32) -> vec2<u32> {
 }
 
 /// The light a cell holds at a place and side (rgb) and over how many frames (a: 0 for a cell new this frame, or
-/// none to be had), keeping it alive `keep` frames. The place is jittered across the surface by up to half a cell,
-/// so the cache reads as a blur rather than a grid. A cell not found is claimed, empty: some update learns it.
-fn read(at_in: vec3<f32>, n: vec3<f32>, keep: u32, seed: ptr<function, u32>) -> vec4<f32> {
+/// none to be had), keeping it alive `keep` frames (see `find`).
+fn read(at: vec3<f32>, n: vec3<f32>, keep: u32, seed: ptr<function, u32>) -> vec4<f32> {
+    let k = find(at, n, keep, seed);
+    if (k == NONE) {
+        return vec4(0.0);
+    }
+    return radiance[k];
+}
+
+/// The cell at a place and side, kept alive `keep` frames: NONE for one claimed new this frame, or none to be had.
+/// The place is jittered across the surface by up to half a cell, so the cache reads as a blur rather than a grid. A
+/// cell not found is claimed, empty: some update learns it.
+fn find(at_in: vec3<f32>, n: vec3<f32>, keep: u32, seed: ptr<function, u32>) -> u32 {
     var at = at_in;
     var size = cell_size(at, seed);
     let t = normalize(cross(n, select(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), abs(n.x) > 0.9)));
@@ -105,18 +120,31 @@ fn read(at_in: vec3<f32>, n: vec3<f32>, keep: u32, seed: ptr<function, u32>) -> 
     let kc = key_of(at, n, size);
     var key = kc.x;
     for (var i = 0u; i < SEARCH; i++) {
-        let cas = atomicCompareExchangeWeak(&checksums[key], EMPTY, kc.y);
-        if (cas.old_value == kc.y || cas.old_value == EMPTY) {
-            atomicMax(&life[key], keep);
+        // a plain load first: a screen's pixels read the same cell by the hundred, and a write each would queue them
+        let now = atomicLoad(&checksums[key]);
+        if (now == kc.y) {
+            if (atomicLoad(&life[key]) < keep) {
+                atomicMax(&life[key], keep);
+            }
+            return key;
         }
-        if (cas.old_value == kc.y) {
-            return radiance[key];
-        }
-        if (cas.old_value == EMPTY && cas.exchanged) {
-            cells[key] = Cell(vec4(at, 0.0), vec4(n, 0.0));
-            return vec4(0.0);
+        if (now == EMPTY) {
+            let cas = atomicCompareExchangeWeak(&checksums[key], EMPTY, kc.y);
+            if (cas.exchanged) {
+                atomicMax(&life[key], keep);
+                cells[key] = Cell(vec4(at, 0.0), vec4(n, 0.0));
+                return NONE;
+            }
+            if (cas.old_value == kc.y) {
+                atomicMax(&life[key], keep);
+                return key;
+            }
+            if (cas.old_value == EMPTY) {
+                // the weak exchange failed with nothing there: tried again next frame
+                return NONE;
+            }
         }
         key = (key + 1u) & (CELLS - 1u);
     }
-    return vec4(0.0);
+    return NONE;
 }

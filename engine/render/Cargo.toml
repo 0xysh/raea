@@ -16,6 +16,7 @@ raea-sys-hold = { path = "../../systems/hold" }
 raea-sys-splat = { path = "../../systems/splat" }
 raea-sys-sprite = { path = "../../systems/sprite" }
 raea-sys-rt = { path = "../../systems/rt" }
+raea-sys-gi = { path = "../../systems/gi" }
 # soft shadows (experimental_pbr_pcss) are under the native feature with raea-runtime-scene3d/pcss: WebGPU refuses their sampling
 bevy = { version = "=0.20.0", default-features = false, features = ["std", "default_app", "multi_threaded", "3d_bevy_render", "ui_bevy_render", "png", "tonemapping_luts", "ktx2", "zstd_rust"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "hdr"] }

@@ -223,8 +223,18 @@ fn key(g: &Grid) -> [u32; 9] {
     [f(g.sun.x), f(g.sun.y), f(g.sun.z), f(g.sun_light.x), f(g.sun_light.y), f(g.sun_light.z), h, f(i), g.res.x ^ (g.res.y << 10) ^ (g.res.z << 20)]
 }
 
+/// This frame's world cache for passes outside raea-sys-rt (raea-sys-gi's screen pass, after this frame's update): its
+/// group 1 (cache::layout), and the sun its cells were lit by, toward it and its light (lux)
+#[derive(Resource, Clone)]
+pub struct WorldCache {
+    pub group: BindGroup,
+    pub sun_dir: Vec3,
+    pub sun_light: Vec3,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn update(
+    mut commands: Commands,
     grid: Option<Res<Grid>>,
     scene: Option<Res<crate::Scene>>,
     images: Res<RenderAssets<GpuImage>>,
@@ -276,6 +286,7 @@ fn update(
     upkeep.write_buffer(&device, &queue);
     let cells = state.cache.get_or_insert_with(|| crate::cache::buffers(&device));
     let cache_group = crate::cache::bind(&device, &cache.get_bind_group_layout(&p.cache_layout), cells, upkeep.binding().unwrap());
+    commands.insert_resource(WorldCache { group: cache_group.clone(), sun_dir: grid.sun.truncate(), sun_light: grid.sun_light });
     if state.timer.is_none() && device.features().contains(WgpuFeatures::TIMESTAMP_QUERY) {
         state.timer = Some(timer(&device, &queue));
     }

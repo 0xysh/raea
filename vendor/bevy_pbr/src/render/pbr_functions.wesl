@@ -707,6 +707,19 @@ fn apply_pbr_lighting(
     found_diffuse_indirect = true;
 }
 
+    // raea: raea GI's indirect diffuse at this pixel (mesh_view_bindings.rs RaeaGiScreen), where it holds any: in place
+    // of the irradiance volume, the environment map's diffuse and the ambient light (raea's docs/realism.feature LT8)
+    var raea_gi_found = false;
+    if (!found_diffuse_indirect) {
+        let gi_size = vec2<i32>(textureDimensions(view_bindings::raea_gi));
+        let gi = textureLoad(view_bindings::raea_gi, min(vec2<i32>(in.frag_coord.xy), gi_size - 1), 0);
+        if (gi.a > 0.0) {
+            indirect_light += gi.rgb * diffuse_color * diffuse_occlusion;
+            found_diffuse_indirect = true;
+            raea_gi_found = true;
+        }
+    }
+
     @if(IRRADIANCE_VOLUME)
     // Irradiance volume light (indirect)
     if (!found_diffuse_indirect) {
@@ -759,7 +772,7 @@ fn apply_pbr_lighting(
     let enable_ambient = (view_bindings::lights.ambient_light_flags & mesh_view_types::AMBIENT_LIGHT_FLAGS_AFFECTS_LIGHTMAPPED_MESHES_BIT) != 0u;
     @else   // LIGHTMAP
     let enable_ambient = true;
-    if (enable_ambient) {
+    if (enable_ambient && !raea_gi_found) {
         indirect_light += ambient::ambient_light(in.world_position, in.N, in.V, NdotV, diffuse_color, F0, perceptual_roughness, diffuse_occlusion);
     }
 
