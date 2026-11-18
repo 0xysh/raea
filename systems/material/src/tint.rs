@@ -54,6 +54,7 @@ pub fn stride_of(t: &Tup) -> usize {
 }
 
 /// One list of copies: each one's placement, and its linear colour when the list has them
+#[derive(Debug)]
 pub struct Copies {
     pub at: Vec<Transform>,
     pub tint: Vec<[f32; 3]>,

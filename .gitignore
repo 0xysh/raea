@@ -5,7 +5,10 @@ target/
 meaning/bench/temporal/out/*.npz
 __pycache__/
 # every package's installed dependencies, wherever bun or npm puts them
-node_modules/
+# a package folder, or a link to one (sdk/blender and sdk/godot link sdk/raea's)
+node_modules
+# TypeScript's incremental build record
+*.tsbuildinfo
 engine/media/golden/
 
 # tools/release.sh writes releases here
