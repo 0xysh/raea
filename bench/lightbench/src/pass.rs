@@ -40,6 +40,12 @@ pub struct Frame {
     pub frame: u32,
     pub exposure: f32,
     pub brute: bool,
+    /// no history (--raw)
+    pub raw: bool,
+    /// the camera cut this frame: the history starts again
+    pub cut: bool,
+    /// the history's length in frames
+    pub history: u32,
 }
 
 pub struct LightPass;
@@ -66,6 +72,9 @@ struct Params {
     eye: Vec4,
     size: UVec4,
     mode: UVec4,
+    prev_clip_from_world: Mat4,
+    prev_eye: Vec4,
+    temporal: UVec4,
 }
 
 #[derive(Resource)]
@@ -74,10 +83,13 @@ struct Pipeline {
     id: CachedComputePipelineId,
 }
 
-/// The BVH on the GPU, made from the SceneGpu it came from (by its pointer).
+/// The BVH on the GPU, made from the SceneGpu it came from (by its pointer); the history's two pairs of textures
+/// (light, surface), read one frame and written the next; and the last frame's camera.
 #[derive(Resource, Default)]
 struct Buffers {
     from: Option<(usize, Buffer, Buffer)>,
+    history: Option<(UVec2, [(Texture, TextureView); 4])>,
+    prev: Option<(Mat4, Vec3)>,
 }
 
 fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCache>) {
@@ -93,6 +105,10 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 read(32),
                 read(48),
                 read(32),
+                texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
+                texture_2d(TextureSampleType::Float { filterable: false }),
+                texture_2d(TextureSampleType::Float { filterable: false }),
+                texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
             ),
         ),
@@ -134,21 +150,51 @@ fn light(
         let tris = make("lightbench_tris", bytemuck::cast_slice(&scene.tris));
         bufs.from = Some((key, nodes, tris));
     }
-    let (_, nodes, tris) = bufs.from.as_ref().unwrap();
     let lights = device.create_buffer_with_data(&BufferInitDescriptor { label: Some("lightbench_lights"), contents: bytemuck::cast_slice(&frame.lights), usage: BufferUsages::STORAGE });
     let size = target.main_texture().size();
+    let want = UVec2::new(size.width, size.height);
+    let fresh = bufs.history.as_ref().map(|h| h.0) != Some(want);
+    if fresh {
+        let make = |i: usize| {
+            let t = device.create_texture(&TextureDescriptor {
+                label: Some(["lightbench_hist_a", "lightbench_geo_a", "lightbench_hist_b", "lightbench_geo_b"][i]),
+                size: Extent3d { width: want.x, height: want.y, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Rgba16Float,
+                usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let v = t.create_view(&TextureViewDescriptor::default());
+            (t, v)
+        };
+        bufs.history = Some((want, [make(0), make(1), make(2), make(3)]));
+    }
     let world_from_clip = extracted.world_from_view.to_matrix() * extracted.clip_from_view.inverse();
+    let clip_from_world = extracted.clip_from_view * extracted.world_from_view.to_matrix().inverse();
+    let eye = extracted.world_from_view.translation();
+    let (prev_clip_from_world, prev_eye) = bufs.prev.unwrap_or((clip_from_world, eye));
+    let reset = fresh || frame.cut || bufs.prev.is_none();
+    bufs.prev = Some((clip_from_world, eye));
+    let (_, nodes, tris) = bufs.from.as_ref().unwrap();
+    // even frames read pair a and write pair b, odd frames the other way
+    let h = &bufs.history.as_ref().unwrap().1;
+    let (r, w) = if frame.frame % 2 == 0 { (0, 2) } else { (2, 0) };
     let mut params = UniformBuffer::from(Params {
         world_from_clip,
         eye: extracted.world_from_view.translation().extend(frame.exposure),
         size: UVec4::new(size.width, size.height, frame.lights.len() as u32, frame.frame),
         mode: UVec4::new(frame.mode, frame.k, frame.view, frame.brute as u32),
+        prev_clip_from_world,
+        prev_eye: prev_eye.extend(0.0),
+        temporal: UVec4::new(frame.raw as u32, reset as u32, frame.history.max(1), 0),
     });
     params.write_buffer(&device, &queue);
     let group = device.create_bind_group(
         "lightbench_light",
         &cache.get_bind_group_layout(&p.layout),
-        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view())),
+        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view(), &h[r].1, &h[r + 1].1, &h[w].1, &h[w + 1].1)),
     );
     let mut pass = ctx.command_encoder().begin_compute_pass(&ComputePassDescriptor { label: Some("lightbench_light"), timestamp_writes: None });
     pass.set_pipeline(pipeline);

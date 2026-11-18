@@ -31,7 +31,12 @@ const HELP: &str = "lightbench [switches]
   --shot FILE                   draw headless, save frame --frames as a PNG, exit
   --frames N                    the lit frame --shot saves (4)
   --bench N                     with --shot: time N more lit frames first and print the mean (frame time, its own run)
-  --no-pillar                   leave out the pillar outside the view (its shadow should go with it)";
+  --no-pillar                   leave out the pillar outside the view (its shadow should go with it)
+  --raw                         no temporal accumulation: each frame's samples alone
+  --history N                   frames the history holds at most (32)
+  --camera still|orbit|cut      the camera holds, circles slowly, or jumps to a second view at lit frame --cut-at (still)
+  --cut-at N                    the lit frame --camera cut jumps on (8)
+  --view history                frames of history at each pixel, white when full";
 
 #[derive(Resource, Clone)]
 pub struct Opts {
@@ -48,10 +53,15 @@ pub struct Opts {
     pub frames: u32,
     pub bench: u32,
     pub pillar: bool,
+    pub raw: bool,
+    pub history: u32,
+    /// 0 still, 1 orbit, 2 cut
+    pub camera: u32,
+    pub cut_at: u32,
 }
 
 fn opts() -> Result<Opts, String> {
-    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 2048, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true };
+    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 2048, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8 };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut val = || args.next().ok_or(format!("{a} needs a value"));
@@ -63,7 +73,7 @@ fn opts() -> Result<Opts, String> {
             }
             "--view" => {
                 let v = val()?;
-                o.view = ["lit", "normal", "albedo", "depth", "rays"].iter().position(|m| *m == v).ok_or("--view: lit, normal, albedo, depth or rays")? as u32;
+                o.view = ["lit", "normal", "albedo", "depth", "rays", "history"].iter().position(|m| *m == v).ok_or("--view: lit, normal, albedo, depth, rays or history")? as u32;
             }
             "--k" => o.k = (num(val()?)? as u32).clamp(1, 16),
             "--lights" => o.lights = (num(val()?)? as u32).max(1),
@@ -80,6 +90,13 @@ fn opts() -> Result<Opts, String> {
             "--frames" => o.frames = (num(val()?)? as u32).max(1),
             "--bench" => o.bench = num(val()?)? as u32,
             "--no-pillar" => o.pillar = false,
+            "--raw" => o.raw = true,
+            "--history" => o.history = (num(val()?)? as u32).max(1),
+            "--cut-at" => o.cut_at = num(val()?)? as u32,
+            "--camera" => {
+                let v = val()?;
+                o.camera = ["still", "orbit", "cut"].iter().position(|m| *m == v).ok_or("--camera: still, orbit or cut")? as u32;
+            }
             "--help" | "-h" => return Err(HELP.into()),
             _ => return Err(format!("unknown switch {a}\n{HELP}")),
         }
@@ -135,7 +152,7 @@ fn camera(mut commands: Commands, o: Res<Opts>, mut images: ResMut<Assets<Image>
         DeferredPrepass,
         CameraMainTextureUsages(usages),
         Projection::Perspective(PerspectiveProjection { fov: 45f32.to_radians(), ..default() }),
-        Transform::from_xyz(0.0, 2.2, 7.0).looking_at(Vec3::new(0.0, 1.3, 0.0), Vec3::Y),
+        eye(&o, 0),
     ));
     if o.shot.is_some() {
         let mut image = Image::new_target_texture(o.size.x, o.size.y, TextureFormat::Rgba8UnormSrgb, None);
@@ -146,10 +163,44 @@ fn camera(mut commands: Commands, o: Res<Opts>, mut images: ResMut<Assets<Image>
     }
 }
 
-/// The lights where they are this frame, and the switches, for the render world.
-fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>) {
+const EYE: Vec3 = Vec3::new(0.0, 2.2, 7.0);
+const LOOK: Vec3 = Vec3::new(0.0, 1.3, 0.0);
+
+/// Where the camera is on lit frame `n`: held, circling slowly, or cut to a second view at --cut-at.
+fn eye(o: &Opts, n: u32) -> Transform {
+    match o.camera {
+        1 => {
+            let a = n as f32 * 0.004;
+            Transform::from_translation(LOOK + Quat::from_rotation_y(a) * (EYE - LOOK)).looking_at(LOOK, Vec3::Y)
+        }
+        2 if n >= o.cut_at => Transform::from_xyz(4.5, 3.2, 4.5).looking_at(LOOK, Vec3::Y),
+        _ => Transform::from_translation(EYE).looking_at(LOOK, Vec3::Y),
+    }
+}
+
+/// The camera and the lights where they are this frame, and the switches, for the render world. A cut is a jump of
+/// more than a metre or 20 degrees in one frame: the history starts again.
+fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: Query<&mut Transform, With<Camera3d>>) {
     let t = o.t.unwrap_or(time.elapsed_secs());
-    *frame = pass::Frame { lights: scene::lights(o.lights, t), mode: o.mode, k: o.k, view: o.view, frame: frame.frame.wrapping_add(1), exposure: o.exposure, brute: o.brute };
+    let n = pass::DRAWN.load(std::sync::atomic::Ordering::Relaxed);
+    let mut cut = false;
+    if let Ok(mut at) = cam.single_mut() {
+        let to = eye(&o, n);
+        cut = at.translation.distance(to.translation) > 1.0 || at.rotation.angle_between(to.rotation) > 20f32.to_radians();
+        *at = to;
+    }
+    *frame = pass::Frame {
+        lights: scene::lights(o.lights, t),
+        mode: o.mode,
+        k: o.k,
+        view: o.view,
+        frame: frame.frame.wrapping_add(1),
+        exposure: o.exposure,
+        brute: o.brute,
+        raw: o.raw,
+        cut,
+        history: o.history,
+    };
 }
 
 fn shoot(mut commands: Commands, o: Res<Opts>, target: Option<Res<Target>>, mut done: Local<bool>, mut clock: Local<Option<(std::time::Instant, u32)>>) {

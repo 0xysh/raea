@@ -9,8 +9,15 @@ struct Params {
     eye: vec4<f32>,
     // width, height, lights, frame
     size: vec4<u32>,
-    // mode (0 every light, 1 uniform, 2 weighted), K, view (0 lit, 1 normal, 2 albedo, 3 depth, 4 rays), brute force
+    // mode (0 every light, 1 uniform, 2 weighted), K, view (0 lit, 1 normal, 2 albedo, 3 depth, 4 rays, 5 history),
+    // brute force
     mode: vec4<u32>,
+    // the previous frame's camera, to find where a point was
+    prev_clip_from_world: mat4x4<f32>,
+    // xyz: the previous camera
+    prev_eye: vec4<f32>,
+    // raw (no history), reset (a camera cut, or the first frame), the history's length in frames, 0
+    temporal: vec4<u32>,
 }
 
 struct Node { mn: vec3<f32>, a: u32, mx: vec3<f32>, count: u32 }
@@ -24,6 +31,12 @@ struct Light { pos: vec3<f32>, range: f32, power: vec3<f32>, radius: f32 }
 @group(0) @binding(4) var<storage, read> tris: array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read> lights: array<Light>;
 @group(0) @binding(6) var out: texture_storage_2d<rgba16float, write>;
+// the light so far at each pixel (rgb, before albedo) and how many frames it holds (a); the surface it was for
+// (its normal, and its distance from that frame's camera); last frame's to read, this frame's to write
+@group(0) @binding(7) var hist_in: texture_2d<f32>;
+@group(0) @binding(8) var geo_in: texture_2d<f32>;
+@group(0) @binding(9) var hist_out: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(10) var geo_out: texture_storage_2d<rgba16float, write>;
 
 const PI: f32 = 3.14159265;
 const MAX_K: u32 = 16u;
@@ -161,8 +174,10 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let px = vec2<i32>(id.xy);
     let depth = textureLoad(depth_tex, px, 0);
-    // the sky (reverse Z: far is 0) keeps Bevy's clear colour
+    // the sky (reverse Z: far is 0) keeps Bevy's clear colour, and holds no history
     if depth <= 0.0 {
+        textureStore(hist_out, px, vec4(0.0));
+        textureStore(geo_out, px, vec4(0.0, 0.0, 0.0, -1.0));
         return;
     }
     let g = textureLoad(gbuf, px, 0);
@@ -235,9 +250,32 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             c /= f32(k);
         }
     }
+    // the history: where this point was last frame, kept only if the same surface was there
+    var held = 0.0;
+    var acc = c;
+    if p.temporal.x == 0u && p.temporal.y == 0u {
+        let was = p.prev_clip_from_world * vec4(pos, 1.0);
+        let ndc = was.xy / was.w;
+        let at = vec2<i32>(floor(vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * vec2<f32>(p.size.xy)));
+        if was.w > 0.0 && all(at >= vec2(0)) && all(at < vec2<i32>(p.size.xy)) {
+            let geo = textureLoad(geo_in, at, 0);
+            let expect = length(pos - p.prev_eye.xyz);
+            if geo.w > 0.0 && abs(geo.w - expect) < 0.02 * expect + 0.01 && dot(geo.xyz, n) > 0.9 {
+                let h = textureLoad(hist_in, at, 0);
+                held = min(h.a, f32(p.temporal.z) - 1.0);
+                acc = mix(h.rgb, c, 1.0 / (held + 1.0));
+            }
+        }
+    }
+    textureStore(hist_out, px, vec4(acc, held + 1.0));
+    textureStore(geo_out, px, vec4(n, dist));
     if view == 4u {
         textureStore(out, px, vec4(vec3(f32(rays) / 16.0), 1.0));
         return;
     }
-    textureStore(out, px, vec4(c * albedo / PI * p.eye.w, 1.0));
+    if view == 5u {
+        textureStore(out, px, vec4(vec3((held + 1.0) / f32(p.temporal.z)), 1.0));
+        return;
+    }
+    textureStore(out, px, vec4(acc * albedo / PI * p.eye.w, 1.0));
 }
