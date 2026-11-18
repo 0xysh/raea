@@ -363,13 +363,22 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
       And so far (11-17, branch realism; not done): a Model's `detail` (near, far, max_px, min_px, edge, fade,
         shadow) is raea-sys-lod's Detail. Bevy's dither now runs in raea's own fragments (ShaderExt, ShaderMaterial).
         Ranges are measured from each mesh's origin, as Bevy's GPU measures them, and moved to the part's nearest
-        edge. Meshes are extracted after the ranges. The live diff keeps its fast path with Detail rows (it had run in
-        full every frame, +19 ms a step). gambit's City draws `levels="detail"`, its tiles' levels cross-faded by
+        edge. The live diff keeps its fast path with Detail rows (it had run in full every frame, +19 ms a step). gambit's City draws `levels="detail"`, its tiles' levels cross-faded by
         distance, streamed or not
       And measured on the 540p fly over Berlin (240 frames; a one-frame spike is an 8x8 block whose change is over
         12/255 and 3 times the frames' either side): detail's level switches at frames 41, 117, 122 and 157 (45, 20,
         19 and 17 blocks) are gone, and JS levels' at 58, 106, 112 and 148 (41, 15, 16, 13) are unchanged. Two left
-        at 35 and 226 (29 and 12 blocks) came from Bevy's extract order; their fix waits for a rebuild to be checked
+        at 35 and 226 (29 and 12 blocks) aren't Bevy's extract order: ordering meshes after the ranges changed no
+        pixel (Bevy 0.20 already orders them, bevy_pbr mesh.rs:200), and it came out again. At 35 a held tile's
+        arcaded row fades out half stippled for three frames with the sky showing through, no level behind it, then
+        drops in one frame: open
+      And the sun's shadows no longer end in a line (Shane, 11-17, on the fly: "the shadow having a clear cull
+        distance"): Bevy draws past its last cascade fully lit, so raea-sys-lod swaps its shadows.wesl (hash checked)
+        for one whose last cascade fades to lit over the cascades' overlap, the last 30% of the distance; the fly's
+        frames change on about 2% of their pixels, all lighter. Reaching 900 m, where DAY's fog begins, costs too
+        much as it is: live at 2560x1440, median of 3, work p50 walk 45.9 ms at 300 m against 53.3 at 900, fly
+        42.5 against 54.3. Far shadows wait on the far cascades cast by coarse levels only and redrawn every few
+        frames
       And measured live at 2560x1440 on an M-series Mac, work p50 JS levels against detail: walk 51.7 against 48.9
         ms (p99 144.8 against 78.2), fly 50.3 against 50.1 (four runs each, about 5 ms apart run to run), streamed
         run 34.7 against 31.8 (p99 143.3 against 114.6). Detail adds 0.4 to 1.3 ms of step. Footprint: walk 6.97

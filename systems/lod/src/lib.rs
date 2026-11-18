@@ -7,6 +7,9 @@
 //! camera's vertical field of view and its target's height in pixels, so a level looks the same at any output size.
 //! `shadow: false` keeps a level out of the shadow maps, for a coarser level to cast its shadow.
 
+// the sun's shadows fade out at their distance rather than end in a line
+mod shadow;
+
 use bevy::{
     camera::{
         primitives::Aabb,
@@ -49,13 +52,7 @@ struct ShadowLeft;
 
 pub fn install(app: &mut App) {
     app.register_type::<Detail>().add_systems(PostUpdate, apply.after(VisibilitySystems::CalculateBounds).after(bevy::transform::TransformSystems::Propagate).before(VisibilitySystems::CheckVisibility));
-    // Bevy 0.20 extracts meshes and visibility ranges in no set order. A mesh re-extracted for its changed range before
-    // the ranges are read bakes the range's previous slot into its uniform and keeps it until its range changes again:
-    // the GPU dithers it by a range the CPU no longer culls by (on the 540p fly a tile's LOD1, in range at 14% faded,
-    // drew nothing for two frames, then snapped in). Meshes are extracted after the ranges.
-    if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
-        render.configure_sets(bevy::render::ExtractSchedule, bevy::pbr::MeshExtractionSystems.after(bevy::render::view::extract_visibility_ranges));
-    }
+    shadow::install(app);
     match std::env::var("RAEA_LOD_DEBUG").as_deref() {
         Ok("time") => {
             app.init_resource::<LodTime>();
