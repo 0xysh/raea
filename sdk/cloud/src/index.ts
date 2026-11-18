@@ -89,25 +89,33 @@ async function follow(res: Response, onOutput: ((text: string, stream: "out" | "
 export class RaeaCloud {
   readonly url: string
   private token: string
+  private spriteToken?: string
   private ws?: Promise<string>
 
-  constructor(o: { url: string; token: string }) {
+  /** `spriteToken`: the box is on a Sprite behind the Sprite's own auth (`auth sprite`), so that token goes in
+   *  Authorization and the box's in ?token=, which the box takes too. (session() can't send it: a WebSocket has no
+   *  headers to put it in, so ACP needs a Sprite with public auth.) */
+  constructor(o: { url: string; token: string; spriteToken?: string }) {
     this.url = o.url.replace(/\/+$/, "")
     this.token = o.token
+    this.spriteToken = o.spriteToken
   }
 
-  private async call(path: string, init: RequestInit = {}): Promise<Response> {
-    const res = await fetch(this.url + path, { ...init, headers: { authorization: `Bearer ${this.token}`, ...init.headers } })
+  /** A request to the box, its response as it comes, for a caller that reads the body itself (a stream of a file
+   *  into storage); it throws unless the box answers 2xx. */
+  async fetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const url = this.spriteToken ? `${this.url}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(this.token)}` : this.url + path
+    const res = await fetch(url, { ...init, headers: { authorization: `Bearer ${this.spriteToken ?? this.token}`, ...init.headers } })
     if (!res.ok) throw new Error(`${init.method ?? "GET"} ${path}: ${res.status} ${await res.text()}`)
     return res
   }
 
   health(): Promise<Health> {
-    return this.call("/v1/health").then((r) => r.json())
+    return this.fetch("/v1/health").then((r) => r.json())
   }
 
   async read(path: string): Promise<Uint8Array> {
-    return new Uint8Array(await (await this.call(`/v1/files?path=${encodeURIComponent(path)}`)).arrayBuffer())
+    return new Uint8Array(await (await this.fetch(`/v1/files?path=${encodeURIComponent(path)}`)).arrayBuffer())
   }
 
   async text(path: string): Promise<string> {
@@ -115,23 +123,23 @@ export class RaeaCloud {
   }
 
   list(path = "."): Promise<Entry[]> {
-    return this.call(`/v1/files?path=${encodeURIComponent(path)}`).then((r) => r.json())
+    return this.fetch(`/v1/files?path=${encodeURIComponent(path)}`).then((r) => r.json())
   }
 
   async write(path: string, data: string | Uint8Array): Promise<void> {
-    await this.call(`/v1/files?path=${encodeURIComponent(path)}`, { method: "PUT", body: typeof data === "string" ? data : new Blob([data as Uint8Array<ArrayBuffer>]) })
+    await this.fetch(`/v1/files?path=${encodeURIComponent(path)}`, { method: "PUT", body: typeof data === "string" ? data : new Blob([data as Uint8Array<ArrayBuffer>]) })
   }
 
   /** `raea ARGS` in the workspace (or `cwd` in it): resolves with its exit code; output goes to onOutput as it comes. */
   async run(args: string[], o: { cwd?: string; onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal } = {}): Promise<number> {
-    const res = await this.call("/v1/run", { method: "POST", body: JSON.stringify({ args, cwd: o.cwd }), headers: { "content-type": "application/json" }, signal: o.signal })
+    const res = await this.fetch("/v1/run", { method: "POST", body: JSON.stringify({ args, cwd: o.cwd }), headers: { "content-type": "application/json" }, signal: o.signal })
     return (await follow(res, o.onOutput, "raea's run")).exit
   }
 
   /** A bash command line in the workspace (or `cwd` in it): its exit code, and whether it was stopped at its
    *  timeout (the server's 10 minutes unless `timeoutMs`, an hour at most); output goes to onOutput as it comes. */
   async shell(command: string, o: { cwd?: string; timeoutMs?: number; onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal } = {}): Promise<{ exit: number; timedOut: boolean }> {
-    const res = await this.call("/v1/shell", { method: "POST", body: JSON.stringify({ command, cwd: o.cwd, timeout_ms: o.timeoutMs }), headers: { "content-type": "application/json" }, signal: o.signal })
+    const res = await this.fetch("/v1/shell", { method: "POST", body: JSON.stringify({ command, cwd: o.cwd, timeout_ms: o.timeoutMs }), headers: { "content-type": "application/json" }, signal: o.signal })
     return follow(res, o.onOutput, "the shell command")
   }
 
@@ -144,29 +152,29 @@ export class RaeaCloud {
     if (farm.gpu) q.set("gpu", farm.gpu)
     if (farm.maxUsd !== undefined) q.set("max_usd", String(farm.maxUsd))
     if (farm.media) q.set("media", "1")
-    const r = await this.call(`/v1/jobs?${q}`, { method: "POST", body: new Blob([folder as Uint8Array<ArrayBuffer>]), headers: { "content-type": "application/octet-stream" }, signal })
+    const r = await this.fetch(`/v1/jobs?${q}`, { method: "POST", body: new Blob([folder as Uint8Array<ArrayBuffer>]), headers: { "content-type": "application/octet-stream" }, signal })
     return ((await r.json()) as { id: string }).id
   }
 
   /** A job's output since line `from`; the server holds the request up to 20 s for more. `exit` once it's done. */
   followJob(id: string, from = 0, signal?: AbortSignal): Promise<JobLog> {
-    return this.call(`/v1/jobs/${id}?from=${from}`, { signal }).then((r) => r.json())
+    return this.fetch(`/v1/jobs/${id}?from=${from}`, { signal }).then((r) => r.json())
   }
 
   /** A finished job's files: the ones its run made or changed, as a tar (zstd unless `as` says gz or tar). The server
    *  drops the job after. */
   async jobFiles(id: string, as: "zst" | "gz" | "tar" = "zst"): Promise<Uint8Array> {
-    return new Uint8Array(await (await this.call(`/v1/jobs/${id}/out?as=${as}`)).arrayBuffer())
+    return new Uint8Array(await (await this.fetch(`/v1/jobs/${id}/out?as=${as}`)).arrayBuffer())
   }
 
   /** A finished job's media outputs (a job started with farm.media), held on the farm until sendMedia. */
   async jobMedia(id: string): Promise<Media[]> {
-    return ((await (await this.call(`/v1/jobs/${id}/media`)).json()) as { objects: Media[] }).objects
+    return ((await (await this.fetch(`/v1/jobs/${id}/media`)).json()) as { objects: Media[] }).objects
   }
 
   /** Sends a job's media outputs to R2: each with an href goes there (a signed PUT), straight from the farm. */
   async sendMedia(id: string, objects: Media[]): Promise<{ uploaded: number; bytes: number }> {
-    const r = await this.call(`/v1/jobs/${id}/media`, { method: "POST", body: JSON.stringify({ objects }), headers: { "content-type": "application/json" } })
+    const r = await this.fetch(`/v1/jobs/${id}/media`, { method: "POST", body: JSON.stringify({ objects }), headers: { "content-type": "application/json" } })
     return r.json()
   }
 
@@ -205,11 +213,11 @@ export class RaeaCloud {
   /** Starts an agent's terminal sign-in (Kimi Code's device code): open `url` and enter `code` once; the sign-in is
    *  kept in the server's home folder. */
   login(agent?: string): Promise<Login> {
-    return this.call(`/v1/login${agent ? `?agent=${encodeURIComponent(agent)}` : ""}`, { method: "POST" }).then((r) => r.json())
+    return this.fetch(`/v1/login${agent ? `?agent=${encodeURIComponent(agent)}` : ""}`, { method: "POST" }).then((r) => r.json())
   }
 
   loginState(agent?: string): Promise<Login> {
-    return this.call(`/v1/login${agent ? `?agent=${encodeURIComponent(agent)}` : ""}`).then((r) => r.json())
+    return this.fetch(`/v1/login${agent ? `?agent=${encodeURIComponent(agent)}` : ""}`).then((r) => r.json())
   }
 
   /** An ACP session with an agent in the workspace (the default agent unless one is named). */
