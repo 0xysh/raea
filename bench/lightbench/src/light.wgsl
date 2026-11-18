@@ -18,6 +18,9 @@ struct Params {
     prev_eye: vec4<f32>,
     // raw (no history), reset (a camera cut, or the first frame), the history's length in frames, 0
     temporal: vec4<u32>,
+    // the light grid: its corner (xyz) and cell size (w); its cells along x, y, z, and whether the sampled modes use it
+    grid_min: vec4<f32>,
+    grid_dims: vec4<u32>,
 }
 
 struct Node { mn: vec3<f32>, a: u32, mx: vec3<f32>, count: u32 }
@@ -39,6 +42,10 @@ struct Light { pos: vec3<f32>, range: f32, power: vec3<f32>, radius: f32 }
 @group(0) @binding(10) var geo_out: texture_storage_2d<rgba16float, write>;
 // this frame's shadow rays, lit pixels and the most rays any pixel traced (LB4's rays a pixel)
 @group(0) @binding(11) var<storage, read_write> stats: array<atomic<u32>, 4>;
+
+// cell c's lights are grid_idx[grid_start[c]..grid_start[c + 1]]
+@group(0) @binding(12) var<storage, read> grid_start: array<u32>;
+@group(0) @binding(13) var<storage, read> grid_idx: array<u32>;
 
 var<workgroup> wg_rays: atomic<u32>;
 var<workgroup> wg_px: atomic<u32>;
@@ -169,6 +176,25 @@ fn visible(o: vec3<f32>, l: Light) -> f32 {
     return select(1.0, 0.0, occluded(o, v / d, d - 1e-3));
 }
 
+// the candidate lights at a point: (first, count) into grid_idx, or with the grid off every light (count with first
+// = 0xFFFFFFFF); outside the grid no light reaches
+fn candidates(pos: vec3<f32>) -> vec2<u32> {
+    if p.grid_dims.w == 0u {
+        return vec2(0xFFFFFFFFu, p.size.z);
+    }
+    let c = vec3<i32>(floor((pos - p.grid_min.xyz) / p.grid_min.w));
+    let d = vec3<i32>(p.grid_dims.xyz);
+    if any(c < vec3(0)) || any(c >= d) {
+        return vec2(0u, 0u);
+    }
+    let cell = u32((c.z * d.y + c.y) * d.x + c.x);
+    return vec2(grid_start[cell], grid_start[cell + 1u] - grid_start[cell]);
+}
+
+fn candidate(range: vec2<u32>, j: u32) -> u32 {
+    return select(grid_idx[range.x + j], j, range.x == 0xFFFFFFFFu);
+}
+
 fn lum(c: vec3<f32>) -> f32 {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -221,21 +247,27 @@ fn shade(id: vec3<u32>) -> vec2<u32> {
             }
         }
     } else if p.mode.x == 1u {
-        // uniform: each light 1 / N
-        for (var s = 0u; s < k; s++) {
-            let i = min(u32(rnd() * f32(nl)), nl - 1u);
-            let u = unshadowed(lights[i], pos, n);
-            if lum(u) > 0.0 {
-                c += u * visible(o, lights[i]) * f32(nl);
+        // uniform: each candidate 1 / their number
+        let cand = candidates(pos);
+        let m = cand.y;
+        if m > 0u {
+            for (var s = 0u; s < k; s++) {
+                let i = candidate(cand, min(u32(rnd() * f32(m)), m - 1u));
+                let u = unshadowed(lights[i], pos, n);
+                if lum(u) > 0.0 {
+                    c += u * visible(o, lights[i]) * f32(m);
+                }
             }
+            c /= f32(k);
         }
-        c /= f32(k);
     } else {
         // weighted: K reservoirs over every light by its unshadowed light, so any light that adds light can be chosen
         var pick: array<u32, MAX_K>;
         var pw: array<f32, MAX_K>;
         var wsum = 0.0;
-        for (var i = 0u; i < nl; i++) {
+        let cand = candidates(pos);
+        for (var j = 0u; j < cand.y; j++) {
+            let i = candidate(cand, j);
             let wi = lum(unshadowed(lights[i], pos, n));
             if wi <= 0.0 {
                 continue;

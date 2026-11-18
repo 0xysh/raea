@@ -53,6 +53,11 @@ pub struct Frame {
     pub cut: bool,
     /// the history's length in frames
     pub history: u32,
+    /// the light grid (grid.rs): its corner and cell size, its cells along each axis and whether to use it, its lists
+    pub grid_min: Vec4,
+    pub grid_dims: UVec4,
+    pub grid_start: Vec<u32>,
+    pub grid_idx: Vec<u32>,
 }
 
 pub struct LightPass;
@@ -82,6 +87,8 @@ struct Params {
     prev_clip_from_world: Mat4,
     prev_eye: Vec4,
     temporal: UVec4,
+    grid_min: Vec4,
+    grid_dims: UVec4,
 }
 
 #[derive(Resource)]
@@ -122,6 +129,8 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 storage_buffer_sized(false, std::num::NonZeroU64::new(16)),
+                read(4),
+                read(4),
             ),
         ),
     );
@@ -163,6 +172,8 @@ fn light(
         bufs.from = Some((key, nodes, tris));
     }
     let lights = device.create_buffer_with_data(&BufferInitDescriptor { label: Some("lightbench_lights"), contents: bytemuck::cast_slice(&frame.lights), usage: BufferUsages::STORAGE });
+    let list = |label: &str, v: &[u32]| device.create_buffer_with_data(&BufferInitDescriptor { label: Some(label), contents: bytemuck::cast_slice(if v.is_empty() { &[0u32][..] } else { v }), usage: BufferUsages::STORAGE });
+    let (grid_start, grid_idx) = (list("lightbench_grid_start", &frame.grid_start), list("lightbench_grid_idx", &frame.grid_idx));
     let size = target.main_texture().size();
     let want = UVec2::new(size.width, size.height);
     let fresh = bufs.history.as_ref().map(|h| h.0) != Some(want);
@@ -215,12 +226,14 @@ fn light(
         prev_clip_from_world,
         prev_eye: prev_eye.extend(0.0),
         temporal: UVec4::new(frame.raw as u32, reset as u32, frame.history.max(1), 0),
+        grid_min: frame.grid_min,
+        grid_dims: frame.grid_dims,
     });
     params.write_buffer(&device, &queue);
     let group = device.create_bind_group(
         "lightbench_light",
         &cache.get_bind_group_layout(&p.layout),
-        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view(), &h[r].1, &h[r + 1].1, &h[w].1, &h[w + 1].1, stats.as_entire_binding())),
+        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view(), &h[r].1, &h[r + 1].1, &h[w].1, &h[w + 1].1, stats.as_entire_binding(), grid_start.as_entire_binding(), grid_idx.as_entire_binding())),
     );
     let encoder = ctx.command_encoder();
     // timed at the pass's own start and end: Apple's GPUs take timestamps there, not inside passes or between them

@@ -4,6 +4,7 @@
 
 mod bvh;
 mod field;
+mod grid;
 mod lod;
 mod pass;
 mod scene;
@@ -44,7 +45,8 @@ const HELP: &str = "lightbench [switches]
   --detail full|adaptive        every finest triangle, or the clusters each knot's distance asks for (adaptive)
   --tau PX                      the error in pixels a cluster may show (1)
   --fov DEG                     the vertical field of view (45)
-  --view lod                    each cluster coloured by its level (white the finest), unlit";
+  --view lod                    each cluster coloured by its level (white the finest), unlit
+  --grid on|off                 the sampled modes weigh only the lights whose range reaches the pixel's cell (on)";
 
 #[derive(Resource, Clone)]
 pub struct Opts {
@@ -72,10 +74,11 @@ pub struct Opts {
     pub full: bool,
     pub tau: f32,
     pub fov: f32,
+    pub grid: bool,
 }
 
 fn opts() -> Result<Opts, String> {
-    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0 };
+    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0, grid: true };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut val = || args.next().ok_or(format!("{a} needs a value"));
@@ -107,6 +110,7 @@ fn opts() -> Result<Opts, String> {
             "--rows" => o.rows = (num(val()?)? as u32).max(1),
             "--tau" => o.tau = num(val()?)?.max(0.0),
             "--fov" => o.fov = num(val()?)?.clamp(1.0, 170.0),
+            "--grid" => o.grid = val()? != "off",
             "--size" => {
                 let v = val()?;
                 let (w, h) = v.split_once('x').ok_or("--size: WxH")?;
@@ -228,8 +232,14 @@ fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: 
         cut = at.translation.distance(to.translation) > 1.0 || at.rotation.angle_between(to.rotation) > 20f32.to_radians();
         *at = to;
     }
+    let lights = scene::lights(o.lights, t, o.scene == 1);
+    let g = grid::build(&lights, 2.0);
     *frame = pass::Frame {
-        lights: scene::lights(o.lights, t),
+        grid_min: g.min.extend(g.cell),
+        grid_dims: g.dims.extend(o.grid as u32),
+        grid_start: g.start,
+        grid_idx: g.idx,
+        lights,
         mode: o.mode,
         k: o.k,
         view: o.view,

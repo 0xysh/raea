@@ -61,7 +61,10 @@ pub fn spawn(mut commands: Commands, opts: Res<Opts>, mut meshes: ResMut<Assets<
 
 /// The lights at time `t` (seconds): the pillar's light first, then `n - 1` on a ring that turns, each a different
 /// colour, their power split so the frame's brightness doesn't change with how many there are.
-pub fn lights(n: u32, t: f32) -> Vec<GpuLight> {
+pub fn lights(n: u32, t: f32, field: bool) -> Vec<GpuLight> {
+    if field {
+        return field_lights(n, t);
+    }
     let mut out = vec![GpuLight { pos: PILLAR_LIGHT.into(), range: 14.0, power: [30.0, 28.0, 24.0], radius: 0.05 }];
     let ring = n.saturating_sub(1).max(1);
     for i in 0..n.saturating_sub(1) {
@@ -74,6 +77,21 @@ pub fn lights(n: u32, t: f32) -> Vec<GpuLight> {
         out.push(GpuLight { pos: [3.6 * a.cos(), h, 3.6 * a.sin()], range: 9.0, power: [c.red * p, c.green * p, c.blue * p], radius: 0.05 });
     }
     out
+}
+
+/// The field's lights: scattered over it from 4 m in front of the camera to 56 m behind, each reaching 6 m and as
+/// bright as the next, so more lights light more of the field (the many-small-lights case a light grid is for).
+fn field_lights(n: u32, t: f32) -> Vec<GpuLight> {
+    (0..n)
+        .map(|i| {
+            let h = |k: f32| ((i as f32 * 12.9898 + k * 78.233).sin() * 43758.547).fract().abs();
+            let c = Color::hsl(h(1.0) * 360.0, 0.75, 0.6).to_linear();
+            let lum = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+            let p = 6.0 / lum.max(1e-3);
+            let y = 0.4 + 2.6 * (0.5 + 0.5 * (h(2.0) * 6.28 + t * 0.7).sin());
+            GpuLight { pos: [h(3.0) * 36.0 - 18.0, y, 4.0 - h(4.0) * 60.0], range: 6.0, power: [c.red * p, c.green * p, c.blue * p], radius: 0.05 }
+        })
+        .collect()
 }
 
 /// A (p, q) torus knot `seg` segments long and `ring` around, its tube `r` thick, in the xy plane.
