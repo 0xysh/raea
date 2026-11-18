@@ -15466,6 +15466,7 @@ dependencies = [
  "raea-core-program",
  "raea-runtime-plugins",
  "raea-sys-compute",
+ "raea-sys-copies",
  "raea-sys-fog",
  "raea-sys-fog-half",
  "raea-sys-frame",
@@ -15731,6 +15732,15 @@ dependencies = [
  "raea-core-scene",
  "raea-core-shape",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-copies"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-sys-material",
+ "raea-sys-shader",
 ]
 
 [[package]]

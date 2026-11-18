@@ -13,6 +13,8 @@ raea-sys-framepass = { path = "../../systems/framepass" }
 raea-sys-compute = { path = "../../systems/compute" }
 raea-sys-sampler = { path = "../../systems/sampler" }
 raea-sys-shader = { path = "../../systems/shader" }
+# an <Instances>' copies: a mesh's or a model's parts at each placement, sharing their material handles
+raea-sys-copies = { path = "../../systems/copies" }
 raea-sys-fog = { path = "../../systems/fog" }
 raea-sys-fog-half = { path = "../../systems/fog-half" }
 raea-sys-post = { path = "../../systems/post" }

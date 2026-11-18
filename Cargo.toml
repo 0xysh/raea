@@ -123,6 +123,7 @@ members = [
     "systems/text3d",
     "runtime/gpuframe",
     "runtime/scene3d",
+    "systems/copies",
     "systems/screen",
     "systems/matchmove",
     "systems/grid",
