@@ -313,6 +313,13 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         but for its ceiling panels, 4.8 stops under its reference: it is lit by their emission alone, which no cell
         knows yet (LT4's first tier, a hit's record's albedo and emission); live 14.5/16.3 ms, the cache and its
         probes 0.92 ms of GPU
+      And on Berlin's walk (11-18, filtered, frames 96 and 191; no reference) the shaded fronts come out darker and
+        blotchy, and live is 54.9 ms raster against 64.5 gi (the cache and probes 1.6 ms of GPU at 226k cells; the
+        rest is the normal prepass over the city). Updating every live cell each frame (RAEA_GI_UPDATES=300000: 2.0 ms,
+        407k cells) barely changes the blotches, so it's the readout, not how often a cell learns: a facade 30 to 40 m
+        off is 1.5 to 2 m cells, and each pixel's jittered read lands in a neighbouring cell with another value. A
+        pixel reading its own cell is the measuring step only: LT8's screen probes (rays from the pixels, their hits
+        read the cache, filtered in probe space) are what draws it. Posted to Shane, i-acp-mwlwy9eb-38
 
     Scenario: LT4. What a ray hit sees
       Given every MaterialExtension writes the deferred G-buffer with its own surface code (D4; procmat's is first,
