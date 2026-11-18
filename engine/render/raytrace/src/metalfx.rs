@@ -7,9 +7,13 @@
 //! denoiser on the view's colour, depth and motion and copies its output back over the colour, before the forward
 //! meshes and the tonemapping. The two command buffers go to wgpu's queue in that order, after Solari's.
 //!
-//! Drawn below its size (RT9, upscale.rs), the view's main pass holds only the top-left corner of its textures: the
-//! denoiser works on that corner, at the main pass's size and with its jitter, and MetalFX's temporal scaler brings it
-//! up after the forward meshes.
+//! Drawn below its size (RT9, upscale.rs), the view's main pass holds only the top-left corner of its textures. Then
+//! the denoiser waits for the forward meshes and runs where Bevy's DLSS does (EarlyPostProcess): from that corner, with
+//! the projection's jitter, out to the whole view, denoising and upscaling in one pass, as MetalFX's denoised scaler is
+//! made to. A pixel with nothing in the G-buffer (a forward mesh, the sky) gives the denoiser its own colour as its
+//! albedo, so it has nothing there to smooth. RAEA_SOLARI_UPSCALE=two denoises the corner before the forward meshes and
+//! leaves the scaling to MetalFX's temporal scaler (upscale.rs), the first way, to compare: the denoiser settled each
+//! frame on the small grid, so the scaler gained nothing from the jitter (0.7 of the full size's fine detail at 0.67).
 //!
 //! Where there's no MetalFX denoiser (not macOS 26, not Metal, a device it doesn't support) the lighting draws as it
 //! is and raea says so once. RAEA_SOLARI_DENOISE=0 turns it off, to see the noise.
@@ -55,6 +59,13 @@ pub(crate) fn add(app: &mut App) {
         return;
     };
     core.add_systems(denoise.after(solari).before(main_opaque_pass_3d).in_set(Core3dSystems::MainPass));
+    core.add_systems(denoise_up.before(super::upscale::upscale).in_set(Core3dSystems::EarlyPostProcess));
+}
+
+/// A view drawn small is denoised and brought up in one pass (unless RAEA_SOLARI_UPSCALE=two).
+fn one_pass() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_UPSCALE").as_deref() != Ok("two"))
 }
 
 // Bevy's G-buffer (bevy_pbr deferred/functions.wesl, types.wesl) to MetalFX's guides: r = base colour (sRGB-ish, pow
@@ -72,8 +83,9 @@ const DECODE_WGSL: &str = r#"
 @group(0) @binding(3) var normal: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(4) var rough: texture_storage_2d<r32float, write>;
 @group(0) @binding(5) var color: texture_storage_2d<rgba16float, read_write>;
-// x: the camera's exposure; y, z: the main pass's size (the corner of the colour it drew)
-@group(0) @binding(6) var<uniform> params: vec4<f32>;
+// [0].x: the camera's exposure; [1]: the output's size and the input's (the corner of the colour the main pass drew);
+// [2].xyz: the camera's back, world-space; [3].xy: the jitter MetalFX is told, in input pixels
+@group(0) @binding(6) var<uniform> params: array<vec4<f32>, 4>;
 fn rgb9e5(v: u32) -> vec3<f32> {
     let scale = exp2(f32(i32(extractBits(v, 27u, 5u)) - 15 - 9));
     return vec3<f32>(f32(extractBits(v, 0u, 9u)), f32(extractBits(v, 9u, 9u)), f32(extractBits(v, 18u, 9u))) * scale;
@@ -95,6 +107,15 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= size.x || id.y >= size.y) { return; }
     let p = vec2<i32>(id.xy);
     let g = textureLoad(gbuf, p, 0);
+    if (all(g == vec4<u32>(0u))) {
+        // nothing deferred here (a forward mesh, the sky): its colour as its albedo, so there's nothing to smooth
+        let c = textureLoad(color, p).rgb;
+        textureStore(diffuse, p, vec4<f32>(c / max(1.0, max(c.r, max(c.g, c.b))), 1.0));
+        textureStore(specular, p, vec4<f32>(0.0, 0.0, 0.0, 1.0));
+        textureStore(normal, p, vec4<f32>(params[2].xyz, 0.0));
+        textureStore(rough, p, vec4<f32>(1.0, 0.0, 0.0, 0.0));
+        return;
+    }
     let a = unorm4x8(g.r);
     let props = unorm4x8(g.b);
     let base = pow(a.rgb, vec3<f32>(2.2));
@@ -106,21 +127,31 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(normal, p, vec4<f32>(n, 0.0));
     textureStore(rough, p, vec4<f32>(a.w, 0.0, 0.0, 0.0));
     let c = textureLoad(color, p);
-    textureStore(color, p, vec4<f32>(max(c.rgb - rgb9e5(g.g) * params.x, vec3<f32>(0.0)), c.a));
+    textureStore(color, p, vec4<f32>(max(c.rgb - rgb9e5(g.g) * params[0].x, vec3<f32>(0.0)), c.a));
+}
+fn emitted(i: vec2<i32>) -> vec3<f32> {
+    return rgb9e5(textureLoad(gbuf, clamp(i, vec2<i32>(0), vec2<i32>(params[1].zw) - 1), 0).g);
 }
 @compute @workgroup_size(8, 8, 1)
 fn restore(@builtin(global_invocation_id) id: vec3<u32>) {
-    let size = vec2<u32>(params.yz);
+    let size = vec2<u32>(params[1].xy);
     if (id.x >= size.x || id.y >= size.y) { return; }
     let p = vec2<i32>(id.xy);
+    // where this output pixel lies in the jittered G-buffer, between its pixels' centres
+    let q = (vec2<f32>(id.xy) + 0.5) * params[1].zw / params[1].xy - params[3].xy - 0.5;
+    let i = vec2<i32>(floor(q));
+    let t = q - floor(q);
+    let e = mix(mix(emitted(i), emitted(i + vec2<i32>(1, 0)), t.x), mix(emitted(i + vec2<i32>(0, 1)), emitted(i + vec2<i32>(1, 1)), t.x), t.y);
     let c = textureLoad(color, p);
-    textureStore(color, p, vec4<f32>(c.rgb + rgb9e5(textureLoad(gbuf, p, 0).g) * params.x, c.a));
+    textureStore(color, p, vec4<f32>(c.rgb + e * params[0].x, c.a));
 }
 "#;
 
-/// A view's denoiser and its textures, made again when the view's size changes.
+/// A view's denoiser and its textures, made again when its input's or output's size changes.
 struct View {
+    /// the main pass's size (the guides'), and the denoised frame's
     size: UVec2,
+    out_size: UVec2,
     scaler: Retained<ProtocolObject<dyn MTLFXTemporalDenoisedScaler>>,
     diffuse: wgpu::Texture,
     specular: wgpu::Texture,
@@ -160,7 +191,7 @@ fn mtl(t: &wgpu::Texture) -> Option<Retained<ProtocolObject<dyn MTLTexture>>> {
 }
 
 impl View {
-    fn new(dev: &wgpu::Device, size: UVec2) -> Result<View, String> {
+    fn new(dev: &wgpu::Device, size: UVec2, out_size: UVec2) -> Result<View, String> {
         let hal = unsafe { dev.as_hal::<Metal>() }.ok_or("the GPU isn't on Metal")?;
         let device = hal.raw_device();
         unsafe {
@@ -178,8 +209,8 @@ impl View {
             d.setOutputTextureFormat(MTLPixelFormat::RGBA16Float);
             d.setInputWidth(size.x as _);
             d.setInputHeight(size.y as _);
-            d.setOutputWidth(size.x as _);
-            d.setOutputHeight(size.y as _);
+            d.setOutputWidth(out_size.x as _);
+            d.setOutputHeight(out_size.y as _);
             d.setRequiresSynchronousInitialization(true);
             let scaler = d.newTemporalDenoisedScalerWithDevice(device).ok_or("MetalFX made no denoiser")?;
             drop(hal);
@@ -187,18 +218,19 @@ impl View {
             let guide = U::STORAGE_BINDING | U::TEXTURE_BINDING;
             Ok(View {
                 size,
+                out_size,
                 scaler,
                 diffuse: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx diffuse albedo"),
                 specular: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx specular albedo"),
                 normal: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx normal"),
                 rough: texture(dev, size, wgpu::TextureFormat::R32Float, guide, "metalfx roughness"),
-                out: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide | U::RENDER_ATTACHMENT | U::COPY_SRC, "metalfx output"),
+                out: texture(dev, out_size, wgpu::TextureFormat::Rgba16Float, guide | U::RENDER_ATTACHMENT | U::COPY_SRC, "metalfx output"),
                 fresh: true,
             })
         }
     }
 
-    /// The denoiser on `cb`, then its output copied over the colour's corner the main pass drew. `jitter` is the
+    /// The denoiser on `cb`, then its output copied over the colour's corner of its size. `jitter` is the
     /// camera's this frame, in the main pass's pixels, as MetalFX takes it (Bevy's TemporalJitter negated, as its DLSS
     /// gives it).
     fn encode(&mut self, cb: &ProtocolObject<dyn MTLCommandBuffer>, color: &wgpu::Texture, depth: &wgpu::Texture, motion: &wgpu::Texture, view: &ExtractedView, jitter: Vec2, reset: bool) -> Result<(), &'static str> {
@@ -227,7 +259,7 @@ impl View {
             s.encodeToCommandBuffer(cb);
             let blit = cb.blitCommandEncoder().ok_or("no blit encoder")?;
             let o = MTLOrigin { x: 0, y: 0, z: 0 };
-            let size = MTLSize { width: self.size.x as _, height: self.size.y as _, depth: 1 };
+            let size = MTLSize { width: self.out_size.x as _, height: self.out_size.y as _, depth: 1 };
             blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin(&out, 0, 0, o, size, &color, 0, 0, o);
             blit.endEncoding();
         }
@@ -261,24 +293,49 @@ fn matrices(s: &ProtocolObject<dyn MTLFXTemporalDenoisedScaler>, world_to_view: 
     }
 }
 
-type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static ExtractedView, &'static ExtractedCamera, &'static SolariLighting, Option<&'static MainPassResolutionOverride>, Option<&'static TemporalJitter>);
+type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static ExtractedView, &'static ExtractedCamera, &'static SolariLighting, Option<&'static MainPassResolutionOverride>, Option<&'static TemporalJitter>, Has<super::upscale::Upscaled>);
 
+/// Before the forward meshes: a view at its full size, or one drawn small when RAEA_SOLARI_UPSCALE=two (its corner).
 fn denoise(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
+    let entity = view.entity();
+    let item = view.into_inner();
+    if item.7 && one_pass() {
+        return;
+    }
+    run(entity, item, &device, &mut kit, &mut ctx, false);
+}
+
+/// After the main pass: a view drawn small, denoised from its corner out to its whole size.
+fn denoise_up(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
+    let entity = view.entity();
+    let item = view.into_inner();
+    if !item.7 || !one_pass() {
+        return;
+    }
+    run(entity, item, &device, &mut kit, &mut ctx, true);
+}
+
+type Item<'a> = (&'a ViewTarget, &'a ViewPrepassTextures, &'a ExtractedView, &'a ExtractedCamera, &'a SolariLighting, Option<&'a MainPassResolutionOverride>, Option<&'a TemporalJitter>, bool);
+
+/// The guides from the G-buffer and the emissive out, at the main pass's size; MetalFX's denoiser, out to the whole
+/// view when `up`; its output over the colour and the emissive back in.
+fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &mut RenderContext, up: bool) {
     if kit.off {
         return;
     }
-    let entity = view.entity();
-    let (target, pre, ext, cam, solari, part, jitter) = view.into_inner();
+    let (target, pre, ext, cam, solari, part, jitter, _) = item;
     let (Some(depth), Some(motion), Some(gbuf)) = (pre.depth.as_ref(), pre.motion_vectors.as_ref(), pre.deferred.as_ref()) else { return };
     if target.main_texture_format() != TextureFormat::Rgba16Float {
         return;
     }
     let color: &wgpu::Texture = target.main_texture();
-    let size = part.map_or(UVec2::new(color.width(), color.height()), |p| p.0);
+    let full = UVec2::new(color.width(), color.height());
+    let size = part.map_or(full, |p| p.0);
+    let out_size = if up { full } else { size };
     let jitter = jitter.map_or(Vec2::ZERO, |j| -j.offset * super::upscale::jitter_gain(true, true));
     let dev = device.wgpu_device().clone();
-    if kit.views.get(&entity).map(|v| v.size) != Some(size) {
-        match View::new(&dev, size) {
+    if kit.views.get(&entity).map(|v| (v.size, v.out_size)) != Some((size, out_size)) {
+        match View::new(&dev, size, out_size) {
             Ok(v) => {
                 kit.views.insert(entity, v);
             }
@@ -298,11 +355,10 @@ fn denoise(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Ki
         })
         .clone();
     let color_view = color.create_view(&Default::default());
-    let mut exposure = [0u8; 16];
-    for (i, v) in [cam.exposure, size.x as f32, size.y as f32].into_iter().enumerate() {
-        exposure[4 * i..4 * i + 4].copy_from_slice(&v.to_ne_bytes());
-    }
-    let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx exposure"), contents: &exposure, usage: wgpu::BufferUsages::UNIFORM });
+    let back = ext.world_from_view.back();
+    let words: [f32; 16] = [cam.exposure, 0.0, 0.0, 0.0, out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, 0.0, jitter.x, jitter.y, 0.0, 0.0];
+    let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
+    let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx params"), contents: &bytes, usage: wgpu::BufferUsages::UNIFORM });
     let v = kit.views.get_mut(&entity).unwrap();
     let views = [&v.diffuse, &v.specular, &v.normal, &v.rough].map(|t| t.create_view(&Default::default()));
     let mut entries = vec![wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&*gbuf.texture.default_view) }];
@@ -341,10 +397,14 @@ fn denoise(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Ki
         let mut pass = ctx.command_encoder().begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("metalfx emissive back"), timestamp_writes: None });
         pass.set_pipeline(&restore);
         pass.set_bind_group(0, &back, &[]);
-        pass.dispatch_workgroups(size.x.div_ceil(8), size.y.div_ceil(8), 1);
+        pass.dispatch_workgroups(out_size.x.div_ceil(8), out_size.y.div_ceil(8), 1);
     }
-    super::upscale::DENOISED.store(done.is_ok(), std::sync::atomic::Ordering::Relaxed);
-    super::upscale::DENOISING.store(done.is_ok(), std::sync::atomic::Ordering::Relaxed);
+    use std::sync::atomic::Ordering::Relaxed;
+    super::upscale::DENOISED.store(done.is_ok(), Relaxed);
+    super::upscale::DENOISING.store(done.is_ok(), Relaxed);
+    if up {
+        super::upscale::BROUGHT_UP.store(done.is_ok(), Relaxed);
+    }
     if let Err(e) = done {
         kit.off = true;
         eprintln!("raea: <SolariLighting>: the MetalFX denoiser stopped ({e}); the lighting draws un-denoised");

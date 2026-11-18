@@ -56,6 +56,9 @@ fn scale(rs: Option<&RenderScale>, solari: bool) -> f32 {
 
 /// The denoiser ran on the view this frame (metalfx.rs sets it; the scaler, after it, reads and clears it).
 pub(crate) static DENOISED: AtomicBool = AtomicBool::new(false);
+/// The denoiser denoised the view and brought it up to its full size this frame (metalfx.rs sets it; the scaler,
+/// after it, reads and clears it and has nothing to do).
+pub(crate) static BROUGHT_UP: AtomicBool = AtomicBool::new(false);
 /// The denoiser is running (metalfx.rs sets it as it encodes, clears it if it stops): a full-size view is jittered only
 /// then, as the raw frame would shimmer half a pixel.
 pub(crate) static DENOISING: AtomicBool = AtomicBool::new(false);
@@ -126,7 +129,7 @@ fn jitter(mut cmd: Commands, frame: Res<FrameCount>, mut cams: Query<(Entity, Op
 
 /// A view the scaler brings up (it has the main pass's size in MainPassResolutionOverride).
 #[derive(Component)]
-struct Upscaled;
+pub(crate) struct Upscaled;
 
 /// Each drawn-small camera's main pass size onto its view; taken off when its scale goes back to 1.
 fn extract(mut cmd: Commands, cams: Extract<Query<(RenderEntity, &Camera, Option<&RenderScale>, Has<SolariLighting>), With<Camera3d>>>, upscaled: Query<(), With<Upscaled>>) {
@@ -155,7 +158,7 @@ struct View {
 }
 
 #[derive(Default)]
-struct Kit {
+pub(crate) struct Kit {
     views: HashMap<Entity, View>,
 }
 // the Metal objects are only touched on the render thread, in this system
@@ -234,10 +237,11 @@ impl View {
     }
 }
 
-type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static MainPassResolutionOverride, Option<&'static TemporalJitter>, Option<&'static SolariLighting>);
+pub(crate) type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static MainPassResolutionOverride, Option<&'static TemporalJitter>, Option<&'static SolariLighting>);
 
-fn upscale(view: ViewQuery<Viewed, With<Upscaled>>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
-    if NONE.load(Ordering::Relaxed) {
+pub(crate) fn upscale(view: ViewQuery<Viewed, With<Upscaled>>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
+    // the denoiser brought it up already, in the same pass (metalfx.rs)
+    if NONE.load(Ordering::Relaxed) || BROUGHT_UP.swap(false, Ordering::Relaxed) {
         return;
     }
     let entity = view.entity();
