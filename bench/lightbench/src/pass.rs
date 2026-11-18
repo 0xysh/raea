@@ -14,7 +14,7 @@ use bevy::{
     render::{
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         render_resource::{
-            binding_types::{storage_buffer_read_only_sized, texture_2d, texture_depth_2d, texture_storage_2d, uniform_buffer},
+            binding_types::{storage_buffer_read_only_sized, storage_buffer_sized, texture_2d, texture_depth_2d, texture_storage_2d, uniform_buffer},
             *,
         },
         renderer::{RenderContext, RenderDevice, RenderQueue, ViewQuery},
@@ -26,6 +26,13 @@ use std::sync::{atomic::{AtomicU32, Ordering}, Arc};
 
 /// Frames the lighting pass has drawn, so a headless shot waits for its pipeline rather than for a number of frames.
 pub static DRAWN: AtomicU32 = AtomicU32::new(0);
+
+/// The last frame read back (timing runs only): shadow rays, lit pixels, the most rays one pixel traced.
+pub static RAYS: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
+
+/// The lighting pass's GPU time (timing runs, where the GPU has timestamps): nanoseconds summed, and frames timed.
+pub static GPU_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static GPU_FRAMES: AtomicU32 = AtomicU32::new(0);
 
 /// What this frame draws: the lights where they are now, and the switches.
 #[derive(Resource, Clone, Default, ExtractResource)]
@@ -90,6 +97,10 @@ struct Buffers {
     from: Option<(usize, Buffer, Buffer)>,
     history: Option<(UVec2, [(Texture, TextureView); 4])>,
     prev: Option<(Mat4, Vec3)>,
+    /// the ray counts the shader adds to, and where a timing run reads them back
+    stats: Option<(Buffer, Buffer)>,
+    /// the pass's start and end timestamps, resolved, read back; nanoseconds a tick
+    timer: Option<(wgpu::QuerySet, wgpu::Buffer, wgpu::Buffer, f64)>,
 }
 
 fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCache>) {
@@ -110,6 +121,7 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 texture_2d(TextureSampleType::Float { filterable: false }),
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
+                storage_buffer_sized(false, std::num::NonZeroU64::new(16)),
             ),
         ),
     );
@@ -177,6 +189,20 @@ fn light(
     let (prev_clip_from_world, prev_eye) = bufs.prev.unwrap_or((clip_from_world, eye));
     let reset = fresh || frame.cut || bufs.prev.is_none();
     bufs.prev = Some((clip_from_world, eye));
+    if bufs.stats.is_none() {
+        let make = |label: &str, usage: BufferUsages| device.create_buffer(&BufferDescriptor { label: Some(label), size: 16, usage, mapped_at_creation: false });
+        bufs.stats = Some((make("lightbench_stats", BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC), make("lightbench_stats_read", BufferUsages::MAP_READ | BufferUsages::COPY_DST)));
+    }
+    if bufs.timer.is_none() && crate::timing() && device.features().contains(WgpuFeatures::TIMESTAMP_QUERY) {
+        let d = device.wgpu_device();
+        let set = d.create_query_set(&wgpu::QuerySetDescriptor { label: Some("lightbench_timer"), ty: wgpu::QueryType::Timestamp, count: 2 });
+        let buf = |label: &str, usage: wgpu::BufferUsages| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: 16, usage, mapped_at_creation: false });
+        let resolve = buf("lightbench_timer_resolve", wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC);
+        let read = buf("lightbench_timer_read", wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
+        bufs.timer = Some((set, resolve, read, queue.get_timestamp_period() as f64));
+    }
+    let (stats, readback) = bufs.stats.as_ref().unwrap();
+    queue.write_buffer(stats, 0, &[0u8; 16]);
     let (_, nodes, tris) = bufs.from.as_ref().unwrap();
     // even frames read pair a and write pair b, odd frames the other way
     let h = &bufs.history.as_ref().unwrap().1;
@@ -194,15 +220,51 @@ fn light(
     let group = device.create_bind_group(
         "lightbench_light",
         &cache.get_bind_group_layout(&p.layout),
-        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view(), &h[r].1, &h[r + 1].1, &h[w].1, &h[w + 1].1)),
+        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view(), &h[r].1, &h[r + 1].1, &h[w].1, &h[w + 1].1, stats.as_entire_binding())),
     );
-    let mut pass = ctx.command_encoder().begin_compute_pass(&ComputePassDescriptor { label: Some("lightbench_light"), timestamp_writes: None });
+    let encoder = ctx.command_encoder();
+    // timed at the pass's own start and end: Apple's GPUs take timestamps there, not inside passes or between them
+    let timer = bufs.timer.as_ref();
+    let writes = timer.map(|t| wgpu::ComputePassTimestampWrites { query_set: &t.0, beginning_of_pass_write_index: Some(0), end_of_pass_write_index: Some(1) });
+    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor { label: Some("lightbench_light"), timestamp_writes: writes });
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, &group, &[]);
     pass.dispatch_workgroups(size.width.div_ceil(8), size.height.div_ceil(8), 1);
+    drop(pass);
+    encoder.copy_buffer_to_buffer(stats, 0, readback, 0, 16);
+    if let Some(t) = timer {
+        encoder.resolve_query_set(&t.0, 0..2, &t.1, 0);
+        encoder.copy_buffer_to_buffer(&t.1, 0, &t.2, 0, 16);
+    }
     DRAWN.fetch_add(1, Ordering::Relaxed);
 }
 
-fn wait(device: Res<RenderDevice>) {
+fn wait(device: Res<RenderDevice>, bufs: Res<Buffers>) {
     let _ = device.poll(PollType::wait_indefinitely());
+    // the frame is done: read its ray counts back
+    let Some((_, readback)) = bufs.stats.as_ref() else { return };
+    let slice = readback.slice(..);
+    slice.map_async(MapMode::Read, |_| {});
+    let _ = device.poll(PollType::wait_indefinitely());
+    {
+        let Ok(data) = slice.get_mapped_range() else { return };
+        let v: &[u32] = bytemuck::cast_slice(&data);
+        for (k, n) in RAYS.iter().enumerate() {
+            n.store(v[k], Ordering::Relaxed);
+        }
+    }
+    readback.unmap();
+    let Some((_, _, read, period)) = bufs.timer.as_ref() else { return };
+    let slice = read.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |_| {});
+    let _ = device.poll(PollType::wait_indefinitely());
+    {
+        let Ok(data) = slice.get_mapped_range() else { return };
+        let t: &[u64] = bytemuck::cast_slice(&data);
+        if t[1] > t[0] {
+            GPU_NS.fetch_add(((t[1] - t[0]) as f64 * period) as u64, Ordering::Relaxed);
+            GPU_FRAMES.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    read.unmap();
 }

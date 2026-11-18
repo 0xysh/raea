@@ -37,6 +37,12 @@ struct Light { pos: vec3<f32>, range: f32, power: vec3<f32>, radius: f32 }
 @group(0) @binding(8) var geo_in: texture_2d<f32>;
 @group(0) @binding(9) var hist_out: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(10) var geo_out: texture_storage_2d<rgba16float, write>;
+// this frame's shadow rays, lit pixels and the most rays any pixel traced (LB4's rays a pixel)
+@group(0) @binding(11) var<storage, read_write> stats: array<atomic<u32>, 4>;
+
+var<workgroup> wg_rays: atomic<u32>;
+var<workgroup> wg_px: atomic<u32>;
+var<workgroup> wg_max: atomic<u32>;
 
 const PI: f32 = 3.14159265;
 const MAX_K: u32 = 16u;
@@ -167,10 +173,10 @@ fn lum(c: vec3<f32>) -> f32 {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
-@compute @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+// one pixel: its light, its history; (shadow rays traced, 1 if it is a lit pixel)
+fn shade(id: vec3<u32>) -> vec2<u32> {
     if id.x >= p.size.x || id.y >= p.size.y {
-        return;
+        return vec2(0u);
     }
     let px = vec2<i32>(id.xy);
     let depth = textureLoad(depth_tex, px, 0);
@@ -178,7 +184,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if depth <= 0.0 {
         textureStore(hist_out, px, vec4(0.0));
         textureStore(geo_out, px, vec4(0.0, 0.0, 0.0, -1.0));
-        return;
+        return vec2(0u);
     }
     let g = textureLoad(gbuf, px, 0);
     let albedo = pow(unpack4x8unorm(g.r).rgb, vec3(2.2));
@@ -190,15 +196,15 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let view = p.mode.z;
     if view == 1u {
         textureStore(out, px, vec4(n * 0.5 + 0.5, 1.0));
-        return;
+        return vec2(0u);
     }
     if view == 2u || view == 6u {
         textureStore(out, px, vec4(albedo, 1.0));
-        return;
+        return vec2(0u);
     }
     if view == 3u {
         textureStore(out, px, vec4(vec3(dist / 20.0), 1.0));
-        return;
+        return vec2(0u);
     }
     seed = pcg(id.x + id.y * p.size.x + p.size.w * p.size.x * p.size.y);
     rays = 0u;
@@ -271,11 +277,26 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(geo_out, px, vec4(n, dist));
     if view == 4u {
         textureStore(out, px, vec4(vec3(f32(rays) / 16.0), 1.0));
-        return;
+        return vec2(rays, 1u);
     }
     if view == 5u {
         textureStore(out, px, vec4(vec3((held + 1.0) / f32(p.temporal.z)), 1.0));
-        return;
+        return vec2(rays, 1u);
     }
     textureStore(out, px, vec4(acc * albedo / PI * p.eye.w, 1.0));
+    return vec2(rays, 1u);
+}
+
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) id: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+    let r = shade(id);
+    atomicAdd(&wg_rays, r.x);
+    atomicAdd(&wg_px, r.y);
+    atomicMax(&wg_max, r.x);
+    workgroupBarrier();
+    if li == 0u {
+        atomicAdd(&stats[0], atomicLoad(&wg_rays));
+        atomicAdd(&stats[1], atomicLoad(&wg_px));
+        atomicMax(&stats[2], atomicLoad(&wg_max));
+    }
 }

@@ -153,16 +153,23 @@ fn main() {
         }
     };
     let mut app = App::new();
+    // timing runs ask the GPU for timestamps at a pass's start and end (Apple's GPUs have no others), for its time
+    let mut wgpu = bevy::render::settings::WgpuSettings::default();
+    if timing() {
+        wgpu.features |= bevy::render::settings::WgpuFeatures::TIMESTAMP_QUERY;
+    }
+    let render = bevy::render::RenderPlugin { render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(wgpu)), ..default() };
     if o.shot.is_some() {
         app.add_plugins(
             DefaultPlugins
                 .set(WindowPlugin { primary_window: None, exit_condition: ExitCondition::DontExit, ..default() })
+                .set(render)
                 .disable::<bevy::winit::WinitPlugin>(),
         )
         .add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO));
     } else {
         let window = Window { title: "LightBench".into(), resolution: (o.size.x, o.size.y).into(), ..default() };
-        app.add_plugins(DefaultPlugins.set(WindowPlugin { primary_window: Some(window), ..default() }));
+        app.add_plugins(DefaultPlugins.set(WindowPlugin { primary_window: Some(window), ..default() }).set(render));
     }
     app.insert_resource(o)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
@@ -235,13 +242,14 @@ fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: 
     };
 }
 
-fn shoot(mut commands: Commands, o: Res<Opts>, counts: Res<field::Counts>, target: Option<Res<Target>>, mut done: Local<bool>, mut clock: Local<Option<(std::time::Instant, u32)>>) {
+fn shoot(mut commands: Commands, o: Res<Opts>, counts: Res<field::Counts>, target: Option<Res<Target>>, mut done: Local<bool>, mut clock: Local<Option<(std::time::Instant, u32)>>, mut gpu0: Local<Option<(u64, u32)>>) {
     let (Some(path), Some(target)) = (o.shot.clone(), target) else { return };
     // counted from the lighting pass's first frame, not from startup (its pipeline compiles meanwhile)
     let drawn = pass::DRAWN.load(std::sync::atomic::Ordering::Relaxed);
     if *done || drawn < o.frames + o.bench {
         if drawn >= o.frames && clock.is_none() {
             *clock = Some((std::time::Instant::now(), drawn));
+            *gpu0 = Some((pass::GPU_NS.load(std::sync::atomic::Ordering::Relaxed), pass::GPU_FRAMES.load(std::sync::atomic::Ordering::Relaxed)));
         }
         return;
     }
@@ -253,6 +261,13 @@ fn shoot(mut commands: Commands, o: Res<Opts>, counts: Res<field::Counts>, targe
     if o.bench > 0 {
         let (t0, d0) = clock.unwrap();
         let ms = t0.elapsed().as_secs_f64() * 1000.0 / (drawn - d0).max(1) as f64;
+        let r = |k: usize| pass::RAYS[k].load(std::sync::atomic::Ordering::Relaxed);
+        println!("RAYS {:.2} a lit pixel (most {}), {} lit pixels", r(0) as f64 / r(1).max(1) as f64, r(2), r(1));
+        let (ns, n) = (pass::GPU_NS.load(std::sync::atomic::Ordering::Relaxed), pass::GPU_FRAMES.load(std::sync::atomic::Ordering::Relaxed));
+        let (ns0, n0) = gpu0.unwrap_or((0, 0));
+        if n > n0 {
+            println!("GPU lighting pass {:.2} ms ({} frames timed)", (ns - ns0) as f64 / 1e6 / (n - n0) as f64, n - n0);
+        }
         println!("FRAME {ms:.2} ms, the GPU waited for ({} frames, {}x{}, {} lights, mode {} k {})", drawn - d0, o.size.x, o.size.y, o.lights, ["all", "uniform", "weighted"][o.mode as usize], o.k);
     }
     commands.spawn(Screenshot::image(target.0.clone())).observe(move |shot: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {

@@ -14714,6 +14714,7 @@ dependencies = [
  "bevy",
  "bytemuck",
  "meshopt",
+ "wgpu",
 ]
 
 [[package]]

@@ -16,3 +16,5 @@ bevy = { version = "=0.20.0", default-features = false, features = ["std", "defa
 bytemuck = { version = "1.25", features = ["derive"] }
 # meshoptimizer (MIT): the simplifier and clusterizer behind the LODs and the cluster hierarchy
 meshopt = "0.6.2"
+# Bevy's wgpu, for the lighting pass's timestamp queries
+wgpu = "=30.0.1"
