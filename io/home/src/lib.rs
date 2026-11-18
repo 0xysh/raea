@@ -2,6 +2,7 @@
 //! models, the fonts), and where its per-user caches and logs go on each platform.
 
 pub mod sdk;
+pub mod shared;
 
 /// What a folder takes on disk, as `du -sh` says it (`links`: through a link to its files), or "?".
 pub fn disk_use(dir: &std::path::Path, links: bool) -> String {
@@ -137,6 +138,16 @@ pub fn src_on(s: &str, windows: bool) -> String {
     }
     let s = drive(s).unwrap_or(s);
     if s.as_bytes().get(1) == Some(&b':') { format!("file:///{}", s.replace('\\', "/")) } else { s.to_string() }
+}
+
+/// The import path from a file in folder `from` to the file `to` (both relative to one folder): ./x, ../y/z.
+pub fn import_path(from: &std::path::Path, to: &std::path::Path) -> String {
+    let (a, b): (Vec<_>, Vec<_>) = (from.components().collect(), to.components().collect());
+    let common = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let mut parts = vec![".."; a.len() - common].into_iter().map(String::from).collect::<Vec<_>>();
+    parts.extend(b[common..].iter().map(|c| c.as_os_str().to_string_lossy().into_owned()));
+    let p = parts.join("/");
+    if p.starts_with("..") { p } else { format!("./{p}") }
 }
 
 /// A local file as a page names it in a URL's path: its path on Unix; on Windows `/C:/x/y` (the path of the file URL

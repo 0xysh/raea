@@ -52,7 +52,11 @@ Feature: One project layout: compositions, components, controllers, assets, arti
     When a project's composition imports "@shared/components/desk"
     Then the engine's loader resolves it to the workspace's shared/components/desk.tsx (walking up to .raea/workspace),
       as it resolves a relative import, with the same extensions and index files
-    And a render, `raea check`, `raea context` and the app's Compositions page all read it the same way
+    And a render, `raea check`, `raea context` and the app's Compositions page all read it the same way: the bundler
+      that copies an edit (runtime/bundle outside.rs) copies what it imports from shared/ beside it, and the one that
+      bundles a script where it lives (engine/bundle script.rs) resolves it from the importer (raea_io_home::shared).
+      0.1.7's render left @shared/ to the bundler, which took it for a package: "Can't find variable:
+      _shared_components_badge" before the first frame, though tsc passed and raea's skill says to import this way
     And TypeScript resolves it too: the project's tsconfig (made by `raea project new`, kept by `raea doctor --fix`)
       maps @shared/* to ../../shared/*, so an editor and tsc follow the import
     And @shared/ outside a workspace is refused with what to do (UnknownLibrary's message names shared/)
