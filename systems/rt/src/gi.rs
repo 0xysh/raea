@@ -39,6 +39,10 @@ use bevy::{
 /// rays a probe each round (gi.wesl's RAYS: a workgroup a probe, a ray a thread)
 const RAYS: u32 = 64;
 
+/// raea-sys-gi's screen passes' GPU milliseconds (the screen probes, their filter and the screen), each timed frame's,
+/// reported beside the cache's (`report`)
+pub static SCREEN_MS: std::sync::Mutex<Vec<f64>> = std::sync::Mutex::new(Vec::new());
+
 fn env<T: std::str::FromStr>(name: &str, or: T) -> T {
     std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(or)
 }
@@ -54,7 +58,8 @@ pub fn install(app: &mut App) {
     }
     bevy::shader::load_shader_library!(app, "cache.wesl");
     bevy::asset::embedded_asset!(app, "compact.wesl");
-    bevy::asset::embedded_asset!(app, "gi.wesl");
+    // a library too: raea-sys-gi's screen probes trace with its functions (first_hit, irradiance_at, sky_radiance)
+    bevy::shader::load_shader_library!(app, "gi.wesl");
     crate::install(app);
     let res = grid_res();
     let mut voxels = Image::new_fill(
@@ -161,10 +166,15 @@ struct Pipeline {
     /// the world cache's group 1, and its passes
     cache_layout: BindGroupLayoutDescriptor,
     cache: crate::cache::Passes,
+    /// whether the probes light anything (RAEA_GI_SHOW=volume): raea-sys-gi's screen probes stand in for them, so
+    /// otherwise they aren't traced
+    shown: bool,
 }
 
-fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCache>, device: Res<RenderDevice>) {
-    let layout = BindGroupLayoutDescriptor::new(
+/// gi.wesl's group 0: the probes' parameters, the TLAS, the sky, the probes' cubes, volume and tags, and the records.
+/// Passes outside raea-sys-rt that trace with gi.wesl's functions bind WorldCache::rays here.
+pub fn layout() -> BindGroupLayoutDescriptor {
+    BindGroupLayoutDescriptor::new(
         "raea_gi_layout",
         &BindGroupLayoutEntries::sequential(
             ShaderStages::COMPUTE,
@@ -181,7 +191,11 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 storage_buffer_read_only_sized(false, None),
             ),
         ),
-    );
+    )
+}
+
+fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCache>, device: Res<RenderDevice>) {
+    let layout = layout();
     let shader = assets.load("embedded://raea_sys_rt/gi.wesl");
     let cache_layout = crate::cache::layout();
     let layouts = vec![layout.clone(), cache_layout.clone()];
@@ -190,7 +204,8 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
     });
     let passes = crate::cache::queue(&cache, &assets, &layouts);
     let sampler = device.create_sampler(&SamplerDescriptor { label: Some("raea gi sky"), mag_filter: FilterMode::Linear, min_filter: FilterMode::Linear, ..default() });
-    commands.insert_resource(Pipeline { layout, id, resolve, sampler, cache_layout, cache: passes });
+    let shown = std::env::var("RAEA_GI_SHOW").as_deref() == Ok("volume");
+    commands.insert_resource(Pipeline { layout, id, resolve, sampler, cache_layout, cache: passes, shown });
 }
 
 /// The cache between frames: its means and which probe each slot holds (gi.wesl's `cubes` and `tags`), where the next
@@ -226,10 +241,12 @@ fn key(g: &Grid) -> [u32; 9] {
 }
 
 /// This frame's world cache for passes outside raea-sys-rt (raea-sys-gi's screen pass, after this frame's update): its
-/// group 1 (cache::layout), and the sun its cells were lit by, toward it and its light (lux)
+/// group 1 (cache::layout), gi.wesl's group 0 to trace with (`layout`), and the sun its cells were lit by, toward it
+/// and its light (lux)
 #[derive(Resource, Clone)]
 pub struct WorldCache {
     pub group: BindGroup,
+    pub rays: BindGroup,
     pub sun_dir: Vec3,
     pub sun_light: Vec3,
 }
@@ -266,7 +283,7 @@ fn update(
         state.cubes = Some((buffer("raea gi cubes", 6), buffer("raea gi tags", 1), total));
         state.key = None;
     }
-    collect(&mut state);
+    collect(&mut state, p.shown);
     let k = key(&grid);
     let fresh = state.key != Some(k);
     state.key = Some(k);
@@ -289,7 +306,6 @@ fn update(
     upkeep.write_buffer(&device, &queue);
     let cells = state.cache.get_or_insert_with(|| crate::cache::buffers(&device));
     let cache_group = crate::cache::bind(&device, &cache.get_bind_group_layout(&p.cache_layout), cells, upkeep.binding().unwrap());
-    commands.insert_resource(WorldCache { group: cache_group.clone(), sun_dir: grid.sun.truncate(), sun_light: grid.sun_light });
     if state.timer.is_none() && device.features().contains(WgpuFeatures::TIMESTAMP_QUERY) {
         state.timer = Some(timer(&device, &queue));
     }
@@ -299,6 +315,7 @@ fn update(
         &cache.get_bind_group_layout(&p.layout),
         &BindGroupEntries::sequential((uniform.binding().unwrap(), scene.0.as_binding(), sky, sky_diffuse, &p.sampler, cubes.as_entire_binding(), &voxels.texture_view, tags.as_entire_binding(), records.0.as_entire_binding())),
     );
+    commands.insert_resource(WorldCache { group: cache_group.clone(), rays: group.clone(), sun_dir: grid.sun.truncate(), sun_light: grid.sun_light });
     // a steady frame is timed when the last one's times are in
     let timed = !fresh && state.timer.as_ref().is_some_and(|t| t.pending.is_none());
     let mut enc = device.create_command_encoder(&CommandEncoderDescriptor { label: Some("raea gi") });
@@ -308,16 +325,20 @@ fn update(
     }
     let cells = state.cache.as_ref().unwrap();
     crate::cache::run(&mut enc, &passes, [&group, &cache_group], cells, state.timer.as_ref().filter(|_| timed).map(|t| (&t.set, 0)));
+    // The probes, only where they light something. Unshown, their pass keeps one workgroup of `resolve`: on the Mac the
+    // cache's last pass writes its end time only when a timed pass follows it (11-18: without one it read 0).
     {
         let writes = state.timer.as_ref().filter(|_| timed).map(|t| wgpu::ComputePassTimestampWrites { query_set: &t.set, beginning_of_pass_write_index: Some(2), end_of_pass_write_index: Some(3) });
         let mut pass = enc.begin_compute_pass(&ComputePassDescriptor { label: Some("raea_gi"), timestamp_writes: writes });
         pass.set_bind_group(0, &group, &[]);
         pass.set_bind_group(1, &cache_group, &[]);
-        pass.set_pipeline(pipeline);
-        pass.dispatch_workgroups(probes, 1, 1);
+        if p.shown {
+            pass.set_pipeline(pipeline);
+            pass.dispatch_workgroups(probes, 1, 1);
+        }
         // every probe's cube into the volume (the grid may have moved), timed with the rays: it is the pass's cost too
         pass.set_pipeline(resolve);
-        pass.dispatch_workgroups(total.div_ceil(64), 1, 1);
+        pass.dispatch_workgroups(if p.shown { total.div_ceil(64) } else { 1 }, 1, 1);
     }
     if let Some(t) = state.timer.as_ref().filter(|_| timed) {
         enc.resolve_query_set(&t.set, 0..4, &t.resolve, 0);
@@ -344,7 +365,7 @@ fn timer(device: &RenderDevice, queue: &RenderQueue) -> Timer {
 }
 
 /// the last timed frame's GPU milliseconds, once its readback is done
-fn collect(state: &mut State) {
+fn collect(state: &mut State, shown: bool) {
     let Some(t) = state.timer.as_mut() else { return };
     let Some(done) = t.pending.as_ref() else { return };
     if !done.load(Ordering::Acquire) {
@@ -354,11 +375,13 @@ fn collect(state: &mut State) {
         let Ok(view) = t.read.slice(..).get_mapped_range() else { return };
         let ts = |i: usize| u64::from_le_bytes(view[8 * i..8 * i + 8].try_into().unwrap());
         let ms = |a: usize, b: usize| ts(b).saturating_sub(ts(a)) as f64 * t.period / 1e6;
-        (ms(0, 1), ms(2, 3), u32::from_le_bytes(view[32..36].try_into().unwrap()))
+        // unshown, the cache runs to the end of the marker pass after it (its own end time reads 0 there)
+        (if shown { ms(0, 1) } else { ms(0, 3) }, if shown { ms(2, 3) } else { 0.0 }, u32::from_le_bytes(view[32..36].try_into().unwrap()))
     };
     t.read.unmap();
     t.pending = None;
-    if probes_ms > 0.0 {
+    // a frame whose times came back (the probes' pass may be empty: not shown)
+    if cache_ms > 0.0 {
         state.seen.push((cache_ms, probes_ms, cells));
     }
 }
@@ -378,13 +401,18 @@ fn report(state: &mut State, budget: u32, total: u32) {
     };
     let (c, pr, all, live) = (col(&|s| s.0), col(&|s| s.1), col(&|s| s.0 + s.1), col(&|s| s.2 as f64));
     let at = |v: &[f64], q: f64| v[((v.len() - 1) as f64 * q).round() as usize];
+    let mut screen = SCREEN_MS.lock().map(|v| v.clone()).unwrap_or_default();
+    screen.sort_by(f64::total_cmp);
+    let screen_at = |q: f64| if screen.is_empty() { 0.0 } else { at(&screen, q) };
     // the ray scene's CPU milliseconds a call: the instance list, the TLAS, a BLAS batch (lib.rs CPU_US)
     let cpu = |k: usize| {
         let (us, n) = (crate::CPU_US[2 * k].load(Ordering::Relaxed), crate::CPU_US[2 * k + 1].load(Ordering::Relaxed));
         format!("{:.3}", us as f64 / n.max(1) as f64 / 1000.0)
     };
     let text = format!(
-        "{{\"rays_a_frame\":{},\"probes\":{total},\"probes_a_frame\":{},\"frames\":{},\"gpu_ms_p50\":{:.3},\"gpu_ms_p90\":{:.3},\"gpu_ms_max\":{:.3},\"cache_ms_p50\":{:.3},\"cache_ms_p90\":{:.3},\"probes_ms_p50\":{:.3},\"probes_ms_p90\":{:.3},\"cache_cells_p50\":{},\"cache_cells_max\":{},\"cpu_ms_gather\":{},\"cpu_ms_tlas\":{},\"cpu_ms_blas_batch\":{},\"blas_batches\":{},\"tlas_builds\":{},\"tlas_instances\":{}}}\n",
+        "{{\"screen_ms_p50\":{:.3},\"screen_ms_p90\":{:.3},\"rays_a_frame\":{},\"probes\":{total},\"probes_a_frame\":{},\"frames\":{},\"gpu_ms_p50\":{:.3},\"gpu_ms_p90\":{:.3},\"gpu_ms_max\":{:.3},\"cache_ms_p50\":{:.3},\"cache_ms_p90\":{:.3},\"probes_ms_p50\":{:.3},\"probes_ms_p90\":{:.3},\"cache_cells_p50\":{},\"cache_cells_max\":{},\"cpu_ms_gather\":{},\"cpu_ms_tlas\":{},\"cpu_ms_blas_batch\":{},\"blas_batches\":{},\"tlas_builds\":{},\"tlas_instances\":{}}}\n",
+        screen_at(0.5),
+        screen_at(0.9),
         (budget / RAYS).min(total) * RAYS,
         (budget / RAYS).min(total),
         all.len(),

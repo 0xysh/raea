@@ -15985,6 +15985,7 @@ dependencies = [
  "bevy",
  "raea-sys-compose",
  "raea-sys-rt",
+ "wgpu",
 ]
 
 [[package]]

@@ -471,6 +471,21 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
       And indirect diffuse is applied per pixel in place of the irradiance volume, as a correction to the baseline
         (D9); Berlin within 0.25 stops mean and 0.5 worst tile of its reference in every sky, with no more flicker
         than raster
+      And so far (11-18, the first step, raea-sys-gi): a probe every 16 pixels on the surface its tile shows traces
+        16 cosine rays a frame through the TLAS with gi.wesl's own functions (a hit is its record lit by the cache, a
+        miss the sky), keeps a running mean over up to 24 frames found by where it stood last frame (kept only on the
+        same surface), and is pooled with the probes up to two tiles around it on its own plane (probe space); each
+        pixel takes the four around it by depth and normal, and reads the cache at its own surface only where none is
+        on it. Not yet: the screen trace before the TLAS, a quarter refreshed a frame. LT2's probe grid is traced only
+        when shown (RAEA_GI_SHOW=volume): its rays claimed cells all over the volume, so the cache's updates went to
+        cells no pixel reads (Berlin's walk 250k live cells to 149k). Filtered, gi path, before (LT4's first tier) and
+        after: FLOOR3 mean 2.381 to 0.617 stops, bias -2.118 to -0.547, worst 6.012 to 5.170, flicker 0.415 to 0.131
+        (raster 1.392, -0.816, 3.392, 0.111), live 16.1 to 14.4 ms; glade 1.319 to 1.292, bias 1.074 to 1.041 (its
+        reference unreliable, LT3). FLOOR3's worst tile is its ceiling: lit only by what the floor sends up, and the
+        floor's cells rarely find a lens with one cosine ray (D7, LT6). Flicker is still a fifth above raster's. Live
+        at 1080p: Berlin's walk 38.9 ms gi against 39.1 raster, raea GI 1.32 ms of GPU (the cache 0.31, the screen
+        probes, their pooling and the pixels 1.01); the kitchen 52.1 ms, 1.91 of it GI (no reference). Berlin's shaded
+        fronts are smooth where each pixel's own cell was blotchy (fd442f2b48); posted to Shane
 
     Scenario: LT9. Reflections, glass and fog
       Then SSR runs first and hands what it can't find to traced rays below a roughness of 0.4, hits shaded by D5's

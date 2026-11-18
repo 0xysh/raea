@@ -251,7 +251,9 @@ fn table(reports: &[Value]) -> String {
         for (p, v) in paths {
             let f = |k: &str| v[k].as_f64().map_or("-".to_string(), |x| format!("{x:.3}"));
             let ms = |k: &str| v["live"][k]["ms_a_frame"].as_f64().map_or("-".to_string(), |x| format!("{x:.1}"));
-            let gi = v["live"]["full"]["gi"]["gpu_ms_p50"].as_f64().map_or("-".to_string(), |x| format!("{x:.2}"));
+            // the cache's passes and the screen's (its probes, their filter, the screen), each a median
+            let g = &v["live"]["full"]["gi"];
+            let gi = g["gpu_ms_p50"].as_f64().map_or("-".to_string(), |x| format!("{:.2}", x + g["screen_ms_p50"].as_f64().unwrap_or(0.0)));
             s += &format!("{name:<18} {p:<9} {:>7} {:>7} {:>7} {:>8} {:>7} {:>8} {:>8} {gi:>8}\n", f("mean_stops"), f("bias_stops"), f("worst_tile_stops"), f("flicker_stops"), f("flicker_raw"), f("seconds_a_still"), ms("full"));
         }
         if r["reference"]["made"] == json!(false) {
