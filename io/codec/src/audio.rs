@@ -222,16 +222,23 @@ pub fn master(a: &Audio, target: f64, ceiling: f64) -> Audio {
 /// change after limiting, given instead, counted it twice: a game played 1 LU under its render).
 pub fn master_gained(a: &Audio, target: f64, ceiling: f64) -> (Audio, f64) {
     let tp = true_envelope(a);
-    // limiting takes loudness off: measure again and make it up (converges in two or three passes)
+    // limiting takes loudness off: measure again and make it up until within 0.1 LU, each step by what the last one's
+    // gain bought (a secant: on the limiter, a dB of gain buys well under a dB of loudness). Made up a dB for a dB, a
+    // track of gunshots, its peaks far over its loudness, was still 1.8 LU short after three passes and 0.04 after 13.
     let mut gain = target - lufs(a);
     let mut out = limit(a, gain, ceiling, &tp);
-    for _ in 0..3 {
-        let miss = target - lufs(&out);
+    let mut lo = lufs(&out);
+    let mut last: Option<(f64, f64)> = None;
+    for _ in 0..8 {
+        let miss = target - lo;
         if miss.abs() < 0.1 {
             break;
         }
-        gain += miss;
+        let slope = last.map(|(g0, l0)| ((lo - l0) / (gain - g0)).clamp(0.05, 1.0)).filter(|s| s.is_finite()).unwrap_or(1.0);
+        last = Some((gain, lo));
+        gain += (miss / slope).clamp(-12.0, 12.0);
         out = limit(a, gain, ceiling, &tp);
+        lo = lufs(&out);
     }
     // the gain ramps reshape the waveform a little: if a peak between samples still gets over, aim that much lower
     for _ in 0..2 {
@@ -359,5 +366,30 @@ mod tests {
         let (tp, sp) = (true_peak_db(&out), peak_db(&out));
         assert!(tp <= -1.0, "true peak {tp:.2} dBTP over the -1 ceiling (sample peak {sp:.2})");
         assert!(tp > -2.0, "limited far below the ceiling: {tp:.2} dBTP");
+    }
+
+    /// A range's sound: a rifle's crack every 1.5 s with a short decaying tail over a quiet bed of wind, its peaks far
+    /// over its loudness, so reaching -14 LUFS under a -1.5 dBTP ceiling takes limiting that eats most of the gain (a
+    /// gambit range demo, made up a dB for a dB in three passes, came out at -15.8). Mastered, it reaches the target
+    /// (made up the old way it stops 0.25 short). Its true peak isn't held here: limited 10 dB, noise like this comes
+    /// out up to a dB over the ceiling between samples, which `master_for` takes off after the encoder.
+    #[test]
+    fn a_percussive_master_reaches_its_loudness() {
+        let n = 9 * RATE as usize;
+        // (noise through a one-pole low-pass near 4 kHz, as a crack heard at the firing point is darker than white noise)
+        let (mut seed, mut lp) = (12345u32, 0f32);
+        let ch: Vec<f32> = (0..n)
+            .map(|i| {
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                lp += 0.4 * (((seed >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0) - lp);
+                let since = (i % (RATE as usize * 3 / 2)) as f32 / RATE as f32;
+                1.6 * lp * (-since / 0.06).exp() + 0.1 * lp
+            })
+            .collect();
+        let a = Audio { rate: RATE, channels: vec![ch.clone(), ch] };
+        let (out, _) = master_gained(&a, -14.0, -1.5);
+        let (l, tp) = (lufs(&out), true_peak_db(&out));
+        assert!((l + 14.0).abs() < 0.15, "mastered to {l:.2} LUFS, not -14 (true peak {tp:.2})");
+        assert!(peak_db(&out) <= -1.5 + 0.05, "sample peak {:.2} dB over the -1.5 ceiling", peak_db(&out));
     }
 }
