@@ -62,6 +62,12 @@ pub(crate) fn add(app: &mut App) {
     core.add_systems(denoise_up.before(super::upscale::upscale).in_set(Core3dSystems::EarlyPostProcess));
 }
 
+/// RAEA_SOLARI_EMISSIVE=split: the emission taken out before the denoiser and put back after (see DECODE_WGSL).
+fn split() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_EMISSIVE").as_deref() == Ok("split"))
+}
+
 /// A view drawn small is denoised and brought up in one pass (unless RAEA_SOLARI_UPSCALE=two).
 fn one_pass() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -72,10 +78,17 @@ fn one_pass() -> bool {
 // 1/2.2) and perceptual roughness as unorm4x8; b = reflectance, metallic, occlusion, clearcoat as unorm4x8; a = a 24-bit
 // octahedral normal (two 12-bit halves) and flags; g = emissive as rgb9e5. Specular albedo is F0 (Bevy's 0.16
 // reflectance² for dielectrics, the base colour for metals).
-// What a surface emits is no noise, so it stays out of the denoiser: `main` takes it (times the exposure, as Solari adds
-// it) out of the colour with the guides, and `restore` puts it back after MetalFX. Denoised with the rest, a screen's
-// picture or a sign's letters came out smeared, its texture treated as noise against a near-black albedo (photo 2's
-// monitor)
+// What a surface emits is no noise. Denoised as lighting, a screen's picture or a sign's letters came out smeared, its
+// texture taken for noise against a near-black albedo (photo 2's monitor). So the emission's share of each pixel's
+// colour goes to MetalFX's denoise strength mask, which leaves a pixel marked 1 undenoised while still gathering its
+// frames (which anti-aliases its edges), and the emission, compressed as e / (1 + e), is added to its albedo, so what
+// the denoiser does smooth isn't swollen against a near-black one. A pixel with nothing in the G-buffer (a forward
+// mesh, the sky) is raster-lit, with nothing to denoise, and is marked 1. Measured on photo 2's monitor:
+// RAEA_SOLARI_EMISSIVE=split takes the emission (times the exposure, as Solari adds it) out of the colour into `emit`
+// and `restore` puts it back after MetalFX, the first way, and kept out of the denoiser an emissive edge stayed
+// stepped and crawled with the jitter (500 pixels jumping 80 levels a frame on the window's and curtain's edges);
+// emission as the albedo where it led, the screen's dark parts kept their noise; added to every albedo with no mask,
+// the picture blurred; split only where it was weak, pixels on the boundary counted it twice and sparkled
 const DECODE_WGSL: &str = r#"
 @group(0) @binding(0) var gbuf: texture_2d<u32>;
 @group(0) @binding(1) var diffuse: texture_storage_2d<rgba16float, write>;
@@ -83,9 +96,14 @@ const DECODE_WGSL: &str = r#"
 @group(0) @binding(3) var normal: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(4) var rough: texture_storage_2d<r32float, write>;
 @group(0) @binding(5) var color: texture_storage_2d<rgba16float, read_write>;
-// [0].x: the camera's exposure; [1]: the output's size and the input's (the corner of the colour the main pass drew);
-// [2].xyz: the camera's back, world-space; [3].xy: the jitter MetalFX is told, in input pixels
+// [0].x: the camera's exposure, .y: 1 to split all emission out (RAEA_SOLARI_EMISSIVE=split); [1]: the output's size
+// and the input's (the corner of the colour the main pass drew); [2].xyz: the camera's back, world-space; [3].xy: the
+// jitter MetalFX is told, in input pixels
 @group(0) @binding(6) var<uniform> params: array<vec4<f32>, 4>;
+// the emission `main` took out of the colour, at the input's size, for `restore` to put back
+@group(0) @binding(7) var emit: texture_storage_2d<rgba16float, read_write>;
+// MetalFX's denoise strength mask: 1 leaves a pixel undenoised
+@group(0) @binding(8) var mask: texture_storage_2d<r32float, write>;
 fn rgb9e5(v: u32) -> vec3<f32> {
     let scale = exp2(f32(i32(extractBits(v, 27u, 5u)) - 15 - 9));
     return vec3<f32>(f32(extractBits(v, 0u, 9u)), f32(extractBits(v, 9u, 9u)), f32(extractBits(v, 18u, 9u))) * scale;
@@ -114,6 +132,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         textureStore(specular, p, vec4<f32>(0.0, 0.0, 0.0, 1.0));
         textureStore(normal, p, vec4<f32>(params[2].xyz, 0.0));
         textureStore(rough, p, vec4<f32>(1.0, 0.0, 0.0, 0.0));
+        textureStore(emit, p, vec4<f32>(0.0));
+        textureStore(mask, p, vec4<f32>(1.0, 0.0, 0.0, 0.0));
         return;
     }
     let a = unorm4x8(g.r);
@@ -122,15 +142,26 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let metallic = props.y;
     let f0 = mix(vec3<f32>(0.16 * props.x * props.x), base, metallic);
     let n = octahedral(vec2<f32>(f32(g.a & 0xFFFu), f32((g.a >> 12u) & 0xFFFu)) / 4095.0);
-    textureStore(diffuse, p, vec4<f32>(base * (1.0 - metallic), 1.0));
-    textureStore(specular, p, vec4<f32>(f0, 1.0));
     textureStore(normal, p, vec4<f32>(n, 0.0));
     textureStore(rough, p, vec4<f32>(a.w, 0.0, 0.0, 0.0));
     let c = textureLoad(color, p);
-    textureStore(color, p, vec4<f32>(max(c.rgb - rgb9e5(g.g) * params[0].x, vec3<f32>(0.0)), c.a));
+    let e = rgb9e5(g.g) * params[0].x;
+    textureStore(specular, p, vec4<f32>(f0, 1.0));
+    if (params[0].y > 0.5) {
+        let taken = min(e, c.rgb);
+        textureStore(diffuse, p, vec4<f32>(base * (1.0 - metallic), 1.0));
+        textureStore(color, p, vec4<f32>(c.rgb - taken, c.a));
+        textureStore(emit, p, vec4<f32>(taken, 0.0));
+        textureStore(mask, p, vec4<f32>(0.0));
+        return;
+    }
+    let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let share = dot(e, luma) / max(dot(c.rgb, luma), 1e-4);
+    textureStore(diffuse, p, vec4<f32>(min(base * (1.0 - metallic) + e / (vec3<f32>(1.0) + e), vec3<f32>(1.0)), 1.0));
+    textureStore(mask, p, vec4<f32>(smoothstep(0.3, 0.7, share), 0.0, 0.0, 0.0));
 }
 fn emitted(i: vec2<i32>) -> vec3<f32> {
-    return rgb9e5(textureLoad(gbuf, clamp(i, vec2<i32>(0), vec2<i32>(params[1].zw) - 1), 0).g);
+    return textureLoad(emit, clamp(i, vec2<i32>(0), vec2<i32>(params[1].zw) - 1)).rgb;
 }
 @compute @workgroup_size(8, 8, 1)
 fn restore(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -143,7 +174,7 @@ fn restore(@builtin(global_invocation_id) id: vec3<u32>) {
     let t = q - floor(q);
     let e = mix(mix(emitted(i), emitted(i + vec2<i32>(1, 0)), t.x), mix(emitted(i + vec2<i32>(0, 1)), emitted(i + vec2<i32>(1, 1)), t.x), t.y);
     let c = textureLoad(color, p);
-    textureStore(color, p, vec4<f32>(c.rgb + e * params[0].x, c.a));
+    textureStore(color, p, vec4<f32>(c.rgb + e, c.a));
 }
 "#;
 
@@ -157,6 +188,8 @@ struct View {
     specular: wgpu::Texture,
     normal: wgpu::Texture,
     rough: wgpu::Texture,
+    emit: wgpu::Texture,
+    mask: wgpu::Texture,
     out: wgpu::Texture,
     fresh: bool,
 }
@@ -206,6 +239,8 @@ impl View {
             d.setSpecularAlbedoTextureFormat(MTLPixelFormat::RGBA16Float);
             d.setNormalTextureFormat(MTLPixelFormat::RGBA16Float);
             d.setRoughnessTextureFormat(MTLPixelFormat::R32Float);
+            d.setDenoiseStrengthMaskTextureEnabled(true);
+            d.setDenoiseStrengthMaskTextureFormat(MTLPixelFormat::R32Float);
             d.setOutputTextureFormat(MTLPixelFormat::RGBA16Float);
             d.setInputWidth(size.x as _);
             d.setInputHeight(size.y as _);
@@ -224,6 +259,8 @@ impl View {
                 specular: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx specular albedo"),
                 normal: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx normal"),
                 rough: texture(dev, size, wgpu::TextureFormat::R32Float, guide, "metalfx roughness"),
+                emit: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx split emission"),
+                mask: texture(dev, size, wgpu::TextureFormat::R32Float, guide, "metalfx denoise strength"),
                 out: texture(dev, out_size, wgpu::TextureFormat::Rgba16Float, guide | U::RENDER_ATTACHMENT | U::COPY_SRC, "metalfx output"),
                 fresh: true,
             })
@@ -237,6 +274,7 @@ impl View {
         let get = |t: &wgpu::Texture| mtl(t).ok_or("a texture isn't a Metal one");
         let (color, depth, motion) = (get(color)?, get(depth)?, get(motion)?);
         let (diffuse, specular, normal, rough, out) = (get(&self.diffuse)?, get(&self.specular)?, get(&self.normal)?, get(&self.rough)?, get(&self.out)?);
+        let mask = get(&self.mask)?;
         let s = &*self.scaler;
         unsafe {
             s.setColorTexture(Some(&color));
@@ -246,6 +284,7 @@ impl View {
             s.setSpecularAlbedoTexture(Some(&specular));
             s.setNormalTexture(Some(&normal));
             s.setRoughnessTexture(Some(&rough));
+            s.setDenoiseStrengthMaskTexture(Some(&mask));
             s.setOutputTexture(Some(&out));
             // Bevy's motion is this frame's UV minus the last's; MetalFX's points from this pixel to where it was, in
             // pixels
@@ -356,7 +395,7 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
         .clone();
     let color_view = color.create_view(&Default::default());
     let back = ext.world_from_view.back();
-    let words: [f32; 16] = [cam.exposure, 0.0, 0.0, 0.0, out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, 0.0, jitter.x, jitter.y, 0.0, 0.0];
+    let words: [f32; 16] = [cam.exposure, if split() { 1.0 } else { 0.0 }, 0.0, 0.0, out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, 0.0, jitter.x, jitter.y, 0.0, 0.0];
     let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
     let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx params"), contents: &bytes, usage: wgpu::BufferUsages::UNIFORM });
     let v = kit.views.get_mut(&entity).unwrap();
@@ -367,6 +406,10 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     }
     entries.push(wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) });
     entries.push(wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() });
+    let emit = v.emit.create_view(&Default::default());
+    entries.push(wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&emit) });
+    let mask = v.mask.create_view(&Default::default());
+    entries.push(wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::TextureView(&mask) });
     let bind = dev.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("metalfx guides"), layout: &pipeline.get_bind_group_layout(0), entries: &entries });
     {
         let mut pass = ctx.command_encoder().begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("metalfx guides"), timestamp_writes: None });
@@ -384,13 +427,14 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     };
     ctx.add_command_buffer(raw.finish());
     // the emissive back in, after the denoiser's command buffer (add_command_buffer flushed the encoder before it)
+    if split() {
     let back = dev.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("metalfx emissive back"),
         layout: &restore.get_bind_group_layout(0),
         entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&*gbuf.texture.default_view) },
             wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) },
             wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&emit) },
         ],
     });
     {
@@ -398,6 +442,7 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
         pass.set_pipeline(&restore);
         pass.set_bind_group(0, &back, &[]);
         pass.dispatch_workgroups(out_size.x.div_ceil(8), out_size.y.div_ceil(8), 1);
+    }
     }
     use std::sync::atomic::Ordering::Relaxed;
     super::upscale::DENOISED.store(done.is_ok(), Relaxed);
