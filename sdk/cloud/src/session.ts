@@ -27,7 +27,7 @@ export class Session {
   constructor(ws: WebSocket, permit?: (p: Permission) => string | Promise<string>) {
     this.ws = ws
     this.permit = permit ?? allowOnce
-    ws.onmessage = async (e) => {
+    ws.addEventListener("message", async (e: MessageEvent) => {
       const m = JSON.parse(String(e.data))
       if (m.id != null && !m.method && this.waiting.has(m.id)) {
         const w = this.waiting.get(m.id)!
@@ -41,11 +41,11 @@ export class Session {
       }
       // a request this client doesn't serve (fs/*, terminal/*): it said so in initialize, but answer rather than hang
       if (m.id != null && m.method) ws.send(JSON.stringify({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: `${m.method} isn't offered by this client` } }))
-    }
-    ws.onclose = (e) => {
+    })
+    ws.addEventListener("close", (e: CloseEvent) => {
       for (const w of this.waiting.values()) w.no(new Error(`the ACP socket closed${e.reason ? `: ${e.reason}` : ""}`))
       this.waiting.clear()
-    }
+    })
   }
 
   request(method: string, params: unknown): Promise<unknown> {

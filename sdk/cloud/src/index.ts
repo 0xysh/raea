@@ -119,7 +119,7 @@ export class RaeaCloud {
   }
 
   async write(path: string, data: string | Uint8Array): Promise<void> {
-    await this.call(`/v1/files?path=${encodeURIComponent(path)}`, { method: "PUT", body: typeof data === "string" ? data : new Blob([data as BlobPart]) })
+    await this.call(`/v1/files?path=${encodeURIComponent(path)}`, { method: "PUT", body: typeof data === "string" ? data : new Blob([data as Uint8Array<ArrayBuffer>]) })
   }
 
   /** `raea ARGS` in the workspace (or `cwd` in it): resolves with its exit code; output goes to onOutput as it comes. */
@@ -218,8 +218,8 @@ export class RaeaCloud {
     const q = new URLSearchParams({ token: this.token, ...(o.agent ? { agent: o.agent } : {}) })
     const ws = new WebSocket(`${this.url.replace(/^http/, "ws")}/v1/acp?${q}`)
     await new Promise((ok, no) => {
-      ws.onopen = ok
-      ws.onerror = () => no(new Error(`couldn't open the ACP socket at ${this.url}`))
+      ws.addEventListener("open", ok)
+      ws.addEventListener("error", () => no(new Error(`couldn't open the ACP socket at ${this.url}`)))
     })
     const s = new Session(ws, o.onPermission)
     await s.request("initialize", { protocolVersion: 1, clientCapabilities: {} })
