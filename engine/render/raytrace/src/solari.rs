@@ -16,7 +16,7 @@ use bevy::solari::pathtracer::{Pathtracer, PathtracingPlugin};
 use bevy::solari::prelude::{RaytracingMesh3d, SolariLighting, SolariPlugins};
 
 pub fn add(app: &mut App) {
-    app.add_plugins((SolariPlugins, PathtracingPlugin)).add_systems(PostUpdate, (cameras, meshes, deferred).before(bevy::camera::CameraUpdateSystems));
+    app.add_plugins((SolariPlugins, PathtracingPlugin)).add_systems(PostUpdate, (cameras, meshes, deferred, shadow_maps).before(bevy::camera::CameraUpdateSystems));
     if dynamic() {
         // a twin posed after its joints are placed and before this frame's asset events go out, so the traced scene
         // gets the pose with the frame that draws it; a part's visibility read once it is propagated
@@ -240,6 +240,48 @@ fn meshes(
             None => cmd.entity(e).insert(Done),
         };
     }
+}
+
+/// A light whose shadow maps this module turned off, to turn them back on.
+#[derive(Component)]
+struct MapsOff;
+
+/// RT10: Solari and the path tracer trace their shadows and never read a light's shadow maps, yet Bevy still draws
+/// them each frame (photo 2's sun's cascades: 1.5 ms of a 22 ms live frame). So while every active 3D camera traces its
+/// light and nothing is drawn raster-lit by them (a skinned or morphed mesh, a <Character>: RT5), the lights draw none;
+/// each one this turned off gets its maps back when that stops.
+fn shadow_maps(
+    mut cmd: Commands,
+    cams: Query<(&Camera, Has<SolariLighting>, Has<Pathtracer>), With<Camera3d>>,
+    raster: Query<(), Or<(With<bevy::mesh::skinning::SkinnedMesh>, With<bevy::mesh::morph::MeshMorphWeights>)>>,
+    mut dir: Query<(Entity, &mut DirectionalLight, Has<MapsOff>)>,
+    mut point: Query<(Entity, &mut PointLight, Has<MapsOff>)>,
+    mut spot: Query<(Entity, &mut SpotLight, Has<MapsOff>)>,
+) {
+    let (mut any, mut all) = (false, true);
+    for (c, solari, path) in &cams {
+        if c.is_active {
+            any = true;
+            all &= solari || path;
+        }
+    }
+    let off = any && all && raster.is_empty();
+    macro_rules! each {
+        ($q:expr) => {
+            for (e, mut l, mine) in &mut $q {
+                if off && l.shadow_maps_enabled {
+                    l.shadow_maps_enabled = false;
+                    cmd.entity(e).insert(MapsOff);
+                } else if !off && mine {
+                    l.shadow_maps_enabled = true;
+                    cmd.entity(e).remove::<MapsOff>();
+                }
+            }
+        };
+    }
+    each!(dir);
+    each!(point);
+    each!(spot);
 }
 
 /// Under Solari, a material that lets light through (`diffuse_transmission`: a leaf, a sheer curtain, a lampshade)

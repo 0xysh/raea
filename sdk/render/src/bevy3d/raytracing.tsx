@@ -9,6 +9,10 @@ export interface SolariLightingProps {
   bounces?: number;
   /** start the lighting's history again (a cut) */
   reset?: boolean;
+  /** draw the view at this fraction of its size a side (a third to 1) and let MetalFX's temporal scaler bring it up to
+   * the full size, so a game traces fewer pixels: 0.67 traces 45% of them (RT9). On the Mac; elsewhere it draws at the
+   * full size and raea says so. 1 (or left out): the full size */
+  scale?: number;
 }
 
 /** Ray-traced direct and indirect light for the <Camera3d> it's inside (Bevy's SolariLighting): shadows, bounce
@@ -18,11 +22,19 @@ export interface SolariLightingProps {
  * Solari can't trace it (RT5). */
 export function SolariLighting(p: SolariLightingProps = {}) {
   if (p.bounces !== undefined && !(Number.isInteger(p.bounces) && p.bounces >= 0)) throw new RangeError(`SolariLighting: bounces is a whole number, got ${p.bounces}`);
+  if (p.scale !== undefined && !(p.scale >= 1 / 3 && p.scale <= 1)) throw new RangeError(`SolariLighting: scale is a third to 1 (of the view's size a side), got ${p.scale}`);
   const value: Record<string, unknown> = {};
   if (p.restir !== undefined) value.restir = p.restir;
   if (p.bounces !== undefined) value.max_bounces = p.bounces;
   if (p.reset !== undefined) value.reset = p.reset;
-  return <BevyComponent type="bevy_solari::realtime::SolariLighting" value={value} />;
+  const lighting = <BevyComponent type="bevy_solari::realtime::SolariLighting" value={value} />;
+  if (p.scale === undefined || p.scale === 1) return lighting;
+  return (
+    <>
+      {lighting}
+      <BevyComponent type="raea_render_raytrace::RenderScale" value={{ scale: p.scale }} />
+    </>
+  );
 }
 
 export interface PathtracerProps {
