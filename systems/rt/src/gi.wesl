@@ -1,6 +1,6 @@
 // raea GI's probes (gi.rs; docs/realism.feature LT2, LT3): a grid of probes around the camera, each refreshed by 64
-// rays through the scene's TLAS. A ray that misses sees the sky (the camera's environment); one that hits sees a flat
-// stand-in surface (albedo 0.5, facing the ray) until hits know their surface (LT4), lit by what the world cache has
+// rays through the scene's TLAS. A ray that misses sees the sky (the camera's environment); one that hits sees its
+// instance's record (records.rs, LT4's first tier: averaged albedo and emission; the surface faces the ray), lit by what the world cache has
 // learned there (cache.wesl: the sun and every bounce, the sky shadowed by what's around), or, where its cell is new,
 // by the sun through one shadow ray and the sky's diffuse light, unshadowed. Each probe keeps a running mean of its
 // ambient cube (the light arriving along +-x, +-y, +-z) and writes it into Bevy's irradiance volume, which every
@@ -35,10 +35,16 @@ struct Params {
 @group(0) @binding(6) var voxels: texture_storage_3d<rgba16float, write>;
 // which world probe each slot holds (xyz) and whether it holds one (w), so a slot taken over starts afresh
 @group(0) @binding(7) var<storage, read_write> tags: array<vec4<i32>>;
+// each TLAS instance's record at its custom index (records.rs): its averaged albedo, and its emission (the radiance
+// raster draws it with)
+struct Record {
+    albedo: vec4<f32>,
+    emission: vec4<f32>,
+}
+@group(0) @binding(8) var<storage, read> records: array<Record>;
 
 const PI = 3.14159265;
 const RAYS = 64u;
-const ALBEDO = 0.5;
 // the most frames a probe's mean is kept over: after that each frame's rays count a 32nd
 const HISTORY = 32.0;
 const CASTS = 1u;
@@ -94,16 +100,20 @@ fn fib(i: u32, n: u32) -> vec3<f32> {
 }
 
 // The queries live in functions of their own, a fresh one each call (traced_ao.wesl: Metal can't reassign one).
-// the distance to the first surface along a ray, or -1 where it reaches the sky
-fn first_hit(o: vec3<f32>, d: vec3<f32>) -> f32 {
+// the first surface along a ray: how far (-1 where the ray reaches the sky), and its instance's record
+struct Hit {
+    t: f32,
+    rec: u32,
+}
+fn first_hit(o: vec3<f32>, d: vec3<f32>) -> Hit {
     var rq: ray_query;
     rayQueryInitialize(&rq, tlas, RayDesc(0u, ALL, 0.01, 10000.0, o, d));
     rayQueryProceed(&rq);
     let h = rayQueryGetCommittedIntersection(&rq);
     if (h.kind == RAY_QUERY_INTERSECTION_NONE) {
-        return -1.0;
+        return Hit(-1.0, 0u);
     }
-    return h.t;
+    return Hit(h.t, h.instance_custom_data);
 }
 // whether a point sees the sun: only what casts shadows stops it (lib.rs's CASTS), as the shadow maps have it
 fn sees_sun(o: vec3<f32>, d: vec3<f32>) -> bool {
@@ -189,13 +199,14 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) l
         let q = random_turn(hash(p.run.z * 7919u + round * 104729u + probe));
         let d = turn(q, fib(li, RAYS));
         var l = vec3(0.0);
-        let t = first_hit(at, d);
-        if (t < 0.0) {
+        let h = first_hit(at, d);
+        if (h.t < 0.0) {
             l = sky_radiance(d);
         } else {
-            let hit = at + d * t;
+            let hit = at + d * h.t;
             var seed = hash(p.run.z * 7919u + round * 104729u + probe * RAYS + li);
-            l = ALBEDO / PI * irradiance_at(hit, -d, LIFE, &seed);
+            let r = records[h.rec];
+            l = r.albedo.rgb / PI * irradiance_at(hit, -d, LIFE, &seed) + r.emission.rgb;
         }
         light[li] = l;
         dirs[li] = d;
@@ -266,13 +277,15 @@ fn learn(@builtin(global_invocation_id) id: vec3<u32>) {
         seen = 1.0;
     }
     let d = cosine(n, &seed);
-    let t = first_hit(o, d);
-    if (t < 0.0) {
+    let h = first_hit(o, d);
+    if (h.t < 0.0) {
         // a cosine sample's irradiance: pi times the radiance it sees
         e += PI * sky_radiance(d);
     } else {
-        // the cell met lives as long as the one reading it
-        e += ALBEDO * irradiance_at(o + d * t, -d, atomicLoad(&life[cell]), &seed);
+        // what the surface met sends back, its albedo of the light the cell met there has learned (that cell lives as
+        // long as the one reading it), and its own light
+        let r = records[h.rec];
+        e += r.albedo.rgb * irradiance_at(o + d * h.t, -d, atomicLoad(&life[cell]), &seed) + PI * r.emission.rgb;
     }
     // the light (rgb) and whether the sun was seen (a)
     learned[id.x] = vec4(e, seen);

@@ -324,6 +324,15 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         the scene's materials
       And Berlin's snow bounces white, and a lit window throws warm light into the street at dusk; a hook that can't
         run at a hit is named by D19's warning
+      And so far (11-18, the first tier): systems/rt keeps each TLAS instance's record at its custom index
+        (records.rs: its StandardMaterial's base colour times its texture's mean, less what is metal, and its emission
+        as the radiance it sends, as the reference takes it), and the probes' and the cache's hits read it in place of
+        LT2's stand-in. An instance with no StandardMaterial (a hook) keeps the stand-in. FLOOR3's lenses (4500 nits)
+        now light its cells: gi mean 4.819 to 2.381 stops, bias -4.796 to -2.118, worst 7.029 to 6.012, flicker
+        0.101 to 0.415, live 16.1 ms. It stays dark and blotchy because one cosine ray an update rarely finds a lens
+        that is 2 to 3% of the sky: emitters sampled by their power with a shadow ray (D7, LT6) are next. Glade gi
+        mean 1.474 to 1.319, bias 1.241 to 1.074 (against LT3's unreliable reference). Taking emission over the
+        exposure where Bevy draws it unexposed (emissive_exposure_weight 0, its default) made FLOOR3 3.2 stops bright
 
     Scenario: LT5. raea's path tracer, the reference and the film tier
       Then a path tracer on systems/rt takes its first hit from the camera's G-buffer and runs full materials at every

@@ -27,7 +27,7 @@ use bevy::{
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         render_asset::RenderAssets,
         render_resource::{
-            binding_types::{acceleration_structure, sampler, storage_buffer_sized, texture_cube, texture_storage_3d, uniform_buffer},
+            binding_types::{acceleration_structure, sampler, storage_buffer_read_only_sized, storage_buffer_sized, texture_cube, texture_storage_3d, uniform_buffer},
             *,
         },
         renderer::{RenderDevice, RenderQueue},
@@ -177,6 +177,8 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 storage_buffer_sized(false, None),
                 texture_storage_3d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 storage_buffer_sized(false, None),
+                // each instance's record (records.rs)
+                storage_buffer_read_only_sized(false, None),
             ),
         ),
     );
@@ -237,6 +239,7 @@ fn update(
     mut commands: Commands,
     grid: Option<Res<Grid>>,
     scene: Option<Res<crate::Scene>>,
+    records: Option<Res<crate::Records>>,
     images: Res<RenderAssets<GpuImage>>,
     fallback: Res<FallbackImage>,
     p: Option<Res<Pipeline>>,
@@ -245,7 +248,7 @@ fn update(
     queue: Res<RenderQueue>,
     mut state: ResMut<State>,
 ) {
-    let (Some(grid), Some(scene), Some(p)) = (grid, scene, p) else { return };
+    let (Some(grid), Some(scene), Some(records), Some(p)) = (grid, scene, records, p) else { return };
     let (Some(pipeline), Some(resolve)) = (cache.get_compute_pipeline(p.id), cache.get_compute_pipeline(p.resolve)) else { return };
     let Some(passes) = p.cache.0.iter().map(|id| cache.get_compute_pipeline(*id)).collect::<Option<Vec<_>>>() else { return };
     let Ok(passes) = <[&ComputePipeline; 6]>::try_from(passes) else { return };
@@ -294,7 +297,7 @@ fn update(
     let group = device.create_bind_group(
         "raea_gi",
         &cache.get_bind_group_layout(&p.layout),
-        &BindGroupEntries::sequential((uniform.binding().unwrap(), scene.0.as_binding(), sky, sky_diffuse, &p.sampler, cubes.as_entire_binding(), &voxels.texture_view, tags.as_entire_binding())),
+        &BindGroupEntries::sequential((uniform.binding().unwrap(), scene.0.as_binding(), sky, sky_diffuse, &p.sampler, cubes.as_entire_binding(), &voxels.texture_view, tags.as_entire_binding(), records.0.as_entire_binding())),
     );
     // a steady frame is timed when the last one's times are in
     let timed = !fresh && state.timer.as_ref().is_some_and(|t| t.pending.is_none());

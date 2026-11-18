@@ -11,6 +11,8 @@ pub mod gi;
 pub mod cache;
 // the sun's far shadow map, past the last cascade (RAEA_SUN_FAR, LT21)
 pub mod far;
+// what a hit sees: each instance's averaged albedo and emission (LT4's first tier)
+pub mod records;
 pub mod traced_ao;
 
 /// Every traced pass asked for: traced AO (RAEA_TRACED_AO), raea GI's probes (RAEA_GI), the sun's far shadow map
@@ -43,7 +45,7 @@ use bevy::{
 /// Every visible opaque mesh instance (its mesh and world transform), from the main world each frame.
 #[derive(Resource, Default, Clone, ExtractResource)]
 #[extract_app(bevy::render::RenderApp)]
-struct Instances(Vec<(AssetId<Mesh>, Mat4, u8)>);
+struct Instances(Vec<(AssetId<Mesh>, Mat4, u8, records::Record)>);
 
 /// an instance's ray mask: every instance has ALL; CASTS where it casts shadows (no NotShadowCaster), which is all a
 /// sun ray tests, so a film's shadow-only stand-ins and its non-casting walls shade the sun as its shadow maps do
@@ -71,6 +73,10 @@ fn spent(k: usize, since: std::time::Instant) {
 #[derive(Resource)]
 pub struct Scene(pub Tlas);
 
+/// Each TLAS instance's record (records.rs), at its custom index: 32 bytes each, room for as many as the TLAS
+#[derive(Resource)]
+pub struct Records(pub Buffer);
+
 /// How many times the TLAS was built and how many instances it last held, for raea GI's stats (gi.rs `report`)
 pub(crate) static TLAS_BUILT: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
 
@@ -82,6 +88,9 @@ struct Held {
     room: u32,
     /// Blases' batch count it was built against
     batches: u64,
+    /// the records last written (Records), in the TLAS's order, and their buffer
+    records: Vec<records::Record>,
+    record_buf: Option<Buffer>,
 }
 
 pub fn install(app: &mut App) {
@@ -112,20 +121,25 @@ fn see_through(m: &StandardMaterial) -> bool {
     m.base_color.alpha() < 0.99 || m.specular_transmission > 0.0 || m.diffuse_transmission > 0.0
 }
 
+#[allow(clippy::too_many_arguments)]
 fn gather(
     meshes: Query<(&Mesh3d, &GlobalTransform, &InheritedVisibility, Option<&MeshMaterial3d<StandardMaterial>>, Has<bevy::light::NotShadowCaster>)>,
     lights: Query<(&DirectionalLight, &GlobalTransform)>,
     mats: Res<Assets<StandardMaterial>>,
+    images: Res<Assets<Image>>,
+    mut means: Local<HashMap<AssetId<Image>, Vec3>>,
     mut instances: ResMut<Instances>,
     mut sun: ResMut<Sun>,
 ) {
     let t0 = std::time::Instant::now();
     instances.0.clear();
     for (mesh, t, vis, mat, no_shadow) in &meshes {
-        if !vis.get() || mat.and_then(|m| mats.get(&m.0)).is_some_and(see_through) {
+        let mat = mat.and_then(|m| mats.get(&m.0));
+        if !vis.get() || mat.is_some_and(see_through) {
             continue;
         }
-        instances.0.push((mesh.id(), t.to_matrix(), if no_shadow { ALL } else { ALL | CASTS }));
+        let rec = mat.map_or(records::STAND_IN, |m| records::record(m, &images, &mut means));
+        instances.0.push((mesh.id(), t.to_matrix(), if no_shadow { ALL } else { ALL | CASTS }, rec));
     }
     if let Some((_, t)) = lights.iter().find(|(l, _)| l.shadow_maps_enabled).or_else(|| lights.iter().next()) {
         sun.0 = t.back().as_vec3();
@@ -163,7 +177,7 @@ fn build_blas(
         blases.0.remove(id);
     }
     let Some(instances) = instances else { return };
-    let mut wanted: Vec<AssetId<Mesh>> = instances.0.iter().map(|(id, _, _)| *id).filter(|id| !blases.0.contains_key(id)).collect();
+    let mut wanted: Vec<AssetId<Mesh>> = instances.0.iter().map(|(id, ..)| *id).filter(|id| !blases.0.contains_key(id)).collect();
     wanted.sort_unstable();
     wanted.dedup();
     let mut made = Vec::new();
@@ -237,11 +251,27 @@ fn build_tlas(mut commands: Commands, instances: Option<Res<Instances>>, blases:
         return;
     }
     let t0 = std::time::Instant::now();
-    let now: Vec<(AssetId<Mesh>, [f32; 12], u8)> = instances.0.iter().filter(|(id, ..)| blases.0.contains_key(id)).map(|(id, m, mask)| (*id, m.transpose().to_cols_array()[..12].try_into().unwrap(), *mask)).collect();
+    let with: Vec<_> = instances.0.iter().filter(|(id, ..)| blases.0.contains_key(id)).collect();
+    let now: Vec<(AssetId<Mesh>, [f32; 12], u8)> = with.iter().map(|(id, m, mask, _)| (*id, m.transpose().to_cols_array()[..12].try_into().unwrap(), *mask)).collect();
+    let recs: Vec<records::Record> = with.iter().map(|(.., r)| *r).collect();
     if std::env::var_os("RAEA_RT_DEBUG").is_some() {
-        for (id, _, _) in instances.0.iter().filter(|(id, _, _)| !blases.0.contains_key(id)) {
+        for (id, ..) in instances.0.iter().filter(|(id, ..)| !blases.0.contains_key(id)) {
             eprintln!("raea rt: no BLAS for {id:?}");
         }
+    }
+    // the records in the TLAS's order, written when they change: a material can change with no instance moving
+    if held.records != recs || held.record_buf.is_none() {
+        if held.record_buf.as_ref().is_none_or(|b| b.size() / 32 < recs.len() as u64) {
+            let n = (recs.len() * 3 / 2).max(64) as u64;
+            let b = device.create_buffer(&BufferDescriptor { label: Some("raea rt records"), size: n * 32, usage: BufferUsages::STORAGE | BufferUsages::COPY_DST, mapped_at_creation: false });
+            commands.insert_resource(Records(b.clone()));
+            held.record_buf = Some(b);
+        }
+        let bytes: Vec<u8> = recs.iter().flatten().flat_map(|f| f.to_le_bytes()).collect();
+        if let (false, Some(b)) = (bytes.is_empty(), held.record_buf.as_ref()) {
+            queue.write_buffer(b, 0, &bytes);
+        }
+        held.records = recs;
     }
     if scene.is_some() && now == held.instances && held.batches == blases.1 {
         spent(1, t0);
