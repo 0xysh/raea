@@ -24,6 +24,12 @@ use crate::{Mesh, Request, Rng, hash_str};
 const DEPTH: f32 = 0.3;
 /// How steeply a root dives once it's under the soil (m down a metre out)
 const DIVE: f32 = 0.8;
+/// The street tree's pit (m from the trunk's centre), the open soil its roots show in: 0.6 m past the flare and never
+/// under 1 m (ASSUMED: a 2 m pit, wider round a big trunk). Past it the roots are under the paving. The plant carries
+/// it (Plant::pit) for the ground to draw the same pit.
+pub(crate) fn pit(sp: &Species, r_dbh: f32) -> f32 {
+    (sp.flare * r_dbh + 0.6).max(1.0)
+}
 
 struct Root {
     a: f32,
@@ -40,20 +46,22 @@ struct Run {
     show: f32,
 }
 
-/// The foot onto the bark: the flare on every level, the roots on the nearest (a request with no pruning).
-pub(crate) fn foot(sp: &Species, req: &Request, nodes: &[Node], m: &mut Mesh) {
-    let Some(trunk) = branches(nodes).into_iter().next() else { return };
+/// The foot onto the bark: the flare on every level, the roots on the nearest (a request with no pruning). Returns
+/// the tree's pit.
+pub(crate) fn foot(sp: &Species, req: &Request, nodes: &[Node], m: &mut Mesh) -> f32 {
+    let Some(trunk) = branches(nodes).into_iter().next() else { return 1.0 };
+    let r_dbh = nodes[trunk[0]].r;
+    let pit = pit(sp, r_dbh);
     if trunk.len() < 2 || sp.roots == 0 {
-        return;
+        return pit;
     }
     let mut rng = Rng::new(req.seed ^ hash_str(sp.id) ^ hash_str("roots"));
     let n = sp.roots as usize;
     let roots: Vec<Root> = (0..n).map(|i| Root { a: TAU * (i as f32 + rng.range(-0.3, 0.3)) / n as f32, size: rng.range(0.55, 1.0) }).collect();
     flare(sp, req, nodes, &trunk, &roots, m);
     if req.prune > 0.0 {
-        return;
+        return pit;
     }
-    let r_dbh = nodes[trunk[0]].r;
     let (c, _) = along_trunk(nodes, &trunk, 0.0);
     let mut forks = vec![];
     for root in &roots {
@@ -61,15 +69,17 @@ pub(crate) fn foot(sp: &Species, req: &Request, nodes: &[Node], m: &mut Mesh) {
         let surf = (sp.surface * rng.range(0.6, 1.4)).clamp(0.05, 0.7);
         // half the trunk's radius at its biggest (ASSUMED); its top stands up to twice its own half-height by the
         // trunk on the species that show their roots most (ASSUMED); it meets the soil 1.6-3 trunk radii out, longer
-        // on those species (0.5-0.9 m on a 0.32 m radius, Lee 2022's range)
+        // on those species (0.5-0.9 m on a 0.32 m radius, Lee 2022's range), and inside the pit, its widest side and
+        // its wander clear of the paving's edge
         let r0 = 0.5 * r_dbh * root.size;
         let tall0 = r0 * ASPECT.0.sqrt();
+        let inside = pit - 0.5 * r_dbh - r0 - 0.08;
         let run = Run {
             start: Vec3::new(c.x, 0.0, c.z) + dir * (0.5 * r_dbh),
             heading: root.a,
             r0,
             t0: (3.0 * surf * tall0).min(2.0 * tall0),
-            show: (r_dbh * (1.6 + 1.4 * root.size) * (0.55 + surf) * rng.range(0.85, 1.15)).clamp(0.25, 1.4),
+            show: (r_dbh * (1.6 + 1.4 * root.size) * (0.55 + surf) * rng.range(0.85, 1.15)).clamp(0.25, 1.4).min(inside.max(0.2)),
         };
         let fork = draw(m, &run, &mut rng);
         if root.size > 0.75 {
@@ -81,6 +91,7 @@ pub(crate) fn foot(sp: &Species, req: &Request, nodes: &[Node], m: &mut Mesh) {
         let turn = if rng.f() < 0.5 { -1.0 } else { 1.0 } * rng.range(0.5, 0.9);
         draw(m, &Run { heading: f.heading + turn, r0: 0.6 * f.r0, show: f.show * rng.range(0.5, 0.8), ..f }, &mut rng);
     }
+    pit
 }
 
 /// A root's section, height over width: where it leaves the trunk and where it meets the soil (ASSUMED)

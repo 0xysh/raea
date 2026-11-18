@@ -84,6 +84,9 @@ fn every_species_grows() {
         let req = Request { species: sp.id.into(), height: 12.0, width: 12.0 / sp.height_per_width, clear: 2.5, seed: 7, leaves: 3_000, prune: 0.0 };
         let t = grow(&req).unwrap();
         assert!(t.nodes.len() > 200 && t.leaf_count() > 500, "{}: {} nodes, {} leaves", sp.id, t.nodes.len(), t.leaf_count());
+        // its roots show only in its pit: past it they're under the paving
+        let reach = t.bark.pos.iter().filter(|p| p[1] > 0.0 && p[1] < 0.5).map(|p| p[0].hypot(p[2])).fold(0.0, f32::max);
+        assert!(reach < t.pit && t.pit >= 1.0, "{}: bark above the ground {reach:.2} m from the trunk, its pit {:.2} m", sp.id, t.pit);
     }
 }
 
@@ -111,7 +114,9 @@ fn grow_files() {
         let id = r["id"].as_str().unwrap();
         std::fs::write(out.join(format!("{id}.glb")), &bytes).unwrap();
         atlas(crate::species(&req.species).unwrap(), req.seed).save(out.join(format!("{id}-atlas.png"))).unwrap();
-        println!("{id}: {} nodes, {} bark triangles, {} leaves, grown in {ms} ms, {} KB", t.nodes.len(), t.bark.tris(), t.leaf_count(), bytes.len() / 1024);
+        // the pit the ground draws round it
+        std::fs::write(out.join(format!("{id}.json")), serde_json::json!({ "pit": (t.pit * 100.0).round() / 100.0 }).to_string()).unwrap();
+        println!("{id}: pit {:.2} m, {} nodes, {} bark triangles, {} leaves, grown in {ms} ms, {} KB", t.pit, t.nodes.len(), t.bark.tris(), t.leaf_count(), bytes.len() / 1024);
     }
 }
 

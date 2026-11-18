@@ -70,6 +70,8 @@ pub struct Plant {
     pub nodes: Vec<Node>,
     pub bark: Mesh,
     pub leaves: Vec<Mesh>,
+    /// its pit's radius (m from the trunk): the open soil its roots show in, for the ground to draw
+    pub pit: f32,
 }
 
 impl Plant {
@@ -87,10 +89,10 @@ pub fn grow(req: &Request) -> Result<Plant, String> {
     let mut rng = Rng::new(req.seed ^ hash_str(sp.id));
     let (nodes, env) = grow::grow(sp, req, &mut rng);
     let mut bark = tube::bark(sp, req, &nodes);
-    roots::foot(sp, req, &nodes, &mut bark);
+    let pit = roots::foot(sp, req, &nodes, &mut bark);
     let cover = atlas::cover(&atlas(sp, req.seed)).max(0.05);
     let leaves = leaves::leaves(sp, req, &nodes, &env, cover, &mut rng);
-    Ok(Plant { nodes, bark, leaves })
+    Ok(Plant { nodes, bark, leaves, pit })
 }
 
 /// The plant as a .glb: material "bark", and "leaf-0" to "leaf-7" over the species' atlas (alpha mask, both sides).
