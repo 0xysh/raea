@@ -37,14 +37,19 @@ const PILLAR_LIGHT: Vec3 = Vec3::new(6.2, 2.4, 4.4);
 
 pub fn spawn(mut commands: Commands, opts: Res<Opts>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     let mut tris: Vec<[Vec3; 3]> = Vec::new();
+    if opts.scene == 1 {
+        crate::field::spawn(&mut commands, &opts, &mut meshes, &mut mats, &mut tris);
+    }
     let mut put = |mesh: Mesh, at: Transform, color: Color, tris: &mut Vec<[Vec3; 3]>| {
         tris.extend(triangles(&mesh, &at));
         let material = mats.add(StandardMaterial { base_color: color, perceptual_roughness: 0.6, ..default() });
         commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(material), at));
     };
-    put(Plane3d::default().mesh().size(30.0, 30.0).build(), Transform::IDENTITY, Color::srgb(0.62, 0.62, 0.6), &mut tris);
-    put(knot(2, 3, opts.detail, opts.detail / 32, 0.33), Transform::from_xyz(0.0, 1.75, 0.0).with_scale(Vec3::splat(0.5)), Color::srgb(0.85, 0.42, 0.18), &mut tris);
-    put(Cuboid::new(0.2, 2.5, 3.0).mesh().build(), Transform::from_xyz(-2.5, 1.25, 0.0), Color::srgb(0.35, 0.42, 0.55), &mut tris);
+    put(Plane3d::default().mesh().size(160.0, 160.0).build(), Transform::IDENTITY, Color::srgb(0.62, 0.62, 0.6), &mut tris);
+    if opts.scene == 0 {
+        put(knot(2, 3, opts.detail, opts.detail / 32, 0.33), Transform::from_xyz(0.0, 1.75, 0.0).with_scale(Vec3::splat(0.5)), Color::srgb(0.85, 0.42, 0.18), &mut tris);
+        put(Cuboid::new(0.2, 2.5, 3.0).mesh().build(), Transform::from_xyz(-2.5, 1.25, 0.0), Color::srgb(0.35, 0.42, 0.55), &mut tris);
+    }
     if opts.pillar {
         put(Cuboid::new(0.4, 4.0, 0.4).mesh().build(), Transform::from_translation(PILLAR), Color::srgb(0.9, 0.9, 0.88), &mut tris);
     }
@@ -73,6 +78,15 @@ pub fn lights(n: u32, t: f32) -> Vec<GpuLight> {
 
 /// A (p, q) torus knot `seg` segments long and `ring` around, its tube `r` thick, in the xy plane.
 fn knot(p: u32, q: u32, seg: u32, ring: u32, r: f32) -> Mesh {
+    let (pos, nor, idx) = knot_data(p, q, seg, ring, r);
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+        .with_inserted_indices(Indices::U32(idx))
+}
+
+/// The knot's positions, normals and triangles: a closed mesh, every vertex shared.
+pub fn knot_data(p: u32, q: u32, seg: u32, ring: u32, r: f32) -> (Vec<Vec3>, Vec<Vec3>, Vec<u32>) {
     let (p, q) = (p as f32, q as f32);
     let c = |t: f32| Vec3::new((2.0 + (q * t).cos()) * (p * t).cos(), (2.0 + (q * t).cos()) * (p * t).sin(), -(q * t).sin());
     let (mut pos, mut nor, mut idx) = (Vec::new(), Vec::new(), Vec::new());
@@ -93,10 +107,7 @@ fn knot(p: u32, q: u32, seg: u32, ring: u32, r: f32) -> Mesh {
             idx.extend([v00, v10, v11, v00, v11, v01]);
         }
     }
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
-        .with_inserted_indices(Indices::U32(idx))
+    (pos, nor, idx)
 }
 
 /// A mesh's triangles in world space.

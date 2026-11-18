@@ -192,7 +192,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         textureStore(out, px, vec4(n * 0.5 + 0.5, 1.0));
         return;
     }
-    if view == 2u {
+    if view == 2u || view == 6u {
         textureStore(out, px, vec4(albedo, 1.0));
         return;
     }

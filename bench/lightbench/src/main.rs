@@ -3,6 +3,8 @@
 //! `--shot FILE` it draws headless, saves frame `--frames` as a PNG and exits, so every claim is a repeatable run.
 
 mod bvh;
+mod field;
+mod lod;
 mod pass;
 mod scene;
 
@@ -24,7 +26,7 @@ const HELP: &str = "lightbench [switches]
   --lights N                    point lights, the pillar's first (16)
   --view lit|normal|albedo|depth|rays   what to show (lit)
   --brute                       test every triangle for each shadow ray instead of the BVH
-  --detail N                    the knot's segments; its triangles are N * N / 16 (2048)
+  --detail N                    the knot's segments; its triangles are N * N / 16 (2048; the field's knots 512)
   --size WxH                    pixels (1280x720)
   --t SECONDS                   hold the lights where they are at this time (they move otherwise)
   --exposure X                  linear exposure (1)
@@ -36,7 +38,13 @@ const HELP: &str = "lightbench [switches]
   --history N                   frames the history holds at most (32)
   --camera still|orbit|cut      the camera holds, circles slowly, or jumps to a second view at lit frame --cut-at (still)
   --cut-at N                    the lit frame --camera cut jumps on (8)
-  --view history                frames of history at each pixel, white when full";
+  --view history                frames of history at each pixel, white when full
+  --scene knot|field            one knot by a wall (lighting), or rows of knots into the distance (detail) (knot)
+  --rows N                      the field's rows (6)
+  --detail full|adaptive        every finest triangle, or the clusters each knot's distance asks for (adaptive)
+  --tau PX                      the error in pixels a cluster may show (1)
+  --fov DEG                     the vertical field of view (45)
+  --view lod                    each cluster coloured by its level (white the finest), unlit";
 
 #[derive(Resource, Clone)]
 pub struct Opts {
@@ -58,10 +66,16 @@ pub struct Opts {
     /// 0 still, 1 orbit, 2 cut
     pub camera: u32,
     pub cut_at: u32,
+    /// 0 knot, 1 field
+    pub scene: u32,
+    pub rows: u32,
+    pub full: bool,
+    pub tau: f32,
+    pub fov: f32,
 }
 
 fn opts() -> Result<Opts, String> {
-    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 2048, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8 };
+    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0 };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut val = || args.next().ok_or(format!("{a} needs a value"));
@@ -73,12 +87,26 @@ fn opts() -> Result<Opts, String> {
             }
             "--view" => {
                 let v = val()?;
-                o.view = ["lit", "normal", "albedo", "depth", "rays", "history"].iter().position(|m| *m == v).ok_or("--view: lit, normal, albedo, depth, rays or history")? as u32;
+                o.view = ["lit", "normal", "albedo", "depth", "rays", "history", "lod"].iter().position(|m| *m == v).ok_or("--view: lit, normal, albedo, depth, rays, history or lod")? as u32;
             }
             "--k" => o.k = (num(val()?)? as u32).clamp(1, 16),
             "--lights" => o.lights = (num(val()?)? as u32).max(1),
             "--brute" => o.brute = true,
-            "--detail" => o.detail = (num(val()?)? as u32).max(64),
+            "--detail" => {
+                let v = val()?;
+                match v.as_str() {
+                    "full" => o.full = true,
+                    "adaptive" => o.full = false,
+                    n => o.detail = (num(n.into())? as u32).max(64),
+                }
+            }
+            "--scene" => {
+                let v = val()?;
+                o.scene = ["knot", "field"].iter().position(|m| *m == v).ok_or("--scene: knot or field")? as u32;
+            }
+            "--rows" => o.rows = (num(val()?)? as u32).max(1),
+            "--tau" => o.tau = num(val()?)?.max(0.0),
+            "--fov" => o.fov = num(val()?)?.clamp(1.0, 170.0),
             "--size" => {
                 let v = val()?;
                 let (w, h) = v.split_once('x').ok_or("--size: WxH")?;
@@ -100,6 +128,9 @@ fn opts() -> Result<Opts, String> {
             "--help" | "-h" => return Err(HELP.into()),
             _ => return Err(format!("unknown switch {a}\n{HELP}")),
         }
+    }
+    if o.detail == 0 {
+        o.detail = if o.scene == 1 { 512 } else { 2048 };
     }
     Ok(o)
 }
@@ -138,7 +169,8 @@ fn main() {
         .insert_resource(ClearColor(Color::srgb(0.02, 0.025, 0.035)))
         .add_plugins(pass::LightPass)
         .add_systems(Startup, (scene::spawn, camera))
-        .add_systems(Update, (tick, shoot))
+        .init_resource::<field::Counts>()
+        .add_systems(Update, (tick, field::choose.after(tick), shoot.after(field::choose)))
         .run();
 }
 
@@ -151,7 +183,7 @@ fn camera(mut commands: Commands, o: Res<Opts>, mut images: ResMut<Assets<Image>
         DepthPrepass,
         DeferredPrepass,
         CameraMainTextureUsages(usages),
-        Projection::Perspective(PerspectiveProjection { fov: 45f32.to_radians(), ..default() }),
+        Projection::Perspective(PerspectiveProjection { fov: o.fov.to_radians(), ..default() }),
         eye(&o, 0),
     ));
     if o.shot.is_some() {
@@ -203,7 +235,7 @@ fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: 
     };
 }
 
-fn shoot(mut commands: Commands, o: Res<Opts>, target: Option<Res<Target>>, mut done: Local<bool>, mut clock: Local<Option<(std::time::Instant, u32)>>) {
+fn shoot(mut commands: Commands, o: Res<Opts>, counts: Res<field::Counts>, target: Option<Res<Target>>, mut done: Local<bool>, mut clock: Local<Option<(std::time::Instant, u32)>>) {
     let (Some(path), Some(target)) = (o.shot.clone(), target) else { return };
     // counted from the lighting pass's first frame, not from startup (its pipeline compiles meanwhile)
     let drawn = pass::DRAWN.load(std::sync::atomic::Ordering::Relaxed);
@@ -214,6 +246,10 @@ fn shoot(mut commands: Commands, o: Res<Opts>, target: Option<Res<Target>>, mut 
         return;
     }
     *done = true;
+    if o.scene == 1 {
+        let c = *counts;
+        println!("LOD {} knots, {} culled, {} of {} triangles drawn ({:.1}%), detail {}, tau {} px, fov {} deg", c.knots, c.culled, c.drawn, c.full, c.drawn as f64 * 100.0 / c.full.max(1) as f64, if o.full { "full" } else { "adaptive" }, o.tau, o.fov);
+    }
     if o.bench > 0 {
         let (t0, d0) = clock.unwrap();
         let ms = t0.elapsed().as_secs_f64() * 1000.0 / (drawn - d0).max(1) as f64;
