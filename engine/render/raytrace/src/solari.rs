@@ -17,6 +17,139 @@ use bevy::solari::prelude::{RaytracingMesh3d, SolariLighting, SolariPlugins};
 
 pub fn add(app: &mut App) {
     app.add_plugins((SolariPlugins, PathtracingPlugin)).add_systems(PostUpdate, (cameras, meshes).before(bevy::camera::CameraUpdateSystems));
+    if dynamic() {
+        // a twin posed after its joints are placed and before this frame's asset events go out, so the traced scene
+        // gets the pose with the frame that draws it; a part's visibility read once it is propagated
+        app.add_systems(
+            PostUpdate,
+            (
+                skin_twins.after(bevy::transform::TransformSystems::Propagate).before(bevy::asset::AssetEventSystems),
+                hidden.after(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            ),
+        );
+    }
+}
+
+/// RAEA_SOLARI_DYNAMIC=1 (RT5, a trial; unset, everything is as before): the traced scene follows what moves. A skinned
+/// mesh gets a traced twin, posed on the CPU each frame as the GPU skins the drawn one (it casts traced shadows, stops
+/// and bounces light), and a hidden part leaves the traced scene until it is shown again (hidden, it still shadowed).
+fn dynamic() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_DYNAMIC").as_deref() == Ok("1"))
+}
+
+/// A skinned mesh's traced twin: the mesh's bind pose in Solari's layout and its skin, and the joints last posed from.
+#[derive(Component)]
+struct SkinTwin {
+    twin: Handle<Mesh>,
+    pos: Vec<Vec3>,
+    nrm: Vec<Vec3>,
+    tan: Vec<Vec4>,
+    joints: Vec<[u16; 4]>,
+    weights: Vec<[f32; 4]>,
+    last: Vec<Mat4>,
+}
+
+/// The twin of a skinned `src`: its copy in Solari's layout, with the bind pose and skin kept to pose it from.
+fn skin_twin(src: &Mesh, mapped: bool) -> Option<(Mesh, SkinTwin)> {
+    let Some(Traceable::Copy(mesh)) = traceable(src, mapped) else { return None };
+    let v3 = |a: &VertexAttributeValues| match a {
+        VertexAttributeValues::Float32x3(v) => Some(v.iter().map(|p| Vec3::from(*p)).collect::<Vec<_>>()),
+        _ => None,
+    };
+    let pos = v3(mesh.attribute(Mesh::ATTRIBUTE_POSITION)?)?;
+    let nrm = v3(mesh.attribute(Mesh::ATTRIBUTE_NORMAL)?)?;
+    let VertexAttributeValues::Float32x4(tan) = mesh.attribute(Mesh::ATTRIBUTE_TANGENT)? else { return None };
+    let tan: Vec<Vec4> = tan.iter().map(|t| Vec4::from(*t)).collect();
+    let joints: Vec<[u16; 4]> = match src.attribute(Mesh::ATTRIBUTE_JOINT_INDEX)? {
+        VertexAttributeValues::Uint16x4(v) => v.clone(),
+        VertexAttributeValues::Uint8x4(v) => v.iter().map(|a| a.map(u16::from)).collect(),
+        _ => return None,
+    };
+    let VertexAttributeValues::Float32x4(weights) = src.attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT)? else { return None };
+    let n = pos.len();
+    if nrm.len() != n || tan.len() != n || joints.len() != n || weights.len() != n {
+        return None;
+    }
+    Some((mesh, SkinTwin { twin: Handle::default(), pos, nrm, tan, joints, weights: weights.clone(), last: Vec::new() }))
+}
+
+/// Each skinned mesh's twin in this frame's pose: every vertex by its joints' places, as Bevy's skinning shader does
+/// (a joint's world place times its inverse bind pose, blended by weight), brought into the mesh entity's own space,
+/// since the traced instance is placed by that entity's transform and the skin ignores it.
+fn skin_twins(
+    mut q: Query<(&GlobalTransform, &bevy::mesh::skinning::SkinnedMesh, &mut SkinTwin), With<RaytracingMesh3d>>,
+    places: Query<&GlobalTransform>,
+    binds: Res<Assets<bevy::mesh::skinning::SkinnedMeshInverseBindposes>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    for (gt, skin, mut tw) in &mut q {
+        let Some(inv) = binds.get(&skin.inverse_bindposes) else { continue };
+        let to_local = gt.affine().inverse();
+        let mats: Vec<Mat4> = skin
+            .joints
+            .iter()
+            .enumerate()
+            .map(|(i, j)| {
+                let g = places.get(*j).map(|g| g.affine()).unwrap_or(bevy::math::Affine3A::IDENTITY);
+                Mat4::from(to_local * g) * inv.get(i).copied().unwrap_or(Mat4::IDENTITY)
+            })
+            .collect();
+        if mats == tw.last {
+            continue;
+        }
+        let n = tw.pos.len();
+        let (mut pos, mut nrm, mut tan) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
+        for v in 0..n {
+            let (ji, w) = (tw.joints[v], tw.weights[v]);
+            let mut m = Mat4::ZERO;
+            let mut total = 0.0;
+            for k in 0..4 {
+                if w[k] != 0.0 {
+                    if let Some(j) = mats.get(ji[k] as usize) {
+                        m += *j * w[k];
+                        total += w[k];
+                    }
+                }
+            }
+            if total <= 0.0 {
+                m = Mat4::IDENTITY;
+            }
+            let m3 = Mat3::from_mat4(m);
+            pos.push(m.transform_point3(tw.pos[v]).to_array());
+            nrm.push((m3 * tw.nrm[v]).normalize_or(Vec3::Y).to_array());
+            tan.push((m3 * tw.tan[v].truncate()).normalize_or(Vec3::X).extend(tw.tan[v].w).to_array());
+        }
+        if let Some(mut mesh) = meshes.get_mut(&tw.twin) {
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, nrm);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tan);
+        }
+        tw.last = mats;
+    }
+}
+
+/// A traced mesh kept out of the traced scene while its part is hidden.
+#[derive(Component)]
+struct Untraced(Handle<Mesh>);
+
+/// Solari traces every RaytracingMesh3d, shown or not: a hidden part (one a frame leaves out, a `visible={false}`)
+/// kept shadowing and bouncing light where it last stood. Hidden, it gives its traced mesh up; shown, it has it back.
+fn hidden(
+    mut cmd: Commands,
+    shown: Query<(Entity, &InheritedVisibility, &RaytracingMesh3d)>,
+    parked: Query<(Entity, &InheritedVisibility, &Untraced), Without<RaytracingMesh3d>>,
+) {
+    for (e, v, rt) in &shown {
+        if !v.get() {
+            cmd.entity(e).insert(Untraced(rt.0.clone())).remove::<RaytracingMesh3d>();
+        }
+    }
+    for (e, v, un) in &parked {
+        if v.get() {
+            cmd.entity(e).insert(RaytracingMesh3d(un.0.clone())).remove::<Untraced>();
+        }
+    }
 }
 
 /// A camera or mesh already set up (or left out).
@@ -62,6 +195,20 @@ fn meshes(
             // its material not made yet: decided on a later frame
             None => continue,
             Some(true) => {}
+        }
+        if skinned && !morphed && dynamic() {
+            let mapped = mats.get(&mat.0).is_some_and(|m| m.normal_map_texture.is_some());
+            let Some(twin) = assets.get(&m.0).map(|src| skin_twin(src, mapped)) else { continue };
+            match twin {
+                Some((mesh, mut tw)) => {
+                    tw.twin = assets.add(mesh);
+                    cmd.entity(e).insert((RaytracingMesh3d(tw.twin.clone()), tw, Done));
+                }
+                None => {
+                    cmd.entity(e).insert(Done);
+                }
+            }
+            continue;
         }
         if skinned || morphed {
             if !*said {
