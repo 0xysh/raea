@@ -3,6 +3,12 @@
 
 pub mod sdk;
 
+/// What a folder takes on disk, as `du -sh` says it (`links`: through a link to its files), or "?".
+pub fn disk_use(dir: &std::path::Path, links: bool) -> String {
+    let o = std::process::Command::new("du").arg(if links { "-shL" } else { "-sh" }).arg(dir).output();
+    o.ok().and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().next().map(str::to_string)).unwrap_or_else(|| "?".into())
+}
+
 /// Where raea's own files are (the SDK's TypeScript, the lite runtime and its packages, the shell's sources, the
 /// sandbox's modules, the tools that install the local models): $RAEA_HOME; else beside an installed binary,
 /// `<prefix>/share/raea` for `<prefix>/bin/raea` (the release's layout, tools/release.sh); else the tree this

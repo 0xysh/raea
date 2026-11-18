@@ -50,6 +50,10 @@ const NEEDS: &[(&str, &str)] = &[
 /// Kimodo's PyTorch environment in a folder (raea's models folder's kimodo-torch).
 pub struct Torch {
     pub dir: PathBuf,
+    /// the Python environment
+    pub venv: PathBuf,
+    /// the motion checkpoint's folder (its stats are decode.rs's too)
+    pub checkpoint: PathBuf,
 }
 
 /// One clip asked of PyTorch.
@@ -72,25 +76,16 @@ pub struct Made {
 
 impl Torch {
     pub fn at(dir: PathBuf) -> Self {
-        Torch { dir }
-    }
-
-    pub fn venv(&self) -> PathBuf {
-        self.dir.join("venv")
+        Torch { venv: dir.join("venv"), checkpoint: dir.join("checkpoints").join("Kimodo-SOMA-RP-v1"), dir }
     }
 
     pub fn python(&self) -> PathBuf {
-        if cfg!(windows) { self.venv().join("Scripts").join("python.exe") } else { self.venv().join("bin").join("python") }
-    }
-
-    /// the motion checkpoint's folder (its stats are decode.rs's too)
-    pub fn checkpoint(&self) -> PathBuf {
-        self.dir.join("checkpoints").join("Kimodo-SOMA-RP-v1")
+        if cfg!(windows) { self.venv.join("Scripts").join("python.exe") } else { self.venv.join("bin").join("python") }
     }
 
     /// the environment's record of what it was made from: a different list makes it again
     fn made_from(&self) -> PathBuf {
-        self.venv().join("raea-packages.txt")
+        self.venv.join("raea-packages.txt")
     }
 
     fn packages() -> String {
@@ -138,7 +133,7 @@ impl Torch {
                     "raea setup motion makes its Python environment with uv, which isn't on PATH: install it (https://docs.astral.sh/uv; Linux and macOS: curl -LsSf https://astral.sh/uv/install.sh | sh; Windows: winget install astral-sh.uv), then run raea setup motion again"
                 );
             }
-            let venv = self.venv();
+            let venv = self.venv.clone();
             let _ = std::fs::remove_dir_all(&venv);
             say(&format!("making the Python environment (Python 3.11 by uv) in {}", venv.display()));
             run(Command::new("uv").args(["venv", "--quiet", "--python", "3.11"]).arg(&venv), "uv venv")?;
@@ -177,10 +172,10 @@ impl Torch {
     /// One clip's features from PyTorch. The runner's progress goes to stderr as it comes.
     pub fn make(&self, job: &Job) -> Result<Made> {
         let runner = self.runner()?;
-        let tmp = std::env::temp_dir().join(format!("raea-motion-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("raea-kimodo-{}", std::process::id()));
         std::fs::create_dir_all(&tmp)?;
         let (ask, out) = (tmp.join("ask.json"), tmp.join("features.f32"));
-        let keys = job.keys.map(|k| std::fs::canonicalize(k).unwrap_or_else(|_| k.to_path_buf()));
+        let keys = job.keys.map(|k| dunce::canonicalize(k).unwrap_or_else(|_| k.to_path_buf()));
         let a = serde_json::json!({"line": job.line, "frames": job.frames, "seed": job.seed, "steps": job.steps, "keys": keys, "cfg": [job.cfg.0, job.cfg.1]});
         std::fs::write(&ask, a.to_string())?;
         let o = Command::new(self.python()).arg("-I").arg(&runner).arg("make").arg(&self.dir).arg(&ask).arg(&out).stderr(Stdio::inherit()).output().context("can't run the environment's Python");
@@ -219,7 +214,7 @@ pub fn root_gap(torch_root: &serde_json::Value, ours: &[[f32; 3]]) -> Option<f64
     let r = torch_root.as_array()?;
     (r.len() == ours.len()).then_some(())?;
     r.iter().zip(ours).map(|(a, b)| {
-        let a: Vec<f64> = a.as_array().map(|v| v.iter().filter_map(serde_json::Value::as_f64).collect()).unwrap_or_default();
+        let a: Vec<f64> = a.as_array().into_iter().flatten().filter_map(serde_json::Value::as_f64).collect();
         (0..3).map(|i| (a.get(i).copied().unwrap_or(f64::NAN) - b[i] as f64).powi(2)).sum::<f64>().sqrt()
     }).try_fold(0.0f64, |m, d| d.is_finite().then_some(m.max(d)))
 }

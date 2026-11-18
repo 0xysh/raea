@@ -111,7 +111,7 @@ fn make(ask: Ask) -> R<String> {
     let keys = ask.keys.as_ref().map(std::path::Path::new);
     let job = torch::Job { line: &ask.words, frames: ask.frames, seed: ask.seed, steps: ask.steps, keys, cfg: (2.0, 2.0) };
     let made = t.make(&job).map_err(|e| format!("raea motion: {e}"))?;
-    let (stats, sk) = (Stats::load(&t.checkpoint()).map_err(|e| format!("raea motion: {e}"))?, Skeleton::soma().map_err(|e| format!("raea motion: {e}"))?);
+    let (stats, sk) = (Stats::load(&t.checkpoint).map_err(|e| format!("raea motion: {e}"))?, Skeleton::soma().map_err(|e| format!("raea motion: {e}"))?);
     let motion = decode::decode(&made.features, &stats, &sk);
     let info = &made.info;
     let clean = info["line"].as_str().unwrap_or(&ask.words).to_string();
@@ -185,11 +185,9 @@ fn fetching() -> impl FnMut(&str, u64) {
     }
 }
 
-/// What a folder takes on disk, as du says it (through a link: the Mac's model folders can be links to their files)
+/// What a folder takes on disk, through a link (the Mac's model folders can be links to their files).
 fn disk(dir: &std::path::Path) -> String {
-    std::process::Command::new("du").arg("-shL").arg(dir).output().ok()
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().next().map(str::to_string))
-        .unwrap_or_else(|| "?".into())
+    raea_io_home::disk_use(dir, true)
 }
 
 /// `raea setup motion [--check]`: what raea motion runs on here, made where missing (--check only says), and where it is.

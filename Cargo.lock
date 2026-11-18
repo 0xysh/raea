@@ -13905,6 +13905,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-app-motion"
+version = "0.1.0"
+dependencies = [
+ "raea-io-home",
+ "raea-runtime-bundle",
+ "raea-sys-kimodo",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-app-notes"
 version = "0.1.0"
 dependencies = [
@@ -13986,13 +13996,13 @@ name = "raea-app-tools"
 version = "0.1.0"
 dependencies = [
  "dunce",
+ "raea-app-motion",
  "raea-io-assets",
  "raea-io-gen",
  "raea-io-home",
  "raea-io-media",
  "raea-runtime-bundle",
  "raea-runtime-export",
- "raea-sys-kimodo",
  "serde_json",
 ]
 
@@ -15991,6 +16001,7 @@ name = "raea-sys-kimodo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dunce",
  "mlx-rs",
  "raea-io-home",
  "raea-sys-ml",

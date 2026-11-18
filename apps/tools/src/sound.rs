@@ -259,11 +259,9 @@ pub fn setup_audio(args: &[String]) -> R<String> {
     Ok(format!("{head}\n{}", lines.join("\n")))
 }
 
-/// What a folder takes on disk, as du says it (clones of another install count in full here, as du counts them).
+/// What a folder takes on disk (clones of another install count in full here, as du counts them).
 fn disk(dir: &Path) -> String {
-    std::process::Command::new("du").arg("-sh").arg(dir).output().ok()
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().next().map(str::to_string))
-        .unwrap_or_else(|| "?".into())
+    raea_io_home::disk_use(dir, false)
 }
 
 // ---- the open sample libraries --------------------------------------------------------------------------------------

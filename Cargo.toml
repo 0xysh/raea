@@ -194,6 +194,7 @@ members = [
     "apps/workspace/registry",
     "apps/ci",
     "apps/tools",
+    "apps/motion",
     "apps/engines",
     "apps/interchange",
     "apps/judge",
