@@ -19,7 +19,11 @@ use bevy::{
 /// Where a part is drawn. Distances are metres from the camera, 0 for none; sizes on screen are the part's size across
 /// in pixels, 0 for none. Drawn from the farther of `near` and the distance where it shrinks to `max_px`, to the nearer
 /// of `far` and the distance where it shrinks to `min_px`. Each edge cross-fades over `fade` of its distance (0.1: 5%
-/// either side). `size` is the part's size across in metres, 0 to take it from its meshes' bounds.
+/// either side). `size` is the part's size across in metres, 0 to take it from its meshes' bounds. `edge` measures the
+/// distances to the part's nearest edge rather than its middle: a big part (a city's tile, a terrain chunk) whose
+/// middle is far from a camera standing in it. Bevy measures to one point, so each mesh's range is shifted every frame
+/// by the gap between that point and the part's nearest edge, exact for the shot's camera (and its shadow passes,
+/// which measure from it).
 #[derive(Component, Reflect, Clone, Debug, PartialEq)]
 #[reflect(Component, Default)]
 pub struct Detail {
@@ -30,11 +34,12 @@ pub struct Detail {
     pub fade: f32,
     pub shadow: bool,
     pub size: f32,
+    pub edge: bool,
 }
 
 impl Default for Detail {
     fn default() -> Self {
-        Self { near: 0.0, far: 0.0, min_px: 0.0, max_px: 0.0, fade: 0.1, shadow: true, size: 0.0 }
+        Self { near: 0.0, far: 0.0, min_px: 0.0, max_px: 0.0, fade: 0.1, shadow: true, size: 0.0, edge: false }
     }
 }
 
@@ -79,29 +84,57 @@ pub fn range(start: f32, end: f32, fade: f32, use_aabb: bool) -> VisibilityRange
     VisibilityRange { start_margin: s.start.min(e.start)..s.end.min(e.start), end_margin: e, use_aabb }
 }
 
+/// A range moved out by `by` metres (a mesh's measuring point that far behind its part's nearest edge); a start at 0
+/// and an endless end stay as they are.
+pub fn shifted(mut r: VisibilityRange, by: f32) -> VisibilityRange {
+    if r.start_margin.end > 0.0 {
+        r.start_margin = r.start_margin.start + by..r.start_margin.end + by;
+    }
+    if r.end_margin.end < f32::MAX {
+        r.end_margin = r.end_margin.start + by..r.end_margin.end + by;
+    }
+    r
+}
+
+/// how much farther `point` is from `eye` than the nearest point of the box `lo`..`hi` is (with the eye inside the box,
+/// all of `point`'s distance: a camera standing in a part is 0 m from it)
+pub fn edge_gap(eye: Vec3, point: Vec3, lo: Vec3, hi: Vec3) -> f32 {
+    (eye.distance(point) - eye.distance(eye.clamp(lo, hi))).max(0.0)
+}
+
 type MeshRow<'a> = (&'a GlobalTransform, Option<&'a Aabb>, Option<&'a VisibilityRange>, Has<NotShadowCaster>, Has<ShadowLeft>);
 
-fn apply(cams: Query<(&Camera, &Projection, Has<bevy::camera::ShadowLodOrigin>), With<Camera3d>>, parts: Query<(Entity, &Detail)>, children: Query<&Children>, meshes: Query<MeshRow, With<Mesh3d>>, mut commands: Commands) {
+fn apply(cams: Query<(&Camera, &Projection, &GlobalTransform, Has<bevy::camera::ShadowLodOrigin>), With<Camera3d>>, parts: Query<(Entity, &Detail)>, children: Query<&Children>, meshes: Query<MeshRow, With<Mesh3d>>, mut commands: Commands) {
     // the shot's camera (raea gives it the shadow LOD origin), else the first active 3D one: a range is one per mesh,
-    // so sizes on screen are measured for one camera
+    // so sizes on screen and nearest edges are measured for one camera
     let shot = cams.iter().filter(|(c, ..)| c.is_active).max_by_key(|(.., origin)| *origin);
-    let focal = shot.and_then(|(c, p, _)| match p {
+    let focal = shot.and_then(|(c, p, ..)| match p {
         Projection::Perspective(p) => c.physical_target_size().map(|s| s.y as f32 / (2.0 * (p.fov * 0.5).tan())),
         _ => None,
     });
+    let eye = shot.map(|(_, _, at, _)| at.translation());
     for (part, d) in &parts {
         let found: Vec<Entity> = std::iter::once(part).chain(children.iter_descendants(part)).filter(|e| meshes.contains(*e)).collect();
         if found.is_empty() {
             continue;
         }
-        let size = if d.size > 0.0 { d.size } else { across(&found, &meshes) };
+        let bounds = bounds(&found, &meshes);
+        let size = if d.size > 0.0 { d.size } else { bounds.map_or(0.0, |(lo, hi)| (hi - lo).length()) };
         let (start, end) = span(d, size, focal);
         for e in found {
-            let Ok((_, aabb, now, no_shadow, ours)) = meshes.get(e) else { continue };
+            let Ok((gt, aabb, now, no_shadow, ours)) = meshes.get(e) else { continue };
             // measured from the mesh's origin, unless that lies outside its own bounds (a mesh baked in world
             // coordinates, as the city's tiles are): then from its bounds' centre
             let use_aabb = aabb.is_some_and(|a| a.center.length() > a.half_extents.length());
-            let want = range(start, end, d.fade, use_aabb);
+            let point = match aabb.filter(|_| use_aabb) {
+                Some(a) => gt.affine().transform_point3(Vec3::from(a.center)),
+                None => gt.translation(),
+            };
+            let gap = match (d.edge, eye, bounds) {
+                (true, Some(eye), Some((lo, hi))) => edge_gap(eye, point, lo, hi),
+                _ => 0.0,
+            };
+            let want = shifted(range(start, end, d.fade, use_aabb), gap);
             if now != Some(&want) {
                 commands.entity(e).insert(want);
             }
@@ -118,8 +151,8 @@ fn apply(cams: Query<(&Camera, &Projection, Has<bevy::camera::ShadowLodOrigin>),
     }
 }
 
-/// the meshes' bounds together, in the world, as a size across (their box's diagonal); 0 before any has bounds
-fn across(found: &[Entity], meshes: &Query<MeshRow, With<Mesh3d>>) -> f32 {
+/// the meshes' bounds together, in the world; None before any has bounds
+fn bounds(found: &[Entity], meshes: &Query<MeshRow, With<Mesh3d>>) -> Option<(Vec3, Vec3)> {
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     for (gt, aabb, ..) in found.iter().filter_map(|e| meshes.get(*e).ok()) {
         let Some(a) = aabb else { continue };
@@ -129,7 +162,7 @@ fn across(found: &[Entity], meshes: &Query<MeshRow, With<Mesh3d>>) -> f32 {
         lo = lo.min(c - h);
         hi = hi.max(c + h);
     }
-    if lo.x > hi.x { 0.0 } else { (hi - lo).length() }
+    (lo.x <= hi.x).then_some((lo, hi))
 }
 
 #[cfg(test)]
@@ -165,5 +198,19 @@ mod tests {
         assert_eq!(a.end_margin, b.start_margin);
         assert!((a.end_margin.start - 114.0).abs() < 1e-3 && (a.end_margin.end - 126.0).abs() < 1e-3);
         assert_eq!(range(0.0, f32::INFINITY, 0.1, false).end_margin, f32::MAX..f32::MAX);
+    }
+
+    #[test]
+    fn edge_distances_move_the_range_by_the_gap_to_the_nearest_edge() {
+        // a 10 m box from 10 m to 20 m out, measured from its middle at 15 m: 5 m behind its nearest edge
+        let gap = edge_gap(Vec3::ZERO, Vec3::new(15.0, 0.0, 0.0), Vec3::new(10.0, -1.0, -1.0), Vec3::new(20.0, 1.0, 1.0));
+        assert!((gap - 5.0).abs() < 1e-4);
+        // drawn to 12 m from the edge: to 17 m from the middle, so drawn here (middle at 15 m, edge at 10 m)
+        let r = shifted(range(0.0, 12.0, 0.0, true), gap);
+        assert_eq!(r.start_margin, 0.0..0.0);
+        assert!(r.is_visible_at_all(15.0) && !r.is_visible_at_all(17.5));
+        // standing inside it, 3 m from its middle: 0 m from it, so the whole 3 m is the gap; an endless end stays endless
+        assert_eq!(edge_gap(Vec3::new(12.0, 0.0, 0.0), Vec3::new(15.0, 0.0, 0.0), Vec3::new(10.0, -1.0, -1.0), Vec3::new(20.0, 1.0, 1.0)), 3.0);
+        assert_eq!(shifted(range(30.0, f32::INFINITY, 0.0, true), 5.0).end_margin, f32::MAX..f32::MAX);
     }
 }

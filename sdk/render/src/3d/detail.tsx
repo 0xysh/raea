@@ -20,8 +20,11 @@ export interface Detail {
   fade?: number;
   /** false: this level casts no shadow, so a coarser level drawn for the shadows alone can (true by default) */
   shadow?: boolean;
-  /** the part's size across, metres, for the sizes on screen (by default its meshes' bounds) */
+  /** the part's size across, metres, for the sizes on screen (by default its meshes' bounds' diagonal) */
   size?: number;
+  /** true: the distances are to its nearest edge, not its middle: a big part a camera stands in or beside (a city's
+   * tile, a terrain chunk), whose middle can be hundreds of metres from where the camera is (false by default) */
+  edge?: boolean;
 }
 
 const NUMS = ["near", "far", "minPx", "maxPx", "fade", "size"] as const;
@@ -33,7 +36,7 @@ export function detailNode(who: string, d: Detail | undefined) {
   for (const k of NUMS) if (d[k] !== undefined && !(Number.isFinite(d[k]) && (d[k] as number) >= 0)) throw new RangeError(`${who}: detail.${k} is 0 or more, got ${d[k]}`);
   if (d.fade !== undefined && d.fade > 1) throw new RangeError(`${who}: detail.fade is a share of the distance, 0 to 1, got ${d.fade}`);
   if (d.far !== undefined && d.near !== undefined && d.far > 0 && d.far <= d.near) throw new RangeError(`${who}: detail.far (${d.far}) must be past detail.near (${d.near})`);
-  if (d.shadow !== undefined && typeof d.shadow !== "boolean") throw new TypeError(`${who}: detail.shadow is true or false, got ${JSON.stringify(d.shadow)}`);
-  const value = { near: d.near ?? 0, far: d.far ?? 0, min_px: d.minPx ?? 0, max_px: d.maxPx ?? 0, fade: d.fade ?? 0.1, shadow: d.shadow ?? true, size: d.size ?? 0 };
+  for (const k of ["shadow", "edge"] as const) if (d[k] !== undefined && typeof d[k] !== "boolean") throw new TypeError(`${who}: detail.${k} is true or false, got ${JSON.stringify(d[k])}`);
+  const value = { near: d.near ?? 0, far: d.far ?? 0, min_px: d.minPx ?? 0, max_px: d.maxPx ?? 0, fade: d.fade ?? 0.1, shadow: d.shadow ?? true, size: d.size ?? 0, edge: d.edge ?? false };
   return <BevyComponent key="raea-detail" type="raea_sys_lod::Detail" value={value} />;
 }
