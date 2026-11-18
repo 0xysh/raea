@@ -343,6 +343,8 @@ bevy_ui = { path = "vendor/bevy_ui" }
 # uv_transform, and a panorama's sun sampled as a light rather than found by reflection rays alone (changes marked
 # "raea:", docs/raytracing.feature RT6). Back to upstream once Solari has these.
 bevy_solari = { path = "vendor/bevy_solari" }
+# the sun's far shadow map (raea-sys-rt far.rs) bound in Bevy's mesh view group (docs/bevy-upgrade.md, docs/realism.feature LT21)
+bevy_pbr = { path = "vendor/bevy_pbr" }
 # bevy_ui_widgets 0.20.0 on parley 0.12, Blitz's (docs/blitz-bevy.feature B0a)
 bevy_ui_widgets = { path = "vendor/bevy_ui_widgets" }
 # blitz-paint 0.3.0-beta.4 with angled gradients in tiles laid out around the tile, many-tile gradient layers drawn

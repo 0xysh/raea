@@ -390,8 +390,20 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         for one whose last cascade fades to lit over the cascades' overlap, the last 30% of the distance; the fly's
         frames change on about 2% of their pixels, all lighter. Reaching 900 m, where DAY's fog begins, costs too
         much as it is: live at 2560x1440, median of 3, work p50 walk 45.9 ms at 300 m against 53.3 at 900, fly
-        42.5 against 54.3. Far shadows wait on the far cascades cast by coarse levels only and redrawn every few
-        frames
+        42.5 against 54.3
+      And past the cascades the sun's shadow comes from the ray scene (Shane, 11-17, on the fly: "its the street it
+        shows it clearly"; raea-sys-rt far.rs, RAEA_SUN_FAR): a map of the sun's view 2 km square, 4096 texels a
+        side, each one ray down along the sun to its first shadow caster, holding how high along the sun it hit; the
+        last cascade fades into it and it shades everything past. Not a ray a pixel: the game's camera has no depth
+        prepass, and one would draw all of Berlin again. Bevy has no hook for it, so bevy_pbr is vendored for its two
+        bindings (39, 40; docs/bevy-upgrade.md). A texel is kept at its column modulo the map's size, so the map
+        follows the eye eight texels at a time and traces only the strip new to it; after the TLAS changes, 256 rows
+        a frame again in turn; the whole map only on the first frame or when the sun turns. On the 1440p fly
+        (11-17, GPU timestamps, p50): a strip 0.38 ms (36,500 rays), 256 rows 0.28 ms (1,048,576); the whole map
+        once, 16 to 31 ms. Live at 2560x1440, work p50, median of 3, without against with: walk 51.1 against 50.4,
+        fly 54.5 against 45.6, inside the runs' 5 to 10 ms spread. On the fly the street and far blocks keep their
+        shadows to the horizon; the frames' popped tiles are as before but for 0.4% more, far chimney shadows
+        shimmering at 600 m to 1 km, which LT12's filter is for. Off unless RAEA_SUN_FAR is set
       And measured live at 2560x1440 on an M-series Mac, work p50 JS levels against detail: walk 51.7 against 48.9
         ms (p99 144.8 against 78.2), fly 50.3 against 50.1 (four runs each, about 5 ms apart run to run), streamed
         run 34.7 against 31.8 (p99 143.3 against 114.6). Detail adds 0.4 to 1.3 ms of step. Footprint: walk 6.97

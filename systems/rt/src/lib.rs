@@ -9,11 +9,14 @@
 pub mod gi;
 // raea GI's world cache: a hash grid of the light on the surfaces rays hit (LT3)
 pub(crate) mod cache;
+// the sun's far shadow map, past the last cascade (RAEA_SUN_FAR, LT21)
+pub mod far;
 pub mod traced_ao;
 
-/// Every traced pass asked for: traced AO (RAEA_TRACED_AO), raea GI's probes (RAEA_GI). Nothing when neither is.
+/// Every traced pass asked for: traced AO (RAEA_TRACED_AO), raea GI's probes (RAEA_GI), the sun's far shadow map
+/// (RAEA_SUN_FAR). Nothing when none is.
 pub fn passes(app: &mut App) {
-    for install in [traced_ao::install as fn(&mut App), gi::install] {
+    for install in [traced_ao::install as fn(&mut App), gi::install, far::install] {
         install(app);
     }
 }
