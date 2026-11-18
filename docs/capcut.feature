@@ -79,6 +79,20 @@ Feature: A composition handed to CapCut, ready in its timeline, and transparent 
       Then footage drawn with a CSS filter, a rotation, a mask or a crop that isn't a box, sounds the Tone graph makes
         (notes), and <Mix>'s mastering are named in the export's output
 
+    Scenario: CC2f. Footage that moves, scales or fades is keyframed (docs/layers.feature LA4c, LA4d)
+      Given a footage clip with keys in layers.json: its box, clip, object-position and opacity at the frames they change
+      Then its segment's common_keyframes hold a group each for its centre across and up (half-canvas units, +y up, as
+        its clip's transform), its scale across and up alike and its opacity, each key at microseconds from the
+        segment's start, straight lines between ("Line"), as published accounts of the draft give them (capcut-cli's
+        draft schema, pyJianYingDraft); every property is keyed while any is, CapCut setting the clip's own aside
+      And its keys are placed as CC2a places a frame (raea_app_layers::plan::picture), around the cut its first frame
+        shows: CapCut's crop is its material's and holds, so a picture moving inside a card that cuts it keeps the cut
+        and moves; a key a straight line between its neighbours gives to 0.15 px is left out
+      And a clip whose cut changes over its run (a split screen's seam rising) is cut as its first frame shows it,
+        its moves keyed, and said: CapCut's keyed crop isn't in any account of the draft
+      And whether a key's time counts from the segment's start or its source's, which the accounts differ on, is read
+        from a trimmed clip moving in CapCut (the Telluride close, 46 frames into its take)
+
   Rule: CC3. CapCut opens it
     Scenario: CC3a. CapCut, quit and opened, lists the draft and plays it as raea renders it
       Then the timeline has the main track's shots, the picture in picture above, the overlay clips above that and the

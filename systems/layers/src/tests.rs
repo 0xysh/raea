@@ -94,3 +94,56 @@ fn a_layer_key_selects_its_element_alone() {
     let s = layer_selector("card.tsx:2:10#2|comp.tsx:6:27#2|x.tsx:1:1");
     assert!(s.starts_with(r#"[data-raea-loc="card.tsx:2:10"][data-raea-idx="2"][data-raea-use="comp.tsx:6:27#2|x.tsx:1:1"]"#), "{s}");
 }
+
+#[test]
+fn the_footage_hidden_draws_as_it_did() {
+    // RAEA_HIDE_MEDIA's CSS as it was before docs/layers.feature: the CapCut export's passes don't change
+    assert_eq!(hiding_css("", None, None), None);
+    assert_eq!(hiding_css("", Some("1"), None).unwrap(), ":has([data-raea-src]) { background: transparent !important; box-shadow: none !important; }\n[data-raea-src] { visibility: hidden !important; }");
+    assert_eq!(hiding_css("", Some("under"), None).unwrap(), ":has([data-raea-src]) { color: transparent !important; text-shadow: none !important; }\n[data-raea-src], :not(:has([data-raea-src])) { visibility: hidden !important; }");
+}
+
+#[test]
+fn an_exports_layers_split_the_captions_from_the_rest() {
+    // docs/layers.feature LA2a: captions alone; the graphics and what's under the footage without them
+    let captions = hiding_css("", None, Some("captions")).unwrap();
+    // what holds a caption is cleared, not hidden (the page draws nothing inside a hidden element); the rest is hidden
+    assert!(captions.contains(r#":has([data-raea-role="caption"]):not([data-raea-role="caption"] *) { background: transparent !important;"#), "{captions}");
+    assert!(captions.ends_with(r#":not(:has([data-raea-role="caption"]):not([data-raea-role="caption"] *), [data-raea-role="caption"], [data-raea-role="caption"] *) { visibility: hidden !important; }"#), "{captions}");
+    assert!(captions.contains("html, body { background: transparent !important; }"), "{captions}");
+    let graphics = hiding_css("", None, Some("graphics")).unwrap();
+    assert_eq!(graphics, format!("{}, {CAPTION} {{ visibility: hidden !important; }}", hiding_css("", Some("1"), None).unwrap().trim_end_matches(" { visibility: hidden !important; }")));
+    let under = hiding_css("", None, Some("under")).unwrap();
+    assert_eq!(under, format!("{}, {CAPTION} {{ visibility: hidden !important; }}", hiding_css("", Some("under"), None).unwrap().trim_end_matches(" { visibility: hidden !important; }")));
+    // RAEA_LAYER wins over RAEA_HIDE_MEDIA; layers hidden by key stay hidden in every layer
+    assert_eq!(hiding_css("", Some("under"), Some("graphics")), Some(graphics));
+    assert!(hiding_css("a.tsx:3:5", None, Some("captions")).unwrap().contains(r#"[data-raea-loc="a.tsx:3:5"]"#));
+    // a layer it doesn't know draws the page whole
+    assert_eq!(hiding_css("", Some("1"), Some("text")), None);
+}
+
+/// docs/layers.feature LA2a: the captions and graphics layers draw none of the 3D, keeping only its cameras; the
+/// layer under the page and a render that isn't an export draw it all
+#[test]
+fn a_layer_without_3d_keeps_only_the_cameras() {
+    let all = ["camera", "mesh", "directional", "text", "rendercam", "splat"];
+    let kinds = |layer: Option<&str>| all.iter().filter(|k| draws_part(layer, k)).copied().collect::<Vec<_>>();
+    for layer in [Some("captions"), Some("graphics")] {
+        assert_eq!(kinds(layer), ["camera", "rendercam"], "{layer:?}");
+    }
+    for layer in [None, Some("under")] {
+        assert_eq!(kinds(layer).len(), 6, "{layer:?}");
+    }
+}
+
+#[test]
+fn whats_behind_a_picture_in_picture_is_its_own_holders_alone() {
+    // docs/layers.feature LA2c: the card holding C and no other footage keeps its background; what holds C and other
+    // footage too (the page) is cleared, not hidden; everything else (the footage among it) is hidden
+    let css = hiding_css("", None, Some("behind:/media/C.mp4")).unwrap();
+    assert!(css.contains(r#":has([data-raea-src="/media/C.mp4"]):has([data-raea-src]:not([data-raea-src="/media/C.mp4"])) { background: transparent !important;"#), "{css}");
+    assert!(css.ends_with(r#":not(:has([data-raea-src="/media/C.mp4"])) { visibility: hidden !important; }"#), "{css}");
+    // a file's name is quoted as CSS reads it
+    assert!(hiding_css("", None, Some(r#"behind:/media/a "b".mp4"#)).unwrap().contains(r#"[data-raea-src="/media/a \"b\".mp4"]"#));
+    assert!(!draws_3d(Some("behind:/media/C.mp4")));
+}

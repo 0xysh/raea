@@ -142,3 +142,24 @@ fn videotoolbox_writes_both_alpha_codecs() {
         let _ = std::fs::remove_file(&out);
     }
 }
+
+/// A movie that opens on frames opaque everywhere (a full-frame card) and then lets the picture through is still one
+/// movie with alpha: one sample description, at depth 32. VideoToolbox left alone describes it by its first frames, at
+/// 24 (no alpha), and starts a second description where its alpha starts, which Premiere won't import and Resolve
+/// reads as opaque throughout (the Telluride test's graphics, 11-17).
+#[cfg(target_vendor = "apple")]
+#[test]
+fn prores_that_opens_opaque_keeps_its_alpha_in_one_description() {
+    let out = tmp("opens-opaque.mov");
+    let mut m = Writer::create(&out, Codec::ProRes, 64, 64, 24.0, 0.9).unwrap();
+    for k in 0..6 {
+        m.push(&if k < 3 { [5u8, 20, 31, 255].repeat(64 * 64) } else { frame(64, 64, k) }).unwrap();
+    }
+    m.finish().unwrap();
+    let d = std::fs::read(&out).unwrap();
+    let i = d.windows(4).rposition(|w| w == b"stsd").unwrap();
+    assert_eq!(u32::from_be_bytes(d[i + 8..i + 12].try_into().unwrap()), 1, "one sample description");
+    let entry = &d[i + 12..];
+    assert_eq!(u16::from_be_bytes(entry[82..84].try_into().unwrap()), 32, "depth 32: colour and alpha");
+    let _ = std::fs::remove_file(&out);
+}
