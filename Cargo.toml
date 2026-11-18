@@ -169,6 +169,7 @@ members = [
     "runtime/cssurls",
     "bench/bridge",
     "bench/bevy-parity",
+    "bench/lightbench",
     "bench/bridge/swatch",
     "bench/rerender/ios",
     "core/alloc",

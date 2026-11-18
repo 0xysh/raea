@@ -14708,6 +14708,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-lightbench"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bytemuck",
+]
+
+[[package]]
 name = "raea-modules"
 version = "0.1.0"
 dependencies = [
