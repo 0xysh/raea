@@ -117,6 +117,7 @@ raea-sys-splat = "systems"
 raea-sys-sprite = "systems"
 raea-sys-rt = "systems"
 raea-sys-lod = "systems"
+raea-sys-foliage = "systems"
 raea-sys-text3d = "systems"
 raea-runtime-gpuframe = "runtime"
 raea-runtime-scene3d = "runtime"
@@ -269,6 +270,8 @@ raea-sys-song = true
 raea-sys-k = true
 raea-sys-wear = true
 raea-sys-procmat = true
+# trees grown by species as meshes: crowns, leaves, bark and roots (the city's tree LODs build on them)
+raea-sys-foliage = true
 raea-sys-canvas = true
 raea-sys-filters = true
 raea-sys-page = true

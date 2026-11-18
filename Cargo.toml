@@ -128,6 +128,7 @@ members = [
     "systems/matchmove",
     "systems/grid",
     "systems/lod",
+    "systems/foliage",
     "systems/viewbox",
     "systems/rendermap",
     "systems/meshseq",
