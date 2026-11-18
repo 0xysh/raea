@@ -120,7 +120,7 @@ pub(crate) fn spots(s: &Surface, doors: &[Door], pts: &[Point]) -> Vec<Spot> {
     const NINE: [(i64, i64); 9] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 0), (0, 1), (1, -1), (1, 0), (1, 1)];
     let near = |p: Vec3| {
         let (c, (x, y)) = (cell(p), flat(p));
-        NINE.iter().map(move |&(i, j)| (c.0 + i, c.1 + j)).flat_map(|k| arris.get(&k).into_iter().flatten()).filter(move |q| {
+        NINE.iter().map(move |&(i, j)| (c.0 + i, c.1 + j)).filter_map(|k| arris.get(&k)).flatten().filter(move |q| {
             let (a, b) = flat(q.p);
             (a - x).hypot(b - y) <= CORNER
         })

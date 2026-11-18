@@ -259,15 +259,10 @@ pub fn setup_audio(args: &[String]) -> R<String> {
             (false, true) => "installed now".to_string(),
             (false, false) => format!("not installed: {} installs it", raea_io_assets::setup_script(m).display()),
         };
-        lines.push(format!("  {m:<10} {state}; {what}\n             {} ({})", dir.display(), if now { disk(&dir) } else { "-".into() }));
+        lines.push(format!("  {m:<10} {state}; {what}\n             {} ({})", dir.display(), if now { raea_io_home::disk_use(&dir, false) } else { "-".into() }));
     }
     let head = if check { if missing > 0 { "CHECKED  local audio models (some missing)" } else { "CHECKED  local audio models" } } else { "APPLIED  local audio models ready" };
     Ok(format!("{head}\n{}", lines.join("\n")))
-}
-
-/// What a folder takes on disk (clones of another install count in full here, as du counts them).
-fn disk(dir: &Path) -> String {
-    raea_io_home::disk_use(dir, false)
 }
 
 // ---- the open sample libraries --------------------------------------------------------------------------------------

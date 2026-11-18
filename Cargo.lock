@@ -14929,6 +14929,7 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-metal 0.3.2",
  "objc2-metal-fx",
+ "raea-io-home",
  "wgpu",
 ]
 
@@ -15908,6 +15909,7 @@ dependencies = [
  "raea-core-scene",
  "raea-io-media",
  "raea-sys-layers",
+ "raea-sys-shots",
  "serde_json",
  "wgpu",
 ]
@@ -16336,6 +16338,14 @@ dependencies = [
  "bevy",
  "raea-sys-material",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-shots"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-core-program",
 ]
 
 [[package]]

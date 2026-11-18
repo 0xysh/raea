@@ -37,10 +37,12 @@ fn fill(img: &mut GrayImage, t: [(f32, f32); 3], uv: Option<[[f32; 2]; 3]>, shee
         return;
     }
     let (w, h) = (img.width() as i32, img.height() as i32);
-    let lo = |f: fn(&(f32, f32)) -> f32| t.iter().map(f).fold(f32::INFINITY, f32::min).floor() as i32;
-    let hi = |f: fn(&(f32, f32)) -> f32| t.iter().map(f).fold(f32::NEG_INFINITY, f32::max).ceil() as i32;
-    for y in lo(|p| p.1).max(0)..=hi(|p| p.1).min(h - 1) {
-        for x in lo(|p| p.0).max(0)..=hi(|p| p.0).min(w - 1) {
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for p in t {
+        (x0, y0, x1, y1) = (x0.min(p.0), y0.min(p.1), x1.max(p.0), y1.max(p.1));
+    }
+    for y in (y0.floor() as i32).max(0)..=(y1.ceil() as i32).min(h - 1) {
+        for x in (x0.floor() as i32).max(0)..=(x1.ceil() as i32).min(w - 1) {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
             let w0 = ((t[1].0 - px) * (t[2].1 - py) - (t[2].0 - px) * (t[1].1 - py)) / area;
             let w1 = ((t[2].0 - px) * (t[0].1 - py) - (t[0].0 - px) * (t[2].1 - py)) / area;

@@ -37,11 +37,6 @@ impl Cuts {
     }
 }
 
-/// The shortest segment, in frames: a cut sooner than this after the segment's first frame is passed over, so a run of
-/// short shots shares one (a keyframe a few frames apart buys a cache nothing and costs the encoder bits).
-pub fn min_frames(fps: f64) -> usize {
-    (fps.round() as usize).max(1)
-}
 
 /// The segments a run of `n` frames makes with these cuts: each one's first frame and length.
 pub fn segments(n: usize, cuts: &Cuts, min: usize) -> Vec<(usize, usize)> {

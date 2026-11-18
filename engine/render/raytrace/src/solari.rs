@@ -35,7 +35,7 @@ pub fn add(app: &mut App) {
 /// and bounces light), and a hidden part leaves the traced scene until it is shown again (hidden, it still shadowed).
 fn dynamic() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_DYNAMIC").as_deref() == Ok("1"))
+    *ON.get_or_init(|| raea_io_home::env_on("RAEA_SOLARI_DYNAMIC"))
 }
 
 /// A skinned mesh's traced twin: the mesh's bind pose in Solari's layout and its skin, and the joints last posed from.

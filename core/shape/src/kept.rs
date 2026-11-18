@@ -32,7 +32,7 @@ fn caches() -> Option<PathBuf> {
 fn this_build() -> (u64, u128) {
     static BUILD: std::sync::OnceLock<(u64, u128)> = std::sync::OnceLock::new();
     *BUILD.get_or_init(|| {
-        let m = std::env::current_exe().ok().and_then(|p| std::fs::metadata(p).ok());
+        let m = std::env::current_exe().and_then(std::fs::metadata).ok();
         let t = m.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()).unwrap_or(0);
         (m.map(|m| m.len()).unwrap_or(0), t)
     })

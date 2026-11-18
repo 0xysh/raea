@@ -110,6 +110,7 @@ raea-sys-page = "systems"
 raea-sys-page-net = "systems"
 raea-sys-page-ops = "systems"
 raea-sys-frame = "systems"
+raea-sys-shots = "systems"
 raea-sys-hold = "systems"
 raea-sys-body = "systems"
 raea-sys-grab = "systems"
@@ -157,6 +158,7 @@ raea-runtime-bundle = "runtime"
 raea-runtime-bundle-lib = "runtime"
 raea-runtime-calls = "runtime"
 raea-runtime-shots = "runtime"
+raea-runtime-segments = "runtime"
 raea-runtime-canvas = "runtime"
 raea-runtime-wear = "runtime"
 raea-runtime-export = "runtime"
@@ -230,6 +232,8 @@ raea-hands-audit = "tools"
 [facility]
 # the frame's rows every pass reads (FrameRows, the edit, the clock, row helpers)
 raea-sys-frame = true
+# cuts between cameras: the frames that start a shot and the last cut drawn (raea-sys-frame re-exports it)
+raea-sys-shots = true
 # the layer pass's keys, table, raster and NAME.layers (raea-sys-frame records the 3D through it)
 raea-sys-layers = true
 # a row's standard material and its maps (meshseq builds its mesh's on it)

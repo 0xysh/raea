@@ -129,7 +129,8 @@ pub(crate) fn leaves(sp: &Species, req: &Request, nodes: &[Node], env: &Envelope
     out
 }
 
-fn smooth(a: f32, b: f32, x: f32) -> f32 {
+/// 0 below `a`, 1 above `b`, smoothly between (a leaf's gaps, its teeth's roots in atlas.rs).
+pub(crate) fn smooth(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }

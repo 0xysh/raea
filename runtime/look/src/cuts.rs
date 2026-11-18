@@ -4,7 +4,7 @@ use super::*;
 /// The paint look's worlds (a <Look cuts>: raea-render's paint.rs, paint_world.wesl): each of up to four cuts' centre,
 /// radius, style, scale and amount on the camera row, one value a frame. No columns while no look has cuts.
 pub fn paint_cut_rows(looks: &[Option<&Map<String, Value>>], p: &mut Program, row: &mut BTreeMap<String, V>, first: &Map<String, Value>) {
-    if !looks.iter().flatten().any(|l| l.get("cuts").is_some_and(Value::is_array)) {
+    if !looks.iter().flatten().any(|l| matches!(l.get("cuts"), Some(Value::Array(_)))) {
         return;
     }
     for i in 0..4 {

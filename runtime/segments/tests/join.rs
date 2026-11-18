@@ -33,13 +33,18 @@ fn scratch(name: &str) -> PathBuf {
     d
 }
 
+/// The video track.
+fn video(m: &re_mp4::Mp4) -> &re_mp4::Track {
+    m.tracks().values().find(|t| t.kind == Some(re_mp4::TrackKind::Video)).unwrap()
+}
+
 /// The video track's samples' key flags, and whether there's a sound track.
 fn keys(path: &Path) -> (Vec<bool>, bool) {
     let b = std::fs::read(path).unwrap();
     let m = re_mp4::Mp4::read_bytes(&b).unwrap();
-    let video = m.tracks().values().find(|t| t.kind == Some(re_mp4::TrackKind::Video)).unwrap();
-    // re_mp4 names only AAC (mp4a) a sound track; Opus (soft, av1) reads as kind None
-    let sound = m.tracks().values().any(|t| t.kind != Some(re_mp4::TrackKind::Video));
+    let video = video(&m);
+    // a track besides the video: re_mp4 names only AAC (mp4a) a sound track; Opus (soft, av1) reads as kind None
+    let sound = m.tracks().len() > 1;
     (video.samples.iter().map(|s| s.is_sync).collect(), sound)
 }
 
@@ -47,7 +52,7 @@ fn keys(path: &Path) -> (Vec<bool>, bool) {
 fn samples(path: &Path) -> Vec<Vec<u8>> {
     let b = std::fs::read(path).unwrap();
     let m = re_mp4::Mp4::read_bytes(&b).unwrap();
-    let video = m.tracks().values().find(|t| t.kind == Some(re_mp4::TrackKind::Video)).unwrap();
+    let video = video(&m);
     video.samples.iter().map(|s| b[s.byte_range()].to_vec()).collect()
 }
 

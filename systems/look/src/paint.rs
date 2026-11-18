@@ -198,11 +198,12 @@ fn params(v: &BTreeMap<String, V>) -> PaintParams {
     haze_sun.w = on("paint_haze_sun");
     let mut cut_rim = lin(v.get("paint_cut_rim"), [1.0, 1.0, 1.0, 1.0]);
     cut_rim.w = on("paint_cut_rim_width");
+    let styles = |s: &str, d: [f32; 4]| std::array::from_fn(|i| lin(v.get(&format!("paint_cut{i}_{s}")), d));
     PaintParams {
         cut: std::array::from_fn(|i| Vec4::new(num(v, &format!("paint_cut{i}_x"), 0.0), num(v, &format!("paint_cut{i}_y"), 0.0), num(v, &format!("paint_cut{i}_z"), 0.0), num(v, &format!("paint_cut{i}_r"), 0.0).max(0.0))),
         style: std::array::from_fn(|i| Vec4::new(num(v, &format!("paint_cut{i}_style"), 0.0), num(v, &format!("paint_cut{i}_scale"), 0.1).max(1e-4), num(v, &format!("paint_cut{i}_amount"), 1.0).clamp(0.0, 1.0), 0.0)),
-        style_a: std::array::from_fn(|i| lin(v.get(&format!("paint_cut{i}_a")), [0.05, 0.05, 0.08, 1.0])),
-        style_b: std::array::from_fn(|i| lin(v.get(&format!("paint_cut{i}_b")), [1.0, 1.0, 1.0, 1.0])),
+        style_a: styles("a", [0.05, 0.05, 0.08, 1.0]),
+        style_b: styles("b", [1.0, 1.0, 1.0, 1.0]),
         kw: Vec4::new(0.0, num(v, "paint_cut_rag", 0.0).max(0.0), num(v, "paint_cut_rim_width", 0.0).max(0.0), 0.0),
         cut_rim,
         k9: Vec4::new(num(v, "paint_rim_amount", 0.0).max(0.0), num(v, "paint_rim_power", 3.0).max(0.1), num(v, "paint_term_amount", 0.0).clamp(0.0, 1.0), 0.0),

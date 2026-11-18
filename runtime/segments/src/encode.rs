@@ -13,6 +13,8 @@ use crate::split::Cuts;
 pub(crate) struct Segs {
     pub name: String,
     pub cuts: Cuts,
+    /// the shortest segment, in frames (a second's): a cut sooner than this after the segment's first frame is passed
+    /// over, so a run of short shots shares one (a keyframe a few frames apart buys a cache nothing and costs bits)
     pub min: usize,
 }
 

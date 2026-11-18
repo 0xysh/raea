@@ -28,11 +28,11 @@ export interface Health {
   jobs: { id: string; running: boolean }[]
 }
 
-/** A render farm's choices for one job (deploy/modal/farm.py): at most `gpus` GPUs at once, of kind `gpu` (Modal's
+/** A render farm's choices for one job (deploy/modal/farm.py): at most `gpus` GPUs at once, each a `card` (Modal's
  *  names: L4, L40S, ...), and a price over `maxUsd` (estimated from the first frames) stops it before the rest. */
 export interface Farm {
   gpus?: number
-  gpu?: string
+  card?: string
   maxUsd?: number
   /** the job's media outputs stay on the farm for `media` to send to R2 (docs/cloud-render.feature CR23) */
   media?: boolean
@@ -149,7 +149,7 @@ export class RaeaCloud {
   async startJob(args: string[], folder: Uint8Array, signal?: AbortSignal, farm: Farm = {}): Promise<string> {
     const q = new URLSearchParams({ args: JSON.stringify(args) })
     if (farm.gpus !== undefined) q.set("gpus", String(farm.gpus))
-    if (farm.gpu) q.set("gpu", farm.gpu)
+    if (farm.card) q.set("gpu", farm.card)
     if (farm.maxUsd !== undefined) q.set("max_usd", String(farm.maxUsd))
     if (farm.media) q.set("media", "1")
     const r = await this.fetch(`/v1/jobs?${q}`, { method: "POST", body: new Blob([folder as Uint8Array<ArrayBuffer>]), headers: { "content-type": "application/octet-stream" }, signal })

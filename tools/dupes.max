@@ -19,5 +19,15 @@
 #   io/capcut store.rs:67 (tasklist's stdout, lower-cased; sdk/ui/parity main.rs:88 trims a command's stdout),
 #   io/capcut build.rs:24 parse (serde_json::from_str + expect; engine/native node.rs:172 js_string, to_string), and
 #   apps/capcut plan.rs:67 (a box moved more than 1 px; systems/layout mod.rs:406, within 1.5 px)
-exact=289
-near=58
+# Raised once more, 11-17, when every waiting branch landed together (body motion, wear, foliage, segmented export, the
+# realtime controls and the rest): 289/58 -> 294/59. Its copies were folded (io-media's backend() is backend_unsigned
+# wrapped; paint's cut colours read by one closure; foliage's one smoothstep and its bounds in one pass; segments' video
+# track found once in its tests; the Solari switch through raea_io_home::env_on); the six left match by shape only:
+#   exact: runtime/segments encode.rs Segs open_video/decode_audio and encoder/encoder_10bit, Segmented
+#          push_nv12/push_p010 (a Backend's and a VideoEncoder's one-line forwards, alike by the traits' design);
+#          systems/foliage lib.rs hash_str (tone tonegraph.rs hash, the same FNV-1a: foliage can't depend on systems/
+#          tone) and Rng::range (core/grow mesh.rs Rng::range in f64; foliage's stream is its own, so moving it to
+#          core/grow's would change every tree)
+#   near:  runtime/live props.rs Live::controls/held (accessors); io/av1 and io/soft Backend::sound (one-line forwards)
+exact=294
+near=59

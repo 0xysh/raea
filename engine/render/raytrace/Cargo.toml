@@ -7,6 +7,8 @@ publish = false
 description = "raea-render's ray tracing: Bevy's Solari for a scene whose camera asks for it (RT3), and MetalFX's temporal denoiser on it on the Mac (RT4)"
 
 [dependencies]
+# RAEA_SOLARI_DYNAMIC=1 read as raea's other switches are
+raea-io-home = { path = "../../../io/home" }
 bevy = { version = "=0.20.0", default-features = false, features = ["std", "3d_bevy_render", "bevy_solari"] }
 # the same wgpu Bevy uses (the guide pass records on its device; MetalFX runs on its Metal objects)
 wgpu = "=30.0.1"

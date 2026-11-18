@@ -255,7 +255,7 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
             // a page draw past Vello's bump buffers, painted again at Vello's own sizes before the frame is encoded (#23)
             fr = raea_gpu_device::check::fed_checked(f, fr, raea_sys_page::wait_drawn, raea_sys_page::redraw_full, || { cx.manifest.as_mut().map(|m| m.pop()); bevy_fed(app.world_mut(), bevy, cx, &page, fps) })?;
             // a shot starts here (an outermost Sequence, a camera cut): the video's next segment does too (RR3)
-            cuts.find(f, raea_runtime_page::shot_starts(app.world_mut()), cx.scene3d.as_ref().is_some_and(|e| raea_sys_frame::shots::Cut::at(e.world(), f)));
+            cuts.find(f, raea_runtime_page::shot_starts(app.world_mut()), matches!(&cx.scene3d, Some(e) if raea_sys_frame::shots::Cut::at(e.world(), f)));
             // a video's 3D made live keeps each frame's scene for the clipping check
             if LIVE_CLIPS.load(std::sync::atomic::Ordering::Relaxed) { fr.scene = scene_of(app.world_mut()); }
             if cx.scene3d.is_none() && cx.live3d.is_none() && !cx.scene.is_empty() && BEVY_3D_PROBE.load(std::sync::atomic::Ordering::Relaxed) {

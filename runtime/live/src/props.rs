@@ -157,7 +157,7 @@ fn held(before: Option<&Holds>, after: Option<&Holds>) -> Vec<Value> {
             (!changed.is_empty()).then(|| json!({"part": part, "kind": kind, "cols": changed}))
         })
         .collect();
-    out.sort_by(|x, y| x["part"].as_str().cmp(&y["part"].as_str()));
+    out.sort_by(|x, y| x.get("part").and_then(Value::as_str).cmp(&y.get("part").and_then(Value::as_str)));
     out
 }
 

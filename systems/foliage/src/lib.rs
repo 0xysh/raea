@@ -61,7 +61,7 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn tris(&self) -> usize {
-        self.idx.len() / 3
+        self.idx.chunks_exact(3).len()
     }
 }
 

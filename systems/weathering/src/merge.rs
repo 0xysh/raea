@@ -128,11 +128,14 @@ pub(crate) fn absorb(cs: Vec<Chart>, sc: &Scene, env: &Env) -> Vec<Chart> {
         c.n != Vec3::ZERO && (w.min(h) < THIN || w * h < AREA)
     };
     let bounds = |c: &Chart| {
-        let ps = c.tris.iter().flat_map(|&t| sc.tri[t as usize].map(|v| sc.pos[v as usize]));
-        ps.fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(l, h), p| (l.min(p), h.max(p)))
+        let ps = || c.tris.iter().flat_map(|&t| sc.tri[t as usize].map(|v| sc.pos[v as usize]));
+        (ps().fold(Vec3::MAX, Vec3::min), ps().fold(Vec3::MIN, Vec3::max))
     };
     const CELL: f32 = 4.0;
-    let cell = |v: Vec3| ((v.x / CELL).floor() as i32, (v.y / CELL).floor() as i32, (v.z / CELL).floor() as i32);
+    let cell = |v: Vec3| {
+        let c = (v / CELL).floor().as_ivec3();
+        (c.x, c.y, c.z)
+    };
     let mut grid: HashMap<(i32, i32, i32), Vec<u32>> = HashMap::new();
     let is_small: Vec<bool> = cs.iter().zip(&ds).map(|(c, &d)| small(c, d)).collect();
     for (i, c) in cs.iter().enumerate() {

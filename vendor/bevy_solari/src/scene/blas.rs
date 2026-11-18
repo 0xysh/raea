@@ -116,7 +116,7 @@ pub fn prepare_raytracing_blas(
                 allocate_blas(&vertex_slice, &index_slice, asset_id, &render_device);
 
             blas_manager.insert(*asset_id, blas);
-            // A mesh rebuilt while its last BLAS still waits in the queue (a mesh that changes every
+            // raea: a mesh rebuilt while its last BLAS still waits in the queue (a mesh that changes every
             // frame, behind a backlog over MAX_COMPACTION_VERTICES_PER_FRAME) must not be queued
             // twice: both entries would resolve to this new BLAS and prepare its compaction twice,
             // which wgpu refuses ("Compaction is already being prepared").

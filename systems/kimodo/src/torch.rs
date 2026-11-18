@@ -54,6 +54,8 @@ pub struct Torch {
     pub venv: PathBuf,
     /// the motion checkpoint's folder (its stats are decode.rs's too)
     pub checkpoint: PathBuf,
+    /// the environment's record of what it was made from: a different list makes it again
+    made_from: PathBuf,
 }
 
 /// One clip asked of PyTorch.
@@ -76,16 +78,12 @@ pub struct Made {
 
 impl Torch {
     pub fn at(dir: PathBuf) -> Self {
-        Torch { venv: dir.join("venv"), checkpoint: dir.join("checkpoints").join("Kimodo-SOMA-RP-v1"), dir }
+        let venv = dir.join("venv");
+        Torch { made_from: venv.join("raea-packages.txt"), venv, checkpoint: dir.join("checkpoints").join("Kimodo-SOMA-RP-v1"), dir }
     }
 
     pub fn python(&self) -> PathBuf {
         if cfg!(windows) { self.venv.join("Scripts").join("python.exe") } else { self.venv.join("bin").join("python") }
-    }
-
-    /// the environment's record of what it was made from: a different list makes it again
-    fn made_from(&self) -> PathBuf {
-        self.venv.join("raea-packages.txt")
     }
 
     fn packages() -> String {
@@ -94,7 +92,7 @@ impl Torch {
 
     /// Whether the Python environment is made from this binary's package list.
     pub fn has_env(&self) -> bool {
-        self.python().exists() && std::fs::read_to_string(self.made_from()).is_ok_and(|s| s == Self::packages())
+        self.python().exists() && std::fs::read_to_string(&self.made_from).is_ok_and(|s| s == Self::packages())
     }
 
     /// What isn't there yet, by name: the Python environment, the motion model, the text encoder. Empty when it's all set up.
@@ -146,7 +144,7 @@ impl Torch {
                 let _ = std::fs::remove_dir_all(&venv);
                 return Err(e);
             }
-            std::fs::write(self.made_from(), Self::packages())?;
+            std::fs::write(&self.made_from, Self::packages())?;
             made.push(format!("made the Python environment (Python 3.11, PyTorch, Kimodo at {}): {}", &KIMODO[..7], venv.display()));
         }
         if self.missing().iter().any(|m| *m != "Python environment") {

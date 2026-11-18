@@ -91,7 +91,7 @@ pub fn indices(g: &Glb, i: usize) -> R<Vec<u32>> {
     let (b, _, csize, _) = raw(g, i)?;
     Ok(match csize {
         1 => b.iter().map(|&x| x as u32).collect(),
-        2 => b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]) as u32).collect(),
+        2 => b.chunks_exact(2).map(|c| u32::from(u16::from_le_bytes([c[0], c[1]]))).collect(),
         _ => b.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect(),
     })
 }

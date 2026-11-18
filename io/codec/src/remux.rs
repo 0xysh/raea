@@ -30,7 +30,7 @@ pub fn hvcc_params(hvcc: &[u8]) -> Vec<u8> {
         let Some(c) = hvcc.get(i + 1..i + 3) else { break };
         i += 3;
         for _ in 0..u16::from_be_bytes([c[0], c[1]]) {
-            let Some(n) = hvcc.get(i..i + 2).map(|l| u16::from_be_bytes([l[0], l[1]]) as usize) else { return out };
+            let Some(n) = hvcc.get(i..i + 2).and_then(|l| l.try_into().ok()).map(|l| u16::from_be_bytes(l) as usize) else { return out };
             let Some(nal) = hvcc.get(i + 2..i + 2 + n) else { return out };
             out.extend_from_slice(&[0, 0, 0, 1]);
             out.extend_from_slice(nal);

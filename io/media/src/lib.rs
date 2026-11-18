@@ -86,10 +86,8 @@ pub fn preferred() -> Vec<Box<dyn Backend>> {
     out
 }
 
+/// The backend named, wrapped by an installed signer as backends() wraps each.
 pub fn backend(name: &str) -> R<Box<dyn Backend>> {
-    backends()
-        .into_iter()
-        .find(|b| b.name() == name)
-        .ok_or(format!("no backend {name:?} in this build"))
+    backend_unsigned(name).map(sign::wrap)
 }
 

@@ -45,10 +45,6 @@ fn shape(u: f32, p: f32, q: f32) -> f32 {
     u.powf(p) * (1.0 - u).powf(q) / m
 }
 
-fn smooth(a: f32, b: f32, x: f32) -> f32 {
-    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
 
 impl Blade {
     /// How far inside the blade (x, y) is (leaf lengths; negative outside), and its vein strength 0-1.
@@ -68,7 +64,7 @@ impl Blade {
             w *= 0.42 + 0.58 * (std::f32::consts::PI * u * self.lobes).sin().abs().powf(0.6);
         }
         if self.teeth > 0.0 {
-            w *= 1.0 - self.depth * (u * self.teeth).fract() * smooth(0.0, 0.2, u);
+            w *= 1.0 - self.depth * (u * self.teeth).fract() * crate::leaves::smooth(0.0, 0.2, u);
         }
         let mut inside = w - cross.abs();
         if self.sinus && t < 0.04 {
@@ -262,7 +258,7 @@ pub(crate) fn png(img: &RgbaImage) -> Result<Vec<u8>, String> {
 /// The share of a cell's pixels that are leaf.
 pub(crate) fn coverage(img: &RgbaImage, cell: u32) -> f32 {
     let (cx, cy) = ((cell % CELLS) * CELL, (cell / CELLS) * CELL);
-    let n = (0..CELL).flat_map(|y| (0..CELL).map(move |x| (x, y))).filter(|&(x, y)| img.get_pixel(cx + x, cy + y)[3] > 127).count();
+    let n = (0..CELL * CELL).filter(|i| img.get_pixel(cx + i % CELL, cy + i / CELL)[3] > 127).count();
     n as f32 / (CELL * CELL) as f32
 }
 
