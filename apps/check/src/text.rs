@@ -213,7 +213,8 @@ pub(crate) fn contrast(video: &str, runs: &[Run], w: f64, h: f64, probe: &Probe,
         }
         let t = (r.from + r.to) / 2.0;
         // the same measure `raea world` joins to a text from its render (raea-sys-measure, DR2)
-        let Some(ratio) = raea_sys_measure::contrast(std::path::Path::new(video), t, crop, &r.color) else { continue };
+        let ratio = if crate::read::native() { crate::read::contrast(video, t, crop, &r.color) } else { raea_sys_measure::contrast(std::path::Path::new(video), t, crop, &r.color) };
+        let Some(ratio) = ratio else { continue };
         measured += 1;
         if ratio < 3.0 {
             low += 1;

@@ -270,7 +270,7 @@ pub fn probe(path: &Path) -> R<Value> {
 
 /// A measured frame rate (frames over duration) snapped to the standard rate it is within 1% of: a phone's variable-rate
 /// take that averages 23.92 is 24 (ffprobe's avg_frame_rate says 24/1).
-pub(crate) fn standard_fps(fps: f64) -> f64 {
+pub fn standard_fps(fps: f64) -> f64 {
     let rates = [24000.0 / 1001.0, 24.0, 25.0, 30000.0 / 1001.0, 30.0, 48.0, 50.0, 60000.0 / 1001.0, 60.0, 120.0];
     // the nearest, within 1% (30 is 30, not 29.97)
     rates.into_iter().filter(|r| (fps - r).abs() / r < 0.01).min_by(|a, b| (fps - a).abs().total_cmp(&(fps - b).abs())).unwrap_or(fps)

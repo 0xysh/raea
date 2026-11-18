@@ -162,11 +162,15 @@ pub(crate) fn bed_up(rms: &[f64], speak: &[bool]) -> Vec<(f64, String)> {
 /// The sound's rules on an export: dead stops always; with the voice's words, a stretch with no voice over it and a bed
 /// too close under it
 pub(crate) fn sound(video: &str, words: Option<&[Word]>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
-    let out = Command::new("ffmpeg").args(["-v", "error", "-i", video, "-vn", "-ac", "1", "-ar", &SR.to_string(), "-f", "f32le", "-"]).output().map_err(|e| format!("ffmpeg: {e}"))?;
-    if !out.status.success() {
-        return Err(format!("ffmpeg couldn't read the sound of {video}: {}", String::from_utf8_lossy(&out.stderr).trim()));
-    }
-    let x: Vec<f32> = out.stdout.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+    let x = if crate::read::native() {
+        crate::read::mono(video, SR as u32)?
+    } else {
+        let out = Command::new("ffmpeg").args(["-v", "error", "-i", video, "-vn", "-ac", "1", "-ar", &SR.to_string(), "-f", "f32le", "-"]).output().map_err(|e| format!("ffmpeg: {e}"))?;
+        if !out.status.success() {
+            return Err(format!("ffmpeg couldn't read the sound of {video}: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        out.stdout.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
+    };
     let (rms, bands) = levels(&x);
     sound_defects(&x, issues, passed);
     let found = |list: Vec<(f64, String)>, p: u8| crate::defects::moments("sound", p, list);
@@ -178,19 +182,7 @@ pub(crate) fn sound(video: &str, words: Option<&[Word]>, issues: &mut Vec<Issue>
     let Some(words) = words.filter(|w| !w.is_empty()) else { return Ok(()) };
     let speak = speaking(words, rms.len());
     // momentary loudness (EBU R128, 400 ms) every 100 ms, from ffmpeg's meter
-    let meter = Command::new("ffmpeg")
-        .args(["-nostats", "-hide_banner", "-i", video, "-vn", "-af", "ebur128=metadata=1,ametadata=print:key=lavfi.r128.M:file=-", "-f", "null", "-"])
-        .output()
-        .map_err(|e| format!("ffmpeg: {e}"))?;
-    let (mut mt, mut mv) = (Vec::new(), Vec::new());
-    for line in String::from_utf8_lossy(&meter.stdout).lines() {
-        if let Some(t) = line.split("pts_time:").nth(1).filter(|_| line.starts_with("frame:")) {
-            mt.push(t.trim().parse::<f64>().unwrap_or(0.0));
-        } else if let Some(v) = line.strip_prefix("lavfi.r128.M=") {
-            mv.push(v.trim().parse::<f64>().unwrap_or(-120.0));
-        }
-    }
-    mt.truncate(mv.len());
+    let (mt, mv) = if crate::read::native() { crate::read::meter(video)? } else { ffmpeg_meter(video)? };
     if let Some((voice, over)) = over_voice(&mt, &mv, &speak) {
         if over.is_empty() {
             passed.push(format!("sound: nothing without the voice is louder than it ({voice:.1} LUFS momentary)"));
@@ -205,6 +197,24 @@ pub(crate) fn sound(video: &str, words: Option<&[Word]>, issues: &mut Vec<Issue>
     Ok(())
 }
 
+/// `ffmpeg ... -af ebur128=metadata=1,ametadata=print:key=lavfi.r128.M:file=-`: each meter reading's time and LUFS
+fn ffmpeg_meter(video: &str) -> R<(Vec<f64>, Vec<f64>)> {
+    let meter = Command::new("ffmpeg")
+        .args(["-nostats", "-hide_banner", "-i", video, "-vn", "-af", "ebur128=metadata=1,ametadata=print:key=lavfi.r128.M:file=-", "-f", "null", "-"])
+        .output()
+        .map_err(|e| format!("ffmpeg: {e}"))?;
+    let (mut mt, mut mv) = (Vec::new(), Vec::new());
+    for line in String::from_utf8_lossy(&meter.stdout).lines() {
+        if let Some(t) = line.split("pts_time:").nth(1).filter(|_| line.starts_with("frame:")) {
+            mt.push(t.trim().parse::<f64>().unwrap_or(0.0));
+        } else if let Some(v) = line.strip_prefix("lavfi.r128.M=") {
+            mv.push(v.trim().parse::<f64>().unwrap_or(-120.0));
+        }
+    }
+    mt.truncate(mv.len());
+    Ok((mt, mv))
+}
+
 pub(crate) fn ffmpeg_stderr(args: &[&str]) -> R<String> {
     let out = Command::new("ffmpeg").args(args).output().map_err(|e| format!("ffmpeg: {e}"))?;
     Ok(String::from_utf8_lossy(&out.stderr).into_owned())
@@ -212,8 +222,9 @@ pub(crate) fn ffmpeg_stderr(args: &[&str]) -> R<String> {
 
 /// -14 LUFS integrated (±1) and a true peak at or below -1 dBTP (the floor's mix line)
 pub(crate) fn loudness(video: &str, taste: Option<&Taste>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
-    // the same measure `raea world` joins to a render as its Mix (raea-sys-measure, DR2)
-    let Some((i, peak)) = raea_sys_measure::loudness(std::path::Path::new(video)) else { return Ok(()) };
+    // the same measure `raea world` joins to a render as its Mix (raea-sys-measure, DR2), or raea's own without FFmpeg
+    let measured = if crate::read::native() { crate::read::loudness(video) } else { raea_sys_measure::loudness(std::path::Path::new(video)) };
+    let Some((i, peak)) = measured else { return Ok(()) };
     let mut ok = true;
     let target = taste.map_or(-14.0, |t| t.value);
     if (i - target).abs() > 1.0 {
@@ -257,7 +268,11 @@ pub(crate) fn frozen_stretches(log: &str, duration: f64) -> Vec<(f64, f64)> {
 
 pub(crate) fn freezes(video: &str, probe: &Probe, taste: Option<&Taste>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
     let most = taste.map_or(3.0, |t| t.value);
-    let err = ffmpeg_stderr(&["-hide_banner", "-nostats", "-i", video, "-an", "-vf", &format!("freezedetect=n=-60dB:d={most}"), "-f", "null", "-"])?;
+    let err = if crate::read::native() {
+        crate::read::freezes(video, -60.0, most)?
+    } else {
+        ffmpeg_stderr(&["-hide_banner", "-nostats", "-i", video, "-an", "-vf", &format!("freezedetect=n=-60dB:d={most}"), "-f", "null", "-"])?
+    };
     let stretches = frozen_stretches(&err, probe.picture);
     for &(s, d) in &stretches {
         let says = format!("nothing changes for {d:.1} s; give it a reason to hold, or cut it shorter");

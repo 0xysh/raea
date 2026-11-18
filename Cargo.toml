@@ -189,6 +189,7 @@ members = [
     "apps/check",
     "apps/check/flash",
     "apps/check/inbox",
+    "apps/check/read",
     "apps/direction",
     "apps/notes",
     "apps/fingerprint",

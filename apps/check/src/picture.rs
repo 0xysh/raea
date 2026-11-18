@@ -111,17 +111,9 @@ pub(crate) fn blotching(video: &str, probe: &Probe, issues: &mut Vec<Issue>, pas
         return Ok(());
     }
     let (w, h) = (probe.w as usize / 8 * 8, probe.h as usize / 8 * 8);
-    let mut child = Command::new("ffmpeg")
-        .args(["-v", "error", "-i", video, "-vf", &format!("fps=0.5,crop={w}:{h}:0:0,format=gray"), "-f", "rawvideo", "-"])
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("ffmpeg: {e}"))?;
-    let mut out = child.stdout.take().unwrap();
-    let mut buf = vec![0u8; w * h];
-    let (mut bad, mut seen, mut worst) = (Vec::new(), 0, 0f64);
-    let mut t = 0.0;
-    while std::io::Read::read_exact(&mut out, &mut buf).is_ok() {
-        if let Some(s) = blotch_score(&buf, w, h) {
+    let (mut bad, mut seen, mut worst, mut t) = (Vec::new(), 0, 0f64, 0.0);
+    let mut frame = |buf: &[u8]| {
+        if let Some(s) = blotch_score(buf, w, h) {
             seen += 1;
             worst = worst.max(s);
             if std::env::var_os("RAEA_CHECK_DEBUG").is_some() {
@@ -132,8 +124,22 @@ pub(crate) fn blotching(video: &str, probe: &Probe, issues: &mut Vec<Issue>, pas
             }
         }
         t += 2.0;
+    };
+    if crate::read::native() {
+        crate::read::crops(video, w, h, &mut frame)?;
+    } else {
+        let mut child = Command::new("ffmpeg")
+            .args(["-v", "error", "-i", video, "-vf", &format!("fps=0.5,crop={w}:{h}:0:0,format=gray"), "-f", "rawvideo", "-"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("ffmpeg: {e}"))?;
+        let mut out = child.stdout.take().unwrap();
+        let mut buf = vec![0u8; w * h];
+        while std::io::Read::read_exact(&mut out, &mut buf).is_ok() {
+            frame(&buf);
+        }
+        let _ = child.wait();
     }
-    let _ = child.wait();
     if !bad.is_empty() {
         let at = bad[0].0;
         let share = bad.len() as f64 / seen.max(1) as f64;

@@ -69,6 +69,9 @@ Feature: Direction that holds: one world of facts, findings and rules, so a pers
     | what each frame shows, as laid out     | `raea render --manifest` (runtime/export/src/lib.rs write_manifest): each text's words and box, each video's source and time, the 3D's clipping, the sounds heard, the layers | written only when asked for; read by `raea check` alone; its clipping list is a second copy of what was printed |
     | parts that clip, float, sink           | systems/contact (every render), `raea scene lint`   | findings are printed text or loose JSON `{check, level, says}`           |
     | an export's floor                      | apps/check (`raea check`: text, picture, flash, sound; `--quick`; `--taste`) | its own `Issue {rule, p, at, says}`; exports only     |
+      # `raea check` reads a video through FFmpeg where it's installed and through raea's own decoders where it isn't
+      # (apps/check/read; RAEA_CHECK_NATIVE=1 forces them): the same findings either way, held there by tests/parity.rs.
+      # 0.1.7 refused any video without FFmpeg, though `raea media probe` and `loudness` never needed it.
     | a person's standing rules with checks  | core/brief/src/taste.rs (`Rule { text, check }`), the taste loop (docs/craft-system.md J) | six closed forms, all about an export's text and sound; a rule is proposed only when a correction repeats; nothing per project or per note |
     | notes as tasks                         | review.feature R3 (to do, working, done), a pin's `part` | "done" is the agent's word; nothing proves it or keeps it       |
     | notes mapped to a verb                 | skills/skills/raea/craft/verbs                      | one verb a note; a note that holds several asks loses the rest           |

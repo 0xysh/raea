@@ -45,10 +45,12 @@ use encode::*;
 mod ff;
 use ff::*;
 mod frames;
+/// what `raea check` reads natively where there's no FFmpeg (apps/check read.rs)
+pub use {change::{frames_of, freezes, times, video_span, yuv}, probe::{probe_of, standard_fps}, sound::audio_folded};
 
 type R<T> = Result<T, String>;
 
-fn backend() -> R<Box<dyn Backend>> {
+pub fn backend() -> R<Box<dyn Backend>> {
     raea_io_media::backend(&raea_sys_frame::media_backend())
 }
 
