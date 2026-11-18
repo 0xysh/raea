@@ -44,6 +44,12 @@ Feature: raea cloud: raea and an ACP agent on a server of your own (sdk/cloud)
     Scenario: CL6. raea runs without an agent
       Then POST /v1/run {args, cwd} runs `raea ARGS` in the workspace, streaming {out}, {err} and last {exit} lines
       And the token and the state keys are never in its environment, and a dropped request stops the run
+    Scenario: CL6b. A shell for an agent the server doesn't run (raea-bot, 11-17)
+      Then POST /v1/shell {command, cwd, timeout_ms} runs a bash command line in the workspace, streaming the same
+        {out}, {err} and last {exit} lines
+      And past its timeout (10 minutes unless given, an hour at most), or when the request drops, its whole process
+        group is stopped, and a timeout's last line says timed_out
+      And an empty command is a 400 and a cwd outside the workspace a 403; test/smoke.ts checks all three
     Scenario: CL7. ACP over a WebSocket
       Then each WebSocket on /v1/acp?agent=ID is one agent process in the workspace: a text frame is one JSON-RPC
         message to its stdin, each line it prints is a frame back, and closing either end ends the other

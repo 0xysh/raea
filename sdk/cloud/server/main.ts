@@ -6,6 +6,10 @@
 //   GET  /v1/files?path=P               a file in the workspace, or a folder's entries as JSON
 //   PUT  /v1/files?path=P               writes the body to P, making its folders
 //   POST /v1/run {args, cwd?}           `raea ARGS` in the workspace: NDJSON {out} and {err} lines, then {exit}
+//   POST /v1/shell {command, cwd?, timeout_ms?}
+//                                       a bash command line in the workspace, the same NDJSON; past its timeout
+//                                       (10 min unless given, 1 h at most) its process group is stopped and the last
+//                                       line says {exit, timed_out: true}. For an agent's shell tool (raea-bot)
 //   POST /v1/login?agent=ID             an agent's terminal sign-in: {url, code, state, output}; GET says where it is
 //   WS   /v1/acp?agent=ID               one agent process per socket: a text frame is one ACP message to its stdin,
 //                                       each line it prints is one frame back
@@ -102,6 +106,36 @@ async function run(req: IncomingMessage, res: ServerResponse) {
   res.on("close", () => child.exitCode === null && child.kill("SIGTERM"))
 }
 
+const SHELL_DEFAULT_MS = 600_000
+const SHELL_MAX_MS = 3_600_000
+
+async function shell(req: IncomingMessage, res: ServerResponse) {
+  const { command, cwd, timeout_ms } = JSON.parse((await body(req)).toString() || "{}") as { command?: unknown; cwd?: string; timeout_ms?: unknown }
+  if (typeof command !== "string" || !command.trim()) return json(res, { error: "command must be a bash command line" }, 400)
+  const ms = typeof timeout_ms === "number" && timeout_ms > 0 ? Math.min(timeout_ms, SHELL_MAX_MS) : SHELL_DEFAULT_MS
+  const dir = resolve(cwd ?? ".")
+  mkdirSync(dir, { recursive: true })
+  res.writeHead(200, { "content-type": "application/x-ndjson" })
+  // in a process group of its own, so a timeout or a caller leaving stops what the command started too
+  const child = spawn("bash", ["-c", command], { cwd: dir, env: childEnv(), stdio: ["ignore", "pipe", "pipe"], detached: true })
+  const line = (v: unknown) => res.write(JSON.stringify(v) + "\n")
+  const stop = () => {
+    try {
+      if (child.pid && child.exitCode === null) process.kill(-child.pid, "SIGTERM")
+    } catch {}
+  }
+  let timedOut = false
+  const timer = setTimeout(() => ((timedOut = true), stop()), ms)
+  child.stdout.setEncoding("utf8").on("data", (out: string) => line({ out }))
+  child.stderr.setEncoding("utf8").on("data", (err: string) => line({ err }))
+  child.on("error", (e) => (clearTimeout(timer), line({ err: String(e) }), res.end(JSON.stringify({ exit: 127 }) + "\n")))
+  child.on("close", (code, signal) => {
+    clearTimeout(timer)
+    res.end(JSON.stringify({ exit: code ?? 128, signal: signal ?? undefined, timed_out: timedOut || undefined }) + "\n")
+  })
+  res.on("close", () => (clearTimeout(timer), stop()))
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://raea-cloud")
   if (url.pathname === "/healthz") return res.writeHead(200, { "content-type": "text/plain" }).end("ok")
@@ -128,6 +162,7 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/files" && (req.method === "GET" || req.method === "PUT")) return await files(req, res, url)
     if (url.pathname === "/v1/run" && req.method === "POST") return await run(req, res)
+    if (url.pathname === "/v1/shell" && req.method === "POST") return await shell(req, res)
     if (url.pathname === "/v1/jobs" && req.method === "POST") {
       const args = jobs.readArgs(url.searchParams.get("args"))
       // a job runs raea here, never handed on again

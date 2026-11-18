@@ -68,6 +68,24 @@ export interface Login {
   output: string
 }
 
+/** Reads a /v1/run or /v1/shell answer: NDJSON {out} and {err} lines to onOutput, until the line with the exit code. */
+async function follow(res: Response, onOutput: ((text: string, stream: "out" | "err") => void) | undefined, what: string): Promise<{ exit: number; timedOut: boolean }> {
+  const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader()
+  let buf = ""
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += value
+    for (let i; (i = buf.indexOf("\n")) >= 0; buf = buf.slice(i + 1)) {
+      const m = JSON.parse(buf.slice(0, i)) as { out?: string; err?: string; exit?: number; timed_out?: boolean }
+      if (m.out !== undefined) onOutput?.(m.out, "out")
+      if (m.err !== undefined) onOutput?.(m.err, "err")
+      if (m.exit !== undefined) return { exit: m.exit, timedOut: !!m.timed_out }
+    }
+  }
+  throw new Error(`${what} ended without an exit code`)
+}
+
 export class RaeaCloud {
   readonly url: string
   private token: string
@@ -107,20 +125,14 @@ export class RaeaCloud {
   /** `raea ARGS` in the workspace (or `cwd` in it): resolves with its exit code; output goes to onOutput as it comes. */
   async run(args: string[], o: { cwd?: string; onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal } = {}): Promise<number> {
     const res = await this.call("/v1/run", { method: "POST", body: JSON.stringify({ args, cwd: o.cwd }), headers: { "content-type": "application/json" }, signal: o.signal })
-    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader()
-    let buf = ""
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buf += value
-      for (let i; (i = buf.indexOf("\n")) >= 0; buf = buf.slice(i + 1)) {
-        const m = JSON.parse(buf.slice(0, i)) as { out?: string; err?: string; exit?: number }
-        if (m.out !== undefined) o.onOutput?.(m.out, "out")
-        if (m.err !== undefined) o.onOutput?.(m.err, "err")
-        if (m.exit !== undefined) return m.exit
-      }
-    }
-    throw new Error("raea's run ended without an exit code")
+    return (await follow(res, o.onOutput, "raea's run")).exit
+  }
+
+  /** A bash command line in the workspace (or `cwd` in it): its exit code, and whether it was stopped at its
+   *  timeout (the server's 10 minutes unless `timeoutMs`, an hour at most); output goes to onOutput as it comes. */
+  async shell(command: string, o: { cwd?: string; timeoutMs?: number; onOutput?: (text: string, stream: "out" | "err") => void; signal?: AbortSignal } = {}): Promise<{ exit: number; timedOut: boolean }> {
+    const res = await this.call("/v1/shell", { method: "POST", body: JSON.stringify({ command, cwd: o.cwd, timeout_ms: o.timeoutMs }), headers: { "content-type": "application/json" }, signal: o.signal })
+    return follow(res, o.onOutput, "the shell command")
   }
 
   /** Starts `raea ARGS` on a folder sent as a tar (zstd, gzip or none), in a folder of its own on the server (a

@@ -74,6 +74,23 @@ await check("raea renders through /v1/run", async () => {
   expect(png[0] === 0x89 && png[1] === 0x50, "not a PNG")
   return `card.png ${png.length} bytes, render ${Math.round(performance.now() - t0)} ms`
 })
+await check("a command line through /v1/shell", async () => {
+  let out = "", err = ""
+  const r = await cloud.shell("pwd; echo two >&2; printf 'a\\nb\\n' | wc -l; exit 3", { cwd: "smoke/sh", onOutput: (t, s) => (s === "out" ? (out += t) : (err += t)) })
+  expect(r.exit === 3 && !r.timedOut, `exit ${r.exit}, timed out ${r.timedOut}`)
+  expect(out.split("\n")[0].endsWith("/smoke/sh") && out.trim().endsWith("2") && err.trim() === "two", `out ${JSON.stringify(out)}, err ${JSON.stringify(err)}`)
+  const t0 = performance.now()
+  const slow = await cloud.shell("sleep 30 & sleep 30; echo never", { timeoutMs: 1500 })
+  const ms = performance.now() - t0
+  expect(slow.timedOut && ms < 10_000, `timed out ${slow.timedOut} after ${Math.round(ms)} ms`)
+  const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" }
+  const bad = [
+    (await fetch(url + "/v1/shell", { method: "POST", headers: auth, body: JSON.stringify({ command: "" }) })).status,
+    (await fetch(url + "/v1/shell", { method: "POST", headers: auth, body: JSON.stringify({ command: "pwd", cwd: "../.." }) })).status,
+  ]
+  expect(bad[0] === 400 && bad[1] === 403, `empty ${bad[0]}, cwd outside ${bad[1]}`)
+  return `exit 3 with its output, stopped at 1.5 s (${Math.round(ms)} ms), empty ${bad[0]}, outside ${bad[1]}`
+})
 /** A folder of the workspace copied here, file by file through /v1/files. */
 async function fetchDir(c: RaeaCloud, rel: string, to: string) {
   mkdirSync(to, { recursive: true })
