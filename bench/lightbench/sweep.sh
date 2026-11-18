@@ -8,13 +8,16 @@ mkdir -p "$out"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 lb="$root/target/release/lightbench"
 [ -x "$lb" ] || { echo "no $lb: cargo build --release -p raea-lightbench" >&2; exit 1; }
-run() { "$lb" --t 0 --size 1280x720 "$@" 2>/dev/null | grep -E '^(FRAME|LOD)' || { echo "FAILED: $*" >&2; return 1; }; }
+run() { "$lb" --t 0 --size 1280x720 "$@" 2>/dev/null | grep -E '^(FRAME|LOD|RAYS|GPU)' || { echo "FAILED: $*" >&2; return 1; }; }
 
 echo "# frame time (the GPU waited for each frame) by light count and mode"
 for n in 16 64 256; do
   run --lights "$n" --bench 30 --shot "$out/all-$n.png"
   for m in uniform weighted; do run --lights "$n" --mode "$m" --k 4 --bench 30 --raw --shot "$out/$m-$n.png"; done
 done
+
+echo "# bounces (LB5): rays a pixel and the lighting pass's time, 0 to 2 bounces"
+for b in 0 1 2; do run --lights 64 --mode weighted --k 4 --bounce "$b" --bench 30 --shot "$out/bounce-$b.png"; done
 
 echo "# detail: full against adaptive, then the field of view"
 run --scene field --detail full --view lod --shot "$out/field-full.png"

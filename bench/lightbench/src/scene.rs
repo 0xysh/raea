@@ -37,10 +37,15 @@ const PILLAR_LIGHT: Vec3 = Vec3::new(6.2, 2.4, 4.4);
 
 pub fn spawn(mut commands: Commands, opts: Res<Opts>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     let mut tris: Vec<[Vec3; 3]> = Vec::new();
+    // where each mesh's triangles start and its albedo, for the bounce
+    let mut from: Vec<(usize, Vec3)> = Vec::new();
+    let linear = |c: Color| { let l = c.to_linear(); Vec3::new(l.red, l.green, l.blue) };
     if opts.scene == 1 {
+        from.push((0, linear(crate::field::COLOUR)));
         crate::field::spawn(&mut commands, &opts, &mut meshes, &mut mats, &mut tris);
     }
     let mut put = |mesh: Mesh, at: Transform, color: Color, tris: &mut Vec<[Vec3; 3]>| {
+        from.push((tris.len(), linear(color)));
         tris.extend(triangles(&mesh, &at));
         let material = mats.add(StandardMaterial { base_color: color, perceptual_roughness: 0.6, ..default() });
         commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(material), at));
@@ -54,7 +59,8 @@ pub fn spawn(mut commands: Commands, opts: Res<Opts>, mut meshes: ResMut<Assets<
         put(Cuboid::new(0.4, 4.0, 0.4).mesh().build(), Transform::from_translation(PILLAR), Color::srgb(0.9, 0.9, 0.88), &mut tris);
     }
     let t0 = std::time::Instant::now();
-    let built = bvh::build(&tris);
+    let albedo: Vec<Vec3> = (0..tris.len()).map(|i| from.iter().rev().find(|f| f.0 <= i).map_or(Vec3::ZERO, |f| f.1)).collect();
+    let built = bvh::build(&tris, &albedo);
     info!("lightbench: {} triangles, {} BVH nodes, depth {}, built in {:.0} ms", tris.len(), built.nodes.len(), built.depth(), t0.elapsed().as_secs_f64() * 1000.0);
     commands.insert_resource(SceneGpu { nodes: Arc::new(built.nodes), tris: Arc::new(built.tris) });
 }

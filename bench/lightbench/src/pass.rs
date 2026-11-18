@@ -42,7 +42,7 @@ pub struct Frame {
     /// 0 every light, 1 uniform, 2 weighted
     pub mode: u32,
     pub k: u32,
-    /// 0 lit, 1 normal, 2 albedo, 3 depth, 4 rays
+    /// 0 lit, 1 normal, 2 albedo, 3 depth, 4 rays, 5 history, 6 lod, 7 bounce
     pub view: u32,
     pub frame: u32,
     pub exposure: f32,
@@ -58,6 +58,8 @@ pub struct Frame {
     pub grid_dims: UVec4,
     pub grid_start: Vec<u32>,
     pub grid_idx: Vec<u32>,
+    /// diffuse bounces a pixel follows (LB5)
+    pub bounces: u32,
 }
 
 pub struct LightPass;
@@ -89,6 +91,7 @@ struct Params {
     temporal: UVec4,
     grid_min: Vec4,
     grid_dims: UVec4,
+    gi: UVec4,
 }
 
 #[derive(Resource)]
@@ -126,7 +129,7 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 texture_2d(TextureSampleType::Float { filterable: false }),
                 texture_2d(TextureSampleType::Float { filterable: false }),
-                texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
+                texture_storage_2d(TextureFormat::Rgba32Float, StorageTextureAccess::WriteOnly),
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 storage_buffer_sized(false, std::num::NonZeroU64::new(16)),
                 read(4),
@@ -185,7 +188,8 @@ fn light(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba16Float,
+                // the light in f32 (a long history's 1 / n steps vanish in f16), the surface in f16
+                format: if i % 2 == 0 { TextureFormat::Rgba32Float } else { TextureFormat::Rgba16Float },
                 usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
@@ -228,6 +232,7 @@ fn light(
         temporal: UVec4::new(frame.raw as u32, reset as u32, frame.history.max(1), 0),
         grid_min: frame.grid_min,
         grid_dims: frame.grid_dims,
+        gi: UVec4::new(frame.bounces, 0, 0, 0),
     });
     params.write_buffer(&device, &queue);
     let group = device.create_bind_group(

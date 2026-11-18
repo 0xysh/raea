@@ -14,7 +14,8 @@ pub struct Node {
     pub count: u32,
 }
 
-/// A triangle as the GPU tests it: v0, v1 - v0 and v2 - v0, each padded to a vec4.
+/// A triangle as the GPU tests it: v0, v1 - v0 and v2 - v0, each padded to a vec4 whose w holds the triangle's
+/// albedo (linear r, g, b), so a bounce ray knows the colour of what it hits.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Default, Debug)]
 pub struct Tri {
@@ -53,7 +54,8 @@ impl Aabb {
     }
 }
 
-pub fn build(tris: &[[Vec3; 3]]) -> Bvh {
+/// The BVH over `tris`, each with its albedo (`albedo` one a triangle, or empty for black).
+pub fn build(tris: &[[Vec3; 3]], albedo: &[Vec3]) -> Bvh {
     let boxes: Vec<Aabb> = tris
         .iter()
         .map(|t| {
@@ -70,7 +72,8 @@ pub fn build(tris: &[[Vec3; 3]]) -> Bvh {
         .iter()
         .map(|&i| {
             let [a, b, c] = tris[i as usize];
-            Tri { v0: a.extend(0.0).into(), e1: (b - a).extend(0.0).into(), e2: (c - a).extend(0.0).into() }
+            let k = albedo.get(i as usize).copied().unwrap_or(Vec3::ZERO);
+            Tri { v0: a.extend(k.x).into(), e1: (b - a).extend(k.y).into(), e2: (c - a).extend(k.z).into() }
         })
         .collect();
     Bvh { nodes, tris }
@@ -179,6 +182,35 @@ impl Bvh {
         }
     }
 
+    /// The nearest triangle on the ray before `tmax`, and how far: the shader's `closest`, on the CPU.
+    pub fn closest(&self, o: Vec3, d: Vec3, tmax: f32) -> Option<(f32, usize)> {
+        let inv = Vec3::ONE / d.map(|c| if c.abs() < 1e-12 { 1e-12 } else { c });
+        let mut stack = Vec::with_capacity(64);
+        let (mut best, mut i) = (None, 0usize);
+        let mut far = tmax;
+        loop {
+            let n = &self.nodes[i];
+            if hit_box(o, inv, n.min.into(), n.max.into(), far) {
+                if n.count > 0 {
+                    for k in n.a as usize..(n.a + n.count) as usize {
+                        let t = tri_t(o, d, &self.tris[k]);
+                        if t < far {
+                            (far, best) = (t, Some((t, k)));
+                        }
+                    }
+                } else {
+                    stack.push(n.a as usize);
+                    i += 1;
+                    continue;
+                }
+            }
+            match stack.pop() {
+                Some(j) => i = j,
+                None => return best,
+            }
+        }
+    }
+
     /// The deepest leaf's depth: the GPU's traversal stack must hold it.
     pub fn depth(&self) -> usize {
         fn go(b: &Bvh, i: usize) -> usize {
@@ -196,27 +228,31 @@ fn hit_box(o: Vec3, inv: Vec3, min: Vec3, max: Vec3, tmax: f32) -> bool {
     near <= far
 }
 
-/// Möller-Trumbore, both sides.
 pub fn hit_tri(o: Vec3, d: Vec3, t: &Tri, tmax: f32) -> bool {
-    let (v0, e1, e2) = (Vec3::from_slice(&t.v0), Vec3::from_slice(&t.e1), Vec3::from_slice(&t.e2));
+    tri_t(o, d, t) < tmax
+}
+
+/// Möller-Trumbore, both sides: how far along the ray the triangle is, infinity if it isn't on it.
+pub fn tri_t(o: Vec3, d: Vec3, t: &Tri) -> f32 {
+    let (v0, e1, e2) = (Vec3::from_slice(&t.v0[..3]), Vec3::from_slice(&t.e1[..3]), Vec3::from_slice(&t.e2[..3]));
     let pv = d.cross(e2);
     let det = e1.dot(pv);
     if det.abs() < 1e-12 {
-        return false;
+        return f32::INFINITY;
     }
     let inv = 1.0 / det;
     let tv = o - v0;
     let u = tv.dot(pv) * inv;
     if !(0.0..=1.0).contains(&u) {
-        return false;
+        return f32::INFINITY;
     }
     let qv = tv.cross(e1);
     let v = d.dot(qv) * inv;
     if v < 0.0 || u + v > 1.0 {
-        return false;
+        return f32::INFINITY;
     }
     let t = e2.dot(qv) * inv;
-    t > 0.0 && t < tmax
+    if t > 0.0 { t } else { f32::INFINITY }
 }
 
 #[cfg(test)]
@@ -243,8 +279,8 @@ mod tests {
                 [c + r.v(0.4), c + r.v(0.4), c + r.v(0.4)]
             })
             .collect();
-        let bvh = build(&soup);
-        let all: Vec<Tri> = build(&soup).tris;
+        let bvh = build(&soup, &[]);
+        let all: Vec<Tri> = build(&soup, &[]).tris;
         assert_eq!(all.len(), soup.len());
         let (mut hits, mut n) = (0, 0);
         for _ in 0..20000 {
@@ -253,6 +289,9 @@ mod tests {
             let tmax = r.f() * 12.0;
             let brute = all.iter().any(|t| hit_tri(o, d, t, tmax));
             assert_eq!(bvh.occluded(o, d, tmax), brute, "ray {o} {d} {tmax}");
+            // the nearest hit too, as LB5's bounce rays find it
+            let near = all.iter().enumerate().map(|(k, t)| (tri_t(o, d, t), k)).filter(|h| h.0 < tmax).min_by(|a, b| a.0.total_cmp(&b.0));
+            assert_eq!(bvh.closest(o, d, tmax).map(|h| h.1), near.map(|h| h.1), "nearest on ray {o} {d} {tmax}");
             hits += brute as u32;
             n += 1;
         }
@@ -264,7 +303,7 @@ mod tests {
     #[test]
     fn coincident_triangles_still_split() {
         let t = [Vec3::ZERO, Vec3::X, Vec3::Y];
-        let bvh = build(&vec![t; 100]);
+        let bvh = build(&vec![t; 100], &[]);
         assert!(bvh.occluded(Vec3::new(0.2, 0.2, 1.0), Vec3::NEG_Z, 2.0));
         assert!(!bvh.occluded(Vec3::new(0.8, 0.8, 1.0), Vec3::NEG_Z, 2.0));
     }

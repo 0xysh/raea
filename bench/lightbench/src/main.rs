@@ -26,6 +26,9 @@ const HELP: &str = "lightbench [switches]
   --k K                         light samples a pixel, 1 to 16 (4)
   --lights N                    point lights, the pillar's first (16)
   --view lit|normal|albedo|depth|rays   what to show (lit)
+  --bounce N                    diffuse bounces each pixel follows through the BVH, each hit lit by the same light
+                                sampling as the pixel (one sample; every light with --mode all) (0)
+  --view bounce                 the bounced light alone
   --brute                       test every triangle for each shadow ray instead of the BVH
   --detail N                    the knot's segments; its triangles are N * N / 16 (2048; the field's knots 512)
   --size WxH                    pixels (1280x720)
@@ -75,10 +78,11 @@ pub struct Opts {
     pub tau: f32,
     pub fov: f32,
     pub grid: bool,
+    pub bounces: u32,
 }
 
 fn opts() -> Result<Opts, String> {
-    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0, grid: true };
+    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0, grid: true, bounces: 0 };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut val = || args.next().ok_or(format!("{a} needs a value"));
@@ -90,7 +94,7 @@ fn opts() -> Result<Opts, String> {
             }
             "--view" => {
                 let v = val()?;
-                o.view = ["lit", "normal", "albedo", "depth", "rays", "history", "lod"].iter().position(|m| *m == v).ok_or("--view: lit, normal, albedo, depth, rays, history or lod")? as u32;
+                o.view = ["lit", "normal", "albedo", "depth", "rays", "history", "lod", "bounce"].iter().position(|m| *m == v).ok_or("--view: lit, normal, albedo, depth, rays, history, lod or bounce")? as u32;
             }
             "--k" => o.k = (num(val()?)? as u32).clamp(1, 16),
             "--lights" => o.lights = (num(val()?)? as u32).max(1),
@@ -111,6 +115,7 @@ fn opts() -> Result<Opts, String> {
             "--tau" => o.tau = num(val()?)?.max(0.0),
             "--fov" => o.fov = num(val()?)?.clamp(1.0, 170.0),
             "--grid" => o.grid = val()? != "off",
+            "--bounce" => o.bounces = (num(val()?)? as u32).min(8),
             "--size" => {
                 let v = val()?;
                 let (w, h) = v.split_once('x').ok_or("--size: WxH")?;
@@ -249,6 +254,7 @@ fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: 
         raw: o.raw,
         cut,
         history: o.history,
+        bounces: o.bounces,
     };
 }
 
@@ -278,7 +284,7 @@ fn shoot(mut commands: Commands, o: Res<Opts>, counts: Res<field::Counts>, targe
         if n > n0 {
             println!("GPU lighting pass {:.2} ms ({} frames timed)", (ns - ns0) as f64 / 1e6 / (n - n0) as f64, n - n0);
         }
-        println!("FRAME {ms:.2} ms, the GPU waited for ({} frames, {}x{}, {} lights, mode {} k {})", drawn - d0, o.size.x, o.size.y, o.lights, ["all", "uniform", "weighted"][o.mode as usize], o.k);
+        println!("FRAME {ms:.2} ms, the GPU waited for ({} frames, {}x{}, {} lights, mode {} k {}, bounces {})", drawn - d0, o.size.x, o.size.y, o.lights, ["all", "uniform", "weighted"][o.mode as usize], o.k, o.bounces);
     }
     commands.spawn(Screenshot::image(target.0.clone())).observe(move |shot: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
         match shot.image.clone().try_into_dynamic() {

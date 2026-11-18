@@ -44,6 +44,15 @@ Feature: LightBench: a small Rust + Bevy renderer that proves raea's lighting an
 
   Scenario: LB3b temporal accumulation, reprojected, rejected on depth and normal, reset on a camera cut; --raw drops it
 
+  # LB5: bounce light
+  Scenario: LB5 diffuse bounces through the BVH, lit by the same light sampling, against the every-light reference
+    When LightBench draws with --bounce N
+    Then each pixel follows N cosine-chosen rays to the nearest triangle, and lights each hit as it lights a pixel
+      (one light sample, or every light with --mode all), so the reference and the sampled path differ only in which
+      lights they look at
+    And the sampled bounce converges to the reference as frames grow (RMSE against it, written down) with no bias
+    And a sampled pixel traces at most K + 2N rays whatever the number of lights
+
   # LB4: instrumentation and acceptance
   Scenario: LB4 sweeps
     Then camera and light-count sweeps at a fixed resolution print triangles drawn, rays a pixel and pass timings

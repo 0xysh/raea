@@ -30,6 +30,9 @@ pub struct Knot {
     drawn: Vec<usize>,
 }
 
+/// The knots' colour.
+pub const COLOUR: Color = Color::srgb(0.85, 0.42, 0.18);
+
 const LEVEL_COLOURS: [[f32; 3]; 8] = [[1.0, 1.0, 1.0], [0.3, 0.9, 0.3], [0.95, 0.9, 0.2], [1.0, 0.55, 0.1], [0.95, 0.2, 0.2], [0.85, 0.3, 0.9], [0.3, 0.5, 1.0], [0.2, 0.9, 0.9]];
 
 /// The knots' places: rows from 3 m to about 60 m away, each a little different in size and turn.
@@ -62,7 +65,7 @@ pub fn spawn(commands: &mut Commands, opts: &Opts, meshes: &mut Assets<Mesh>, ma
     });
     let center = (lo + hi) * 0.5;
     let radius = pos.iter().map(|p| p.distance(center)).fold(0.0, f32::max);
-    let material = mats.add(StandardMaterial { base_color: Color::srgb(0.85, 0.42, 0.18), perceptual_roughness: 0.6, ..default() });
+    let material = mats.add(StandardMaterial { base_color: COLOUR, perceptual_roughness: 0.6, ..default() });
     let lod_material = mats.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.6, ..default() });
     for at in places(opts.rows) {
         let m = at.to_matrix();

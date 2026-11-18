@@ -1,7 +1,10 @@
 // LightBench's lighting (docs/lightbench.feature LB1, LB3): each pixel of Bevy's G-buffer (the depth prepass and the
 // deferred prepass's albedo and normal) lit by point lights, every light (the reference) or K of them chosen at random,
 // each through one shadow ray in LightBench's own BVH. Both use `unshadowed` and `visible`, so they differ only in
-// which lights they look at. The result goes into the camera's HDR main texture, before Bevy's tonemapping.
+// which lights they look at. With --bounce (LB5) each pixel also follows a cosine-chosen ray through the BVH to the
+// nearest surface and lights that point the same way (one light sample in the sampled modes, every light in the
+// reference), so the reference and the sampled path still differ only in the lights they look at. The result goes
+// into the camera's HDR main texture, before Bevy's tonemapping.
 
 struct Params {
     world_from_clip: mat4x4<f32>,
@@ -9,7 +12,8 @@ struct Params {
     eye: vec4<f32>,
     // width, height, lights, frame
     size: vec4<u32>,
-    // mode (0 every light, 1 uniform, 2 weighted), K, view (0 lit, 1 normal, 2 albedo, 3 depth, 4 rays, 5 history),
+    // mode (0 every light, 1 uniform, 2 weighted), K, view (0 lit, 1 normal, 2 albedo, 3 depth, 4 rays, 5 history,
+    // 6 lod, 7 bounce: the bounced light alone),
     // brute force
     mode: vec4<u32>,
     // the previous frame's camera, to find where a point was
@@ -21,6 +25,8 @@ struct Params {
     // the light grid: its corner (xyz) and cell size (w); its cells along x, y, z, and whether the sampled modes use it
     grid_min: vec4<f32>,
     grid_dims: vec4<u32>,
+    // diffuse bounces a pixel follows (0 none), 0, 0, 0
+    gi: vec4<u32>,
 }
 
 struct Node { mn: vec3<f32>, a: u32, mx: vec3<f32>, count: u32 }
@@ -30,7 +36,7 @@ struct Light { pos: vec3<f32>, range: f32, power: vec3<f32>, radius: f32 }
 @group(0) @binding(1) var depth_tex: texture_depth_2d;
 @group(0) @binding(2) var gbuf: texture_2d<u32>;
 @group(0) @binding(3) var<storage, read> nodes: array<Node>;
-// three a triangle: v0, v1 - v0, v2 - v0
+// three a triangle: v0, v1 - v0, v2 - v0; their w the triangle's albedo (linear r, g, b), for the bounce
 @group(0) @binding(4) var<storage, read> tris: array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read> lights: array<Light>;
 @group(0) @binding(6) var out: texture_storage_2d<rgba16float, write>;
@@ -38,7 +44,8 @@ struct Light { pos: vec3<f32>, range: f32, power: vec3<f32>, radius: f32 }
 // (its normal, and its distance from that frame's camera); last frame's to read, this frame's to write
 @group(0) @binding(7) var hist_in: texture_2d<f32>;
 @group(0) @binding(8) var geo_in: texture_2d<f32>;
-@group(0) @binding(9) var hist_out: texture_storage_2d<rgba16float, write>;
+// (in f32: a long history's 1 / n steps are below an f16's resolution, and its mean stops moving)
+@group(0) @binding(9) var hist_out: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(10) var geo_out: texture_storage_2d<rgba16float, write>;
 // this frame's shadow rays, lit pixels and the most rays any pixel traced (LB4's rays a pixel)
 @group(0) @binding(11) var<storage, read_write> stats: array<atomic<u32>, 4>;
@@ -89,29 +96,35 @@ fn hit_box(o: vec3<f32>, inv: vec3<f32>, mn: vec3<f32>, mx: vec3<f32>, tmax: f32
     return near <= far;
 }
 
-// Möller-Trumbore, both sides
-fn hit_tri(o: vec3<f32>, d: vec3<f32>, i: u32, tmax: f32) -> bool {
+const MISS: f32 = 3.4e38;
+
+// Möller-Trumbore, both sides: how far along the ray triangle i is, MISS if it isn't on it
+fn tri_t(o: vec3<f32>, d: vec3<f32>, i: u32) -> f32 {
     let v0 = tris[3u * i].xyz;
     let e1 = tris[3u * i + 1u].xyz;
     let e2 = tris[3u * i + 2u].xyz;
     let pv = cross(d, e2);
     let det = dot(e1, pv);
     if abs(det) < 1e-12 {
-        return false;
+        return MISS;
     }
     let inv = 1.0 / det;
     let tv = o - v0;
     let u = dot(tv, pv) * inv;
     if u < 0.0 || u > 1.0 {
-        return false;
+        return MISS;
     }
     let qv = cross(tv, e1);
     let v = dot(d, qv) * inv;
     if v < 0.0 || u + v > 1.0 {
-        return false;
+        return MISS;
     }
     let t = dot(e2, qv) * inv;
-    return t > 0.0 && t < tmax;
+    return select(MISS, t, t > 0.0);
+}
+
+fn hit_tri(o: vec3<f32>, d: vec3<f32>, i: u32, tmax: f32) -> bool {
+    return tri_t(o, d, i) < tmax;
 }
 
 // whether anything lies on the ray before tmax: the BVH, or every triangle when brute force is asked for
@@ -153,6 +166,53 @@ fn occluded(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> bool {
         i = stack[sp];
     }
     return false;
+}
+
+struct Hit { t: f32, i: u32 }
+
+// the nearest triangle on the ray before tmax (i 0xFFFFFFFF if none): the BVH walked as `occluded` walks it, the
+// ray shortening at each hit so farther boxes drop out; every triangle with brute force
+fn closest(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
+    rays += 1u;
+    var best = Hit(tmax, 0xFFFFFFFFu);
+    if p.mode.w != 0u {
+        let n = arrayLength(&tris) / 3u;
+        for (var i = 0u; i < n; i++) {
+            let t = tri_t(o, d, i);
+            if t < best.t {
+                best = Hit(t, i);
+            }
+        }
+        return best;
+    }
+    let inv = 1.0 / select(d, vec3(1e-12), abs(d) < vec3(1e-12));
+    var stack: array<u32, STACK>;
+    var sp = 0u;
+    var i = 0u;
+    loop {
+        let n = nodes[i];
+        if hit_box(o, inv, n.mn, n.mx, best.t) {
+            if n.count > 0u {
+                for (var t = n.a; t < n.a + n.count; t++) {
+                    let h = tri_t(o, d, t);
+                    if h < best.t {
+                        best = Hit(h, t);
+                    }
+                }
+            } else if sp < STACK {
+                stack[sp] = n.a;
+                sp++;
+                i++;
+                continue;
+            }
+        }
+        if sp == 0u {
+            break;
+        }
+        sp--;
+        i = stack[sp];
+    }
+    return best;
 }
 
 // a light's light at a point before its shadow: its power times the cosine and the falloff (an inverse square that
@@ -199,45 +259,10 @@ fn lum(c: vec3<f32>) -> f32 {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
-// one pixel: its light, its history; (shadow rays traced, 1 if it is a lit pixel)
-fn shade(id: vec3<u32>) -> vec2<u32> {
-    if id.x >= p.size.x || id.y >= p.size.y {
-        return vec2(0u);
-    }
-    let px = vec2<i32>(id.xy);
-    let depth = textureLoad(depth_tex, px, 0);
-    // the sky (reverse Z: far is 0) keeps Bevy's clear colour, and holds no history
-    if depth <= 0.0 {
-        textureStore(hist_out, px, vec4(0.0));
-        textureStore(geo_out, px, vec4(0.0, 0.0, 0.0, -1.0));
-        return vec2(0u);
-    }
-    let g = textureLoad(gbuf, px, 0);
-    let albedo = pow(unpack4x8unorm(g.r).rgb, vec3(2.2));
-    let n = oct_decode(vec2(f32(g.a & 0xFFFu), f32((g.a >> 12u) & 0xFFFu)) / 4095.0);
-    let uv = (vec2<f32>(id.xy) + 0.5) / vec2<f32>(p.size.xy);
-    let w = p.world_from_clip * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
-    let pos = w.xyz / w.w;
-    let dist = length(pos - p.eye.xyz);
-    let view = p.mode.z;
-    if view == 1u {
-        textureStore(out, px, vec4(n * 0.5 + 0.5, 1.0));
-        return vec2(0u);
-    }
-    if view == 2u || view == 6u {
-        textureStore(out, px, vec4(albedo, 1.0));
-        return vec2(0u);
-    }
-    if view == 3u {
-        textureStore(out, px, vec4(vec3(dist / 20.0), 1.0));
-        return vec2(0u);
-    }
-    seed = pcg(id.x + id.y * p.size.x + p.size.w * p.size.x * p.size.y);
-    rays = 0u;
-    // off the surface along its normal, more the farther it is (depth precision)
-    let o = pos + n * (2e-3 + 5e-4 * dist);
+// the light reaching a point (pos, its normal n, o just off it) from the lights: every light with its shadow ray, or
+// k shadow rays to lights chosen uniformly or by their light from the point's cell
+fn lit_at(pos: vec3<f32>, n: vec3<f32>, o: vec3<f32>, k: u32) -> vec3<f32> {
     let nl = p.size.z;
-    let k = clamp(p.mode.y, 1u, MAX_K);
     var c = vec3(0.0);
     if p.mode.x == 0u {
         for (var i = 0u; i < nl; i++) {
@@ -287,6 +312,98 @@ fn shade(id: vec3<u32>) -> vec2<u32> {
             }
             c /= f32(k);
         }
+    }
+    return c;
+}
+
+// a direction about n, chosen in proportion to its cosine (Duff et al.'s basis)
+fn cosine_dir(n: vec3<f32>) -> vec3<f32> {
+    let phi = 2.0 * PI * rnd();
+    let r2 = rnd();
+    let r = sqrt(r2);
+    let s = select(-1.0, 1.0, n.z >= 0.0);
+    let a = -1.0 / (s + n.z);
+    let b = n.x * n.y * a;
+    let t = vec3(1.0 + s * n.x * n.x * a, s * b, -s * n.x);
+    let bt = vec3(b, s + n.y * n.y * a, -n.y);
+    return normalize(t * (r * cos(phi)) + bt * (r * sin(phi)) + n * sqrt(max(0.0, 1.0 - r2)));
+}
+
+// the light reaching a point by way of other surfaces, p.gi.x bounces deep: from the point a cosine-chosen ray to the
+// nearest triangle, that point lit as a pixel is (one light sample, or every light in the reference), and on from
+// there. A cosine-chosen ray's pdf cancels the cosine and the 1 / PI of the hit's diffuse light, so each bounce adds
+// the albedos so far times the light at the hit. Rays that leave the scene bring nothing (it has no sky).
+fn bounced(n0: vec3<f32>, o0: vec3<f32>) -> vec3<f32> {
+    var e = vec3(0.0);
+    var through = vec3(1.0);
+    var n = n0;
+    var o = o0;
+    for (var b = 0u; b < p.gi.x; b++) {
+        let d = cosine_dir(n);
+        let h = closest(o, d, 1e4);
+        if h.i == 0xFFFFFFFFu {
+            break;
+        }
+        let v0 = tris[3u * h.i];
+        let e1 = tris[3u * h.i + 1u];
+        let e2 = tris[3u * h.i + 2u];
+        var nh = normalize(cross(e1.xyz, e2.xyz));
+        if dot(nh, d) > 0.0 {
+            nh = -nh;
+        }
+        let hp = o + d * h.t;
+        let oh = hp + nh * (2e-3 + 5e-4 * length(hp - p.eye.xyz));
+        through *= vec3(v0.w, e1.w, e2.w);
+        e += through * lit_at(hp, nh, oh, 1u);
+        n = nh;
+        o = oh;
+    }
+    return e;
+}
+
+// one pixel: its light, its history; (shadow rays traced, 1 if it is a lit pixel)
+fn shade(id: vec3<u32>) -> vec2<u32> {
+    if id.x >= p.size.x || id.y >= p.size.y {
+        return vec2(0u);
+    }
+    let px = vec2<i32>(id.xy);
+    let depth = textureLoad(depth_tex, px, 0);
+    // the sky (reverse Z: far is 0) keeps Bevy's clear colour, and holds no history
+    if depth <= 0.0 {
+        textureStore(hist_out, px, vec4(0.0));
+        textureStore(geo_out, px, vec4(0.0, 0.0, 0.0, -1.0));
+        return vec2(0u);
+    }
+    let g = textureLoad(gbuf, px, 0);
+    let albedo = pow(unpack4x8unorm(g.r).rgb, vec3(2.2));
+    let n = oct_decode(vec2(f32(g.a & 0xFFFu), f32((g.a >> 12u) & 0xFFFu)) / 4095.0);
+    let uv = (vec2<f32>(id.xy) + 0.5) / vec2<f32>(p.size.xy);
+    let w = p.world_from_clip * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
+    let pos = w.xyz / w.w;
+    let dist = length(pos - p.eye.xyz);
+    let view = p.mode.z;
+    if view == 1u {
+        textureStore(out, px, vec4(n * 0.5 + 0.5, 1.0));
+        return vec2(0u);
+    }
+    if view == 2u || view == 6u {
+        textureStore(out, px, vec4(albedo, 1.0));
+        return vec2(0u);
+    }
+    if view == 3u {
+        textureStore(out, px, vec4(vec3(dist / 20.0), 1.0));
+        return vec2(0u);
+    }
+    seed = pcg(id.x + id.y * p.size.x + p.size.w * p.size.x * p.size.y);
+    rays = 0u;
+    // off the surface along its normal, more the farther it is (depth precision)
+    let o = pos + n * (2e-3 + 5e-4 * dist);
+    var c = vec3(0.0);
+    if view != 7u {
+        c = lit_at(pos, n, o, clamp(p.mode.y, 1u, MAX_K));
+    }
+    if p.gi.x > 0u {
+        c += bounced(n, o);
     }
     // the history: where this point was last frame, kept only if the same surface was there
     var held = 0.0;
