@@ -58,6 +58,36 @@ pub fn base_ident(it: &Item) -> &str {
     }
 }
 
+/// A mesh's surface as part of what it is across frames: its material's kind and its shader's source, hashed (not the
+/// uniforms, which animate). A mesh row takes its surface from its track's first frame, so a later shot's mesh of the
+/// same shape on an earlier shot's track drew the earlier shot's shader (a set's street in its own colours, the
+/// ShaderExtension that reads them lost: gambit previz v4, act 3); two shaders are now two parts.
+fn surface_ident(it: &Item) -> String {
+    use std::hash::{Hash, Hasher};
+    let Some(m) = it.material.as_ref().filter(|_| it.kind == "mesh") else { return String::new() };
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    let mut any = false;
+    if let Some(sh) = m.props.get("shader").and_then(Value::as_object) {
+        for k in ["wgsl", "wesl", "fragment"] {
+            if let Some(s) = sh.get(k).and_then(Value::as_str) {
+                (k, s).hash(&mut h);
+                any = true;
+            }
+        }
+    }
+    for k in ["vertexShader", "fragmentShader"] {
+        if let Some(s) = m.props.get(k).and_then(Value::as_str) {
+            (k, s).hash(&mut h);
+            any = true;
+        }
+    }
+    match (&*m.kind, any) {
+        ("MeshStandardMaterial", false) => String::new(),
+        (kind, false) => format!("|{kind}"),
+        (kind, true) => format!("|{kind}:{:016x}", h.finish()),
+    }
+}
+
 /// `tracks` over items already walked: only the parts of these kinds are copied
 pub fn tracks_of(all: &[Vec<Item>], kinds: &[&str]) -> Vec<(String, Vec<Option<Item>>)> {
     let mut order: Vec<String> = Vec::new();
@@ -66,7 +96,7 @@ pub fn tracks_of(all: &[Vec<Item>], kinds: &[&str]) -> Vec<(String, Vec<Option<I
     for (i, its) in all.iter().enumerate() {
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         for it in its.iter().filter(|it| kinds.contains(&it.kind)).cloned() {
-            let base = format!("{}|{}", it.kind, base_ident(&it));
+            let base = format!("{}|{}{}", it.kind, base_ident(&it), surface_ident(&it));
             let k = seen.entry(base.clone()).or_insert(0);
             let id = format!("{base}#{k}");
             *k += 1;
@@ -107,4 +137,43 @@ pub fn entities_nodes(props: &Map<String, Value>) -> Vec<Node3> {
             Node3 { kind: "Mesh".into(), props: std::sync::Arc::new(p), shape: mesh.get("shape").and_then(Value::as_str).map(Into::into), at: None, kids: std::sync::Arc::new([material]) }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod surface_tracks {
+    use super::*;
+
+    fn mesh(shape: &str, material: &str, shader: Option<(&str, f64)>) -> Item {
+        let mut props = Map::new();
+        if let Some((src, k)) = shader {
+            props.insert("shader".into(), serde_json::json!({ "wgsl": src, "uniforms": { "k": k } }));
+        }
+        let material = Node3 { kind: material.into(), props: std::sync::Arc::new(props), shape: None, at: None, kids: Vec::new().into() };
+        Item { kind: "mesh", props: std::sync::Arc::new(Map::new()), shape: Some(shape.into()), at: None, material: Some(material), world: Mat4::IDENTITY }
+    }
+
+    #[test]
+    fn one_shape_under_two_shaders_is_two_parts() {
+        // a shot's box under shader A, then the next shot's box of the same shape under shader B
+        let a = mesh("box", "MeshStandardMaterial", Some(("fn surface(in: VertexOutput, pbr: ptr<function, PbrInput>) { }", 1.0)));
+        let b = mesh("box", "MeshStandardMaterial", Some(("fn surface(in: VertexOutput, pbr: ptr<function, PbrInput>) { (*pbr).material.base_color = in.color; }", 1.0)));
+        let t = tracks_of(&[vec![a], vec![b]], &["mesh"]);
+        assert_eq!(t.len(), 2, "{:?}", t.iter().map(|x| &x.0).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_shader_whose_uniforms_move_stays_one_part() {
+        let src = "fn surface(in: VertexOutput, pbr: ptr<function, PbrInput>) { }";
+        let t = tracks_of(&[vec![mesh("box", "MeshStandardMaterial", Some((src, 0.0)))], vec![mesh("box", "MeshStandardMaterial", Some((src, 1.0)))]], &["mesh"]);
+        assert_eq!(t.len(), 1);
+        assert!(t[0].1.iter().all(Option::is_some));
+    }
+
+    #[test]
+    fn plain_standard_meshes_keep_their_old_identity() {
+        // no shader: the key is what it was before, so a scene without shaders matches its parts as it did
+        let t = tracks_of(&[vec![mesh("box", "MeshStandardMaterial", None)], vec![mesh("box", "MeshStandardMaterial", None)]], &["mesh"]);
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].0, "mesh|box#0");
+    }
 }
