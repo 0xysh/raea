@@ -44,6 +44,17 @@ impl BlitzPage {
                 if let (Some(b), true) = (rect(n), a > 0.01) {
                     let at = node.attr(LocalName::from("data-raea-at")).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
                     let mut v = json!({"src": src, "at": at, "box": [r(b.x), r(b.y), r(b.width), r(b.height)], "opacity": (a * 100.0).round() / 100.0});
+                    // what of the box shows when a box it's in clips it (an `overflow: hidden` parent cropping it):
+                    // the exports crop the clip to it; one clipped away entirely isn't shown
+                    if let Some([x0, y0, x1, y1]) = clip(doc, n) {
+                        let c = [x0.max(b.x), y0.max(b.y), x1.min(b.x + b.width), y1.min(b.y + b.height)];
+                        if c[2] - c[0] < 0.5 || c[3] - c[1] < 0.5 {
+                            continue;
+                        }
+                        if (c[0] - b.x).abs() > 0.05 || (c[1] - b.y).abs() > 0.05 || (c[2] - b.x - b.width).abs() > 0.05 || (c[3] - b.y - b.height).abs() > 0.05 {
+                            v["clip"] = json!([r(c[0]), r(c[1]), r(c[2] - c[0]), r(c[3] - c[1])]);
+                        }
+                    }
                     // how the picture fills its box (the CapCut export places a clip by it, docs/capcut.feature CC2a)
                     if let Some(s) = node.primary_styles() {
                         use style::computed_values::object_fit::T as Fit;
@@ -54,6 +65,21 @@ impl BlitzPage {
                             Fit::None => "none",
                             Fit::ScaleDown => "scale-down",
                         });
+                        // where the picture sits in what its box leaves free (object-position), when not centred: each
+                        // axis as px plus a share of the free space ([x px, x share, y px, y share]), keywords and calc()
+                        // alike, as blitz-paint places it
+                        use style::values::computed::Length;
+                        let p = s.clone_object_position();
+                        let lin = |lp: &style::values::computed::LengthPercentage| {
+                            let (a, b) = (lp.resolve(Length::new(0.0)).px() as f64, lp.resolve(Length::new(1000.0)).px() as f64);
+                            (a, (b - a) / 1000.0)
+                        };
+                        let ((xp, xs), (yp, ys)) = (lin(&p.horizontal), lin(&p.vertical));
+                        if xp.abs() > 0.01 || yp.abs() > 0.01 || (xs - 0.5).abs() > 0.001 || (ys - 0.5).abs() > 0.001 {
+                            // a share to a millionth: of a 4K picture's free space, well under a pixel
+                            let share = |v: f64| (v * 1e6).round() / 1e6;
+                            v["position"] = json!([r(xp), share(xs), r(yp), share(ys)]);
+                        }
                     }
                     stamps(n, &mut v);
                     videos.push(v);
@@ -160,6 +186,11 @@ impl BlitzPage {
             if let Some(l) = node.element_data().and_then(|e| e.inline_layout_data.as_ref()) {
                 t["lines"] = json!(l.layout.len());
             }
+            // words a caption says (docs/layers.feature LA1a, LA2b): an export in layers renders captions as a pass of
+            // their own only when a frame has some, and writes them as SubRip
+            if in_caption(doc, owner) {
+                t["caption"] = json!(true);
+            }
             stamps(owner, &mut t);
             text.push(t);
         }
@@ -205,6 +236,40 @@ impl BlitzPage {
     }
 }
 
+/// The part of the page an element can show in, as the boxes that clip it leave it: the padding boxes, on the axes they
+/// clip, of each `overflow` other than visible along its containing blocks (the clips blitz-paint draws it under; the
+/// root element's overflow is the viewport's and clips nothing), as [left, top, right, bottom]. None when none clips it.
+fn clip(doc: &blitz_dom::BaseDocument, n: blitz_dom::NodeId) -> Option<[f64; 4]> {
+    use style::values::computed::Overflow;
+    let mut out: Option<[f64; 4]> = None;
+    let mut up = doc.get_node(n).and_then(|x| x.containing_block());
+    while let Some(id) = up {
+        let Some(node) = doc.get_node(id) else { break };
+        up = node.containing_block();
+        let is_root_element = node.parent.and_then(|p| doc.get_node(p)).is_some_and(|p| p.parent.is_none());
+        if !node.is_element() || node.parent.is_none() || is_root_element {
+            continue;
+        }
+        let Some(s) = node.primary_styles() else { continue };
+        let (cx, cy) = (!matches!(s.clone_overflow_x(), Overflow::Visible), !matches!(s.clone_overflow_y(), Overflow::Visible));
+        if !(cx || cy) {
+            continue;
+        }
+        let Some(b) = doc.get_client_bounding_rect(id) else { continue };
+        let bd = node.final_layout().border;
+        let o = out.get_or_insert([f64::NEG_INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::INFINITY]);
+        if cx {
+            o[0] = o[0].max(b.x + bd.left as f64);
+            o[2] = o[2].min(b.x + b.width - bd.right as f64);
+        }
+        if cy {
+            o[1] = o[1].max(b.y + bd.top as f64);
+            o[3] = o[3].min(b.y + b.height - bd.bottom as f64);
+        }
+    }
+    out
+}
+
 /// An element's own opacity times its parents', 0 when it or one of them isn't shown.
 fn alpha(doc: &blitz_dom::BaseDocument, n: blitz_dom::NodeId) -> f64 {
     use style::computed_values::visibility::T as Visibility;
@@ -243,6 +308,19 @@ fn stamps(doc: &blitz_dom::BaseDocument, n: blitz_dom::NodeId, entry: &mut serde
         }
         at = node.parent;
     }
+}
+
+/// Whether `n` is a caption or inside one: it or an element up from it carries data-raea-role="caption".
+fn in_caption(doc: &blitz_dom::BaseDocument, n: blitz_dom::NodeId) -> bool {
+    let mut at = Some(n);
+    while let Some(x) = at {
+        let Some(node) = doc.get_node(x) else { break };
+        if node.attr(LocalName::from("data-raea-role")) == Some("caption") {
+            return true;
+        }
+        at = node.parent;
+    }
+    false
 }
 
 /// An svg's shown <text>s, in document order: each one's words (as [`run_text`] joins its chunks), its box in the
