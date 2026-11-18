@@ -24,7 +24,7 @@ const out = (stdout: string, exitCode = 0, stderr = "") => ({ stdout, stderr, ex
 // `raea library` (library.ts), kept apart from the imports above
 import { libraryVerb } from "./library";
 // `raea show` (show.ts): what a session shows the person, in the raea app
-import { showVerb } from "./show";
+import { labelsIn, showVerb } from "./show";
 // `raea clothes` (clothes.ts): garments for SOMA's body from words
 import { clothesVerb } from "./clothes";
 // `raea bug` (bug.ts): an agent's report of a bug in raea, to raea's server
@@ -267,8 +267,18 @@ export function raeaHandler(host?: Host, engine?: Engine) {
         }
         case "library":
           return out(libraryVerb(ask, args.slice(1), (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}));
-        case "show":
-          return out(showVerb(ask, args.slice(1), c.cwd, (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}));
+        case "show": {
+          // --labels FILE.json: read here, where the shell's files are (show.ts labelsIn)
+          const at = args.lastIndexOf("--labels");
+          const file = at > 0 ? args[at + 1] : undefined;
+          let listed: unknown[] | undefined;
+          try {
+            listed = file === undefined ? undefined : labelsIn(await c.fs.readFile(p(file), "utf8"), file);
+          } catch (e) {
+            return out("", 2, `raea show: ${(e as Error).message.startsWith("--labels") ? (e as Error).message : `--labels ${file}: ${(e as Error).message}`}\n`);
+          }
+          return out(showVerb(ask, args.slice(1), c.cwd, (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}, listed));
+        }
         case "clothes":
           return out(clothesVerb(ask, args.slice(1)));
         case "bug":
