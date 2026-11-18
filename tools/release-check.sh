@@ -1,7 +1,7 @@
 #!/bin/bash
 # The check every release archive passes (tools/release.sh runs it on the archive it just made; release.yml's
 # windows-verify job runs it again on a fresh Windows runner, from the archive alone): unpacked into a fresh folder,
-# with RAEA_NO_TREE=1 so it can't be reading a checkout, its raea renders a frame, has the plugin catalog, prints a
+# with RAEA_NO_TREE=1 so it can't be reading a checkout, its raea renders a frame (and a 3D one), has the plugin catalog, prints a
 # craft guide, writes styles.gen.ts and maps a song; its binaries name none of raea's API, nothing in it looks like a
 # key, and a Windows archive holds no Microsoft file (the CRT comes from the VC++ redistributable;
 # docs/handoff/ports.md).
@@ -35,6 +35,45 @@ TSX
 # hello.tsx draws white text on black, so a frame raea finds all black lost its page (Windows' c:\ paths read as a URL
 # scheme drew nothing but the black behind it, 11-05)
 ! grep -q "is all black" "$check/p/render.log" || { grep "all black" "$check/p/render.log" >&2; fail "the unpacked raea rendered a black frame"; }
+# a 3D frame too, Bevy's camera, lights and a mesh: on Linux every 3D render panicked in a build whose Engines each made
+# an event loop (#182), while the page above rendered. On black, so a 3D pass that drew nothing is all black; on Linux
+# once more with no display at all, as a render needs none. Not on Windows, whose runners have only WARP
+mkdir -p "$check/3d"
+cat > "$check/3d/cube.tsx" <<'TSX'
+import { AbsoluteFill, Composition, registerRoot } from "raea";
+import { Camera3d } from "raea/camera";
+import { AmbientLight, DirectionalLight } from "raea/light";
+import { Cuboid, Mesh3d } from "raea/mesh";
+import { StandardMaterial } from "raea/pbr";
+import { Transform } from "raea/transform";
+function Cube() {
+  return (
+    <AbsoluteFill style={{ background: "#000" }}>
+      <>
+        <Camera3d transform={Transform.fromXyz(0, 2, 5).lookingAt([0, 0, 0])} />
+        <AmbientLight brightness={200} />
+        <DirectionalLight transform={Transform.fromXyz(3, 6, 4).lookingAt([0, 0, 0])} illuminance={10000} />
+        <Mesh3d>
+          <Cuboid half_size={[1, 1, 1]} />
+          <StandardMaterial base_color="#e76f51" />
+        </Mesh3d>
+      </>
+    </AbsoluteFill>
+  );
+}
+registerRoot(() => <Composition id="cube" component={Cube} width={320} height={180} fps={30} durationInFrames={10} />);
+TSX
+cube() { # FRAME [ENV ARGS]: cube.tsx's frame FRAME, rendered under `env ENV ARGS`
+  local f=$1; shift
+  (cd "$check/3d" && env "$@" RAEA_NO_TREE=1 RUST_BACKTRACE=1 "$raea" render cube.tsx --frame "$f" -o "cube-$f.png" > "render-$f.log" 2>&1) \
+    || { local s=$?; tail -40 "$check/3d/render-$f.log" >&2; fail "the unpacked raea didn't render a 3D frame${1:+ ($*)} (exit $s)"; }
+  [ -s "$check/3d/cube-$f.png" ] || fail "no 3D frame written${1:+ ($*)}"
+  ! grep -q "is all black" "$check/3d/render-$f.log" || fail "the unpacked raea's 3D frame is all black${1:+ ($*)}"
+}
+case $(uname -s) in
+  Linux) cube 3; cube 7 -u DISPLAY -u WAYLAND_DISPLAY ;;
+  Darwin) cube 3 ;;
+esac
 # the plugin catalog is in it (track 3, raea/plugins): a headless App with avian and Bevy's input, raea/input's virtual
 # gamepad pressed and read back. A raea built without --features "bevy-plugins,..." says "no plugin "avian" in this
 # build" here

@@ -74,6 +74,9 @@ pub struct Clip {
     pub fade_in: f64,
     pub fade_out: f64,
     pub place: Place,
+    /// a picture that moves, scales or fades: its place at frames from its first (its first frame's first), a
+    /// straight line between two; its crop is its first's throughout (CapCut's crop isn't keyed). None when it holds
+    pub keys: Vec<(i64, Place)>,
 }
 
 /// Where a picture sits: its centre in canvas pixels from the top left, its scale against the media fitted inside
@@ -96,7 +99,7 @@ impl Place {
 
 impl Default for Clip {
     fn default() -> Clip {
-        Clip { media: 0, start: 0, frames: 0, source_in: 0.0, speed: 1.0, volume: 1.0, fade_in: 0.0, fade_out: 0.0, place: Place { x: 0.0, y: 0.0, scale: 1.0, opacity: 1.0, crop: [0.0, 0.0, 1.0, 1.0] } }
+        Clip { media: 0, start: 0, frames: 0, source_in: 0.0, speed: 1.0, volume: 1.0, fade_in: 0.0, fade_out: 0.0, place: Place { x: 0.0, y: 0.0, scale: 1.0, opacity: 1.0, crop: [0.0, 0.0, 1.0, 1.0] }, keys: Vec::new() }
     }
 }
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "FSL-1.1-ALv2"
 publish = false
-description = "`raea export capcut`: a composition as a CapCut draft ready in its timeline, its footage and sounds as clips of their files and what raea draws as transparent overlays (docs/capcut.feature)"
+description = "`raea export capcut`: a composition as a CapCut draft ready in its timeline, written from its layers (raea-app-layers: footage and sounds as clips of their files, the graphics, captions and what is under the footage as movies; docs/capcut.feature, docs/layers.feature LA4b)"
 
 [dependencies]
 dunce = "1"
@@ -13,7 +13,6 @@ raea-io-capcut = { path = "../../io/capcut" }
 raea-io-alpha = { path = "../../io/alpha" }
 raea-io-media = { path = "../../io/media", default-features = false, features = ["soft-audio", "apple"] }
 raea-io-home = { path = "../../io/home" }
-# the renderer's own lookup of a staticFile path (/media/x), so the export finds the files the render drew
-raea-core-scene = { path = "../../core/scene" }
-serde_json = "1"
+# the composition exported in layers (layers.json), which the draft is written from (docs/layers.feature LA4b)
+raea-app-layers = { path = "../layers" }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }

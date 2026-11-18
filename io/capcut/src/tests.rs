@@ -158,3 +158,29 @@ fn ids_are_uuid_shaped_and_distinct() {
     assert_eq!(a.iter().collect::<std::collections::HashSet<_>>().len(), 1000);
     assert!(a.iter().all(|i| i.len() == 36 && i.as_bytes()[14] == b'4'));
 }
+
+/// CC2f: a picture's keys are its segment's common_keyframes, a group each for its centre across and up, its scale
+/// across and up and its opacity, each key at microseconds from the segment's start, straight lines between; a picture
+/// without keys has none
+#[test]
+fn a_keyed_picture_carries_its_keyframes_on_its_segment() {
+    let d = tmp("keys");
+    let mut tl = timeline(&d);
+    let from = Place { x: 840.0, y: 380.0, scale: 0.3333, opacity: 1.0, crop: [0.0, 0.0, 1.0, 1.0] };
+    tl.tracks[1].clips[0].keys = vec![(0, from), (15, Place { x: 540.0, y: 960.0, scale: 0.5, opacity: 0.5, ..from })];
+    let b = build(&tl, &Markers::default()).unwrap();
+    let seg = &b.info["tracks"][1]["segments"][0];
+    let groups = seg["common_keyframes"].as_array().unwrap();
+    let kinds: Vec<&str> = groups.iter().map(|g| g["property_type"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["KFTypePositionX", "KFTypePositionY", "KFTypeScaleX", "KFTypeScaleY", "KFTypeAlpha"]);
+    let at = |g: usize, k: usize| &groups[g]["keyframe_list"][k];
+    // 15 frames at 30 fps from the segment's start; the centre from (840, 380), right of and above the canvas's
+    // centre, to the canvas's centre
+    assert_eq!((at(0, 0)["time_offset"].as_i64(), at(0, 1)["time_offset"].as_i64()), (Some(0), Some(500_000)));
+    assert!((at(0, 0)["values"][0].as_f64().unwrap() - 300.0 / 540.0).abs() < 1e-5 && (at(1, 0)["values"][0].as_f64().unwrap() - 580.0 / 960.0).abs() < 1e-5);
+    assert_eq!((at(0, 1)["values"][0].as_f64(), at(1, 1)["values"][0].as_f64()), (Some(0.0), Some(0.0)));
+    assert_eq!((at(2, 1)["values"][0].as_f64(), at(3, 1)["values"][0].as_f64(), at(4, 1)["values"][0].as_f64()), (Some(0.5), Some(0.5), Some(0.5)));
+    assert!(groups.iter().all(|g| g["material_id"] == "" && g["keyframe_list"].as_array().unwrap().iter().all(|k| k["curveType"] == "Line")));
+    assert_eq!(b.info["tracks"][0]["segments"][0]["common_keyframes"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(&d);
+}

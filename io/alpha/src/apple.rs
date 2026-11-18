@@ -88,6 +88,14 @@ impl Writer {
                     row[x * 4..x * 4 + 4].copy_from_slice(&[src[x * 4 + 2], src[x * 4 + 1], src[x * 4], src[x * 4 + 3]]);
                 }
             }
+            // VideoToolbox describes the movie by its first frames: until a frame has alpha it encodes them without
+            // (depth 24), then starts a second sample description with alpha (depth 32), which Premiere won't import
+            // ("generic error") and Resolve reads as all opaque. So a first frame that's opaque everywhere (a layer that
+            // opens on a full-frame card) gets one corner pixel at 254 of 255: the movie has alpha from its first frame
+            // and keeps one description (it never goes back to 24 for opaque frames after)
+            if self.n == 0 && w > 0 && h > 0 && rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 255) {
+                *base.add((h - 1) * bpr + (w - 1) * 4 + 3) = 254;
+            }
             CVPixelBufferUnlockBaseAddress(&pb, CVPixelBufferLockFlags(0));
             pb.set_attachment(kCVImageBufferAlphaChannelModeKey, kCVImageBufferAlphaChannelMode_StraightAlpha, CVAttachmentMode::ShouldPropagate);
             let t = CMTime::with_seconds(self.n as f64 / self.fps, 6000);

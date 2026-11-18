@@ -193,8 +193,8 @@ impl BlitzPage {
         if let Some(render_creation) = render {
             group = group.set(bevy::render::RenderPlugin { render_creation, ..default() });
         }
-        // a registered Bevy plugin may change the group, as it does raea-render's Engine's: one that brings bevy_winit
-        // turns WinitPlugin off (two Apps in a process can't each make an event loop: the plugin build's page panicked)
+        // the registered Bevy plugins' changes, as raea-render's Engine's, and no WinitPlugin (raea_runtime_plugins::group):
+        // two Apps in a process can't each make an event loop (the plugin build's page panicked; #182 on Linux)
         app.add_plugins(raea_runtime_plugins::group(group)).add_plugins(PagePlugin);
         app.finish();
         app.cleanup();

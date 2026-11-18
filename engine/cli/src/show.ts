@@ -26,6 +26,14 @@ raea show [--title T] --question Q1 [--preview FILE] --choice A [--preview FILE]
   lists them), a folder in the project, or a Copy reference from the app; a title only when it's the only one and
   this folder isn't in another project. Else the one this folder is in. Who's showing it: --as NAME [--role ROLE]
   [--inbox NAME], else your harness's.
+raea show FILE... --label "PLACE TAG" [--detail "PARAGRAPH"] --label ... | --labels LABELS.json
+  Labels say what's where in what you show: each tag stands beside the picture, never on it, and points at its place
+  when the person's pointer is on it. PLACE is x0,y0,x1,y1 or x,y in the picture's own 0-1, then #N for the Nth file
+  shown (from 1), @T or @T-TO for a film's seconds, or part=KEY for a scene's part (its source key, or its name),
+  joined without spaces (0,0,.5,1#2@3-5); the tag is the rest, a few words. A --detail is the paragraph its --label
+  opens, where a tag isn't enough. --labels gives them as feed_post takes them. A sheet raea media sheet wrote comes
+  labelled by itself (its OUT.labels.json, beside it). When one picture holds several things (a sheet, a side by side,
+  a grid), label each instead of naming them by position in the title.
 raea show --on ITEM --working ID... [--ask TEXT]... [--status S [--states S1,S2...]] | --done ID... [--note LINE] [--sub NAME]
 raea show --on ITEM --working ID --sign N --clip FILE --render HASH
 raea show FILE... --replaces ITEM --done ID...
@@ -37,7 +45,7 @@ raea show FILE... --replaces ITEM --done ID...
   closes when the person retires it, never with --done. raea notes post sends all of these from the notes.
 `;
 
-const WITH_VALUE = new Set(["--title", "--ask", "--project", "--replaces", "--as", "--role", "--inbox", "--question", "--choice", "--preview", "--on", "--working", "--done", "--note", "--sub", "--status", "--states", "--sign", "--clip", "--render"]);
+const WITH_VALUE = new Set(["--label", "--detail", "--labels", "--title", "--ask", "--project", "--replaces", "--as", "--role", "--inbox", "--question", "--choice", "--preview", "--on", "--working", "--done", "--note", "--sub", "--status", "--states", "--sign", "--clip", "--render"]);
 const FLAGS = new Set(["--open"]);
 
 /** The harness an agent runs in, named as the feed shows it, from the program that started this command (native.ts
@@ -77,9 +85,20 @@ export function parseShow(args: string[], cwd: string) {
   // the questions in order: each --question starts one and its --choice's follow; a --preview after a --choice is that
   // choice's, after the --question (before any choice) the question's own
   const asked: { ask: string; choices: { label: string; preview?: string }[]; preview?: string }[] = [];
+  // the labels in order (docs/callouts.feature CO2b): each --label a place and its tag, a --detail its paragraph
+  const labels: { place: string; text: string; detail?: string }[] = [];
   for (let i = 0; i < args.length; i++) {
     const v = args[i + 1];
-    if (args[i] === "--question" && v !== undefined) asked.push({ ask: v, choices: [] });
+    if (args[i] === "--label" && v !== undefined) {
+      const m = /^\s*(\S+)\s+(\S[\s\S]*)$/.exec(v);
+      if (!m) throw new Error(`--label "${v}" is a place, then its tag: --label "0,0,.5,1 v1, hook first"\n${SHOW_USAGE}`);
+      labels.push({ place: m[1], text: m[2].trim() });
+    } else if (args[i] === "--detail" && v !== undefined) {
+      const l = labels.at(-1);
+      if (!l) throw new Error(`--detail goes after the --label whose paragraph it is\n${SHOW_USAGE}`);
+      if (l.detail !== undefined) throw new Error(`one --detail for the label "${l.text}"\n${SHOW_USAGE}`);
+      l.detail = v;
+    } else if (args[i] === "--question" && v !== undefined) asked.push({ ask: v, choices: [] });
     else if (args[i] === "--choice" && v !== undefined) asked.at(-1)?.choices.push({ label: v });
     else if (args[i] === "--preview" && v !== undefined) {
       const q = asked.at(-1);
@@ -92,11 +111,27 @@ export function parseShow(args: string[], cwd: string) {
   if (args.includes("--choice") && args.indexOf("--choice") < args.indexOf("--question")) throw new Error(`a --choice goes after its --question\n${SHOW_USAGE}`);
   // several questions, or any preview: one item with them all (host/show.ts questions); else the one question as before
   const questions = asked.length > 1 || asked.some((q) => q.preview || q.choices.some((c) => c.preview)) ? asked : undefined;
+  if ((labels.length || args.includes("--labels")) && (!files.length || questions || asked.length)) throw new Error(`labels go on the files you show: raea show FILE --label "PLACE TAG"\n${SHOW_USAGE}`);
+  if (labels.length && args.includes("--labels")) throw new Error(`--label or --labels, not both\n${SHOW_USAGE}`);
   if (questions && files.length) throw new Error(`with several questions or previews, each file is a --preview of the question or choice it shows\n${SHOW_USAGE}`);
-  return { files, choices, questions, open: args.includes("--open"), title: one("--title"), ask: one("--ask"), asks: many("--ask"), project: one("--project"), replaces: one("--replaces"), question: questions ? undefined : one("--question"), as: one("--as"), role: one("--role"), inbox: one("--inbox"), on: one("--on"), working: many("--working"), done: many("--done"), note: one("--note"), sub: one("--sub"), status: one("--status"), states: one("--states")?.split(",").map((s) => s.trim()).filter(Boolean), sign: one("--sign"), clip: one("--clip"), render: one("--render") };
+  return { labels, labelsFile: one("--labels"), files, choices, questions, open: args.includes("--open"), title: one("--title"), ask: one("--ask"), asks: many("--ask"), project: one("--project"), replaces: one("--replaces"), question: questions ? undefined : one("--question"), as: one("--as"), role: one("--role"), inbox: one("--inbox"), on: one("--on"), working: many("--working"), done: many("--done"), note: one("--note"), sub: one("--sub"), status: one("--status"), states: one("--states")?.split(",").map((s) => s.trim()).filter(Boolean), sign: one("--sign"), clip: one("--clip"), render: one("--render") };
 }
 
-export function showVerb(ask: Ask, args: string[], cwd: string, env: Record<string, string | undefined>): string {
+/** A --labels file's labels, as feed_post takes them: a list, or { "labels": [...] } (raea media sheet's OUT.labels.json). */
+export function labelsIn(text: string, name: string): unknown[] {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`--labels ${name} isn't JSON: ${(e as Error).message}`);
+  }
+  const list = Array.isArray(json) ? json : (json as { labels?: unknown } | null)?.labels;
+  if (!Array.isArray(list)) throw new Error(`--labels ${name} is a list of labels, or { "labels": [...] }, each { text, detail?, box? | point? | part?, frame?, t?, to? }`);
+  return list;
+}
+
+/** `listed`: the --labels file's labels, read by the caller (labelsIn), which has the files. */
+export function showVerb(ask: Ask, args: string[], cwd: string, env: Record<string, string | undefined>, listed?: unknown[]): string {
   if (!args.length || args[0] === "--help") return SHOW_USAGE;
   const a = parseShow(args, cwd);
   const parent = (): { name: string; pid: number } | undefined => {
@@ -132,7 +167,9 @@ export function showVerb(ask: Ask, args: string[], cwd: string, env: Record<stri
   }
   if (a.working.length) throw new Error(`--working marks comments without showing anything: raea show --on ITEM --working ID\n${SHOW_USAGE}`);
   if (a.done.length && !a.replaces) throw new Error(`--done with files settles comments on the item they replace: add --replaces ITEM\n${SHOW_USAGE}`);
-  const r = ask("show", { files: a.files, title: a.title, ask: a.ask, question: a.question, choices: a.choices, questions: a.questions, open: a.open, project: a.project, replaces: a.replaces, cwd, by }) as
+  if (a.labelsFile !== undefined && !listed) throw new Error(`--labels ${a.labelsFile}: its labels weren't read (raea's own handler reads the file)`);
+  const labels = a.labels.length ? a.labels : listed;
+  const r = ask("show", { ...(labels?.length ? { labels } : {}), files: a.files, title: a.title, ask: a.ask, question: a.question, choices: a.choices, questions: a.questions, open: a.open, project: a.project, replaces: a.replaces, cwd, by }) as
     | { opened: string[] }
     | { kind: "item" | "composition"; id: string; type: string; title: string; project: string; workspace: string; inbox: string; brought?: boolean };
   if ("opened" in r) return `The raea app isn't on this Mac, so ${r.opened.length === 1 ? "it opened" : `${r.opened.length} files opened`} in the Mac's own viewer: nothing was posted and nothing comes back. Install raea (raea.io) to show work as items the person can answer.\n`;

@@ -304,6 +304,23 @@ mod tests {
     }
 
     #[test]
+    fn the_scene_sig_changes_with_what_component_rows_are_made_from() {
+        let with = |m: Option<(&str, Value)>| {
+            let mut it = item("mesh", serde_json::json!({"components": [{"type": "Detail", "value": {"near": 10}}]}));
+            it.material = m.map(|(kind, props)| Node3 { kind: kind.into(), props: std::sync::Arc::new(props.as_object().cloned().unwrap_or_default()), shape: None, at: None, kids: Vec::new().into() });
+            vec![it]
+        };
+        let field = |w: f64| with(Some(("StandardMaterial", serde_json::json!({"color": "#000000", "field:emissive_exposure_weight": w}))));
+        let shader = |t: f64| with(Some(("ThreeShaderMaterial", serde_json::json!({"uniforms": {"u_k": 1}, "time": t}))));
+        // a material's animated field (FC1c) and a shader's time each change it: the fast path can't keep their rows
+        assert_ne!(scene_sig(&field(0.0)), scene_sig(&field(1.0)));
+        assert_ne!(scene_sig(&shader(0.0)), scene_sig(&shader(0.5)));
+        // still components the same and nothing animated: the same sig, so LT21's fast path holds
+        assert_eq!(scene_sig(&field(0.5)), scene_sig(&field(0.5)));
+        assert_eq!(scene_sig(&with(None)), scene_sig(&with(None)));
+    }
+
+    #[test]
     fn each_frame_takes_its_own_post_processing() {
         let sun = item("light", serde_json::json!({}));
         let sky = vec![sun.clone(), item("atmosphere", serde_json::json!({"light": true})), item("bloom", serde_json::json!({"intensity": 0.35}))];
@@ -380,13 +397,30 @@ pub fn light_sig(its: &[Item]) -> String {
     s
 }
 
-/// light_sig, and each part's Bevy components (its <BevyComponent>s, a Detail, its layer key): what a live frame's fast
-/// path (raea-runtime-scene fast.rs) doesn't diff, so the frame where either changes goes the full way, and a frame
-/// where neither did leaves the component rows as they were sent
+/// light_sig, and everything a part's component rows are made from: its Bevy components (its <BevyComponent>s, a
+/// Detail, its layer key), its material's animated fields (material_fields, docs/control.feature FC1c) and a three.js
+/// shader's uniforms, time and textures (three_uniforms). A live frame's fast path (raea-runtime-scene fast.rs) doesn't
+/// diff component rows, so the frame where any of these changes goes the full way, and a frame where none did leaves
+/// the rows as they were sent. (11-18, v0.1.8-rc1: with the components alone, a material's animated field and a shader's
+/// time stayed at the first frame in live play; bevy-ts's material-field-live failed on Windows and the Mac.)
 pub fn scene_sig(its: &[Item]) -> String {
     let mut s = light_sig(its);
-    for c in its.iter().filter_map(|i| i.props.get("components")) {
-        s.push_str(&c.to_string());
+    for it in its {
+        if let Some(c) = it.props.get("components") {
+            s.push_str(&c.to_string());
+        }
+        let Some(m) = it.material.as_ref() else { continue };
+        for (k, v) in m.props.iter().filter(|(k, _)| k.starts_with("field:")) {
+            s.push_str(k);
+            s.push_str(&v.to_string());
+        }
+        if &*m.kind == "ThreeShaderMaterial" {
+            for k in ["uniforms", "time", "textures"] {
+                if let Some(v) = m.props.get(k) {
+                    s.push_str(&v.to_string());
+                }
+            }
+        }
     }
     s
 }
