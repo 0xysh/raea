@@ -29,6 +29,8 @@ raea-core-brief = { path = "../../core/brief" }
 raea-app-workspace = { path = "../../apps/workspace" }
 # raea-runtime-react's defaults
 raea-runtime-react = { path = "../../runtime/react", default-features = false, features = ["h264", "av1", "scripts", "modules", "network", "ml"] }
+# `raea wear bake`: raea/wear's bake from a shell (docs/wear.feature WR4)
+raea-runtime-wear = { path = "../../runtime/wear" }
 # the sound of its renders and plays: <Seedling> samples and speech (raea-runtime-sound's features)
 raea-runtime-sound = { path = "../../runtime/sound", features = ["seedling", "ml"] }
 raea-runtime-export = { path = "../../runtime/export" }

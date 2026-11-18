@@ -99,6 +99,11 @@ raea-sys-canvas = "systems"
 raea-sys-tweak = "systems"
 raea-sys-filters = "systems"
 raea-sys-wear = "systems"
+raea-sys-weathering = "systems"
+raea-sys-runoff = "systems"
+raea-sys-touch = "systems"
+raea-sys-exposure = "systems"
+raea-sys-glb = "systems"
 raea-sys-procmat = "systems"
 raea-sys-grass = "systems"
 raea-sys-page = "systems"
@@ -151,6 +156,7 @@ raea-runtime-bundle-lib = "runtime"
 raea-runtime-calls = "runtime"
 raea-runtime-shots = "runtime"
 raea-runtime-canvas = "runtime"
+raea-runtime-wear = "runtime"
 raea-runtime-export = "runtime"
 raea-runtime-pagestore = "runtime"
 raea-runtime-cssurls = "runtime"
@@ -270,3 +276,11 @@ raea-sys-page-net = true
 raea-sys-page-ops = true
 raea-sys-fonts = true
 raea-sys-image = true
+# rain's run-off over a model's surfaces (the weathering bake builds its flow and stains on it)
+raea-sys-runoff = true
+# where hands, feet and wheels wear a model, and where things belong (the weathering bake's touch and spots)
+raea-sys-touch = true
+# what a model is exposed to through the year: the sun by date, driven snow, where blown things settle (the weathering bake's causes3)
+raea-sys-exposure = true
+# a .glb read as JSON and bytes and written back (the weathering bake reads and rewrites models through it)
+raea-sys-glb = true

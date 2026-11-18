@@ -12,6 +12,8 @@ ml = ["dep:raea-sys-ml", "dep:raea-sys-speech"]
 
 [dependencies]
 raea-runtime-plugins = { path = "../plugins" }
+# raea/wear's bake as the native call wear.bake, registered with these (docs/wear.feature WR4)
+raea-runtime-wear = { path = "../wear" }
 raea-native = { path = "../../engine/native", default-features = false }
 raea-core-shape = { path = "../../core/shape" }
 raea-core-place = { path = "../../core/place" }

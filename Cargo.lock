@@ -14258,6 +14258,7 @@ dependencies = [
  "raea-runtime-plugins",
  "raea-runtime-react",
  "raea-runtime-sound",
+ "raea-runtime-wear",
  "raea-sys-index",
  "regex",
  "serde",
@@ -15112,6 +15113,7 @@ dependencies = [
  "raea-io-net",
  "raea-native",
  "raea-runtime-plugins",
+ "raea-runtime-wear",
  "raea-sys-fonts",
  "raea-sys-grab",
  "raea-sys-mix",
@@ -15565,6 +15567,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-runtime-wear"
+version = "0.1.0"
+dependencies = [
+ "raea-io-assets",
+ "raea-native",
+ "raea-sys-bake",
+ "raea-sys-glb",
+ "raea-sys-weathering",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-runtime-world"
 version = "0.1.0"
 dependencies = [
@@ -15731,6 +15745,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-sys-exposure"
+version = "0.1.0"
+dependencies = [
+ "parry3d",
+]
+
+[[package]]
 name = "raea-sys-filters"
 version = "0.1.0"
 dependencies = [
@@ -15858,6 +15879,13 @@ dependencies = [
  "raea-sys-material",
  "raea-sys-sampler",
  "raea-sys-shader",
+ "serde_json",
+]
+
+[[package]]
+name = "raea-sys-glb"
+version = "0.1.0"
+dependencies = [
  "serde_json",
 ]
 
@@ -16216,6 +16244,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-sys-runoff"
+version = "0.1.0"
+dependencies = [
+ "parry3d",
+ "rayon",
+]
+
+[[package]]
 name = "raea-sys-sampler"
 version = "0.1.0"
 dependencies = [
@@ -16344,6 +16380,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-sys-touch"
+version = "0.1.0"
+dependencies = [
+ "parry3d",
+]
+
+[[package]]
 name = "raea-sys-tweak"
 version = "0.1.0"
 dependencies = [
@@ -16395,6 +16438,21 @@ dependencies = [
  "bevy",
  "raea-core-program",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-weathering"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "parry3d",
+ "raea-sys-exposure",
+ "raea-sys-glb",
+ "raea-sys-runoff",
+ "raea-sys-touch",
+ "rayon",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]

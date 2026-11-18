@@ -30,7 +30,7 @@ const GROUPS: [string, string, string[]][] = [
   ["Check", "What's wrong before anyone watches it.", ["check", "judge", "fingerprint", "findings", "scene", "light", "world", "solid", "next", "doctor", "hook", "traces"]],
   ["Footage", "Takes, cuts and the camera, from your own media.", ["media", "cut", "frame", "track", "splat", "mezz", "neural"]],
   ["Sound", "Music read, foley and instruments made on this machine.", ["song", "sounds", "sao", "tokensynth", "setup-audio"]],
-  ["Generate and 3D tools", "Generated media, physics bakes, clothes and motion for SOMA's body, Blender and Godot.", ["gen", "physics", "clothes", "motion", "blender", "godot"]],
+  ["Generate and 3D tools", "Generated media, physics and weathering bakes, clothes and motion for SOMA's body, Blender and Godot.", ["gen", "physics", "wear", "clothes", "motion", "blender", "godot"]],
   ["Agents and setup", "What an agent reads and shows the person, and the tools raea installs.", ["guide", "context", "notes", "show", "skill", "skills", "setup", "bug"]],
 ]
 /** A verb's page: VERB.md, but index.md is this section's own page, so raea index's is indexer.md */
@@ -38,7 +38,7 @@ const pageOf = (verb: string) => (verb === "index" ? "indexer.md" : `${verb}.md`
 const groupOf = new Map(GROUPS.flatMap(([g, , vs]) => vs.map((v, i) => [v, { g, i }] as const)))
 
 // a verb with its own parser lists its forms itself: that list is its usage
-const OWN_HELP: Record<string, string[]> = { media: ["media", "help"], gen: ["gen"], blender: ["blender"], godot: ["godot"], physics: ["physics"] }
+const OWN_HELP: Record<string, string[]> = { media: ["media", "help"], gen: ["gen"], blender: ["blender"], godot: ["godot"], physics: ["physics"], wear: ["wear"] }
 function ownHelp(v: string): string {
   return run(OWN_HELP[v] ?? [v]).replace(/^REFUSED\s+/, "").replace(/^usage:\s*/, "").split("\n").map((l) => l.replace(/^\s{7}(raea )/, "$1").trimEnd()).join("\n")
 }

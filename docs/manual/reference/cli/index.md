@@ -14,7 +14,7 @@ they match the version they were made from; the prose around them is written by 
 - **Help.** `raea help` (or `raea` alone) lists every verb's forms. `raea help --json` gives the same as data: each
   verb's forms, its flags, how many values each flag takes, how many arguments it takes and where it runs.
 - **Strict arguments.** A verb refuses a flag or an argument its forms don't name, rather than ignoring it, so a
-  typo is caught. The four verbs with parsers of their own (`media`, `gen`, `physics`, `blender`) list their own forms.
+  typo is caught. The five verbs with parsers of their own (`media`, `gen`, `physics`, `blender`, `godot`) list their own forms.
 - **Output.** A verb prints its result on stdout and exits 0. When it can't do what it was asked, it prints a line
   starting with `REFUSED` that says why and what to do instead, and exits 1. A file refused again is told what
   changed since the last refusal.
@@ -105,12 +105,13 @@ Music read, foley and instruments made on this machine.
 
 ## Generate and 3D tools
 
-Generated media, physics bakes, clothes and motion for SOMA's body, Blender and Godot.
+Generated media, physics and weathering bakes, clothes and motion for SOMA's body, Blender and Godot.
 
 | Verb | What it does |
 | --- | --- |
 | [`raea gen`](gen.md) | Generate images, video, music, sound, speech, 3D models and text through made.app, fal, Replicate, OpenRouter, Modal or ComfyUI. |
 | [`raea physics`](physics.md) | Make the bakes <Physics> and <Goo> play: rigid bodies, soft goo, and parts cut out of a .glb. |
+| [`raea wear`](wear.md) | Bake what weathers a model: where rain reaches and runs, what the sun sees, edges, hollows and touch, as maps raea/wear reads. |
 | [`raea clothes`](clothes.md) | Clothes for SOMA's body from words: make sews a garment from a sewing pattern (GarmentCode, MIT), cut to SOMA's measurements and draped by raea's own cloth, as assets/clothes/NAME.json and its .glb; cover lays one on the skin by procedure; wear puts garments on a body. |
 | [`raea motion`](motion.md) | Body motion made on this machine by Kimodo (NVIDIA), on MLX on a Mac and on PyTorch on Linux and Windows: a SOMA clip from a line of words and, with --keys, Kimodo constraints (full-body keyframes, hand or foot targets, a root path, as sdk/body/tools/between.ts writes them), as the clip sdk/body/tools/fromkimodo.ts reads. |
 | [`raea blender`](blender.md) | Run a Blender Python script headless, with raea's library of mesh scripts: convert, decimate, repair, split, bake, rig, cloth. |

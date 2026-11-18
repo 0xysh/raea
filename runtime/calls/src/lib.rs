@@ -201,6 +201,7 @@ pub fn call(name: &str, v: &Value) -> R<Value> {
 pub fn register() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
+        raea_runtime_wear::register(raea_runtime_wear::Place { dir: composition_dir, media: raea_core_scene::media_path });
         const BOUNDS: &str = "{ min: [number, number, number]; max: [number, number, number] }";
         const SOLID: &str = "{ id: number; expr: string }";
         const SECTION: &str = "{ polygons: [number, number][][]; area: number; contours: number; bounds: { min: [number, number]; max: [number, number] } }";
