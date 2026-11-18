@@ -281,12 +281,25 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         surface (LT4) a cell sees LT2's stand-in (albedo 0.5) and is keyed by the side a ray meets (its normal faces
         the ray); LT2's probe rays seed it, the screen's 8x8-tile paths come after; behind RAEA_GI=1, timed per pass
         | crate       | file                 | lines | job                                                                 |
-        | raea-sys-rt | src/cache.rs         | 260   | the cache's buffers (2^20 cells, 84 bytes each), its passes in order |
+        | raea-sys-rt | src/cache.rs         | 130   | the cache's buffers (2^20 cells, 84 bytes each), its passes in order |
         | raea-sys-rt | src/cache.wesl       | 170   | the hash grid: cell size by distance, key and checksum, claim, read  |
-        | raea-sys-rt | src/cache_update.wesl | 150  | each live cell: sun and sky, one bounce into last frame's cache, blend |
         | raea-sys-rt | src/compact.wesl     | 80    | cells age out; the live ones listed (a two-level prefix sum)         |
-        | raea-sys-rt | src/gi.wesl          | +20   | a probe ray's hit reads its cell in place of the flat stand-in       |
+        | raea-sys-rt | src/gi.wesl          | +90   | a probe ray's hit reads its cell; `learn` and `blend`, the update     |
         | raea-sys-rt | src/gi.rs            | +40   | the cache's GPU ms per pass and its live cells in RAEA_GI_STATS      |
+      And so far (11-17, branch realism; not done): the cache runs behind RAEA_GI=1 before the probes each frame, in
+        two compute passes (upkeep: cells age, the live ones listed; update: 40000 cells learn the sun and one bounce
+        into last frame's cache, and blend), and the probes' hits read it. Measured on Berlin's walk (light-walk) at
+        1080p by GPU timestamps, 131072 probe rays a frame:
+        | smallest cell | cache ms p50 | p90   | probes ms p50 | live cells p50 | max       |
+        | 0.15 m        | 0.931        | 1.211 | 0.310         | 541,923        | 1,032,116 |
+        | 0.5 m         | 0.512        | 0.688 | 0.259         | 210,165        | 479,631   |
+        | 1 m           | 0.456        | 0.541 | 0.241         | 99,018         | 189,480   |
+        | 0.5 m, 524288 rays | 0.594   | 0.718 | 0.799         | 289,538        | 488,563   |
+      And what they say: 0.5 m is the default; 0.15 m fills the table. Decay and listing over all 2^20 cells set a floor
+        near 0.4 ms; the frame's work p50 moves about 5 ms run to run (raster alone 45.4 ms), so the timestamps are the
+        measure. LT2's probes cost 0.253 ms at 131072 rays. Open: the cache lights nothing on screen yet (as LT2's
+        grid: Metal's sampler limit), so its light is unchecked; the persistent TLAS, compaction and the screen's
+        8x8-tile paths are still to build
 
     Scenario: LT4. What a ray hit sees
       Given every MaterialExtension writes the deferred G-buffer with its own surface code (D4; procmat's is first,

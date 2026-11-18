@@ -1,9 +1,12 @@
-// raea GI's world radiance cache, its first form (gi.rs; docs/realism.feature LT2): a grid of probes around the
-// camera, each refreshed by 64 rays through the scene's TLAS. A ray that misses sees the sky (the camera's
-// environment); one that hits sees a flat stand-in surface (albedo 0.5, facing the ray) lit by the sun through one
-// shadow ray and by the sky's diffuse light, unshadowed, until hits know their surface (LT3, LT4). Each probe keeps a
-// running mean of its ambient cube (the light arriving along +-x, +-y, +-z) and writes it into Bevy's irradiance
-// volume, which every standard material samples in place of its environment's diffuse light.
+// raea GI's probes (gi.rs; docs/realism.feature LT2, LT3): a grid of probes around the camera, each refreshed by 64
+// rays through the scene's TLAS. A ray that misses sees the sky (the camera's environment); one that hits sees a flat
+// stand-in surface (albedo 0.5, facing the ray) until hits know their surface (LT4), lit by what the world cache has
+// learned there (cache.wesl: the sun and every bounce, the sky shadowed by what's around), or, where its cell is new,
+// by the sun through one shadow ray and the sky's diffuse light, unshadowed. Each probe keeps a running mean of its
+// ambient cube (the light arriving along +-x, +-y, +-z) and writes it into Bevy's irradiance volume, which every
+// standard material samples in place of its environment's diffuse light. `learn` and `blend` are the cache's update.
+import raea_sys_rt::cache::{read, rand, hash, radiance, cells, deltas, life, live, count, learned, upkeep, LIFE};
+
 enable wgpu_ray_query;
 
 struct Params {
@@ -64,11 +67,6 @@ fn grid_ijk(i: u32) -> vec3<u32> {
     return vec3<u32>(i % r.x, (i / r.x) % r.y, i / (r.x * r.y));
 }
 
-fn hash(v: u32) -> u32 {
-    let s = v * 747796405u + 2891336453u;
-    let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
-    return (w >> 22u) ^ w;
-}
 fn unit(h: u32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
@@ -135,6 +133,41 @@ fn sky_irradiance(n: vec3<f32>) -> vec3<f32> {
     return textureSampleLevel(sky_diffuse, sky_sampler, sky_dir(n), 0.0).rgb * p.sun.w;
 }
 
+// The light arriving at a stand-in surface (irradiance, lux): what the cache has learned there, or where its cell is
+// new, the sun through one shadow ray and the sky's diffuse light, unshadowed (LT2's stand-in).
+fn irradiance_at(hit: vec3<f32>, n: vec3<f32>, keep: u32, seed: ptr<function, u32>) -> vec3<f32> {
+    let cached = read(hit, n, keep, seed);
+    if (cached.a > 0.0) {
+        return cached.rgb;
+    }
+    let ndl = dot(n, p.sun_dir.xyz);
+    var e = PI * sky_irradiance(n);
+    if (ndl > 0.0 && sees_sun(hit + n * 0.02, p.sun_dir.xyz)) {
+        e += p.sun.xyz * ndl;
+    }
+    return e;
+}
+
+// a direction about n, by the cosine (Malley: a point on the disc lifted to the hemisphere)
+fn cosine(n: vec3<f32>, seed: ptr<function, u32>) -> vec3<f32> {
+    let r = sqrt(rand(seed));
+    let a = 2.0 * PI * rand(seed);
+    let t = normalize(cross(n, select(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), abs(n.x) > 0.9)));
+    let b = cross(n, t);
+    return normalize(t * (r * cos(a)) + b * (r * sin(a)) + n * sqrt(max(1.0 - r * r, 0.0)));
+}
+
+fn luma(c: vec3<f32>) -> f32 {
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+// whether a listed cell learns this frame: about upkeep.run.y of the live cells do, the same ones in `learn` and
+// `blend` (the same first draw from the cell's seed)
+fn learns(cell: u32, seed: ptr<function, u32>) -> bool {
+    *seed = hash(cell ^ upkeep.run.x);
+    return rand(seed) < f32(upkeep.run.y) / f32(max(count, 1u));
+}
+
 // one workgroup a probe, one ray a thread each round
 @compute @workgroup_size(64, 1, 1)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
@@ -161,13 +194,8 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) l
             l = sky_radiance(d);
         } else {
             let hit = at + d * t;
-            let n = -d;
-            let ndl = dot(n, p.sun_dir.xyz);
-            var sun = vec3(0.0);
-            if (ndl > 0.0 && sees_sun(hit + n * 0.02, p.sun_dir.xyz)) {
-                sun = p.sun.xyz * ndl / PI;
-            }
-            l = ALBEDO * (sun + sky_irradiance(n));
+            var seed = hash(p.run.z * 7919u + round * 104729u + probe * RAYS + li);
+            l = ALBEDO / PI * irradiance_at(hit, -d, LIFE, &seed);
         }
         light[li] = l;
         dirs[li] = d;
@@ -212,4 +240,61 @@ fn resolve(@builtin(global_invocation_id) id: vec3<u32>) {
         let c = select(vec3(0.0), cubes[probe * 6u + face].rgb, held);
         textureStore(voxels, vec3<u32>(ijk.x, ijk.y + r.y * (face & 1u), ijk.z + r.z * (face / 2u)), vec4(c, 1.0));
     }
+}
+
+// The cache's update, a thread a listed cell (an indirect dispatch: compact.wesl's count): the light arriving at the
+// cell this frame, from the sun through one shadow ray and one bounce by the cosine, which sees the cell it meets
+// (last frame's light there, times the stand-in's albedo) or the sky. Over frames that is every bounce.
+@compute @workgroup_size(64, 1, 1)
+fn learn(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (id.x >= count) {
+        return;
+    }
+    let cell = live[id.x];
+    var seed = 0u;
+    if (!learns(cell, &seed)) {
+        return;
+    }
+    let c = cells[cell];
+    let n = c.n.xyz;
+    let o = c.at.xyz + n * 0.02;
+    var e = vec3(0.0);
+    let ndl = dot(n, p.sun_dir.xyz);
+    if (ndl > 0.0 && sees_sun(o, p.sun_dir.xyz)) {
+        e = p.sun.xyz * ndl;
+    }
+    let d = cosine(n, &seed);
+    let t = first_hit(o, d);
+    if (t < 0.0) {
+        // a cosine sample's irradiance: pi times the radiance it sees
+        e += PI * sky_radiance(d);
+    } else {
+        // the cell met lives as long as the one reading it
+        e += ALBEDO * irradiance_at(o + d * t, -d, atomicLoad(&life[cell]), &seed);
+    }
+    learned[id.x] = vec4(e, 1.0);
+}
+
+// Each cell that learned this frame takes its new light into its mean: up to upkeep.size.z frames, fewer while its
+// light is changing (its luminance step against its light), so a door opening or a sky changing shows within frames.
+@compute @workgroup_size(64, 1, 1)
+fn blend(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (id.x >= count) {
+        return;
+    }
+    let cell = live[id.x];
+    var seed = 0u;
+    if (!learns(cell, &seed)) {
+        return;
+    }
+    let old = radiance[cell];
+    let now = learned[id.x].rgb;
+    let delta = deltas[cell];
+    let n = min(old.a + 1.0, upkeep.size.z);
+    let most = mix(upkeep.size.z, 1.0, pow(saturate(abs(delta) / max(luma(old.rgb), 0.001)), 1.0 / 8.0));
+    let reset = upkeep.run.z == 1u;
+    let w = select(1.0 / min(n, most), 1.0, reset);
+    let mixed = mix(old.rgb, now, w);
+    deltas[cell] = select(mix(delta, luma(mixed) - luma(old.rgb), 1.0 / 8.0), 0.0, reset);
+    radiance[cell] = vec4(mixed, n);
 }

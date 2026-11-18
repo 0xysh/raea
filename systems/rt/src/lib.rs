@@ -7,6 +7,8 @@
 
 // traced ambient occlusion, the TLAS's first reader; raea GI's world probes (RAEA_GI=1, docs/realism.feature LT2)
 pub mod gi;
+// raea GI's world cache: a hash grid of the light on the surfaces rays hit (LT3)
+pub(crate) mod cache;
 pub mod traced_ao;
 
 /// Every traced pass asked for: traced AO (RAEA_TRACED_AO), raea GI's probes (RAEA_GI). Nothing when neither is.
