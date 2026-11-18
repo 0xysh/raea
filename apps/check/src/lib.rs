@@ -24,6 +24,8 @@ mod defects;
 use defects::*;
 mod text;
 use text::*;
+/// a video read through FFmpeg, or raea's own decoders where it isn't installed
+use raea_app_check_read::{self as read, Probe};
 pub mod quick;
 pub mod hook;
 pub use raea_app_check_inbox as inbox;
@@ -145,7 +147,7 @@ fn measured(args: &[String], taste: Vec<Taste>) -> R<(String, Vec<Issue>, Vec<St
     if !std::path::Path::new(&video).exists() {
         return Err(format!("no file at {video}\n{USAGE}"));
     }
-    let probe = Probe::of(&video)?;
+    let probe = read::probe(&video)?;
     let (mut issues, mut passed) = (Vec::new(), Vec::new());
     let manifest: Option<Value> = match flag(args, "--manifest") {
         Some(m) => Some(serde_json::from_str(&std::fs::read_to_string(m).map_err(|e| format!("{m}: {e}"))?).map_err(|e| format!("{m}: {e}"))?),
@@ -228,47 +230,6 @@ fn report(video: &str, issues: Vec<Issue>, more: Vec<Finding>, passed: Vec<Strin
         s.push_str(&line);
         s.push('\n');
     }
-    Ok((s + &format!("raea check: {}", finding::count(&found)), bad))
-}
-
-struct Probe {
-    w: f64,
-    h: f64,
-    duration: f64,
-    /// when the picture ends, on the clock FFmpeg's filters read: it starts at the file's first stream, sound can run on
-    /// past the picture, and the container's duration counts that
-    picture: f64,
-    audio: bool,
-}
-
-/// Where the picture's last packet ends, for a container that doesn't state the video stream's own length (Matroska)
-fn last_packet_end(video: &str) -> Option<f64> {
-    let out = Command::new("ffprobe").args(["-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time,duration_time", "-of", "csv=p=0", video]).output().ok()?;
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|l| {
-            let mut parts = l.split(',');
-            let t: f64 = parts.next()?.trim().parse().ok()?;
-            Some(t + parts.next().and_then(|d| d.trim().parse::<f64>().ok()).unwrap_or(0.0))
-        })
-        .max_by(f64::total_cmp)
-}
-
-impl Probe {
-    fn of(video: &str) -> R<Probe> {
-        let entries = "stream=codec_type,width,height,r_frame_rate,duration,start_time:format=duration,start_time";
-        let out = Command::new("ffprobe").args(["-v", "error", "-show_entries", entries, "-of", "json", video]).output().map_err(|e| format!("ffprobe: {e}"))?;
-        let v: Value = serde_json::from_slice(&out.stdout).map_err(|e| format!("ffprobe: {e}"))?;
-        let streams = v["streams"].as_array().cloned().unwrap_or_default();
-        let vid = streams.iter().find(|s| s["codec_type"] == "video").ok_or("no video stream")?;
-        let seconds = |field: &Value| field.as_str().and_then(|d| d.parse::<f64>().ok());
-        let duration = seconds(&v["format"]["duration"]).unwrap_or(0.0);
-        let origin = seconds(&v["format"]["start_time"]).unwrap_or(0.0);
-        let picture = match seconds(&vid["duration"]) {
-            Some(length) => seconds(&vid["start_time"]).unwrap_or(origin) - origin + length,
-            None => last_packet_end(video).map_or(duration, |end| end - origin),
-        };
-        let audio = streams.iter().any(|s| s["codec_type"] == "audio");
-        Ok(Probe { w: vid["width"].as_f64().unwrap_or(1920.0), h: vid["height"].as_f64().unwrap_or(1080.0), duration, picture, audio })
-    }
+    s.push_str(&format!("raea check: {}", finding::count(&found)));
+    Ok((s, bad))
 }

@@ -19,6 +19,8 @@ raea-io-trace = { path = "../../io/trace" }
 raea-io-ffmpeg = { path = "../../io/ffmpeg" }
 # caption contrast and loudness, measured as `raea world` measures a render (DR2)
 raea-sys-measure = { path = "../../systems/measure" }
+# what it reads of a video, through FFmpeg or raea's own decoders where it isn't installed
+raea-app-check-read = { path = "read" }
 # the flashing screen (WCAG 2.3.1), split out to keep this crate small
 raea-app-check-flash = { path = "flash" }
 # what the person sent from the raea app, handed to the agent (split out to keep this crate small)

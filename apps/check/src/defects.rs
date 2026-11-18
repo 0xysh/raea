@@ -113,6 +113,9 @@ pub(crate) fn flash_frames(luma: &[f32], fps: f64) -> Vec<(f64, String)> {
 
 /// Each frame's mean brightness (0-1), decoded small and grey
 fn lumas(video: &str) -> R<(Vec<f32>, f64)> {
+    if crate::read::native() {
+        return crate::read::lumas(video);
+    }
     let out = Command::new("ffmpeg")
         .args(["-v", "error", "-nostdin", "-i", video, "-map", "0:v:0", "-vf", "scale=32:18:flags=area,format=gray", "-f", "rawvideo", "-"])
         .output()

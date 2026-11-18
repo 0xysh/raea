@@ -34,6 +34,14 @@ pub(crate) fn log_level(line: &str) -> Option<&str> {
 pub(crate) fn flashing(video: &str, probe: &Probe, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
     let w = FLASH_W;
     let h = (((w as f64 * probe.h / probe.w.max(1.0)) / 2.0).round() as usize * 2).max(6);
+    if crate::read::native() {
+        let mut screen = FlashScreen::new(w, h);
+        if crate::read::flash_frames(video, w, h, |t, buf| screen.push(buf, t))? == 0 {
+            return Err(format!("{video}: flashing can't be screened, no frame decoded"));
+        }
+        screened(screen, 0, "", issues, passed);
+        return Ok(());
+    }
     let graph = format!("showinfo,split=2[area][point];[area]scale={w}:{h}:flags=area[a];[point]scale={w}:{h}:flags=neighbor[b];[a][b]hstack=inputs=2,format=rgb24");
     let sync = raea_io_ffmpeg::passthrough();
     let mut child = Command::new("ffmpeg")
@@ -92,6 +100,12 @@ pub(crate) fn flashing(video: &str, probe: &Probe, issues: &mut Vec<Issue>, pass
     if !status.success() || frames == 0 {
         return Err(format!("{video}: flashing can't be screened, FFmpeg decoded {frames} frames ({first})"));
     }
+    screened(screen, errors, &first, issues, passed);
+    Ok(())
+}
+
+/// What the screen found, after `errors` errors decoding the picture (`first` the first of them)
+fn screened(screen: FlashScreen, errors: usize, first: &str, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
     if errors > 0 {
         issues.push(Issue {
             rule: "decode",
@@ -110,5 +124,4 @@ pub(crate) fn flashing(video: &str, probe: &Probe, issues: &mut Vec<Issue>, pass
         None if errors == 0 => passed.push("flashing: no more than 3 flashes a second found (a screen, not a certification)".to_string()),
         None => {}
     }
-    Ok(())
 }

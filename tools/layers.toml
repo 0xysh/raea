@@ -180,6 +180,7 @@ raea-page = "runtime"
 raea-app-check = "apps"
 raea-app-check-flash = "apps"
 raea-app-check-inbox = "apps"
+raea-app-check-read = "apps"
 raea-app-direction = "apps"
 raea-app-notes = "apps"
 # `raea fingerprint`: its verbs and the resident service that keeps the encoders loaded
