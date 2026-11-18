@@ -350,6 +350,25 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         so raea's own levels are the fallback for what nobody made levels for
       And measured on Berlin's walk at 1440p out: triangles and draws a frame and frame time, before and after, with
         no pop to see (the shot's flicker no worse)
+      And so far (11-17, branch realism; not done): a Model's `detail` (near, far, max_px, min_px, edge, fade,
+        shadow) is raea-sys-lod's Detail. Bevy's dither now runs in raea's own fragments (ShaderExt, ShaderMaterial).
+        Ranges are measured from each mesh's origin, as Bevy's GPU measures them, and moved to the part's nearest
+        edge. Meshes are extracted after the ranges. The live diff keeps its fast path with Detail rows (it had run in
+        full every frame, +19 ms a step). gambit's City draws `levels="detail"`, its tiles' levels cross-faded by
+        distance, streamed or not
+      And measured on the 540p fly over Berlin (240 frames; a one-frame spike is an 8x8 block whose change is over
+        12/255 and 3 times the frames' either side): detail's level switches at frames 41, 117, 122 and 157 (45, 20,
+        19 and 17 blocks) are gone, and JS levels' at 58, 106, 112 and 148 (41, 15, 16, 13) are unchanged. Two left
+        at 35 and 226 (29 and 12 blocks) came from Bevy's extract order; their fix waits for a rebuild to be checked
+      And measured live at 2560x1440 on an M-series Mac, work p50 JS levels against detail: walk 51.7 against 48.9
+        ms (p99 144.8 against 78.2), fly 50.3 against 50.1 (four runs each, about 5 ms apart run to run), streamed
+        run 34.7 against 31.8 (p99 143.3 against 114.6). Detail adds 0.4 to 1.3 ms of step. Footprint: walk 6.97
+        against 7.24 GB, fly 3.80 against 4.07, streamed 3.74 against 3.74; the streamed run's geometry peaks at
+        302.6 MB against 304.2. None of it is in FRAME_BUDGET yet
+      And open: triangles and draws a frame aren't counted yet. A tile's LOD1 and LOD2 are measured to their own
+        boxes, 1 to 2 m apart, a 3% gap in a 70 m band; every level should be measured to one box. The dither reads
+        as stipple until LT12's temporal filter. Auto levels, posters, GPU culling of Instances' copies, baked
+        visibility and the generators' own ranges are still to build
 
   Rule: Every light, everything in it
 
