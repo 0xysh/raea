@@ -77,16 +77,19 @@ pub fn settle_with(app: &mut App, want: Option<i64>, secs: f64, answer: &mut cra
         if let Some(e) = crate::COMPOSITION_ERROR.lock().unwrap().take() {
             return Err(format!("the composition threw at frame {}: {e}", want.map(|w| w.to_string()).unwrap_or("?".into())));
         }
-        // a layout read waiting: every commit sent before it applied (one an update with OneBatch), then answered, and
-        // the loop goes on (the read's thread carries on from its effect, so more commits and the marker follow)
+        // a layout read waiting is answered once every commit sent before it is applied (its batch is sent before the
+        // effect that reads runs), then the read's thread carries on. With OneBatch one a pass, each read for the marker
+        // below: applied at once, unread, a stepped range's frames queued behind the read went by for good (#158)
         if let Some(ask) = ask.as_deref().filter(|a| a.asked()) {
-            // (the read's own commit can land after this pass's update: its batch is sent before its effects run)
-            app.world_mut().run_schedule(PreUpdate);
-            while app.world().get_resource::<crate::OneBatch>().is_some_and(|q| !q.0.is_empty()) {
-                app.world_mut().run_schedule(PreUpdate);
+            match crate::queued(app.world_mut()) {
+                None => {
+                    app.world_mut().run_schedule(PreUpdate);
+                    crate::layout::answer_if_asked(ask, app.world_mut(), answer);
+                    continue;
+                }
+                Some(0) => crate::layout::answer_if_asked(ask, app.world_mut(), answer),
+                Some(_) => {}
             }
-            crate::layout::answer_if_asked(ask, app.world_mut(), answer);
-            continue;
         }
         let world = app.world_mut();
         // the marker's entity, remembered (a scan of every entity's props for it each pass was most of a settle)
@@ -138,14 +141,17 @@ pub fn settle_with(app: &mut App, want: Option<i64>, secs: f64, answer: &mut cra
         // a held frame (delayRender, a scene still loading: its marker at the frame, not done) waits up to
         // HOLD_SECS, so a hold's own timeout (30 s unless it says) fails the render naming it first (layout-reads LR9)
         held = want.is_some_and(|w| marked.0 == w && marked.1 != w);
+        let gone = want.is_some_and(|w| watch.gone(w, marked.0));
         let Some(left) = watch.watch((flushed, work, track::making_secs()), in_call, if held { secs.max(HOLD_SECS) } else { secs }, HOLD_SECS) else { break };
-        // commits held to be applied one an update (OneBatch): the next is applied without waiting
-        if app.world().get_resource::<crate::OneBatch>().is_some_and(|q| !q.0.is_empty()) {
+        // commits held to be applied one an update (OneBatch), and any sent since: the next is applied without waiting
+        let queued = crate::queued(app.world_mut());
+        if queued.is_some_and(|n| n > 0) {
             continue;
         }
-        // a stepped range's frame lost (#158): its runtime idle, the frame neither drawn nor held. Asked for again (pure)
+        // a stepped range's frame lost (#158): its runtime idle, the frame neither drawn nor held, or gone by with nothing
+        // left to apply. Asked for again (pure), and refused at once when that doesn't bring it back (stall.rs)
         if let (Some(j), Some(s), Some(o)) = (&js, app.world().get_resource::<crate::Stepping>(), app.world().get_resource::<crate::ReactOutbox>())
-            && watch.nudge(j, want.unwrap_or(-1), s.to, held, marked)
+            && watch.nudge(j, want.unwrap_or(-1), s.to, held, gone && queued == Some(0), marked)?
         {
             o.send(serde_json::json!({"t": "event", "name": "raea-frames", "value": {"from": want, "to": s.to}}));
         }
@@ -155,10 +161,7 @@ pub fn settle_with(app: &mut App, want: Option<i64>, secs: f64, answer: &mut cra
     if let Some(d) = js.as_ref().map_or_else(crate::js_call_for, |j| j.since(&j.call_since)).filter(|d| d.as_secs_f64() >= HANG_SECS) {
         return Err(format!("the composition hangs on frame {want:?}: {} has run for {:.0} s without returning (past {HANG_SECS} s: an endless loop, or a native call that never returns; `sample <pid>` shows where), its marker at frame {} (done {})", crate::js_call_who(), d.as_secs_f64(), marked.0, marked.1));
     }
-    if held {
-        return Err(format!("frame {want:?} was held for {HOLD_SECS} s and never released: a delayRender never continued, or a scene that never finished loading"));
-    }
-    Err(watch.refusal(js.as_deref(), want, secs, HOLD_SECS, marked))
+    Err(watch.refusal(js.as_deref(), want, secs, HOLD_SECS, held, marked))
 }
 
 /// The entity carrying the frame marker (data-raea-frame), once found.

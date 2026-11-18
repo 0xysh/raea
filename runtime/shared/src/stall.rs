@@ -132,12 +132,14 @@ pub struct Settling {
     nudged: Instant,
     /// refused because the thread only ran timers, committing nothing
     timers_only: bool,
+    /// the marker has been at or before the frame in this settle (gone)
+    reached: bool,
 }
 
 impl Default for Settling {
     fn default() -> Self {
         let now = Instant::now();
-        Settling { still: now, moved: (u64::MAX, u64::MAX, f64::NAN), drawn: now, drew: (u64::MAX, f64::NAN), nudges: 0, nudged: now, timers_only: false }
+        Settling { still: now, moved: (u64::MAX, u64::MAX, f64::NAN), drawn: now, drew: (u64::MAX, f64::NAN), nudges: 0, nudged: now, timers_only: false, reached: false }
     }
 }
 
@@ -157,22 +159,42 @@ impl Settling {
         self.timers_only = left > 0.0 && self.drawn.elapsed().as_secs_f64() >= limit.max(hold);
         (left > 0.0 && !self.timers_only).then_some(left)
     }
-    /// Whether to ask frame `want` again now (said on stderr): a range is stepped (`to`), the frame isn't held, and the
-    /// runtime's thread, in no call, has waited on nothing for NUDGE_IDLE_SECS, at most NUDGES times, twice that apart
-    /// and not in the settle's first 2 x NUDGE_IDLE_SECS (the range's own event may not be taken yet).
-    pub fn nudge(&mut self, js: &JsState, want: i64, to: i64, held: bool, marked: (i64, i64)) -> bool {
-        let idle = js.call_since.load(SeqCst) == 0 && js.since(&js.idle_since).is_some_and(|d| d.as_secs_f64() >= NUDGE_IDLE_SECS);
-        if !idle || held || want < 0 || want >= to || self.nudges >= NUDGES || self.nudged.elapsed().as_secs_f64() < 2.0 * NUDGE_IDLE_SECS {
-            return false;
+    /// Whether frame `want` has gone by in this settle (called each pass with the marker's frame `at`, -2 before it's
+    /// found): the marker was at or before it and is now past it. A stepped range's frames only move forward, so the
+    /// frame can't come by itself. (A marker past the frame from the start is a range stepped after a later one.)
+    pub fn gone(&mut self, want: i64, at: i64) -> bool {
+        self.reached |= (-1..=want).contains(&at);
+        want >= 0 && self.reached && at > want
+    }
+    /// Whether to ask frame `want` again now (said on stderr): a range is stepped (`to`), the frame isn't held, and either
+    /// the runtime has gone past it (`past`: gone, nothing left to apply) or its thread, in no call, has waited on nothing
+    /// for NUDGE_IDLE_SECS; at most NUDGES times, twice that apart, and not in the settle's first 2 x NUDGE_IDLE_SECS
+    /// unless past (the range's own event may not be taken yet; a frame gone by is asked for at once). A frame gone by
+    /// and still gone after every ask, the last that long ago with the thread in no call, is the settle's refusal, at
+    /// once (Err): waiting out its time would change nothing.
+    pub fn nudge(&mut self, js: &JsState, want: i64, to: i64, held: bool, past: bool, marked: (i64, i64)) -> Result<bool, String> {
+        let free = js.call_since.load(SeqCst) == 0;
+        let idle = free && js.since(&js.idle_since).is_some_and(|d| d.as_secs_f64() >= NUDGE_IDLE_SECS);
+        let spaced = self.nudged.elapsed().as_secs_f64() >= 2.0 * NUDGE_IDLE_SECS;
+        if past && free && spaced && self.nudges >= NUDGES {
+            return Err(format!("frame {want} went by without being read: its runtime stepped on to frame {} (done {}) with nothing left to apply, so the frame can't come, and asking for it again {NUDGES} times didn't bring it back. This is raea's fault, not the composition's: `raea bug` reports it", marked.0, marked.1));
+        }
+        if !(idle || past) || held || want < 0 || want >= to || self.nudges >= NUDGES || !(spaced || past && self.nudges == 0) {
+            return Ok(false);
         }
         self.nudges += 1;
         self.nudged = Instant::now();
-        eprintln!("raea: frame {want}'s runtime went idle without drawing it (its marker at frame {} done {}): asked for frames {want}..{to} again ({} of {NUDGES})", marked.0, marked.1, self.nudges);
-        true
+        let why = if past { format!("frame {want} went by without being read (its runtime's marker is past it, at frame {} done {})", marked.0, marked.1) } else { format!("frame {want}'s runtime went idle without drawing it (its marker at frame {} done {})", marked.0, marked.1) };
+        eprintln!("raea: {why}: asked for frames {want}..{to} again ({} of {NUDGES})", self.nudges);
+        Ok(true)
     }
-    /// The settle's refusal of frame `want` after `secs` with nothing moving (`hold`, when only timers ran), its marker as
-    /// last seen, and what the runtime's JS thread was doing (nothing said for a replay's App, which has none).
-    pub fn refusal(&self, js: Option<&JsState>, want: Option<i64>, secs: f64, hold: f64, marked: (i64, i64)) -> String {
+    /// The settle's refusal of frame `want` after `secs` with nothing moving (`hold`, when only timers ran, or the frame
+    /// `held` that long), its marker as last seen, and what the runtime's JS thread was doing (nothing said for a
+    /// replay's App, which has none).
+    pub fn refusal(&self, js: Option<&JsState>, want: Option<i64>, secs: f64, hold: f64, held: bool, marked: (i64, i64)) -> String {
+        if held {
+            return format!("frame {want:?} was held for {hold} s and never released: a delayRender never continued, or a scene that never finished loading");
+        }
         let frame = want.map_or("?".to_string(), |w| w.to_string());
         let quiet = if self.timers_only { format!("{:.0} s (its JS thread ran only timers, committing nothing)", secs.max(hold)) } else { format!("{secs} s") };
         format!("the composition made no progress on frame {frame} for {quiet}, its marker at frame {} (done {}).{} Does it throw? Its [js] lines are above, and `raea traces show last` has the run's log", marked.0, marked.1, self.thread(js))
@@ -185,5 +207,31 @@ impl Settling {
         let unheard = j.unheard.load(SeqCst);
         let stopped = if unheard > 0 { format!("; its event loop had stopped taking events ({unheard} went unread: an error thrown out of an event handler?)") } else { String::new() };
         format!(" Its JS thread was {idle}{asked}{stopped}.")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A stepped frame its runtime went past is asked for again at once, a thread busy or not, and not again until the
+    /// ask has had its time; a marker past the frame from the start (a range stepped after a later one) isn't gone.
+    #[test]
+    fn a_frame_gone_by_is_asked_for_at_once() {
+        let js = JsState::default();
+        js.in_call(true);
+        let mut w = Settling::default();
+        assert!(!w.gone(10, -2) && !w.gone(10, 50), "no marker yet, then an earlier range's, past the frame");
+        assert_eq!(w.nudge(&js, 10, 20, false, false, (50, 50)), Ok(false), "a thread in a call, the frame not gone");
+        assert!(!w.gone(10, 10));
+        assert!(w.gone(10, 12));
+        assert_eq!(w.nudge(&js, 10, 20, false, true, (12, 12)), Ok(true), "a frame gone by is asked for at once");
+        assert_eq!(w.nudge(&js, 10, 20, false, true, (12, 12)), Ok(false), "and not again within 2 x NUDGE_IDLE_SECS");
+        js.in_call(false);
+        w.nudges = NUDGES;
+        w.nudged = Instant::now() - std::time::Duration::from_secs_f64(2.0 * NUDGE_IDLE_SECS);
+        let e = w.nudge(&js, 10, 20, false, true, (12, 12)).unwrap_err();
+        assert!(e.starts_with("frame 10 went by without being read: its runtime stepped on to frame 12"), "{e}");
+        assert!(!Settling::default().gone(-1, 3), "the settings' settle has no frame to go past");
     }
 }

@@ -53,7 +53,7 @@ pub(crate) fn js_thread(bundle: PathBuf, tx: Sender<Batch>, events: Receiver<Str
         }
     };
     interactive_thread();
-    JS_RUNTIME.set(JS_RUNTIMES.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1);
+    js_runtime_starts();
     let mut ctx = match Engine::default().start() {
         Ok(c) => c,
         Err(e) => {

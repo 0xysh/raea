@@ -211,56 +211,10 @@ static FLUSHED: (Mutex<u64>, std::sync::Condvar) = (Mutex::new(0), std::sync::Co
 /// Where a frame's step goes: nanoseconds the JS thread ran (timers, events, microtasks), nanoseconds Bevy spent
 /// applying commits (JSON parse, entities, the page mirror), and bytes of commit JSON sent. Read as deltas per frame.
 pub static JS_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-/// When the JS threads' current calls began, in ms after JS_BASE plus 1 (0: none is in a call): a render's settle counts
-/// a call still running as progress (a frame's render under load can take seconds before its first flush). A render runs
-/// several runtimes, each with a JS thread, so JS_CALLS counts the calls under way and the time is cleared only when the
-/// last ends: one thread's call ending zeroed it while another's ran on (film.tsx frame 1334 under load, 10-27).
-pub static JS_CALL_SINCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub static JS_BASE: std::sync::LazyLock<Instant> = std::sync::LazyLock::new(Instant::now);
-pub static JS_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-/// Which call began the current run of calls: its runtime (numbered as each JS thread starts, from 1) times 2, plus 1
-/// for an event's delivery (__raea_deliver: a frame's render) or 0 for timers (__raea_timers), so a hang's refusal
-/// names it
-static JS_CALL_WHO: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static JS_RUNTIMES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-thread_local! {
-    static JS_RUNTIME: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-}
+// the process's JS calls across its runtimes (raea-runtime-shared calls.rs)
+pub use shared::{js_call_for, js_call_who};
+use shared::{js_call_begins, js_call_ends, js_runtime_starts};
 
-/// The call that began the current run of calls, in words: "JS runtime 2 of 3's __raea_deliver (a frame's render)".
-pub fn js_call_who() -> String {
-    let who = JS_CALL_WHO.load(std::sync::atomic::Ordering::SeqCst);
-    let what = if who % 2 == 1 { "__raea_deliver (a frame's render)" } else { "__raea_timers (its timers and effects)" };
-    format!("JS runtime {} of {}'s {what}", who / 2, JS_RUNTIMES.load(std::sync::atomic::Ordering::SeqCst))
-}
-
-/// How long the JS threads have been in calls without a break, if one is in a call (JS_CALLS decides: an ending call can
-/// clear the time just after another began, which reads as a call just begun).
-pub fn js_call_for() -> Option<Duration> {
-    use std::sync::atomic::Ordering::SeqCst;
-    if JS_CALLS.load(SeqCst) == 0 {
-        return None;
-    }
-    let at = JS_CALL_SINCE.load(SeqCst);
-    Some(if at == 0 { Duration::ZERO } else { JS_BASE.elapsed().saturating_sub(Duration::from_millis(at - 1)) })
-}
-
-fn js_call_begins(deliver: bool, state: &JsState) {
-    use std::sync::atomic::Ordering::SeqCst;
-    state.in_call(true);
-    if JS_CALLS.fetch_add(1, SeqCst) == 0 {
-        JS_CALL_WHO.store(JS_RUNTIME.get() * 2 + deliver as u64, SeqCst);
-        JS_CALL_SINCE.store(JS_BASE.elapsed().as_millis() as u64 + 1, SeqCst);
-    }
-}
-
-fn js_call_ends(state: &JsState) {
-    use std::sync::atomic::Ordering::SeqCst;
-    state.in_call(false);
-    if JS_CALLS.fetch_sub(1, SeqCst) == 1 {
-        JS_CALL_SINCE.store(0, SeqCst);
-    }
-}
 /// This thread at macOS's user-interactive QoS (the class a game's frame threads get): under load from other processes a
 /// default-QoS JS thread was preempted for ~30 ms at a time, and a 120 fps game missed frames (pong: 8 in 36,000 with a
 /// load average of 4-10). Live play's JS thread and the thread that steps its frames take it.

@@ -147,6 +147,38 @@ Feature: Layout reads: a composition measures its text and layout as Chrome does
           --offscreen --no-vsync, 5 s, twice): a frame's step p50 0.39-0.41 ms without the read, 1.8-2.0 ms with it;
           work p50 3.8-4.2 ms against 4.3-5.0 ms. Under a tenth of a 60 fps frame.
 
+    @needs:LR1 @done
+    Scenario: LR12. A read in a stepped range lets settle take every frame (#158)
+      Given a range of frames stepped back to back (raea-frames: the 3D rows' pre-pass, a bake), its commits applied
+        one a pass (OneBatch)
+      And a component reads its layout in an effect while frames of the range wait in the queue
+      Then the read is answered once every commit sent before it is applied, one a pass, and each pass's commit is read
+        for the frame's marker as any commit is
+      And a frame the runtime has gone past with nothing left to apply is asked for again at once, and fails the
+        settle in seconds, naming the frame and where the runtime is, when asking doesn't bring it back
+      And 11-16, built:
+        - settle answered a read by applying every queued commit at once and going on, unread. The frames queued
+          behind the read went by, and settle waited on a frame already gone: for good on 0.1.4 (the main thread in
+          wait_flush, the JS idle), 20 to 120 s and "made no progress" on 0.1.5. It came by chance, when a read
+          landed while frames were queued, so long renders with more runtimes hit it more often.
+        - The read is answered only when nothing is queued (raea-runtime-react's queued); until then the loop takes
+          a commit a pass and checks the marker. Settling's gone and nudge (raea-runtime-shared stall.rs) are the
+          watchdog.
+        - runtime/bake/tests/reads.rs: a hand-written bundle steps frames 0 to 3 and reads after the last, all
+          queued before settle looks. Before: "made no progress on frame 0 for 5 s, its marker at frame 3 (done 3)".
+          After: each frame's settle returns at that frame, 0.4 s for the four.
+        - A repro shaped like the report (2160x3840, 30 fps, 752 frames: Sequences, an @font-face font, Imgs, the
+          six-layer Freeze blur, a component that measures itself in a layout effect) rendered with --alpha to a
+          folder of PNGs: 0.1.5 refused it after 21 s with no frame written; the fix wrote all 752
+          frames in 72 s. Its pre-pass alone (raea scene light) failed every run before, and passed 12 of 12 after.
+
+    Scenario: LR13. A pre-pass's runtimes keep their errors apart
+      Given a render's 3D-rows pre-pass runs several runtimes in one process, each with its own ask (LR1)
+      Then a composition's thrown error (COMPOSITION_ERROR) and a bundle's (BUNDLE_ERROR) are each runtime's own, as
+        its LayoutAsk is
+      And today they are process-wide statics: whichever runtime's settle looks first takes the error, so the render
+        still fails, but it can name the wrong runtime's frame
+
   Rule: a ref has the DOM a web component reads
 
     @needs:LR1 @done
