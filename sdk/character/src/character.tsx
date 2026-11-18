@@ -20,6 +20,9 @@ export type { Quat, Joint, Skeleton, Pose, Posed, Side, Finger, HandShape, Closi
 // a character takes a thing with its hands, with no capture of the action (docs/hands.feature)
 export { take, fetch, fitPose, handShape, placedPose, walkUp } from "./take";
 export type { TakeThing, TakeSpec, Taken, Mark } from "./take";
+// a body's anatomy: its bones and organs made from its own skeleton, an X-ray of them, and a shot's path through them
+export { anatomyOf, hits, Anatomy, Round, ShotPath, Wounds, xrayGhost, xrayParts } from "./anatomy";
+export type { AnatomyOf, Hit, AnatomyProps, Piece, Kind, Frame } from "./anatomy";
 // motion on SOMA's skeleton (NVIDIA's motion models and datasets) played on a raea body
 export { readSomaUsda, somaPose, turnsPose, withTwists } from "./soma";
 export type { SomaClip, TurnsClip } from "./soma";
