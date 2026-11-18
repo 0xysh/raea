@@ -16,7 +16,7 @@ use bevy::solari::pathtracer::{Pathtracer, PathtracingPlugin};
 use bevy::solari::prelude::{RaytracingMesh3d, SolariLighting, SolariPlugins};
 
 pub fn add(app: &mut App) {
-    app.add_plugins((SolariPlugins, PathtracingPlugin)).add_systems(PostUpdate, (cameras, meshes).before(bevy::camera::CameraUpdateSystems));
+    app.add_plugins((SolariPlugins, PathtracingPlugin)).add_systems(PostUpdate, (cameras, meshes, deferred).before(bevy::camera::CameraUpdateSystems));
     if dynamic() {
         // a twin posed after its joints are placed and before this frame's asset events go out, so the traced scene
         // gets the pose with the frame that draws it; a part's visibility read once it is propagated
@@ -239,6 +239,24 @@ fn meshes(
             Some(h) => cmd.entity(e).insert((RaytracingMesh3d(h), Done)),
             None => cmd.entity(e).insert(Done),
         };
+    }
+}
+
+/// Under Solari, a material that lets light through (`diffuse_transmission`: a leaf, a sheer curtain, a lampshade)
+/// is pinned to the deferred path. Left on Auto, Bevy draws it forward, as the G-buffer has no room for transmission,
+/// so it skipped Solari's lighting and drew raster-lit over the traced frame, its emissive shown raw: photo 2's lamp
+/// and curtain came out white (1.85x the photo's lamp), its leaves flat. Solari 0.20 traces no transmission, so as a
+/// G-buffer surface it is lit like any other (the lamp 1.12x, the curtain 1.26x, as the path tracer has them).
+fn deferred(on: Query<(), With<SolariLighting>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    if on.is_empty() {
+        return;
+    }
+    use bevy::material::OpaqueRendererMethod;
+    let forward: Vec<_> = mats.iter().filter(|(_, m)| m.opaque_render_method == OpaqueRendererMethod::Auto && m.diffuse_transmission > 0.0).map(|(id, _)| id).collect();
+    for id in forward {
+        if let Some(mut m) = mats.get_mut(id) {
+            m.opaque_render_method = OpaqueRendererMethod::Deferred;
+        }
     }
 }
 

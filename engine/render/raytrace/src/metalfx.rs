@@ -17,6 +17,7 @@ use bevy::core_pipeline::prepass::ViewPrepassTextures;
 use bevy::core_pipeline::schedule::{Core3d, Core3dSystems};
 use bevy::render::render_resource::TextureFormat;
 use bevy::render::renderer::{RenderContext, RenderDevice, ViewQuery};
+use bevy::render::camera::ExtractedCamera;
 use bevy::render::view::{ExtractedView, ViewTarget};
 use bevy::solari::prelude::SolariLighting;
 use objc2::rc::Retained;
@@ -53,14 +54,25 @@ pub(crate) fn add(app: &mut App) {
 
 // Bevy's G-buffer (bevy_pbr deferred/functions.wesl, types.wesl) to MetalFX's guides: r = base colour (sRGB-ish, pow
 // 1/2.2) and perceptual roughness as unorm4x8; b = reflectance, metallic, occlusion, clearcoat as unorm4x8; a = a 24-bit
-// octahedral normal (two 12-bit halves) and flags. Specular albedo is F0 (Bevy's 0.16 reflectance² for dielectrics,
-// the base colour for metals)
+// octahedral normal (two 12-bit halves) and flags; g = emissive as rgb9e5. Specular albedo is F0 (Bevy's 0.16
+// reflectance² for dielectrics, the base colour for metals).
+// What a surface emits is no noise, so it stays out of the denoiser: `main` takes it (times the exposure, as Solari adds
+// it) out of the colour with the guides, and `restore` puts it back after MetalFX. Denoised with the rest, a screen's
+// picture or a sign's letters came out smeared, its texture treated as noise against a near-black albedo (photo 2's
+// monitor)
 const DECODE_WGSL: &str = r#"
 @group(0) @binding(0) var gbuf: texture_2d<u32>;
 @group(0) @binding(1) var diffuse: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(2) var specular: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var normal: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(4) var rough: texture_storage_2d<r32float, write>;
+@group(0) @binding(5) var color: texture_storage_2d<rgba16float, read_write>;
+// x: the camera's exposure
+@group(0) @binding(6) var<uniform> params: vec4<f32>;
+fn rgb9e5(v: u32) -> vec3<f32> {
+    let scale = exp2(f32(i32(extractBits(v, 27u, 5u)) - 15 - 9));
+    return vec3<f32>(f32(extractBits(v, 0u, 9u)), f32(extractBits(v, 9u, 9u)), f32(extractBits(v, 18u, 9u))) * scale;
+}
 fn unorm4x8(p: u32) -> vec4<f32> {
     return vec4<f32>(f32(p & 255u), f32((p >> 8u) & 255u), f32((p >> 16u) & 255u), f32(p >> 24u)) / 255.0;
 }
@@ -88,6 +100,16 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(specular, p, vec4<f32>(f0, 1.0));
     textureStore(normal, p, vec4<f32>(n, 0.0));
     textureStore(rough, p, vec4<f32>(a.w, 0.0, 0.0, 0.0));
+    let c = textureLoad(color, p);
+    textureStore(color, p, vec4<f32>(max(c.rgb - rgb9e5(g.g) * params.x, vec3<f32>(0.0)), c.a));
+}
+@compute @workgroup_size(8, 8, 1)
+fn restore(@builtin(global_invocation_id) id: vec3<u32>) {
+    let size = textureDimensions(color);
+    if (id.x >= size.x || id.y >= size.y) { return; }
+    let p = vec2<i32>(id.xy);
+    let c = textureLoad(color, p);
+    textureStore(color, p, vec4<f32>(c.rgb + rgb9e5(textureLoad(gbuf, p, 0).g) * params.x, c.a));
 }
 "#;
 
@@ -105,7 +127,8 @@ struct View {
 
 #[derive(Default)]
 struct Kit {
-    pipeline: Option<wgpu::ComputePipeline>,
+    /// the guides (and the emissive out), and the emissive back in
+    pipeline: Option<(wgpu::ComputePipeline, wgpu::ComputePipeline)>,
     views: HashMap<Entity, View>,
     off: bool,
 }
@@ -229,12 +252,12 @@ fn matrices(s: &ProtocolObject<dyn MTLFXTemporalDenoisedScaler>, world_to_view: 
     }
 }
 
-fn denoise(view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &ExtractedView, &SolariLighting)>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
+fn denoise(view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &ExtractedView, &ExtractedCamera, &SolariLighting)>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
     if kit.off {
         return;
     }
     let entity = view.entity();
-    let (target, pre, ext, solari) = view.into_inner();
+    let (target, pre, ext, cam, solari) = view.into_inner();
     let (Some(depth), Some(motion), Some(gbuf)) = (pre.depth.as_ref(), pre.motion_vectors.as_ref(), pre.deferred.as_ref()) else { return };
     if target.main_texture_format() != TextureFormat::Rgba16Float {
         return;
@@ -254,19 +277,26 @@ fn denoise(view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &ExtractedView, &
             }
         }
     }
-    let pipeline = kit
+    let (pipeline, restore) = kit
         .pipeline
         .get_or_insert_with(|| {
             let module = dev.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("metalfx guides"), source: wgpu::ShaderSource::Wgsl(DECODE_WGSL.into()) });
-            dev.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("metalfx guides"), layout: None, module: &module, entry_point: Some("main"), compilation_options: Default::default(), cache: None })
+            let make = |entry: &str| dev.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("metalfx guides"), layout: None, module: &module, entry_point: Some(entry), compilation_options: Default::default(), cache: None });
+            (make("main"), make("restore"))
         })
         .clone();
+    let color_view = color.create_view(&Default::default());
+    let mut exposure = [0u8; 16];
+    exposure[..4].copy_from_slice(&cam.exposure.to_ne_bytes());
+    let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx exposure"), contents: &exposure, usage: wgpu::BufferUsages::UNIFORM });
     let v = kit.views.get_mut(&entity).unwrap();
     let views = [&v.diffuse, &v.specular, &v.normal, &v.rough].map(|t| t.create_view(&Default::default()));
     let mut entries = vec![wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&*gbuf.texture.default_view) }];
     for (i, tv) in views.iter().enumerate() {
         entries.push(wgpu::BindGroupEntry { binding: i as u32 + 1, resource: wgpu::BindingResource::TextureView(tv) });
     }
+    entries.push(wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) });
+    entries.push(wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() });
     let bind = dev.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("metalfx guides"), layout: &pipeline.get_bind_group_layout(0), entries: &entries });
     {
         let mut pass = ctx.command_encoder().begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("metalfx guides"), timestamp_writes: None });
@@ -283,6 +313,22 @@ fn denoise(view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &ExtractedView, &
         })
     };
     ctx.add_command_buffer(raw.finish());
+    // the emissive back in, after the denoiser's command buffer (add_command_buffer flushed the encoder before it)
+    let back = dev.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("metalfx emissive back"),
+        layout: &restore.get_bind_group_layout(0),
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&*gbuf.texture.default_view) },
+            wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) },
+            wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() },
+        ],
+    });
+    {
+        let mut pass = ctx.command_encoder().begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("metalfx emissive back"), timestamp_writes: None });
+        pass.set_pipeline(&restore);
+        pass.set_bind_group(0, &back, &[]);
+        pass.dispatch_workgroups(size.x.div_ceil(8), size.y.div_ceil(8), 1);
+    }
     if let Err(e) = done {
         kit.off = true;
         eprintln!("raea: <SolariLighting>: the MetalFX denoiser stopped ({e}); the lighting draws un-denoised");
