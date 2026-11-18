@@ -69,6 +69,17 @@ fn outside_copies_what_the_edit_imports_beyond_its_folder() {
     w("y.ts", "export const y = 0;\n");
     let e = outside_in(&dir, &roots).unwrap_err();
     assert!(e.contains("lib/c.ts") && e.contains("outside raea's home"), "{e}");
+    // @shared/ (LY2), as raea's skill says to import: 0.1.7 left it to the bundler, which took it for a package
+    w(".raea/workspace", "");
+    w("shared/components/badge.tsx", "export { TONE } from \"./tone\";\n");
+    w("shared/components/tone.ts", "export const TONE = 1;\n");
+    w("proj/edit/a.tsx", "import { TONE } from \"@shared/components/badge\";\n");
+    let roots = vec![("project", root.clone()), ("shared", t.join("shared"))];
+    let outs = outside_in(&dir, &roots).unwrap();
+    assert_eq!(outs.iter().map(|o| o.copy.to_str().unwrap()).collect::<Vec<_>>(), ["ext/shared/components/badge.tsx", "ext/shared/components/tone.ts"]);
+    assert!(point_outside("import { TONE } from \"@shared/components/badge\";", &dir, Path::new("src"), &dir, &outs).contains("\"../ext/shared/components/badge.tsx\""));
+    w("proj/edit/a.tsx", "import { N } from \"@shared/components/nope\";\n");
+    assert!(outside_in(&dir, &roots).unwrap_err().contains("a.tsx: `@shared/components/nope` isn't there"));
     std::fs::remove_dir_all(&t).unwrap();
 }
 
