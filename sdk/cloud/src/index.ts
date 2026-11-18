@@ -132,7 +132,7 @@ export class RaeaCloud {
     if (farm.gpu) q.set("gpu", farm.gpu)
     if (farm.maxUsd !== undefined) q.set("max_usd", String(farm.maxUsd))
     if (farm.media) q.set("media", "1")
-    const r = await this.call(`/v1/jobs?${q}`, { method: "POST", body: new Blob([folder as BlobPart]), headers: { "content-type": "application/octet-stream" }, signal })
+    const r = await this.call(`/v1/jobs?${q}`, { method: "POST", body: new Blob([folder as Uint8Array<ArrayBuffer>]), headers: { "content-type": "application/octet-stream" }, signal })
     return ((await r.json()) as { id: string }).id
   }
 
