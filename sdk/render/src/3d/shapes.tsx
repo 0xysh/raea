@@ -448,8 +448,13 @@ const flat = (kids: ReactNode): ReactElement[] => Children.toArray(kids).flatMap
 
 export function shapeFromChildren(children: ReactNode): string | undefined {
   for (const child of flat(children)) {
-    const props = child.props as Record<string, unknown>;
-    const s = child.type === Text3D ? text3dShape(props as unknown as Text3DProps) : child.type === BufferMesh ? bufferShape(props as unknown as BufferMeshProps) : GEOMETRY_SHAPES.get(child.type)?.(props);
+    if (child.type === Text3D) {
+      return text3dShape((child as ReactElement<Text3DProps>).props);
+    }
+    if (child.type === BufferMesh) {
+      return bufferShape((child as ReactElement<BufferMeshProps>).props);
+    }
+    const s = GEOMETRY_SHAPES.get(child.type)?.((child as ReactElement<Record<string, unknown>>).props);
     if (s !== undefined) return s;
   }
   return undefined;
