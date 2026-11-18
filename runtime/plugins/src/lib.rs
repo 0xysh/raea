@@ -79,7 +79,16 @@ pub fn names() -> Vec<&'static str> {
     PLUGINS.lock().unwrap().iter().map(|r| r.name).collect()
 }
 
+/// Bevy's plugin group for one of raea's Engines (raea-render's, the page's BlitzPage): each registered plugin's change
+/// to it, and Bevy's window plugin left out. The Engines are headless, and what shows one in a window makes that window
+/// itself; WinitPlugin would make an event loop in every App, and winit allows one a process, so a process's second App
+/// panicked "Failed to build event loop: RecreationAttempt" (#182: Linux, a build cargo had unified bevy_winit into).
+/// It's compiled in on the desktop (Cargo.toml), so it's always here to leave out, however the build brought it.
 pub fn group(mut b: PluginGroupBuilder) -> PluginGroupBuilder {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    if b.contains::<bevy::winit::WinitPlugin>() {
+        b = b.disable::<bevy::winit::WinitPlugin>();
+    }
     for r in PLUGINS.lock().unwrap().iter().filter(|r| !r.on_demand) {
         if let Some(g) = r.group {
             b = g(b);

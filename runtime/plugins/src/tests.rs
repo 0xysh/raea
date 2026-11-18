@@ -204,3 +204,12 @@ fn a_pure_clocks_time_is_the_frame_drawns() {
     let held = at(&mut app, 500);
     assert!(held.0 < 1.0, "a stepping clock's Time isn't set to the frame's: {held:?}");
 }
+
+/// #182: an Engine's group leaves Bevy's window plugin out in every desktop build, so no App of raea's makes an event loop
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[test]
+fn an_engine_makes_no_event_loop() {
+    let b = group(bevy::app::PluginGroup::build(bevy::DefaultPlugins));
+    assert!(b.contains::<bevy::winit::WinitPlugin>(), "bevy_winit is compiled in on the desktop (Cargo.toml)");
+    assert!(!b.enabled::<bevy::winit::WinitPlugin>(), "WinitPlugin left in: a second App in the process panics RecreationAttempt");
+}
