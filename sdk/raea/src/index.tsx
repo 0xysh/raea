@@ -50,9 +50,19 @@ export {
   Composition,
   getCompositions,
   registerRoot,
+  useControl,
   type CompositionProps,
   type Edit,
   type RegisteredComposition,
+  type Control,
+  type Controls,
+  type ControlCost,
+  type RegisteredControl,
+  type NumberControl,
+  type SwitchControl,
+  type ChoiceControl,
+  type ColourControl,
+  type TextControl,
 } from "@raea/video/registry";
 
 export { Effect, effectAt, type EffectProps } from "@raea/video/effect";
