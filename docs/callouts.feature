@@ -34,7 +34,9 @@ Feature: Callouts: an agent's labels on what it made, beside it, pointing in whe
     And raea's own side: `raea show --label` (engine/cli/src/show.ts) and the sheet's labels (apps/media picture.rs)
 
   Rule: CO1. A label, and what it can point at
-    # Status 11-18: building on raea-feed branch labels.
+    # Status 11-18: in 0.1.8. The feed draws them (raea-feed labels: a still, a film, a scene's parts live, the card's
+    # count); raea show takes --label, --detail and --labels; raea media sheet writes OUT.labels.json; the raea skill says
+    # when to label (CO5a).
 
     Scenario: CO1a. A tag and a paragraph
       Given a label
@@ -111,6 +113,6 @@ Feature: Callouts: an agent's labels on what it made, beside it, pointing in whe
       And it shows raea show sheet.png --label "0,0,.5,1 v1, hook first" --label ".5,0,1,1 v2, product first"
         --detail "Opens on the product..."
 
-  Rule: CO6. Open
+  Rule: CO6. On the feed's card
     Scenario: CO6a. Labels on the feed's card
       Then the card shows how many labels the item has, and not the tags themselves, until a card has room for them
