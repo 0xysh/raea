@@ -81,7 +81,8 @@ pub fn distance(a: &Luma, reference: &Luma) -> Result<Distance, String> {
         t.1 += 1;
     }
     let n = a.y.len().max(1) as f64;
-    let (k, worst) = tiles.iter().enumerate().map(|(k, &(s, c))| (k, s / c.max(1) as f64)).fold((0, 0.0), |b, t| if t.1 > b.1 { t } else { b });
+    // the worst tile, the first of equals
+    let (k, worst) = tiles.iter().enumerate().map(|(k, &(s, c))| (k, s / c.max(1) as f64)).max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0))).unwrap_or((0, 0.0));
     Ok(Distance { mean: (sum / n) as f32, bias: (signed / n) as f32, worst: worst as f32, worst_at: (k % tw, k / tw) })
 }
 
