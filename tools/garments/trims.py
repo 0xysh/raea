@@ -4,6 +4,8 @@
 # vertex's joints and weights), so it moves with the garment wherever <Character> takes it. A trim set made again
 # replaces the last. Run after fabric.py's cover when a trim is in the garment's own cloth (it takes the cloth's maps).
 #   python tools/garments/trims.py GARMENT.glb TRIMS.json        (add --landmarks: the body's joints, to place by)
+#   python tools/garments/trims.py GARMENT.glb --mend            the trims already on it (a worn copy too) re-wound
+#                                                                facing out, shaded as sheets (sheet_normals)
 # TRIMS.json: {"trims": [ ... ]}, every length in metres, in the garment's frame (glTF: y up, the body facing +z; all
 # of raea's sewn garments are cut to SOMA's one body, so a place on one is the same place on another). Each trim:
 #   {"kind": "button", "at": [x, y], "from": "front", "d": 0.022, "material": {...}}       from front|back|left|right
@@ -200,7 +202,105 @@ def material(spec, base, name):
     return m
 
 
+def wound(V, F, cloth_tree=None, cloth_n=None):
+    """F wound one way round over each connected piece, facing out: a slab's walls were wound for the stand's rows and
+    came out facing into the fall collar's slab (gambit's Schaffnerin, 11-17): its edge vertices averaged opposing
+    faces to normals near zero, drawn as bright lines along the collar. Each piece is walked from its first face (a
+    slab's top comes first), every neighbour turned to cross their shared edge the other way; then a closed piece
+    faces out by its volume, an open one (a slab) away from the cloth under it."""
+    F = np.array(F, np.int64)
+    edges = {}
+    for f, t in enumerate(F):
+        for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+            edges.setdefault((min(a, b), max(a, b)), []).append(f)
+    seen = np.zeros(len(F), bool)
+    for s0 in range(len(F)):
+        if seen[s0]:
+            continue
+        piece, stack, seen[s0] = [s0], [s0], True
+        while stack:
+            f = stack.pop()
+            t = F[f]
+            for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+                for g_ in edges[(min(a, b), max(a, b))]:
+                    if seen[g_]:
+                        continue
+                    u = F[g_]
+                    same = any((u[i] == a and u[(i + 1) % 3] == b) for i in range(3))
+                    if same:
+                        F[g_] = u[[0, 2, 1]]
+                    seen[g_] = True; piece.append(g_); stack.append(g_)
+        P_ = np.array(piece)
+        tri = V[F[P_]]
+        fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+        closed = all(len(edges[(min(a, b), max(a, b))]) == 2 for t in F[P_] for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])))
+        if closed or cloth_tree is None:
+            face_out = (tri[:, 0] * np.cross(tri[:, 1], tri[:, 2])).sum() >= 0
+        else:
+            _, k = cloth_tree.query(tri.mean(1))
+            face_out = (fn * cloth_n[k]).sum() >= 0
+        if not face_out:
+            F[P_] = F[P_][:, [0, 2, 1]]
+    return F
+
+
+def sheet_normals(V, F, cloth_tree=None, cloth_n=None):
+    """A trim's vertex normals. A slab (open: its top and the walls round its edge) is shaded as the sheet it is: every
+    vertex takes the normal of the top faces round it (those facing away from the cloth), the walls' own bottom
+    vertices that of the top vertex nearest them. Averaged with the 3 mm walls, the edges' normals leaned out and the
+    walls showed edge-on: bright white outlines round every collar and strap under raea's even ambient light (gambit's
+    Schaffnerin, 11-17, Shane: "some issues here with stitching?"). A closed trim (a button, a tube) is area-weighted."""
+    V, F = np.asarray(V, np.float64), np.asarray(F, np.int64)
+    fn = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+    e = np.sort(np.r_[F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]], 1)
+    _, cnt = np.unique(e, axis=0, return_counts=True)
+    top = np.ones(len(F), bool)
+    if cloth_tree is not None and (cnt == 1).any():
+        _, k = cloth_tree.query(V[F].mean(1))
+        top = (unit(fn) * cloth_n[k]).sum(1) > 0.5
+    Nv = np.zeros_like(V)
+    for c in range(3):
+        np.add.at(Nv, F[top, c], fn[top])
+    has = np.linalg.norm(Nv, axis=1) > 0
+    if (~has).any() and has.any():
+        from scipy.spatial import cKDTree
+        _, near = cKDTree(V[has]).query(V[~has])
+        Nv[~has] = Nv[has][near]
+    Nv[np.linalg.norm(Nv, axis=1) == 0] = [0, 1, 0]
+    return unit(Nv).astype(np.float32)
+
+
+def mend(path):
+    """trims.py GARMENT.glb --mend: the trims already on a garment (a worn one too) wound as wound() winds them, and
+    their normals made again from the faces"""
+    g = Glb(path)
+    j = g.j
+    from scipy.spatial import cKDTree
+    cloth = [p for me in j["meshes"] for p in me["primitives"] if not p.get("extras", {}).get("trim")]
+    CP = np.concatenate([g.read(p["attributes"]["POSITION"]).astype(np.float64) for p in cloth])
+    CN = np.concatenate([g.read(p["attributes"]["NORMAL"]).astype(np.float64) for p in cloth])
+    tree = cKDTree(CP)
+    n = 0
+    for me in j["meshes"]:
+        for p in me["primitives"]:
+            if not p.get("extras", {}).get("trim") and not j["materials"][p.get("material", 0)].get("extras", {}).get("trim"):
+                continue
+            V = g.read(p["attributes"]["POSITION"]).astype(np.float64)
+            F0 = g.read(p["indices"]).reshape(-1, 3).astype(np.int64)
+            F = wound(V, F0, tree, CN)
+            Nv = sheet_normals(V, F, tree, CN)
+            p["indices"] = g.accessor(F.astype(np.uint32).reshape(-1), 34963)
+            p["attributes"]["NORMAL"] = g.accessor(Nv, 34962)
+            n += 1
+            print(f"trims: mended {j['materials'][p.get('material', 0)].get('name', '?')}: {int((F != F0).any(1).sum())} of {len(F)} faces turned")
+    g.drop_accessors(g.used_accessors())
+    size = g.save(path)
+    print(f"trims: {n} trims mended on {os.path.basename(path)} ({size / 1e6:.1f} MB)")
+
+
 def main():
+    if "--mend" in sys.argv:
+        return mend(sys.argv[1])
     if len(sys.argv) < 2:
         raise SystemExit(__doc__ or "trims.py GARMENT.glb TRIMS.json")
     path = sys.argv[1]
@@ -248,12 +348,8 @@ def main():
             print(f"trims: {label}: nothing of it lies on the cloth (missed)")
             return
         V, F = np.asarray(V, np.float64), np.asarray(F, np.int64)
-        # normals: area-weighted from the faces
-        Nv = np.zeros_like(V)
-        fn = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
-        for c in range(3):
-            np.add.at(Nv, F[:, c], fn)
-        Nv = unit(Nv).astype(np.float32)
+        F = wound(V, F, tree, Nr)
+        Nv = sheet_normals(V, F, tree, Nr)
         _, nn = tree.query(V)
         j.setdefault("materials", []).append(material(mspec, cloth_mat, label))
         prim = {"attributes": {"POSITION": g.accessor(V.astype(np.float32), 34962, bounds=True), "NORMAL": g.accessor(Nv, 34962),
