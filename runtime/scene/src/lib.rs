@@ -20,7 +20,7 @@ use parts::*;
 mod models;
 use models::*;
 mod live;
-pub use live::{LiveScene, Shot};
+pub use live::{LIVE_GROUPS, LiveScene, Shot, cam_keyed, live_dynamic};
 use live::*;
 mod fast;
 

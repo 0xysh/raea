@@ -50,7 +50,7 @@ pub(crate) struct LiveRow {
 pub(crate) const LIVE_FORGET: u32 = 240;
 
 /// The kinds a live frame keys column by column (live_dynamic); every other kind is diffed whole.
-pub(crate) const LIVE_GROUPS: [&str; 5] = ["light", "mesh", "model", "panel", "decal"];
+pub const LIVE_GROUPS: [&str; 5] = ["light", "mesh", "model", "panel", "decal"];
 
 /// A <Model animations>'s keyed columns (its clips' times and weights) and a <Model morphs>'s (its targets' weights).
 pub(crate) const MIX_COLS: [(&str, &str); 4] = [("mix0_t", "mix0_w"), ("mix1_t", "mix1_w"), ("mix2_t", "mix2_w"), ("mix3_t", "mix3_w")];
@@ -59,7 +59,7 @@ pub(crate) const GRAPH_COLS: [[&str; 2]; 16] = [["g0_w", "g0_t"], ["g1_w", "g1_t
 pub(crate) const MORPH_COLS: [&str; 64] = ["morph0", "morph1", "morph2", "morph3", "morph4", "morph5", "morph6", "morph7", "morph8", "morph9", "morph10", "morph11", "morph12", "morph13", "morph14", "morph15", "morph16", "morph17", "morph18", "morph19", "morph20", "morph21", "morph22", "morph23", "morph24", "morph25", "morph26", "morph27", "morph28", "morph29", "morph30", "morph31", "morph32", "morph33", "morph34", "morph35", "morph36", "morph37", "morph38", "morph39", "morph40", "morph41", "morph42", "morph43", "morph44", "morph45", "morph46", "morph47", "morph48", "morph49", "morph50", "morph51", "morph52", "morph53", "morph54", "morph55", "morph56", "morph57", "morph58", "morph59", "morph60", "morph61", "morph62", "morph63"];
 
 /// The columns a frame may change, per kind (what `rows_into` and `camera` key); everything else is the first frame's.
-pub(crate) fn live_dynamic(kind: &str) -> &'static [&'static str] {
+pub fn live_dynamic(kind: &str) -> &'static [&'static str] {
     match kind {
         "light" => &["lux", "lumens", "x", "y", "z", "dir_x", "dir_y", "dir_z", "rot_qx", "rot_qy", "rot_qz", "rot_qw", "inner", "outer", "frame_sets", "frame_set_i"],
         "mesh" => &["x", "y", "z", "q_x", "q_y", "q_z", "q_w", "scale_x", "scale_y", "scale_z", "visible", "col_r", "col_g", "col_b", "rough", "metal", "emissive_k", "opacity", "sh_r", "sh_g", "sh_b", "rim_k", "spec_k", "outline_w", "pass", "inst"],
@@ -73,7 +73,7 @@ pub(crate) fn live_dynamic(kind: &str) -> &'static [&'static str] {
 /// A camera column a render keys when it changes (raea-runtime-look camera.rs), which a live frame sends when it does:
 /// its place and look, lens, roll (up_*), view window, ambient, sky and environment, aberration, depth of field, motion
 /// blur, the paint look and its parts' rotations (*_qx..qw). The rest is the first frame's, as a render's is.
-pub(crate) fn cam_keyed(k: &str) -> bool {
+pub fn cam_keyed(k: &str) -> bool {
     ["lens_", "mb_", "up_", "view_"].iter().any(|p| k.starts_with(p))
         || ["_qx", "_qy", "_qz", "_qw"].iter().any(|q| k.ends_with(q))
         || matches!(k, "x" | "y" | "z" | "look_x" | "look_y" | "look_z" | "fov" | "focus" | "ortho" | "ambient" | "skybox_k" | "env_srcs" | "env_i" | "env_k" | "env_rot" | "sky_k" | "aberration" | "dof_aperture" | "paint_bands" | "paint_grain" | "paint_rag" | "paint_seed")
