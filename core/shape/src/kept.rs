@@ -46,11 +46,31 @@ pub fn place(expr: &str) -> Option<PathBuf> {
         _ => caches()?.join("shapes"),
     };
     let (len, time) = this_build();
+    let files = files_read(expr);
     let mut key: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in expr.as_bytes().iter().chain(&len.to_le_bytes()).chain(&time.to_le_bytes()) {
+    for b in expr.as_bytes().iter().chain(&len.to_le_bytes()).chain(&time.to_le_bytes()).chain(&files) {
         key = (key ^ *b as u64).wrapping_mul(0x100_0000_01b3);
     }
     Some(root.join(format!("{key:016x}-{:x}.tris", expr.len())))
+}
+
+/// The mesh files an expression reads (obj("..."), glb("..."), wherever they sit in it), each as its length and its
+/// modified time. They go into the key, so a file written again at the same path is read again rather than drawn as
+/// the mesh kept from the file it replaced (a scan remeshed in place kept drawing its first mesh, gambit, 11-17).
+pub(crate) fn files_read(expr: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    for tag in ["obj(\"", "glb(\""] {
+        for (i, _) in expr.match_indices(tag) {
+            let rest = &expr[i + tag.len()..];
+            let Some(end) = rest.find("\")") else { continue };
+            // the path as the expression quotes it ({:?}): a backslash is written doubled
+            let m = std::fs::metadata(rest[..end].replace("\\\\", "\\")).ok();
+            let t = m.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()).unwrap_or(0);
+            out.extend_from_slice(&m.map(|m| m.len()).unwrap_or(0).to_le_bytes());
+            out.extend_from_slice(&t.to_le_bytes());
+        }
+    }
+    out
 }
 
 const MAGIC: &[u8; 8] = b"raeatri1";

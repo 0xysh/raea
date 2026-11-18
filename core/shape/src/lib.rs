@@ -243,6 +243,23 @@ mod tests {
     }
 
     #[test]
+    fn a_mesh_file_written_again_is_kept_under_a_new_key() {
+        let dir = std::env::temp_dir().join(format!("raea-shape-files-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("scan.obj");
+        std::fs::write(&p, "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n").unwrap();
+        let expr = format!("minus(obj({:?}), box(0.1, 0.1, 0.1))", p.to_string_lossy());
+        let first = kept::files_read(&expr);
+        assert_eq!(first.len(), 24, "one file read: its length and modified time");
+        // the same file written again with other content (a larger mesh) reads as another file
+        std::fs::write(&p, "v 0 0 0\nv 2 0 0\nv 0 2 0\nv 0 0 2\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n# remeshed\n").unwrap();
+        assert_ne!(kept::files_read(&expr), first);
+        // an expression that reads no file adds nothing to its key
+        assert!(kept::files_read("box(1, 1, 1)").is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn csg_volumes_are_right() {
         let v = |e: &str| solid(e).unwrap().volume();
         assert!((v("box(2, 1, 0.5)") - 1.0).abs() < 1e-9);
