@@ -53,6 +53,13 @@ Feature: LightBench: a small Rust + Bevy renderer that proves raea's lighting an
     And the sampled bounce converges to the reference as frames grow (RMSE against it, written down) with no bias
     And a sampled pixel traces at most K + 2N rays whatever the number of lights
 
+  Scenario: LB6 a sun and a sky, in a closed room lit through a window
+    When LightBench draws --scene room, or --sun on and --sky X
+    Then the sun is one shadow ray a lit point to a point on its disc, the same in every mode, so its shadows soften
+      as --sun-size grows; a bounce ray that leaves the scene brings the sky
+    And in the room the bounce lights what the sun patch and the window don't, and converges to the reference
+    And a sampled pixel traces at most K + 1 + 3N rays
+
   # LB4: instrumentation and acceptance
   Scenario: LB4 sweeps
     Then camera and light-count sweeps at a fixed resolution print triangles drawn, rays a pixel and pass timings

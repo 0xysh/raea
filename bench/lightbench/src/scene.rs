@@ -51,7 +51,26 @@ pub fn spawn(mut commands: Commands, opts: Res<Opts>, mut meshes: ResMut<Assets<
         commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(material), at));
     };
     put(Plane3d::default().mesh().size(160.0, 160.0).build(), Transform::IDENTITY, Color::srgb(0.62, 0.62, 0.6), &mut tris);
-    if opts.scene == 0 {
+    if opts.scene == 2 {
+        // the room (LB6): 8 x 3.6 x 11 m inside (the knot reaches 3.4), walls 0.2 thick, a window 3 m wide and 1.6
+        // tall in the left wall
+        let shell: [([f32; 3], [f32; 3]); 9] = [
+            ([0.0, 1.9, -3.1], [8.4, 3.8, 0.2]),
+            ([0.0, 1.9, 8.1], [8.4, 3.8, 0.2]),
+            ([4.1, 1.9, 2.5], [0.2, 3.8, 11.4]),
+            ([-4.1, 0.45, 2.5], [0.2, 0.9, 11.4]),
+            ([-4.1, 3.15, 2.5], [0.2, 1.3, 11.4]),
+            ([-4.1, 1.7, -1.85], [0.2, 1.6, 2.7]),
+            ([-4.1, 1.7, 5.35], [0.2, 1.6, 5.7]),
+            ([0.0, 3.7, 2.5], [8.4, 0.2, 11.4]),
+            ([0.0, 0.01, 2.5], [8.0, 0.02, 11.0]),
+        ];
+        for (k, (at, size)) in shell.iter().enumerate() {
+            let colour = if k == 8 { Color::srgb(0.55, 0.42, 0.3) } else { Color::srgb(0.82, 0.8, 0.76) };
+            put(Cuboid::new(size[0], size[1], size[2]).mesh().build(), Transform::from_translation(Vec3::from(*at)), colour, &mut tris);
+        }
+    }
+    if opts.scene != 1 {
         put(knot(2, 3, opts.detail, opts.detail / 32, 0.33), Transform::from_xyz(0.0, 1.75, 0.0).with_scale(Vec3::splat(0.5)), Color::srgb(0.85, 0.42, 0.18), &mut tris);
         put(Cuboid::new(0.2, 2.5, 3.0).mesh().build(), Transform::from_xyz(-2.5, 1.25, 0.0), Color::srgb(0.35, 0.42, 0.55), &mut tris);
     }

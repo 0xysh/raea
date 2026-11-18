@@ -43,7 +43,12 @@ const HELP: &str = "lightbench [switches]
   --camera still|orbit|cut      the camera holds, circles slowly, or jumps to a second view at lit frame --cut-at (still)
   --cut-at N                    the lit frame --camera cut jumps on (8)
   --view history                frames of history at each pixel, white when full
-  --scene knot|field            one knot by a wall (lighting), or rows of knots into the distance (detail) (knot)
+  --scene knot|field|room       one knot by a wall (lighting), rows of knots into the distance (detail), or the knot
+                                and wall in a closed room lit by the sun through a window (bounce: --sun on, --sky
+                                0.25, --bounce 2 unless given) (knot)
+  --sun on|off                  a low sun from the left, one shadow ray to a point on its disc a pixel (off)
+  --sun-size DEG                the sun's angular diameter: larger, softer shadows (0.53)
+  --sky X                       the sky's radiance (a blue-white), brought by bounce rays that leave the scene (0)
   --rows N                      the field's rows (6)
   --detail full|adaptive        every finest triangle, or the clusters each knot's distance asks for (adaptive)
   --tau PX                      the error in pixels a cluster may show (1)
@@ -79,10 +84,15 @@ pub struct Opts {
     pub fov: f32,
     pub grid: bool,
     pub bounces: u32,
+    pub sun: bool,
+    pub sun_size: f32,
+    pub sky: f32,
 }
 
 fn opts() -> Result<Opts, String> {
-    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0, grid: true, bounces: 0 };
+    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0, grid: true, bounces: 0, sun: false, sun_size: 0.53, sky: 0.0 };
+    // what --scene room turns on, unless the switches say otherwise
+    let (mut sun, mut sky, mut bounces) = (None, None, None);
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut val = || args.next().ok_or(format!("{a} needs a value"));
@@ -109,13 +119,16 @@ fn opts() -> Result<Opts, String> {
             }
             "--scene" => {
                 let v = val()?;
-                o.scene = ["knot", "field"].iter().position(|m| *m == v).ok_or("--scene: knot or field")? as u32;
+                o.scene = ["knot", "field", "room"].iter().position(|m| *m == v).ok_or("--scene: knot, field or room")? as u32;
             }
             "--rows" => o.rows = (num(val()?)? as u32).max(1),
             "--tau" => o.tau = num(val()?)?.max(0.0),
             "--fov" => o.fov = num(val()?)?.clamp(1.0, 170.0),
             "--grid" => o.grid = val()? != "off",
-            "--bounce" => o.bounces = (num(val()?)? as u32).min(8),
+            "--bounce" => bounces = Some((num(val()?)? as u32).min(8)),
+            "--sun" => sun = Some(val()? != "off"),
+            "--sun-size" => o.sun_size = num(val()?)?.clamp(0.0, 30.0),
+            "--sky" => sky = Some(num(val()?)?.max(0.0)),
             "--size" => {
                 let v = val()?;
                 let (w, h) = v.split_once('x').ok_or("--size: WxH")?;
@@ -138,6 +151,8 @@ fn opts() -> Result<Opts, String> {
             _ => return Err(format!("unknown switch {a}\n{HELP}")),
         }
     }
+    let room = o.scene == 2;
+    (o.sun, o.sky, o.bounces) = (sun.unwrap_or(room), sky.unwrap_or(if room { 0.25 } else { 0.0 }), bounces.unwrap_or(if room { 2 } else { 0 }));
     if o.detail == 0 {
         o.detail = if o.scene == 1 { 512 } else { 2048 };
     }
@@ -161,6 +176,7 @@ fn main() {
             std::process::exit(if e == HELP { 0 } else { 2 });
         }
     };
+    let (sky, x) = (o.sky, o.exposure);
     let mut app = App::new();
     // timing runs ask the GPU for timestamps at a pass's start and end (Apple's GPUs have no others), for its time
     let mut wgpu = bevy::render::settings::WgpuSettings::default();
@@ -182,7 +198,8 @@ fn main() {
     }
     app.insert_resource(o)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
-        .insert_resource(ClearColor(Color::srgb(0.02, 0.025, 0.035)))
+        // the sky seen past the scene: the bounce's sky, exposed as the lighting pass exposes, else near black
+        .insert_resource(ClearColor(if sky > 0.0 { Color::linear_rgb(SKY.x * sky * x, SKY.y * sky * x, SKY.z * sky * x) } else { Color::srgb(0.02, 0.025, 0.035) }))
         .add_plugins(pass::LightPass)
         .add_systems(Startup, (scene::spawn, camera))
         .init_resource::<field::Counts>()
@@ -210,6 +227,12 @@ fn camera(mut commands: Commands, o: Res<Opts>, mut images: ResMut<Assets<Image>
         commands.insert_resource(Target(handle));
     }
 }
+
+/// The sun (LB6): toward it from the scene, low on the left and a little behind the knot, so in --scene room it comes
+/// through the window onto the floor in front of the knot; its irradiance, warm; the sky's colour, which --sky scales.
+const SUN_TO: Vec3 = Vec3::new(-1.0, 0.55, -0.45);
+const SUN_E: Vec3 = Vec3::new(3.2, 2.9, 2.5);
+const SKY: Vec3 = Vec3::new(0.55, 0.75, 1.0);
 
 const EYE: Vec3 = Vec3::new(0.0, 2.2, 7.0);
 const LOOK: Vec3 = Vec3::new(0.0, 1.3, 0.0);
@@ -255,6 +278,9 @@ fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: 
         cut,
         history: o.history,
         bounces: o.bounces,
+        sun: SUN_TO.normalize().extend((o.sun_size * 0.5).to_radians()),
+        sun_e: if o.sun { SUN_E.extend(0.0) } else { Vec4::ZERO },
+        sky: (SKY * o.sky).extend(0.0),
     };
 }
 

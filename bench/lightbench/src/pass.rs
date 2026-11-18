@@ -60,13 +60,17 @@ pub struct Frame {
     pub grid_idx: Vec<u32>,
     /// diffuse bounces a pixel follows (LB5)
     pub bounces: u32,
+    /// the sun (LB6): the unit direction toward it and its angular radius; its irradiance (zero: none); the sky's
+    /// radiance, which bounce rays that leave the scene bring back
+    pub sun: Vec4,
+    pub sun_e: Vec4,
+    pub sky: Vec4,
 }
 
 pub struct LightPass;
 
 impl Plugin for LightPass {
     fn build(&self, app: &mut App) {
-        bevy::asset::embedded_asset!(app, "light.wgsl");
         app.init_resource::<Frame>().add_plugins((ExtractResourcePlugin::<Frame>::default(), ExtractResourcePlugin::<SceneGpu>::default()));
         let Some(render) = app.get_sub_app_mut(RenderApp) else { return };
         // timing a run (--bench): each frame waits for the GPU, so the frame time counts the GPU's work too
@@ -92,6 +96,9 @@ struct Params {
     grid_min: Vec4,
     grid_dims: UVec4,
     gi: UVec4,
+    sun: Vec4,
+    sun_e: Vec4,
+    sky: Vec4,
 }
 
 #[derive(Resource)]
@@ -140,7 +147,8 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
     let id = cache.queue_compute_pipeline(ComputePipelineDescriptor {
         label: Some("lightbench_light".into()),
         layout: vec![layout.clone()],
-        shader: assets.load("embedded://lightbench/light.wgsl"),
+        // the lighting and the rays it traces, one module
+        shader: assets.add(bevy::shader::Shader::from_wgsl(concat!(include_str!("light.wgsl"), "\n", include_str!("trace.wgsl")), "lightbench/light.wgsl")),
         entry_point: Some("main".into()),
         ..default()
     });
@@ -233,6 +241,9 @@ fn light(
         grid_min: frame.grid_min,
         grid_dims: frame.grid_dims,
         gi: UVec4::new(frame.bounces, 0, 0, 0),
+        sun: frame.sun,
+        sun_e: frame.sun_e,
+        sky: frame.sky,
     });
     params.write_buffer(&device, &queue);
     let group = device.create_bind_group(

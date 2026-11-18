@@ -27,6 +27,11 @@ struct Params {
     grid_dims: vec4<u32>,
     // diffuse bounces a pixel follows (0 none), 0, 0, 0
     gi: vec4<u32>,
+    // the sun (LB6): xyz the unit direction toward it, w its angular radius in radians; its irradiance (rgb, 0 off)
+    sun: vec4<f32>,
+    sun_e: vec4<f32>,
+    // the sky's radiance (rgb): what a bounce ray that leaves the scene brings back
+    sky: vec4<f32>,
 }
 
 struct Node { mn: vec3<f32>, a: u32, mx: vec3<f32>, count: u32 }
@@ -65,17 +70,6 @@ const STACK: u32 = 48u;
 var<private> seed: u32;
 var<private> rays: u32;
 
-fn pcg(v: u32) -> u32 {
-    let s = v * 747796405u + 2891336453u;
-    let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
-    return (w >> 22u) ^ w;
-}
-
-fn rnd() -> f32 {
-    seed = pcg(seed);
-    return f32(seed >> 8u) / 16777216.0;
-}
-
 // Bevy's octahedral_decode (bevy_render utils), for the deferred prepass's normal
 fn oct_decode(v: vec2<f32>) -> vec3<f32> {
     let f = v * 2.0 - 1.0;
@@ -84,135 +78,6 @@ fn oct_decode(v: vec2<f32>) -> vec3<f32> {
     let w = select(vec2(t), vec2(-t), n.xy >= vec2(0.0));
     n = vec3(n.xy + w, n.z);
     return normalize(n);
-}
-
-fn hit_box(o: vec3<f32>, inv: vec3<f32>, mn: vec3<f32>, mx: vec3<f32>, tmax: f32) -> bool {
-    let t0 = (mn - o) * inv;
-    let t1 = (mx - o) * inv;
-    let lo = min(t0, t1);
-    let hi = max(t0, t1);
-    let near = max(max(lo.x, lo.y), max(lo.z, 0.0));
-    let far = min(min(hi.x, hi.y), min(hi.z, tmax));
-    return near <= far;
-}
-
-const MISS: f32 = 3.4e38;
-
-// Möller-Trumbore, both sides: how far along the ray triangle i is, MISS if it isn't on it
-fn tri_t(o: vec3<f32>, d: vec3<f32>, i: u32) -> f32 {
-    let v0 = tris[3u * i].xyz;
-    let e1 = tris[3u * i + 1u].xyz;
-    let e2 = tris[3u * i + 2u].xyz;
-    let pv = cross(d, e2);
-    let det = dot(e1, pv);
-    if abs(det) < 1e-12 {
-        return MISS;
-    }
-    let inv = 1.0 / det;
-    let tv = o - v0;
-    let u = dot(tv, pv) * inv;
-    if u < 0.0 || u > 1.0 {
-        return MISS;
-    }
-    let qv = cross(tv, e1);
-    let v = dot(d, qv) * inv;
-    if v < 0.0 || u + v > 1.0 {
-        return MISS;
-    }
-    let t = dot(e2, qv) * inv;
-    return select(MISS, t, t > 0.0);
-}
-
-fn hit_tri(o: vec3<f32>, d: vec3<f32>, i: u32, tmax: f32) -> bool {
-    return tri_t(o, d, i) < tmax;
-}
-
-// whether anything lies on the ray before tmax: the BVH, or every triangle when brute force is asked for
-fn occluded(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> bool {
-    rays += 1u;
-    if p.mode.w != 0u {
-        let n = arrayLength(&tris) / 3u;
-        for (var i = 0u; i < n; i++) {
-            if hit_tri(o, d, i, tmax) {
-                return true;
-            }
-        }
-        return false;
-    }
-    let inv = 1.0 / select(d, vec3(1e-12), abs(d) < vec3(1e-12));
-    var stack: array<u32, STACK>;
-    var sp = 0u;
-    var i = 0u;
-    loop {
-        let n = nodes[i];
-        if hit_box(o, inv, n.mn, n.mx, tmax) {
-            if n.count > 0u {
-                for (var t = n.a; t < n.a + n.count; t++) {
-                    if hit_tri(o, d, t, tmax) {
-                        return true;
-                    }
-                }
-            } else if sp < STACK {
-                stack[sp] = n.a;
-                sp++;
-                i++;
-                continue;
-            }
-        }
-        if sp == 0u {
-            break;
-        }
-        sp--;
-        i = stack[sp];
-    }
-    return false;
-}
-
-struct Hit { t: f32, i: u32 }
-
-// the nearest triangle on the ray before tmax (i 0xFFFFFFFF if none): the BVH walked as `occluded` walks it, the
-// ray shortening at each hit so farther boxes drop out; every triangle with brute force
-fn closest(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
-    rays += 1u;
-    var best = Hit(tmax, 0xFFFFFFFFu);
-    if p.mode.w != 0u {
-        let n = arrayLength(&tris) / 3u;
-        for (var i = 0u; i < n; i++) {
-            let t = tri_t(o, d, i);
-            if t < best.t {
-                best = Hit(t, i);
-            }
-        }
-        return best;
-    }
-    let inv = 1.0 / select(d, vec3(1e-12), abs(d) < vec3(1e-12));
-    var stack: array<u32, STACK>;
-    var sp = 0u;
-    var i = 0u;
-    loop {
-        let n = nodes[i];
-        if hit_box(o, inv, n.mn, n.mx, best.t) {
-            if n.count > 0u {
-                for (var t = n.a; t < n.a + n.count; t++) {
-                    let h = tri_t(o, d, t);
-                    if h < best.t {
-                        best = Hit(h, t);
-                    }
-                }
-            } else if sp < STACK {
-                stack[sp] = n.a;
-                sp++;
-                i++;
-                continue;
-            }
-        }
-        if sp == 0u {
-            break;
-        }
-        sp--;
-        i = stack[sp];
-    }
-    return best;
 }
 
 // a light's light at a point before its shadow: its power times the cosine and the falloff (an inverse square that
@@ -313,26 +178,19 @@ fn lit_at(pos: vec3<f32>, n: vec3<f32>, o: vec3<f32>, k: u32) -> vec3<f32> {
             c /= f32(k);
         }
     }
+    // the sun, the same in every mode: one shadow ray to a point on its disc, so its shadows soften with its size
+    let ns = dot(n, p.sun.xyz);
+    if ns > 0.0 && lum(p.sun_e.rgb) > 0.0 && !occluded(o, cone_dir(p.sun.xyz, cos(p.sun.w)), 1e4) {
+        c += p.sun_e.rgb * ns;
+    }
     return c;
-}
-
-// a direction about n, chosen in proportion to its cosine (Duff et al.'s basis)
-fn cosine_dir(n: vec3<f32>) -> vec3<f32> {
-    let phi = 2.0 * PI * rnd();
-    let r2 = rnd();
-    let r = sqrt(r2);
-    let s = select(-1.0, 1.0, n.z >= 0.0);
-    let a = -1.0 / (s + n.z);
-    let b = n.x * n.y * a;
-    let t = vec3(1.0 + s * n.x * n.x * a, s * b, -s * n.x);
-    let bt = vec3(b, s + n.y * n.y * a, -n.y);
-    return normalize(t * (r * cos(phi)) + bt * (r * sin(phi)) + n * sqrt(max(0.0, 1.0 - r2)));
 }
 
 // the light reaching a point by way of other surfaces, p.gi.x bounces deep: from the point a cosine-chosen ray to the
 // nearest triangle, that point lit as a pixel is (one light sample, or every light in the reference), and on from
 // there. A cosine-chosen ray's pdf cancels the cosine and the 1 / PI of the hit's diffuse light, so each bounce adds
-// the albedos so far times the light at the hit. Rays that leave the scene bring nothing (it has no sky).
+// the albedos so far times the light at the hit. A ray that leaves the scene brings the sky: PI times its radiance,
+// for the same reason.
 fn bounced(n0: vec3<f32>, o0: vec3<f32>) -> vec3<f32> {
     var e = vec3(0.0);
     var through = vec3(1.0);
@@ -342,6 +200,7 @@ fn bounced(n0: vec3<f32>, o0: vec3<f32>) -> vec3<f32> {
         let d = cosine_dir(n);
         let h = closest(o, d, 1e4);
         if h.i == 0xFFFFFFFFu {
+            e += through * PI * p.sky.rgb;
             break;
         }
         let v0 = tris[3u * h.i];
