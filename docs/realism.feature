@@ -277,6 +277,16 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
         most three bounces ending in last frame's cache
       And on Berlin light no longer leaks through a facade into a room, and the TLAS's cost and the cache's are in
         LT2's table
+      And the plan, the cache first and measured on Berlin before anything rests on it (11-17): until hits know their
+        surface (LT4) a cell sees LT2's stand-in (albedo 0.5) and is keyed by the side a ray meets (its normal faces
+        the ray); LT2's probe rays seed it, the screen's 8x8-tile paths come after; behind RAEA_GI=1, timed per pass
+        | crate       | file                 | lines | job                                                                 |
+        | raea-sys-rt | src/cache.rs         | 260   | the cache's buffers (2^20 cells, 84 bytes each), its passes in order |
+        | raea-sys-rt | src/cache.wesl       | 170   | the hash grid: cell size by distance, key and checksum, claim, read  |
+        | raea-sys-rt | src/cache_update.wesl | 150  | each live cell: sun and sky, one bounce into last frame's cache, blend |
+        | raea-sys-rt | src/compact.wesl     | 80    | cells age out; the live ones listed (a two-level prefix sum)         |
+        | raea-sys-rt | src/gi.wesl          | +20   | a probe ray's hit reads its cell in place of the flat stand-in       |
+        | raea-sys-rt | src/gi.rs            | +40   | the cache's GPU ms per pass and its live cells in RAEA_GI_STATS      |
 
     Scenario: LT4. What a ray hit sees
       Given every MaterialExtension writes the deferred G-buffer with its own surface code (D4; procmat's is first,
