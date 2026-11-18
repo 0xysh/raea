@@ -227,48 +227,71 @@ pub fn instance_models(world: &mut World) {
         let at = world.get_mut::<Model3d>(e).and_then(|mut m| m.inst.take()).unwrap_or_default();
         let src = world.get::<Model3d>(e).map(|m| m.src.clone()).unwrap_or_default();
         let roots: Vec<Entity> = world.get::<Children>(e).map(|c| c.iter().collect()).unwrap_or_default();
-        // every mesh under the scene, with its place in the model (its transforms multiplied up to the model)
-        let mut parts: Vec<(Mesh3d, MeshMaterial3d<StandardMaterial>, Mat4)> = vec![];
-        let mut stack: Vec<(Entity, Mat4)> = roots.iter().map(|r| (*r, Mat4::IDENTITY)).collect();
-        let mut failed = None;
-        while let Some((d, above)) = stack.pop() {
-            let here = above * world.get::<Transform>(d).map(Transform::to_matrix).unwrap_or(Mat4::IDENTITY);
-            if let Some(mesh) = world.get::<Mesh3d>(d) {
-                if world.get::<SkinnedMesh>(d).is_some() {
-                    failed = Some(format!("model {src}: a skinned mesh can't be instanced; use a <Model>"));
-                    break;
-                }
-                match world.get::<MeshMaterial3d<StandardMaterial>>(d) {
-                    Some(mat) => parts.push((mesh.clone(), mat.clone(), here)),
-                    None => {
-                        failed = Some(format!("model {src}: instances take its standard (glTF) materials; a toon, look or shader surface isn't instanced yet"));
-                        break;
-                    }
-                }
+        let parts = match copy_scene(world, e, &roots, &at) {
+            Ok(p) => p,
+            Err(f) => {
+                world.resource_mut::<Error>().0.get_or_insert(format!("model {src}: {f}"));
+                continue;
             }
-            if let Some(kids) = world.get::<Children>(d) {
-                stack.extend(kids.iter().map(|k| (k, here)));
-            }
-        }
-        if let Some(f) = failed {
-            world.resource_mut::<Error>().0.get_or_insert(f);
-            continue;
-        }
-        let m = markers(world, e);
-        for tr in &at {
-            let place = tr.to_matrix();
-            for (mesh, mat, local) in &parts {
-                spawn_copy(world, e, mesh.clone(), mat.clone(), Transform::from_matrix(place * *local), &m);
-            }
-        }
+        };
         for r in roots {
             world.entity_mut(r).despawn();
         }
         if let Some(mut pl) = world.get_mut::<Placements>(e) {
-            pl.parts = parts.iter().map(|p| p.2).collect();
+            pl.parts = parts;
         }
         world.entity_mut(e).insert(Instanced);
     }
+}
+
+/// A model's scene (`roots`, its children) copied under `e` to every placement in `at`: each mesh with its place in
+/// the model (its transforms multiplied up to the model) and its material's components, its standard (glTF) one or
+/// what a cover put over it (a shader's surface, with the link that keeps it following the standard one the rows
+/// animate; a procedural or worn one), cloned onto each copy as handles, so Bevy still batches the set. Copies go
+/// placement by placement, each one's parts in the same order (sync_instances moves them in that order). Returns each
+/// part's place in the model.
+fn copy_scene(world: &mut World, e: Entity, roots: &[Entity], at: &[Transform]) -> Result<Vec<Mat4>, String> {
+    let shaded = world.components().component_id::<raea_sys_shader::Shaded>();
+    let mut parts: Vec<(Mesh3d, Entity, Vec<ComponentId>, Mat4)> = vec![];
+    let mut stack: Vec<(Entity, Mat4)> = roots.iter().map(|r| (*r, Mat4::IDENTITY)).collect();
+    while let Some((d, above)) = stack.pop() {
+        let here = above * world.get::<Transform>(d).map(Transform::to_matrix).unwrap_or(Mat4::IDENTITY);
+        if let Some(mesh) = world.get::<Mesh3d>(d) {
+            if world.get::<SkinnedMesh>(d).is_some() {
+                return Err("a skinned mesh can't be instanced; use a <Model>".into());
+            }
+            let mut mats = materials_of(world, d);
+            if mats.is_empty() {
+                return Err("instances take its mesh materials: standard, shaded, procedural or worn (a toon or look surface isn't instanced yet)".into());
+            }
+            if let Some(id) = shaded.filter(|_| world.get::<raea_sys_shader::Shaded>(d).is_some()) {
+                mats.push(id);
+            }
+            parts.push((mesh.clone(), d, mats, here));
+        }
+        if let Some(kids) = world.get::<Children>(d) {
+            stack.extend(kids.iter().map(|k| (k, here)));
+        }
+    }
+    let m = markers(world, e);
+    let mut cloners: Vec<EntityCloner> = parts
+        .iter()
+        .map(|(_, _, mats, _)| {
+            let mut b = EntityCloner::build_opt_in(world);
+            b.without_required_components(|b| {
+                b.allow_by_ids(mats.iter().copied());
+            });
+            b.finish()
+        })
+        .collect();
+    for tr in at {
+        let place = tr.to_matrix();
+        for (k, (mesh, from, _, local)) in parts.iter().enumerate() {
+            let c = spawn_bare(world, e, mesh.clone(), Transform::from_matrix(place * *local), &m);
+            cloners[k].clone_entity(world, *from, c);
+        }
+    }
+    Ok(parts.iter().map(|p| p.3).collect())
 }
 
 /// A ready model with `shadow={false}` or `receiveShadow={false}`: each of its meshes given the marker the model has
@@ -336,5 +359,42 @@ mod tests {
         let e = world.spawn((Mesh3d(Handle::default()), Transform::default())).id();
         let err = instance_mesh(&mut world, e, &row()).unwrap_err();
         assert!(err.contains("instances take a mesh material"), "{err}");
+    }
+
+    /// A model whose cover put a shader over a part (a tree's leaves): each placement gets every part, the shaded one
+    /// with its surface and its link to the standard material the rows animate, placement by placement.
+    #[test]
+    fn a_models_shaded_parts_are_copied_with_their_surface() {
+        let mut world = world();
+        world.resource::<AppTypeRegistry>().write().register::<MeshMaterial3d<StandardMaterial>>();
+        let e = world.spawn(Transform::default()).id();
+        let root = world.spawn((Transform::from_xyz(0.0, 1.0, 0.0), ChildOf(e))).id();
+        let std = MeshMaterial3d::<StandardMaterial>(Handle::default());
+        let shaded = MeshMaterial3d::<TintMaterial>(Handle::default());
+        world.spawn((Mesh3d(Handle::default()), std.clone(), Transform::default(), ChildOf(root)));
+        world.spawn((Mesh3d(Handle::default()), shaded.clone(), raea_sys_shader::Shaded { std: Handle::default() }, Transform::from_xyz(0.0, 2.0, 0.0), ChildOf(root)));
+        let at = [Transform::from_xyz(10.0, 0.0, 0.0), Transform::from_xyz(20.0, 0.0, 0.0)];
+        let parts = copy_scene(&mut world, e, &[root], &at).unwrap();
+        assert_eq!(parts.len(), 2);
+        let kids: Vec<Entity> = world.get::<Children>(e).unwrap().iter().filter(|k| *k != root).collect();
+        assert_eq!(kids.len(), 4, "two parts at two placements");
+        for (i, k) in kids.iter().enumerate() {
+            let y = world.get::<Transform>(*k).unwrap().translation;
+            assert_eq!(y.x, if i < 2 { 10.0 } else { 20.0 }, "placement by placement");
+            let is_shaded = world.get::<MeshMaterial3d<TintMaterial>>(*k).is_some();
+            assert_eq!(is_shaded, world.get::<raea_sys_shader::Shaded>(*k).is_some(), "a shaded copy keeps its link");
+            assert_ne!(is_shaded, world.get::<MeshMaterial3d<StandardMaterial>>(*k).is_some(), "one surface a copy");
+            assert_eq!(y.y, if is_shaded { 3.0 } else { 1.0 }, "its place in the model");
+        }
+    }
+
+    #[test]
+    fn a_models_part_with_no_material_is_refused() {
+        let mut world = world();
+        let e = world.spawn(Transform::default()).id();
+        let root = world.spawn((Transform::default(), ChildOf(e))).id();
+        world.spawn((Mesh3d(Handle::default()), Transform::default(), ChildOf(root)));
+        let err = copy_scene(&mut world, e, &[root], &[Transform::default()]).unwrap_err();
+        assert!(err.contains("instances take its mesh materials"), "{err}");
     }
 }
