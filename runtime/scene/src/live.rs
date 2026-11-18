@@ -28,8 +28,8 @@ pub struct LiveScene {
     /// identity -> a panel's `src`, or an <Instances>' placements (its shared data-at), as the full path last made its row
     /// (the fast path leaves it a new one)
     pub(crate) panel_srcs: std::collections::HashMap<String, std::sync::Arc<str>>,
-    /// what the lights' sets were made from when the full path last made them (light_sig): the fast path, which
-    /// doesn't make them, goes the full way when it differs
+    /// what the lights' sets and the parts' components were made from when the full path last made them (scene_sig):
+    /// the fast path, which doesn't make them, goes the full way when it differs
     pub(crate) light_sig: String,
 }
 
@@ -142,7 +142,7 @@ impl LiveScene {
     /// by identity, with the row ids this scene keeps.
     pub(crate) fn current(&mut self, f: Shot) -> (BTreeMap<String, V>, Vec<(String, String, BTreeMap<String, V>)>) {
         let all = vec![items_of(f.scene)];
-        self.light_sig = light_sig(&all[0]);
+        self.light_sig = scene_sig(&all[0]);
         // the camera's own spawns (its fog, sky...) in the frame's program with the rest
         let mut p = Program::default();
         let cam = self.camera_row(&all, f.clear, &mut p);

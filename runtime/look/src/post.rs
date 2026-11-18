@@ -379,3 +379,14 @@ pub fn light_sig(its: &[Item]) -> String {
     }
     s
 }
+
+/// light_sig, and each part's Bevy components (its <BevyComponent>s, a Detail, its layer key): what a live frame's fast
+/// path (raea-runtime-scene fast.rs) doesn't diff, so the frame where either changes goes the full way, and a frame
+/// where neither did leaves the component rows as they were sent
+pub fn scene_sig(its: &[Item]) -> String {
+    let mut s = light_sig(its);
+    for c in its.iter().filter_map(|i| i.props.get("components")) {
+        s.push_str(&c.to_string());
+    }
+    s
+}

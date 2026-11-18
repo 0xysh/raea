@@ -49,8 +49,34 @@ struct ShadowLeft;
 
 pub fn install(app: &mut App) {
     app.register_type::<Detail>().add_systems(PostUpdate, apply.after(VisibilitySystems::CalculateBounds).after(bevy::transform::TransformSystems::Propagate).before(VisibilitySystems::CheckVisibility));
-    if std::env::var_os("RAEA_LOD_DEBUG").is_some() {
-        app.add_systems(PostUpdate, report.after(VisibilitySystems::CheckVisibility));
+    match std::env::var("RAEA_LOD_DEBUG").as_deref() {
+        Ok("time") => {
+            app.init_resource::<LodTime>();
+            app.add_systems(PostUpdate, (stamp.before(apply), timed.after(apply)));
+        }
+        Ok(_) => {
+            app.add_systems(PostUpdate, report.after(VisibilitySystems::CheckVisibility));
+        }
+        Err(_) => {}
+    }
+}
+
+/// RAEA_LOD_DEBUG=time: apply's own time and the Details changed this frame, averaged every 100 frames, on stderr
+fn stamp(mut t: ResMut<LodTime>) {
+    t.0 = Some(std::time::Instant::now());
+}
+
+#[derive(Resource, Default)]
+struct LodTime(Option<std::time::Instant>, f64, u32, u32);
+
+fn timed(mut t: ResMut<LodTime>, changed: Query<(), Changed<Detail>>, parts: Query<(), With<Detail>>) {
+    let Some(at) = t.0 else { return };
+    t.1 += at.elapsed().as_secs_f64() * 1000.0;
+    t.2 += 1;
+    t.3 += changed.iter().count() as u32;
+    if t.2 == 100 {
+        eprintln!("raea lod time: apply {:.2} ms a frame, {:.0} of {} Details changed a frame", t.1 / 100.0, t.3 as f64 / 100.0, parts.iter().count());
+        *t = LodTime::default();
     }
 }
 
@@ -102,9 +128,34 @@ pub fn edge_gap(eye: Vec3, point: Vec3, lo: Vec3, hi: Vec3) -> f32 {
     (eye.distance(point) - eye.distance(eye.clamp(lo, hi))).max(0.0)
 }
 
+/// how far a part's nearest edge (`d`) is from the bands its range fades over (0 inside one): the eye can move a third
+/// of this before a range written for it could draw the part differently (the edge and each mesh's gap move at most
+/// as far as the eye)
+pub fn slack(d: f32, start: f32, end: f32, fade: f32) -> f32 {
+    let h = fade.clamp(0.0, 1.0) * 0.5;
+    [start, end].into_iter().filter(|b| *b > 0.0 && b.is_finite()).fold(f32::INFINITY, |s, b| {
+        let (lo, hi) = (b * (1.0 - h), b * (1.0 + h));
+        s.min(if d < lo { lo - d } else if d > hi { d - hi } else { 0.0 })
+    })
+}
+
 type MeshRow<'a> = (&'a GlobalTransform, Option<&'a Aabb>, Option<&'a VisibilityRange>, Has<NotShadowCaster>, Has<ShadowLeft>);
 
-fn apply(cams: Query<(&Camera, &Projection, &GlobalTransform, Has<bevy::camera::ShadowLodOrigin>), With<Camera3d>>, parts: Query<(Entity, &Detail)>, children: Query<&Children>, meshes: Query<MeshRow, With<Mesh3d>>, mut commands: Commands) {
+/// What `apply` last did for a part: its meshes and their bounds, and the Detail, lens and eye it wrote their ranges for.
+/// Bevy rebuilds its whole table of ranges whenever one changes and never reuses a range's slot (65,535 in all), so a
+/// range is written only when it can draw differently, and an edge's gap is whole metres.
+#[derive(Default)]
+struct Held {
+    meshes: Vec<Entity>,
+    bounds: Option<(Vec3, Vec3)>,
+    detail: Option<Detail>,
+    focal: Option<f32>,
+    eye: Vec3,
+    slack: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply(cams: Query<(&Camera, &Projection, &GlobalTransform, Has<bevy::camera::ShadowLodOrigin>), With<Camera3d>>, parts: Query<(Entity, &Detail, Ref<GlobalTransform>)>, added: Query<(), Added<Mesh3d>>, children: Query<&Children>, meshes: Query<MeshRow, With<Mesh3d>>, mut held: Local<std::collections::HashMap<Entity, Held>>, mut commands: Commands) {
     // the shot's camera (raea gives it the shadow LOD origin), else the first active 3D one: a range is one per mesh,
     // so sizes on screen and nearest edges are measured for one camera
     let shot = cams.iter().filter(|(c, ..)| c.is_active).max_by_key(|(.., origin)| *origin);
@@ -113,15 +164,39 @@ fn apply(cams: Query<(&Camera, &Projection, &GlobalTransform, Has<bevy::camera::
         _ => None,
     });
     let eye = shot.map(|(_, _, at, _)| at.translation());
-    for (part, d) in &parts {
-        let found: Vec<Entity> = std::iter::once(part).chain(children.iter_descendants(part)).filter(|e| meshes.contains(*e)).collect();
-        if found.is_empty() {
+    // a part's meshes are walked again only when meshes arrived (a glTF loading its children) or its Detail changed
+    let loaded = !added.is_empty();
+    held.retain(|e, _| parts.contains(*e));
+    for (part, d, at) in &parts {
+        let h = held.entry(part).or_default();
+        let new = h.detail.as_ref() != Some(d);
+        let walk = loaded || new || h.meshes.is_empty();
+        if walk {
+            h.meshes = std::iter::once(part).chain(children.iter_descendants(part)).filter(|e| meshes.contains(*e)).collect();
+        }
+        if h.meshes.is_empty() {
             continue;
         }
-        let bounds = bounds(&found, &meshes);
-        let size = if d.size > 0.0 { d.size } else { bounds.map_or(0.0, |(lo, hi)| (hi - lo).length()) };
+        if walk || at.is_changed() {
+            h.bounds = bounds(&h.meshes, &meshes);
+        }
+        let size = if d.size > 0.0 { d.size } else { h.bounds.map_or(0.0, |(lo, hi)| (hi - lo).length()) };
         let (start, end) = span(d, size, focal);
-        for e in found {
+        let edge = match (d.edge, eye, h.bounds) {
+            (true, Some(eye), Some((lo, hi))) => Some((eye, lo, hi)),
+            _ => None,
+        };
+        let moved = edge.is_some_and(|(eye, ..)| eye.distance(h.eye) >= (h.slack / 3.0).max(0.5));
+        if !(walk || at.is_changed() || h.focal != focal || moved) {
+            continue;
+        }
+        h.detail = Some(d.clone());
+        h.focal = focal;
+        if let Some((eye, lo, hi)) = edge {
+            h.eye = eye;
+            h.slack = slack(eye.distance(eye.clamp(lo, hi)), start, end, d.fade);
+        }
+        for &e in &h.meshes {
             let Ok((gt, aabb, now, no_shadow, ours)) = meshes.get(e) else { continue };
             // measured from the mesh's origin, unless that lies outside its own bounds (a mesh baked in world
             // coordinates, as the city's tiles are): then from its bounds' centre
@@ -130,10 +205,7 @@ fn apply(cams: Query<(&Camera, &Projection, &GlobalTransform, Has<bevy::camera::
                 Some(a) => gt.affine().transform_point3(Vec3::from(a.center)),
                 None => gt.translation(),
             };
-            let gap = match (d.edge, eye, bounds) {
-                (true, Some(eye), Some((lo, hi))) => edge_gap(eye, point, lo, hi),
-                _ => 0.0,
-            };
+            let gap = edge.map_or(0.0, |(eye, lo, hi)| edge_gap(eye, point, lo, hi).round());
             let want = shifted(range(start, end, d.fade, use_aabb), gap);
             if now != Some(&want) {
                 commands.entity(e).insert(want);
@@ -212,5 +284,15 @@ mod tests {
         // standing inside it, 3 m from its middle: 0 m from it, so the whole 3 m is the gap; an endless end stays endless
         assert_eq!(edge_gap(Vec3::new(12.0, 0.0, 0.0), Vec3::new(15.0, 0.0, 0.0), Vec3::new(10.0, -1.0, -1.0), Vec3::new(20.0, 1.0, 1.0)), 3.0);
         assert_eq!(shifted(range(30.0, f32::INFINITY, 0.0, true), 5.0).end_margin, f32::MAX..f32::MAX);
+    }
+
+    #[test]
+    fn slack_is_the_way_to_the_nearest_fading_band() {
+        // drawn 120 m to 700 m, fading 10%: bands 114-126 m and 665-735 m
+        assert!((slack(300.0, 120.0, 700.0, 0.1) - 174.0).abs() < 1e-3);
+        assert_eq!(slack(120.0, 120.0, 700.0, 0.1), 0.0);
+        // a start at 0 and an endless end have no band
+        assert!((slack(50.0, 0.0, f32::INFINITY, 0.1)).is_infinite());
+        assert!((slack(50.0, 0.0, 120.0, 0.1) - 64.0).abs() < 1e-3);
     }
 }

@@ -16,8 +16,8 @@ impl LiveScene {
         if self.rows.is_empty() {
             return None;
         }
-        // rows of other kinds (components, entities, fires...): the full path, which diffs them (G15)
-        if self.rows.values().any(|r| !LIVE_GROUPS.contains(&r.kind.as_str())) {
+        // rows of other kinds (entities, fires...): the full path, which diffs them (G15); components stay as sent (scene_sig)
+        if self.rows.values().any(|r| !LIVE_GROUPS.contains(&r.kind.as_str()) && r.kind != "component") {
             return None;
         }
         // a lens, motion blur or a toon surface's keyed values: the full path, which keys them (camera_of, rows_into_of)
@@ -25,8 +25,8 @@ impl LiveScene {
             return None;
         }
         let its = items_of(f.scene);
-        // a light's colour, shadows or shafts changed (its set, as_table): the full path, which makes them
-        if light_sig(&its) != self.light_sig {
+        // a light's colour, shadows or shafts (its set, as_table) or a part's components changed: the full path, which makes them
+        if scene_sig(&its) != self.light_sig {
             return None;
         }
         // pass 1: every part's id (as tracks_of names it on one frame), or None before anything changes
@@ -285,12 +285,12 @@ impl LiveScene {
         // missing this frame: hidden (a light dark); dropped once it's been gone long enough
         let mut gone = Vec::new();
         for (id, r) in self.rows.iter_mut() {
-            if r.seen {
+            if r.seen || (r.kind == "component" && r.missing == 0) {
                 continue;
             }
             r.missing += 1;
-            if r.missing > LIVE_FORGET {
-                gone.push((r.kind.clone(), id.clone()));
+            if r.missing > LIVE_FORGET || r.kind == "component" {
+                gone.extend((r.missing > LIVE_FORGET).then(|| (r.kind.clone(), id.clone())));
                 continue;
             }
             let (k, v) = match r.kind.as_str() {
