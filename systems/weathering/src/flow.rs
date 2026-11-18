@@ -24,14 +24,13 @@ pub(crate) fn flow(sc: &Scene, at: &Atlas, env: &Env, mesh: &TriMesh, c0: &[[u8;
     let role: Vec<Role> = (0..sc.tri.len()).map(|t| role_of(sc, env, t)).collect();
     let s = Surface { pos: &sc.pos, tri: &sc.tri, nrm: &sc.nrm, role: &role, uv: &uv, mesh };
     let dens = |t: u32| at.chart_dens[at.chart_of[t as usize] as usize];
-    let at_px = |x: u16, y: u16| y as usize * at.w as usize + x as usize;
     let drops: Vec<Drop> = at.texels.iter().filter_map(|tx| {
-        let sky = c0[at_px(tx.x, tx.y)][0] as f32 / 255.0;
+        let sky = c0[at.px(tx.x, tx.y)][0] as f32 / 255.0;
         (sky > 0.02).then(|| Drop { p: tx.p + tx.n * 0.002, tri: tx.tri, water: sky / dens(tx.tri).powi(2) })
     }).collect();
     let out = run(&s, &drops, env.up, at.w, at.h);
     for tx in &at.texels {
-        let i = at_px(tx.x, tx.y);
+        let i = at.px(tx.x, tx.y);
         let [f, d, k] = out.bytes(i, dens(tx.tri));
         c1[i] = [f, d, k, c1[i][3]];
     }

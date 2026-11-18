@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use parry3d::glamx::Vec3;
+use raea_core_meshcheck::find;
 
 use crate::Env;
 use crate::charts::Chart;
@@ -22,13 +23,6 @@ const AREA: f32 = 6.0;
 /// a sparse chart is cut into cells this many texels square
 const SPLIT: f32 = 64.0;
 
-fn find(p: &mut [u32], mut i: u32) -> u32 {
-    while p[i as usize] != i {
-        p[i as usize] = p[p[i as usize] as usize];
-        i = p[i as usize];
-    }
-    i
-}
 
 /// Coplanar charts (the same plane to 1/64 in the normal and 2 cm in offset) whose rectangles touch, joined.
 pub(crate) fn merge(cs: Vec<Chart>, sc: &Scene, up: Vec3) -> Vec<Chart> {
@@ -134,10 +128,8 @@ pub(crate) fn absorb(cs: Vec<Chart>, sc: &Scene, env: &Env) -> Vec<Chart> {
         c.n != Vec3::ZERO && (w.min(h) < THIN || w * h < AREA)
     };
     let bounds = |c: &Chart| {
-        c.tris.iter().flat_map(|&t| sc.tri[t as usize]).fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(l, h), v| {
-            let p = sc.pos[v as usize];
-            (l.min(p), h.max(p))
-        })
+        let ps = c.tris.iter().flat_map(|&t| sc.tri[t as usize].map(|v| sc.pos[v as usize]));
+        ps.fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(l, h), p| (l.min(p), h.max(p)))
     };
     const CELL: f32 = 4.0;
     let cell = |v: Vec3| ((v.x / CELL).floor() as i32, (v.y / CELL).floor() as i32, (v.z / CELL).floor() as i32);

@@ -10,6 +10,7 @@
 pub mod blender;
 mod glb;
 mod topo;
+pub use topo::find;
 
 pub use glb::Glb;
 use serde_json::{Value, json};

@@ -15,6 +15,8 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
+use raea_sys_exposure::cone;
+
 use parry3d::glamx::Vec3;
 use parry3d::query::{Ray, RayCast};
 use parry3d::shape::TriMesh;
@@ -51,13 +53,6 @@ pub(crate) fn across(n: Vec3) -> (Vec3, Vec3) {
     let a = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
     let t = n.cross(a).normalize();
     (t, n.cross(t))
-}
-
-fn cone(axis: Vec3, half: f32, (u1, u2): (f32, f32)) -> Vec3 {
-    let c = 1.0 - u1 * (1.0 - half.cos());
-    let s = (1.0 - c * c).max(0.0).sqrt();
-    let (t, b) = across(axis);
-    (axis * c + t * (s * (TAU * u2).cos()) + b * (s * (TAU * u2).sin())).normalize()
 }
 
 fn hemi(n: Vec3, (u1, u2): (f32, f32)) -> Vec3 {
@@ -198,7 +193,7 @@ pub(crate) fn causes(sc: &Scene, at: &Atlas, env: &Env, mesh: &TriMesh, c0: &mut
     let from = -env.rain;
     let k = env.sky_rays;
     let level: f32 = (0..k).map(|j| cone(from, env.spread, sample(0, j)).dot(env.up).max(0.0)).sum::<f32>() / k as f32;
-    let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
     let hit = |o: Vec3, d: Vec3, far: f32| mesh.cast_local_ray(&Ray::new(o, d), far, false).is_some();
     let vals: Vec<([u8; 4], [u8; 4], [u8; 4])> = at
         .texels

@@ -28,20 +28,19 @@ pub(crate) fn touch(sc: &Scene, at: &Atlas, env: &Env, mesh: &TriMesh, c0: &[[u8
     let mats: Vec<Mat> = sc.class.iter().map(|&c| mat(c)).collect();
     let walk: Vec<bool> = (0..sc.tri.len()).map(|t| walks(sc, env, t)).collect();
     let s = Surface { pos: &sc.pos, tri: &sc.tri, nrm: &sc.nrm, mat: &mats, walk: &walk, mesh, up: env.up };
-    let px = |x: u16, y: u16| y as usize * at.w as usize + x as usize;
     let f = |b: u8| b as f32 / 255.0;
     let pts: Vec<Point> = at.texels.iter().map(|tx| {
-        let i = px(tx.x, tx.y);
+        let i = at.px(tx.x, tx.y);
         Point { p: tx.p, n: tx.n, tri: tx.tri, ground: f(c2[i][0]) * GROUND_RANGE, rain: f(c0[i][0]), flow: f(c1[i][0]), edge: f(c0[i][3]) }
     }).collect();
     let (touch, spots) = mark(&s, &pts);
     for (tx, v) in at.texels.iter().zip(touch) {
-        c1[px(tx.x, tx.y)][3] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        c1[at.px(tx.x, tx.y)][3] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     }
     let v3 = |v: Vec3| json!([round(v.x), round(v.y), round(v.z)]);
     json!(spots.iter().map(|s: &Spot| json!({ "what": s.what, "by": s.by, "at": v3(s.at), "n": v3(s.n), "size": s.size })).collect::<Vec<_>>())
 }
 
 fn round(v: f32) -> f64 {
-    (v as f64 * 1000.0).round() / 1000.0
+    (f64::from(v) * 1000.0).round() / 1000.0
 }

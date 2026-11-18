@@ -191,7 +191,8 @@ fn across(n: Vec3) -> (Vec3, Vec3) {
     (t, n.cross(t))
 }
 
-fn cone(axis: Vec3, half: f32, (u1, u2): (f32, f32)) -> Vec3 {
+/// A direction within `half` radians of `axis`, uniform over that cap, from two uniform numbers.
+pub fn cone(axis: Vec3, half: f32, (u1, u2): (f32, f32)) -> Vec3 {
     let c = 1.0 - u1 * (1.0 - half.cos());
     let s = (1.0 - c * c).max(0.0).sqrt();
     let (t, b) = across(axis);

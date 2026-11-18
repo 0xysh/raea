@@ -177,7 +177,7 @@ pub(crate) fn read(bytes: &[u8], classes: &Classes) -> R<Scene> {
         }
         let mesh = meshes.get(mi).ok_or_else(|| format!("mesh {mi} missing"))?;
         // a mesh drawn by a second node is baked again as a copy (written as a new mesh)
-        let baked_as = if used[mi] { meshes.len() + sc.node_mesh.iter().filter(|(_, b)| *b >= meshes.len()).count() } else { mi };
+        let baked_as = if used[mi] { meshes.len() + sc.node_mesh.iter().filter(|nb| nb.1 >= meshes.len()).count() } else { mi };
         used[mi] = true;
         sc.node_mesh.push((n, baked_as));
         for (pi, p) in arr(mesh, "primitives").iter().enumerate() {

@@ -54,7 +54,11 @@ pub fn cli(args: &[String], media: fn(&Path, &str) -> PathBuf) -> R<String> {
     let req = args.get(2).filter(|a| !a.starts_with('-')).ok_or(USAGE)?;
     let v: Value = serde_json::from_slice(&std::fs::read(req).map_err(|e| format!("{req}: {e}"))?).map_err(|e| format!("{req}: {e}"))?;
     let out = bake_in(Path::new("."), media, &v)?;
-    match args.iter().position(|a| a == "-o").map(|i| args.get(i + 1).ok_or(USAGE)).transpose()? {
+    let o = match args.iter().position(|a| a == "-o") {
+        Some(i) => Some(args.get(i + 1).ok_or(USAGE)?),
+        None => None,
+    };
+    match o {
         Some(o) => {
             std::fs::write(o, serde_json::to_string_pretty(&out).map_err(|e| e.to_string())?).map_err(|e| format!("{o}: {e}"))?;
             Ok(o.clone())

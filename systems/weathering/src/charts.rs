@@ -53,10 +53,15 @@ pub(crate) struct Atlas {
 }
 
 impl Atlas {
+    /// A texel's index in a map over the atlas.
+    pub fn px(&self, x: u16, y: u16) -> usize {
+        y as usize * self.w as usize + x as usize
+    }
+
     pub fn covered(&self) -> Vec<bool> {
         let mut c = vec![false; (self.w * self.h) as usize];
         for t in &self.texels {
-            c[t.y as usize * self.w as usize + t.x as usize] = true;
+            c[self.px(t.x, t.y)] = true;
         }
         c
     }
@@ -364,7 +369,10 @@ pub(crate) fn build(sc: &Scene, env: &Env, mesh: &TriMesh) -> R<Atlas> {
         index.push(ix);
         uv.push(us);
     }
-    let rects = cs.iter().map(|c| [c.ox, c.oy, c.w, c.h]).collect();
+    let mut rects = Vec::with_capacity(cs.len());
+    for c in cs.iter() {
+        rects.push([c.ox, c.oy, c.w, c.h]);
+    }
     let chart_dens = cs.iter().map(|c| c.dens * d).collect();
     Ok(Atlas { w, h, density: env.density * d, chart_dens, charts: cs.len(), hidden: hidden.len(), texels, chart_of, verts, index, uv, rects })
 }

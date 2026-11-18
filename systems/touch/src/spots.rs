@@ -90,7 +90,7 @@ fn thin_if(mut c: Vec<Spot>, gap: f32, ok: impl Fn(&Spot) -> bool) -> Vec<Spot> 
     c.sort_by_key(|s| seed(s.at));
     let mut kept: Vec<Spot> = Vec::new();
     for s in c {
-        if kept.iter().all(|k| (k.at - s.at).length() >= gap) && ok(&s) {
+        if !kept.iter().any(|k| k.at.distance(s.at) < gap) && ok(&s) {
             kept.push(s);
         }
     }
@@ -117,9 +117,10 @@ pub(crate) fn spots(s: &Surface, doors: &[Door], pts: &[Point]) -> Vec<Spot> {
     for q in pts.iter().filter(|q| wall(q) && q.edge > 0.8 && q.ground < 4.0) {
         arris.entry(cell(q.p)).or_default().push(q);
     }
+    const NINE: [(i64, i64); 9] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 0), (0, 1), (1, -1), (1, 0), (1, 1)];
     let near = |p: Vec3| {
         let (c, (x, y)) = (cell(p), flat(p));
-        (-1..=1).flat_map(move |i| (-1..=1).map(move |j| (c.0 + i, c.1 + j))).flat_map(|k| arris.get(&k).into_iter().flatten()).filter(move |q| {
+        NINE.iter().map(move |&(i, j)| (c.0 + i, c.1 + j)).flat_map(|k| arris.get(&k).into_iter().flatten()).filter(move |q| {
             let (a, b) = flat(q.p);
             (a - x).hypot(b - y) <= CORNER
         })

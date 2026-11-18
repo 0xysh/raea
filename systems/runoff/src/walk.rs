@@ -191,7 +191,7 @@ pub(crate) fn drop(s: &Surface, adj: &Adjacency, acc: &Acc, up: Vec3, d0: &Drop,
                 }
                 if n2.dot(up) < UNDERSIDE {
                     // about to drip: a wall met head on along this edge takes it into the corner, else it falls
-                    match capture(s, t, q, n, ev).or_else(|| fall(s, q + dir * 0.003 + n * 0.003, up)) {
+                    match drip(s, t, q, n, dir, ev, up) {
                         Some((t3, q3)) => (t, p, water, along) = (t3, q3, water * SPLASH, None),
                         None => return,
                     }
@@ -211,7 +211,7 @@ pub(crate) fn drop(s: &Surface, adj: &Adjacency, acc: &Acc, up: Vec3, d0: &Drop,
                     (t, p) = (t2, q2 + downhill(s, t2, up, heading).unwrap_or(dir) * 0.001);
                 }
             }
-            None => match capture(s, t, q, n, ev).or_else(|| fall(s, q + dir * 0.003 + n * 0.003, up)) {
+            None => match drip(s, t, q, n, dir, ev, up) {
                 Some((t3, q3)) => (t, p, water, along) = (t3, q3, water * SPLASH, None),
                 None => return,
             },
@@ -238,6 +238,11 @@ fn probe(s: &Surface, t: u32, q: Vec3, dir: Vec3) -> Option<(u32, Vec3)> {
 }
 
 /// The foot of an end face about to drip: a wall along the edge within CAPTURE, met head on, takes the drop.
+/// Where a drop leaving a face at `q` goes: into the corner of a wall met head on, else falling from just off the face.
+fn drip(s: &Surface, t: u32, q: Vec3, n: Vec3, dir: Vec3, ev: Vec3, up: Vec3) -> Option<(u32, Vec3)> {
+    capture(s, t, q, n, ev).or_else(|| fall(s, q + dir * 0.003 + n * 0.003, up))
+}
+
 fn capture(s: &Surface, t: u32, q: Vec3, n: Vec3, ev: Vec3) -> Option<(u32, Vec3)> {
     [ev, -ev].into_iter().filter_map(|e| {
         let (t2, h) = cast(s, q + n * 0.004, e, CAPTURE)?;

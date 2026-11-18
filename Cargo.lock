@@ -16467,6 +16467,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "parry3d",
+ "raea-core-meshcheck",
  "raea-sys-exposure",
  "raea-sys-glb",
  "raea-sys-runoff",
