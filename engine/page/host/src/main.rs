@@ -145,9 +145,12 @@ fn main() {
     }
     let (css, size) = (a.css, a.size);
     let preamble = vec![a.chrome.preamble()];
+    // the page's code handed over once, not kept (the window's memory, 11-18: the feed's bundle is 21 to 26 MB, held
+    // all the app's life beside the JS engine's own copy)
+    let mut code = Some(code);
     let mount = move |world: &mut World| {
         chrome::install(world);
-        let m = page::Mount { code: code.clone(), preamble: preamble.clone(), css: css.clone(), styles: None, picking, size };
+        let m = page::Mount { code: code.take().unwrap_or_default(), preamble: preamble.clone(), css: css.clone(), styles: None, picking, size };
         if let Err(e) = page::mount(world, m) {
             eprintln!("raea-page-host: {e}");
             std::process::exit(1);
