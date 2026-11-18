@@ -37,7 +37,8 @@ export interface BoxProps {
   args?: [number, number, number];
 }
 
-/** Bevy's Cuboid: half its size along each axis ([0.5, 0.5, 0.5], a 1 m cube, as Bevy's default). */
+/** Bevy's Cuboid: half its size along each axis ([0.5, 0.5, 0.5], a 1 m cube, as Bevy's default). Bevy's UVs show a
+ *  picture upside down on its front face (+z) and the right way up on its back (-z): turn a printed label half a turn. */
 export interface CuboidProps {
   /** half its size along x, y and z, metres ([0.5, 0.5, 0.5]) */
   half_size?: [number, number, number];
@@ -389,8 +390,7 @@ export interface MeshProps extends PointerHandlers3d {
   /** it may pass through other parts on purpose (a blade into a body, a ghost through a wall): raea's clipping
    * check leaves it out */
   allowOverlap?: boolean;
-  /** set at an angle on purpose (a bowl knocked over, a mug on its side): `raea scene lint` doesn't call it
-   * tilted */
+  /** set at an angle on purpose (a bowl knocked over, a mug on its side): `raea scene lint` doesn't call it tilted */
   posed?: boolean;
   /** a Manifold solid (manifold.box(...).minus(...)) or its expression; wins over the geometry child */
   shape?: string | Solid;

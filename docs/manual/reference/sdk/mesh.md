@@ -387,7 +387,8 @@ height (0.5), standing up: a tapered Cylinder of args [radius_top, radius_bottom
 
 ### `CuboidProps`
 
-Bevy's Cuboid: half its size along each axis ([0.5, 0.5, 0.5], a 1 m cube, as Bevy's default).
+Bevy's Cuboid: half its size along each axis ([0.5, 0.5, 0.5], a 1 m cube, as Bevy's default). Bevy's UVs show a
+picture upside down on its front face (+z) and the right way up on its back (-z): turn a printed label half a turn.
 
 | Field | Type | What it is |
 | --- | --- | --- |
