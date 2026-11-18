@@ -43,14 +43,14 @@ impl Gpu {
     pub fn available() -> bool {
         static A: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         *A.get_or_init(|| {
-            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: raea_gpu_device::backends(), ..wgpu::InstanceDescriptor::new_without_display_handle() });
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
                 .is_ok_and(|a| a.get_info().device_type != wgpu::DeviceType::Cpu)
         })
     }
 
     pub fn new() -> Result<Gpu, String> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: raea_gpu_device::backends(), ..wgpu::InstanceDescriptor::new_without_display_handle() });
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
             .map_err(|e| format!("no GPU adapter: {e}"))?;
         let info = adapter.get_info();

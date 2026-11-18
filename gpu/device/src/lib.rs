@@ -43,6 +43,26 @@ pub fn dx12_first(windows: bool, env: Option<wgpu::Backends>, dx12: Option<(u32,
     windows && env.is_none() && matches!(dx12, Some((INTEL, kind)) if kind != wgpu::DeviceType::Cpu)
 }
 
+/// The backends every wgpu instance of raea's asks for (the shared device's, Bevy's own when it isn't there, systems/k's
+/// kernels): WGPU_BACKEND when it's set; else, on Windows, DX12 alone when DX12's pick is an Intel GPU (dx12_first);
+/// else every backend, wgpu's own default. Found once a process: on Windows it asks DX12 for its adapter first.
+pub fn backends() -> wgpu::Backends {
+    static B: std::sync::OnceLock<wgpu::Backends> = std::sync::OnceLock::new();
+    *B.get_or_init(|| {
+        let env = wgpu::Backends::from_env();
+        if let Some(b) = env {
+            return b;
+        }
+        let dx12 = cfg!(windows).then(|| {
+            let i = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: wgpu::Backends::DX12, ..wgpu::InstanceDescriptor::new_without_display_handle() });
+            pollster::block_on(i.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
+                .ok()
+                .map(|a| (a.get_info().vendor, a.get_info().device_type))
+        });
+        if dx12_first(cfg!(windows), env, dx12.flatten()) { wgpu::Backends::DX12 } else { wgpu::Backends::all() }
+    })
+}
+
 fn make() -> Result<Handles, String> {
     // wgpu's indirect-draw validation off in release (it stays in debug builds; RAEA_WGPU_INDIRECT_VALIDATION=1 puts it
     // back): it checks each indirect draw's arguments in compute passes before drawing, and the indirect draws are
@@ -52,35 +72,14 @@ fn make() -> Result<Handles, String> {
     // but for an Intel GPU on Windows, which goes on DX12: dx12_first):
     // Windows' check renders on Mesa's lavapipe with WGPU_BACKEND=vulkan, because WARP crashes compiling one of Bevy's
     // compute shaders on GitHub's GPU-less runner (d3d10warp ComputeShaderTransformer, PT20)
-    let instance_on = |backends: Option<wgpu::Backends>| {
-        let mut desc = wgpu::InstanceDescriptor::new_without_display_handle_from_env();
-        if let Some(b) = backends {
-            desc.backends = b;
-        }
-        if !cfg!(debug_assertions) && std::env::var("RAEA_WGPU_INDIRECT_VALIDATION").as_deref() != Ok("1") {
-            desc.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
-        }
-        wgpu::Instance::new(desc)
-    };
-    let options = wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() };
-    // on Windows with no WGPU_BACKEND, DX12's pick is asked first, so an Intel GPU never meets its Vulkan driver
-    // (dx12_first); any other pick is dropped and every backend asked as before
-    let env = wgpu::Backends::from_env();
-    let dx12 = if cfg!(windows) && env.is_none() {
-        let i = instance_on(Some(wgpu::Backends::DX12));
-        let a = pollster::block_on(i.request_adapter(&options)).ok();
-        a.map(|a| (i, a))
-    } else {
-        None
-    };
-    let (instance, adapter) = match dx12 {
-        Some((i, a)) if dx12_first(cfg!(windows), env, Some((a.get_info().vendor, a.get_info().device_type))) => (i, a),
-        _ => {
-            let i = instance_on(None);
-            let a = pollster::block_on(i.request_adapter(&options)).map_err(|e| format!("no GPU adapter: {e}"))?;
-            (i, a)
-        }
-    };
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle_from_env();
+    desc.backends = backends();
+    if !cfg!(debug_assertions) && std::env::var("RAEA_WGPU_INDIRECT_VALIDATION").as_deref() != Ok("1") {
+        desc.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
+    }
+    let instance = wgpu::Instance::new(desc);
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() }))
+        .map_err(|e| format!("no GPU adapter: {e}"))?;
     let mut features = adapter.features();
     if adapter.get_info().device_type == wgpu::DeviceType::DiscreteGpu {
         features.remove(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS);
