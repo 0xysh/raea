@@ -1,7 +1,7 @@
 #!/bin/bash
 # One raea cloud box, set up on the Fly Sprite it runs on. Two callers run this same file: deploy/sprites/box.sh up
-# from a Mac, and raea-bot's POST /v1/bots (B1: apps/site/bot harness/sprite.ts, through the Sprites API, at the
-# commit the bot pins), so a box made by hand and a box a bot makes can't differ (docs/cloud-render.feature CR11).
+# from a Mac, and raea cloud's POST /v1/bots (B1: apps/site/cloud harness/sprite.ts, through the Sprites API, at the
+# commit it pins), so a box made by hand and a box a bot makes can't differ (docs/cloud-render.feature CR11).
 # It only adds what's missing, so running it again is safe.
 #
 #   bash -s -- NAME RAEA_VERSION "AGENTS" [REF] < setup.sh
