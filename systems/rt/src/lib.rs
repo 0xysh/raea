@@ -52,8 +52,9 @@ pub const ALL: u8 = 2;
 #[extract_app(bevy::render::RenderApp)]
 pub struct Sun(pub Vec3);
 
+/// a BLAS a mesh, and how many batches have been built (a mesh changed keeps its id, so the TLAS knows by this)
 #[derive(Resource, Default)]
-struct Blases(HashMap<AssetId<Mesh>, Blas>);
+struct Blases(HashMap<AssetId<Mesh>, Blas>, u64);
 
 /// The ray scene's CPU cost so far, for raea GI's stats (gi.rs `report`; LT2): microseconds and calls of `gather`
 /// (the main world's instance list), `build_tlas` and `build_blas` (counted only when it builds), in that order.
@@ -63,9 +64,22 @@ fn spent(k: usize, since: std::time::Instant) {
     CPU_US[2 * k + 1].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// This frame's TLAS, for the traced passes to bind.
+/// The TLAS, for the traced passes to bind: one kept from frame to frame (LT3), rebuilt only when the instances change.
 #[derive(Resource)]
 pub struct Scene(pub Tlas);
+
+/// How many times the TLAS was built and how many instances it last held, for raea GI's stats (gi.rs `report`)
+pub(crate) static TLAS_BUILT: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
+
+/// What the kept TLAS holds: each instance's BLAS (its mesh), its transform as the TLAS takes it, and its mask; and how
+/// many instances it has room for
+#[derive(Default)]
+struct Held {
+    instances: Vec<(AssetId<Mesh>, [f32; 12], u8)>,
+    room: u32,
+    /// Blases' batch count it was built against
+    batches: u64,
+}
 
 pub fn install(app: &mut App) {
     // (once, whether a traced pass or traced AO asked first)
@@ -206,38 +220,58 @@ fn build_blas(
     let mut enc = device.create_command_encoder(&CommandEncoderDescriptor { label: Some("raea rt blas") });
     enc.build_acceleration_structures(&entries, &[]);
     queue.submit([enc.finish()]);
+    blases.1 += 1;
     spent(2, t0);
 }
 
-/// the TLAS: every instance whose mesh has a BLAS, rebuilt each frame (things move)
-fn build_tlas(mut commands: Commands, instances: Option<Res<Instances>>, blases: Res<Blases>, device: Res<RenderDevice>, queue: Res<RenderQueue>) {
+/// The TLAS: every instance whose mesh has a BLAS. One is kept (LT3): built again only when an instance came, went,
+/// moved or changed its mask, so a still scene costs a comparison a frame; made anew only when it runs out of room,
+/// with half as much again to spare. Each instance's custom index is its place in the list, where LT4's record table
+/// will keep what a hit on it sees.
+fn build_tlas(mut commands: Commands, instances: Option<Res<Instances>>, blases: Res<Blases>, scene: Option<ResMut<Scene>>, mut held: Local<Held>, device: Res<RenderDevice>, queue: Res<RenderQueue>) {
     let Some(instances) = instances else { return };
     if !device.features().contains(WgpuFeatures::EXPERIMENTAL_RAY_QUERY) {
         return;
     }
     let t0 = std::time::Instant::now();
-    let present: Vec<_> = instances.0.iter().filter_map(|(id, m, mask)| blases.0.get(id).map(|b| (b, m, *mask))).collect();
+    let now: Vec<(AssetId<Mesh>, [f32; 12], u8)> = instances.0.iter().filter(|(id, ..)| blases.0.contains_key(id)).map(|(id, m, mask)| (*id, m.transpose().to_cols_array()[..12].try_into().unwrap(), *mask)).collect();
     if std::env::var_os("RAEA_RT_DEBUG").is_some() {
         for (id, _, _) in instances.0.iter().filter(|(id, _, _)| !blases.0.contains_key(id)) {
             eprintln!("raea rt: no BLAS for {id:?}");
         }
     }
-    let mut tlas = device.wgpu_device().create_tlas(&CreateTlasDescriptor {
-        label: Some("raea rt tlas"),
-        flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
-        update_mode: AccelerationStructureUpdateMode::Build,
-        max_instances: present.len().max(1) as u32,
-    });
-    for (i, (blas, m, mask)) in present.iter().enumerate() {
-        let t: [f32; 12] = m.transpose().to_cols_array()[..12].try_into().unwrap();
-        *tlas.get_mut_single(i).unwrap() = Some(TlasInstance::new(blas, t, 0, *mask));
+    if scene.is_some() && now == held.instances && held.batches == blases.1 {
+        spent(1, t0);
+        return;
+    }
+    // out of room (or the first): a new TLAS, half as much again as now
+    let mut made = None;
+    if scene.is_none() || now.len() as u32 > held.room {
+        held.room = (now.len() as u32 * 3 / 2).max(64);
+        made = Some(device.wgpu_device().create_tlas(&CreateTlasDescriptor { label: Some("raea rt tlas"), flags: AccelerationStructureFlags::PREFER_FAST_TRACE, update_mode: AccelerationStructureUpdateMode::Build, max_instances: held.room }));
+    }
+    let mut scene = scene;
+    let (tlas, was) = match (made.as_mut(), scene.as_deref_mut()) {
+        (Some(t), _) => (t, 0),
+        (None, Some(s)) => (&mut s.0, held.instances.len()),
+        (None, None) => return,
+    };
+    // each slot this frame's instance, or empty where last frame's list was longer
+    for i in 0..now.len().max(was) {
+        *tlas.get_mut_single(i).unwrap() = now.get(i).map(|(id, t, mask)| TlasInstance::new(&blases.0[id], *t, i as u32, *mask));
     }
     let mut enc = device.create_command_encoder(&CommandEncoderDescriptor { label: Some("raea rt tlas") });
-    enc.build_acceleration_structures(&[], [&tlas]);
+    enc.build_acceleration_structures(&[], [&*tlas]);
     queue.submit([enc.finish()]);
     spent(1, t0);
+    TLAS_BUILT[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    TLAS_BUILT[1].store(now.len() as u64, std::sync::atomic::Ordering::Relaxed);
     if std::env::var_os("RAEA_RT_DEBUG").is_some() {
-        eprintln!("raea rt: {} instances, {} with a BLAS ({} BLAS)", instances.0.len(), present.len(), blases.0.len());
+        eprintln!("raea rt: {} instances, {} with a BLAS ({} BLAS)", instances.0.len(), now.len(), blases.0.len());
     }
-    commands.insert_resource(Scene(tlas));
+    held.instances = now;
+    held.batches = blases.1;
+    if let Some(t) = made {
+        commands.insert_resource(Scene(t));
+    }
 }

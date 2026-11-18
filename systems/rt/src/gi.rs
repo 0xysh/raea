@@ -370,7 +370,7 @@ fn report(state: &mut State, budget: u32, total: u32) {
         format!("{:.3}", us as f64 / n.max(1) as f64 / 1000.0)
     };
     let text = format!(
-        "{{\"rays_a_frame\":{},\"probes\":{total},\"probes_a_frame\":{},\"frames\":{},\"gpu_ms_p50\":{:.3},\"gpu_ms_p90\":{:.3},\"gpu_ms_max\":{:.3},\"cache_ms_p50\":{:.3},\"cache_ms_p90\":{:.3},\"probes_ms_p50\":{:.3},\"probes_ms_p90\":{:.3},\"cache_cells_p50\":{},\"cache_cells_max\":{},\"cpu_ms_gather\":{},\"cpu_ms_tlas\":{},\"cpu_ms_blas_batch\":{},\"blas_batches\":{}}}\n",
+        "{{\"rays_a_frame\":{},\"probes\":{total},\"probes_a_frame\":{},\"frames\":{},\"gpu_ms_p50\":{:.3},\"gpu_ms_p90\":{:.3},\"gpu_ms_max\":{:.3},\"cache_ms_p50\":{:.3},\"cache_ms_p90\":{:.3},\"probes_ms_p50\":{:.3},\"probes_ms_p90\":{:.3},\"cache_cells_p50\":{},\"cache_cells_max\":{},\"cpu_ms_gather\":{},\"cpu_ms_tlas\":{},\"cpu_ms_blas_batch\":{},\"blas_batches\":{},\"tlas_builds\":{},\"tlas_instances\":{}}}\n",
         (budget / RAYS).min(total) * RAYS,
         (budget / RAYS).min(total),
         all.len(),
@@ -386,7 +386,9 @@ fn report(state: &mut State, budget: u32, total: u32) {
         cpu(0),
         cpu(1),
         cpu(2),
-        crate::CPU_US[5].load(Ordering::Relaxed)
+        crate::CPU_US[5].load(Ordering::Relaxed),
+        crate::TLAS_BUILT[0].load(Ordering::Relaxed),
+        crate::TLAS_BUILT[1].load(Ordering::Relaxed)
     );
     let _ = std::fs::write(path, text);
 }
