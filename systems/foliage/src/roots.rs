@@ -67,8 +67,9 @@ pub(crate) fn foot(sp: &Species, req: &Request, nodes: &[Node], m: &mut Mesh) ->
     for root in &roots {
         let dir = Vec3::new(root.a.cos(), 0.0, -root.a.sin());
         let surf = (sp.surface * rng.range(0.6, 1.4)).clamp(0.05, 0.7);
-        // half the trunk's radius at its biggest (ASSUMED); its top stands up to twice its own half-height by the
-        // trunk on the species that show their roots most (ASSUMED); it meets the soil 1.6-3 trunk radii out, longer
+        // half the trunk's radius at its biggest (ASSUMED); its top stands up to 1.3 times its half-height by the
+        // trunk on the species that show their roots most, so even there it's buried a third deep and comes up out of
+        // the soil rather than lying on it (ASSUMED; at twice it sat on the soil like a log, 11-17); it meets the soil 1.6-3 trunk radii out, longer
         // on those species (0.5-0.9 m on a 0.32 m radius, Lee 2022's range), and inside the pit, its widest side and
         // its wander clear of the paving's edge
         let r0 = 0.5 * r_dbh * root.size;
@@ -78,7 +79,7 @@ pub(crate) fn foot(sp: &Species, req: &Request, nodes: &[Node], m: &mut Mesh) ->
             start: Vec3::new(c.x, 0.0, c.z) + dir * (0.5 * r_dbh),
             heading: root.a,
             r0,
-            t0: (3.0 * surf * tall0).min(2.0 * tall0),
+            t0: (3.0 * surf * tall0).min(1.3 * tall0),
             show: (r_dbh * (1.6 + 1.4 * root.size) * (0.55 + surf) * rng.range(0.85, 1.15)).clamp(0.25, 1.4).min(inside.max(0.2)),
         };
         let fork = draw(m, &run, &mut rng);
@@ -94,17 +95,21 @@ pub(crate) fn foot(sp: &Species, req: &Request, nodes: &[Node], m: &mut Mesh) ->
     pit
 }
 
-/// A root's section, height over width: where it leaves the trunk and where it meets the soil (ASSUMED)
-const ASPECT: (f32, f32) = (1.8, 0.8);
+/// A root's section, height over width: where it leaves the trunk (a low buttress) and where it meets the soil (wider
+/// than tall, as a surface root spreads under the paving; ASSUMED: at 1.8 and 0.8 they read as blades, 11-17)
+const ASPECT: (f32, f32) = (1.25, 0.5);
 
-/// One root: it halves its radius by where it meets the soil (ASSUMED, inside Day et al.'s fast taper), its top falls
-/// steeply off the flare, runs low along the soil and goes under at `show`, then dives. It wanders a little. Returns
+/// One root: it halves its radius by where it meets the soil (ASSUMED, inside Day et al.'s fast taper), swelling and
+/// pinching by a tenth along the way, its top falls off the flare, runs low along the soil and goes under at `show`,
+/// then dives. It wanders a little. Returns
 /// where a fork leaves it (two fifths of the way to the soil) with what's left of it there.
 fn draw(m: &mut Mesh, r: &Run, rng: &mut Rng) -> Run {
     let len = r.show + 0.35;
     let steps = ((len / 0.05).ceil() as usize).clamp(6, 40);
     let x = |d: f32| (d / r.show).clamp(0.0, 1.4);
-    let rad = |d: f32| r.r0 * (1.0 - 0.5 * x(d));
+    // the swellings: two waves of 0.35 and 0.13 m, their phase the root's own (ASSUMED)
+    let ph = rng.range(0.0, TAU);
+    let rad = |d: f32| r.r0 * (1.0 - 0.5 * x(d)) * (1.0 + 0.07 * (d * 18.0 + ph).sin() + 0.04 * (d * 48.0 + 2.0 * ph).sin());
     let aspect = |d: f32| ASPECT.0 + (ASPECT.1 - ASPECT.0) * x(d).min(1.0);
     let tall = |d: f32| rad(d) * aspect(d).sqrt();
     let top = |d: f32| {
@@ -119,7 +124,7 @@ fn draw(m: &mut Mesh, r: &Run, rng: &mut Rng) -> Run {
         h += rng.range(-1.0, 1.0) * 0.07;
         p += Vec3::new(h.cos(), 0.0, -h.sin()) * (len / steps as f32);
     }
-    let sides = ((r.r0 * 40.0).round() as usize + 5).clamp(6, 12);
+    let sides = ((r.r0 * 80.0).round() as usize + 8).clamp(8, 16);
     let rep = (TAU * r.r0 / BARK).round().max(1.0);
     let mut along = 0.0;
     let at = (0.4 * r.show / len * steps as f32).round() as usize;
