@@ -23,7 +23,7 @@ use bevy_render::{
         PipelineCache, RenderPassDescriptor, ShaderStages, StorageTextureAccess, TextureFormat,
         TextureFormatFeatureFlags, TextureSampleType,
     },
-    renderer::{RenderAdapter, RenderContext, RenderDevice, ViewQuery},
+    renderer::{RenderAdapter, RenderContext, RenderDevice, RenderQueue, ViewQuery},
     view::{ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
 };
 use bevy_shader::{Shader, ShaderDefVal};
@@ -91,6 +91,7 @@ pub fn solari_lighting(
     view_uniforms: Res<ViewUniforms>,
     previous_view_uniforms: Res<PreviousViewUniforms>,
     render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
     mut ctx: RenderContext,
 ) {
     #[cfg(any(not(feature = "dlss"), feature = "force_disable_dlss"))]
@@ -289,23 +290,31 @@ pub fn solari_lighting(
         });
     }
 
-    let mut pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
-        label: Some("solari_lighting"),
-        timestamp_writes: None,
-    });
+    // raea: one compute pass a stage instead of one for all, so RAEA_SOLARI_TIMES=1 can time each at its boundaries
+    // (times.rs); bind groups 0 and 1 are set again in each
+    let times = super::times::set(render_device.wgpu_device());
+    macro_rules! stage {
+        ($label:expr, $i:expr) => {{
+            let mut pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some($label),
+                timestamp_writes: super::times::writes(times, $i),
+            });
+            pass.set_bind_group(0, scene_bind_group, &[]);
+            pass.set_bind_group(
+                1,
+                &bind_group,
+                &[
+                    view_uniform_offset.offset,
+                    previous_view_uniform_offset.offset,
+                ],
+            );
+            pass
+        }};
+    }
+    let mut pass = stage!("solari_lighting/light_tiles", 0);
 
     let dx = solari_lighting_resources.view_size.x.div_ceil(8);
     let dy = solari_lighting_resources.view_size.y.div_ceil(8);
-
-    pass.set_bind_group(0, scene_bind_group, &[]);
-    pass.set_bind_group(
-        1,
-        &bind_group,
-        &[
-            view_uniform_offset.offset,
-            previous_view_uniform_offset.offset,
-        ],
-    );
 
     #[cfg(all(feature = "dlss", not(feature = "force_disable_dlss")))]
     if let Some(bind_group_resolve_dlss_rr_textures) = &bind_group_resolve_dlss_rr_textures {
@@ -318,7 +327,9 @@ pub fn solari_lighting(
     pass.set_pipeline(presample_light_tiles_pipeline);
     pass.dispatch_workgroups(LIGHT_TILE_BLOCKS as u32, 1, 1);
     d.end(&mut pass);
+    drop(pass);
 
+    let mut pass = stage!("solari_lighting/world_cache", 1);
     let d = diagnostics.time_span(&mut pass, "solari_lighting/world_cache");
 
     pass.set_bind_group(2, &bind_group_world_cache_active_cells_dispatch, &[]);
@@ -356,7 +367,9 @@ pub fn solari_lighting(
     );
 
     d.end(&mut pass);
+    drop(pass);
 
+    let mut pass = stage!("solari_lighting/initial", 2);
     let d = diagnostics.time_span(&mut pass, "solari_lighting/lighting");
 
     if let Some(bind_group_restir) = &bind_group_restir {
@@ -376,15 +389,33 @@ pub fn solari_lighting(
     }
     pass.set_pipeline(initial_pipeline);
     pass.dispatch_workgroups(dx, dy, 1);
+    d.end(&mut pass);
+    drop(pass);
 
     if let Some(spatial_and_shade_pipeline) = spatial_and_shade_pipeline {
+        let mut pass = stage!("solari_lighting/spatial_and_shade", 3);
+        if let Some(bind_group_restir) = &bind_group_restir {
+            pass.set_bind_group(
+                1,
+                bind_group_restir,
+                &[
+                    view_uniform_offset.offset,
+                    previous_view_uniform_offset.offset,
+                ],
+            );
+        }
+        #[cfg(all(feature = "dlss", not(feature = "force_disable_dlss")))]
+        if let Some(bind_group_resolve_dlss_rr_textures) = &bind_group_resolve_dlss_rr_textures {
+            pass.set_bind_group(2, bind_group_resolve_dlss_rr_textures, &[]);
+        }
+        let d = diagnostics.time_span(&mut pass, "solari_lighting/spatial_and_shade");
         pass.set_pipeline(spatial_and_shade_pipeline);
         pass.dispatch_workgroups(dx, dy, 1);
+        d.end(&mut pass);
     }
-
-    d.end(&mut pass);
-
-    drop(pass);
+    if times.is_some() {
+        super::times::after(render_device.wgpu_device(), ctx.command_encoder(), render_queue.get_timestamp_period());
+    }
 
     // Active cell count readback.
     diagnostics.record_u32(

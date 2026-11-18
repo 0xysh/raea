@@ -1,6 +1,8 @@
 mod extract;
 mod node;
 mod prepare;
+// raea: RAEA_SOLARI_TIMES=1, each stage's GPU time
+mod times;
 
 use crate::{
     scene::{prepare_raytracing_scene_resources, RaytracingSceneBindings},
