@@ -225,8 +225,7 @@ pub fn run(args: &[String]) -> R<String> {
     if args.first().map(String::as_str) == Some("play") {
         return raea_app_play::play(args);
     }
-    // `export layers EDIT.tsx` (the composition as its layers and layers.json, every editor's export's) and `export xml
-    // EDIT.tsx` (an FCP7 XML project for Premiere Pro and DaVinci Resolve): apps/layers
+    // `export layers EDIT.tsx` (the composition as its layers and layers.json, every editor's export's) and `export xml EDIT.tsx` (an FCP7 XML project for Premiere Pro and DaVinci Resolve): apps/layers
     if let Some(done) = raea_app_layers::cli(args) { return done; }
     // `export capcut EDIT.tsx` (a CapCut draft) and `render ... -o OUT.mov --alpha` (a transparent movie): apps/capcut
     if let Some(done) = raea_app_capcut::cli(args, |a| raea_app_sound::render(a).unwrap_or_else(|| raea_runtime_export::render(a))) { return done; }
