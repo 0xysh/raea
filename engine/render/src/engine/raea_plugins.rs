@@ -62,6 +62,7 @@ raea_plugin! {
     TracedAoPlugin: raea_sys_rt::passes, "Traced passes: ambient occlusion and raea GI's world probes (raea-sys-rt).";
     VolumePlugin: super::volume::install, "Simulated smoke, clouds and contrails, raymarched (volume.rs).";
     GrassPlugin: raea_sys_grass::install, "Fields of grass, made in tiles as detailed as the camera's distance asks (systems/grass).";
+    DetailPlugin: raea_sys_lod::install, "Where each part is drawn: levels by distance or size on screen, cross-faded, draw distance and shadows left to a coarser level (raea-sys-lod, docs/realism.feature LT21).";
     ShadowOnlyPlugin: super::shadow_only::install, "Meshes in the shadow maps only (shadow_only.rs).";
     ShadowCatchPlugin: super::shadow_catch::install, "Surfaces that show only the shadows falling on them (shadow_catch.rs).";
     TintPlugin: raea_sys_material::tint::install, "A colour a copy over an <Instances>' surface, three's instanceColor (tint.rs).";

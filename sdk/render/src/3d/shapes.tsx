@@ -1,5 +1,5 @@
 // Shapes and meshes: Bevy's primitives, buffer meshes, 3D text's props, and <Mesh> with its shape from its children.
-import { Children, isValidElement, memo, useId, type ReactElement, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, memo, useId, type ReactElement, type ReactNode } from "react";
 import { Solid } from "../solid";
 import { useAnimation3d, type Keys, type Move, type TrackSpec } from "@raea/math/animate";
 import { Place3d, usePlace3d, usePointer3d, type LocalBounds, type PointerHandlers3d } from "../events3d";
@@ -443,32 +443,25 @@ export function apply3d<T extends object>(props: T, v: Record<string, number | s
   return out as T;
 }
 
+/** a mesh's element children with fragments opened: <><Sphere /><StandardMaterial /></> is the same mesh as its two */
+const flat = (kids: ReactNode): ReactElement[] => Children.toArray(kids).flatMap((c) => (!isValidElement(c) ? [] : c.type === Fragment ? flat((c as ReactElement<{ children?: ReactNode }>).props.children) : [c]));
+
 export function shapeFromChildren(children: ReactNode): string | undefined {
-  let found: string | undefined;
-  Children.forEach(children, (child) => {
-    if (found !== undefined || !isValidElement(child)) return;
-    if (child.type === Text3D) {
-      found = text3dShape((child as ReactElement<Text3DProps>).props);
-      return;
-    }
-    if (child.type === BufferMesh) {
-      found = bufferShape((child as ReactElement<BufferMeshProps>).props);
-      return;
-    }
-    const toShape = GEOMETRY_SHAPES.get(child.type);
-    if (toShape) found = toShape((child as ReactElement<Record<string, unknown>>).props);
-  });
-  return found;
+  for (const child of flat(children)) {
+    const props = child.props as Record<string, unknown>;
+    const s = child.type === Text3D ? text3dShape(props as unknown as Text3DProps) : child.type === BufferMesh ? bufferShape(props as unknown as BufferMeshProps) : GEOMETRY_SHAPES.get(child.type)?.(props);
+    if (s !== undefined) return s;
+  }
+  return undefined;
 }
 
 /** The first geometry child's bounds in its own space. */
 function boundsFromChildren(children: ReactNode): LocalBounds | undefined {
-  let found: LocalBounds | undefined;
-  Children.forEach(children, (child) => {
-    if (found !== undefined || !isValidElement(child)) return;
-    found = GEOMETRY_BOUNDS.get(child.type)?.((child as ReactElement<Record<string, unknown>>).props);
-  });
-  return found;
+  for (const child of flat(children)) {
+    const b = GEOMETRY_BOUNDS.get(child.type)?.(child.props as Record<string, unknown>);
+    if (b !== undefined) return b;
+  }
+  return undefined;
 }
 
 /** A drawn object: a geometry child (or `shape`) and a material child, placed by position, rotation and scale. Its

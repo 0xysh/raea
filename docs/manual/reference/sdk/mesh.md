@@ -120,6 +120,7 @@ shadow="only" draws it with the shadow-only material (engine/render shadow_only.
 | --- | --- | --- |
 | `transform` | `TransformValue` | where it stands: translation, rotation (a quaternion) and scale, as Bevy's Transform |
 | `visibility` | `"Visible" \| "Hidden" \| "Inherited"` | Bevy's Visibility: "Hidden" draws nothing; "Visible" and "Inherited" draw |
+| `detail` | `Detail` | where it's drawn: its distances or sizes on screen, cross-faded, and its shadow (Detail; raea-sys-lod) |
 | `children` | `ReactNode` | its material and child entities |
 
 Also takes the props of `MeshProps` (`animate`, `name`, `pass`, `quaternion`, `allowOverlap`, `posed`, `shape`, `driven`, `shadow`, `material`, `castShadow`, `surface`, `receiveShadow`, `attributes`, `compressed`, `layers`); `PointerHandlers3d` (`onClick`, `onDrag`, `onDragEnd`, `onDragEnter`, `onDragLeave`, `onDragOver`, `onDragStart`, `onDrop`, `onPointerDown`, `onPointerMove`, `onPointerUp`, `onPointerEnter`, `onPointerLeave`, `onPointerOver`, `onPointerOut`, `onWheel`).

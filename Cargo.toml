@@ -121,6 +121,7 @@ members = [
     "systems/screen",
     "systems/matchmove",
     "systems/grid",
+    "systems/lod",
     "systems/viewbox",
     "systems/rendermap",
     "systems/meshseq",

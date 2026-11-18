@@ -56,6 +56,7 @@ raea-sys-fog-half = { path = "../../systems/fog-half" }
 raea-sys-volume = { path = "../../systems/volume" }
 # a field of grass made in tiles by distance (<Grass>)
 raea-sys-grass = { path = "../../systems/grass" }
+raea-sys-lod = { path = "../../systems/lod" }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 # the direct render's views, the 2D rows, clips' masks and the paint device (runtime/view)
 raea-runtime-view = { path = "../../runtime/view", optional = true }

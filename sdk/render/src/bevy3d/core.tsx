@@ -1,6 +1,7 @@
 // Quat, Transform, Mesh3d and Camera3d.
 import { Children, cloneElement, isValidElement, useId, type ReactNode } from "react";
 import { meshLayers } from "../layers";
+import { detailNode, type Detail } from "../3d/detail";
 import { BevyComponent, DepthOfField, Fog, dofOf, eulerOf, type DepthOfFieldProps, type FogProps, type Vec3 } from "../3d";
 import { AmbientLight as AmbientLight3, Mesh, OrthographicCamera, PerspectiveCamera, type MeshProps } from "../three";
 import { Transform as TransformComponent } from "@raea/app/bevy";
@@ -181,6 +182,8 @@ export interface Mesh3dProps extends Omit<MeshProps, "position" | "rotation" | "
   transform?: TransformValue;
   /** Bevy's Visibility: "Hidden" draws nothing; "Visible" and "Inherited" draw */
   visibility?: "Visible" | "Hidden" | "Inherited";
+  /** where it's drawn: its distances or sizes on screen, cross-faded, and its shadow (Detail; raea-sys-lod) */
+  detail?: Detail;
   /** its material and child entities */
   children?: ReactNode;
 }
@@ -194,9 +197,11 @@ export interface Mesh3dProps extends Omit<MeshProps, "position" | "rotation" | "
  * `layers` is its RenderLayers (a light's and a camera's too): @bevy bevy_camera::visibility::render_layers::RenderLayers
  * shadow="only" draws it with the shadow-only material (engine/render shadow_only.rs):
  * @bevy bevy_pbr::mesh_material::MeshMaterial3d<raea_render::engine::shadow_only::ShadowOnlyMaterial> */
-export function Mesh3d({ transform, visibility, children, ...rest }: Mesh3dProps) {
+export function Mesh3d({ transform, visibility, detail, children: own, ...rest }: Mesh3dProps) {
   const id = useId();
   if (visibility === "Hidden") return null;
+  // appended to the children as a list, not wrapped in a fragment: Mesh reads its shape from its own children
+  const children = detail === undefined ? own : [...Children.toArray(own), detailNode("Mesh3d", detail)];
   const layers = meshLayers("Mesh3d", rest.name ?? `layer${id}`, children, true);
   const at = place(transform, rest.animate !== undefined);
   if (!layers.surface) return <Mesh {...rest} {...at}>{layers.children}</Mesh>;

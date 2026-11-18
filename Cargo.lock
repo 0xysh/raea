@@ -14884,6 +14884,7 @@ dependencies = [
  "raea-sys-grass",
  "raea-sys-grid",
  "raea-sys-hold",
+ "raea-sys-lod",
  "raea-sys-look",
  "raea-sys-matchmove",
  "raea-sys-material",
@@ -15990,6 +15991,13 @@ dependencies = [
  "raea-core-facts",
  "raea-core-scene",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-lod"
+version = "0.1.0"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
