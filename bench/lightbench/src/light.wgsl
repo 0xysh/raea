@@ -25,13 +25,16 @@ struct Params {
     // the light grid: its corner (xyz) and cell size (w); its cells along x, y, z, and whether the sampled modes use it
     grid_min: vec4<f32>,
     grid_dims: vec4<u32>,
-    // diffuse bounces a pixel follows (0 none), 0, 0, 0
+    // diffuse bounces a pixel follows (0 none), whether its bounce reads the radiance cache instead (cache.wgsl),
+    // whether the bounce is traced at half resolution and upsampled (half.wgsl), 0
     gi: vec4<u32>,
     // the sun (LB6): xyz the unit direction toward it, w its angular radius in radians; its irradiance (rgb, 0 off)
     sun: vec4<f32>,
     sun_e: vec4<f32>,
     // the sky's radiance (rgb): what a bounce ray that leaves the scene brings back
     sky: vec4<f32>,
+    // the radiance cache: a cell's size at 1 m from the camera, the samples a cell holds at most, 0, 0
+    cache: vec4<f32>,
 }
 
 struct Node { mn: vec3<f32>, a: u32, mx: vec3<f32>, count: u32 }
@@ -55,9 +58,9 @@ struct Light { pos: vec3<f32>, range: f32, power: vec3<f32>, radius: f32 }
 // this frame's shadow rays, lit pixels and the most rays any pixel traced (LB4's rays a pixel)
 @group(0) @binding(11) var<storage, read_write> stats: array<atomic<u32>, 4>;
 
-// cell c's lights are grid_idx[grid_start[c]..grid_start[c + 1]]
-@group(0) @binding(12) var<storage, read> grid_start: array<u32>;
-@group(0) @binding(13) var<storage, read> grid_idx: array<u32>;
+// the light grid's two lists in one: cell c's lights are grid[grid[c]..grid[c + 1]] (its starts count from the buffer's
+// beginning, the lights' indices following the starts)
+@group(0) @binding(12) var<storage, read> grid: array<u32>;
 
 var<workgroup> wg_rays: atomic<u32>;
 var<workgroup> wg_px: atomic<u32>;
@@ -113,11 +116,11 @@ fn candidates(pos: vec3<f32>) -> vec2<u32> {
         return vec2(0u, 0u);
     }
     let cell = u32((c.z * d.y + c.y) * d.x + c.x);
-    return vec2(grid_start[cell], grid_start[cell + 1u] - grid_start[cell]);
+    return vec2(grid[cell], grid[cell + 1u] - grid[cell]);
 }
 
 fn candidate(range: vec2<u32>, j: u32) -> u32 {
-    return select(grid_idx[range.x + j], j, range.x == 0xFFFFFFFFu);
+    return select(grid[range.x + j], j, range.x == 0xFFFFFFFFu);
 }
 
 fn lum(c: vec3<f32>) -> f32 {
@@ -261,7 +264,11 @@ fn shade(id: vec3<u32>) -> vec2<u32> {
     if view != 7u {
         c = lit_at(pos, n, o, clamp(p.mode.y, 1u, MAX_K));
     }
-    if p.gi.x > 0u {
+    if p.gi.z != 0u {
+        c += upsampled(px, pos, n, dist);
+    } else if p.gi.y != 0u {
+        c += cached(n, o);
+    } else if p.gi.x > 0u {
         c += bounced(n, o);
     }
     // the history: where this point was last frame, kept only if the same surface was there

@@ -56,8 +56,8 @@ pub struct Frame {
     /// the light grid (grid.rs): its corner and cell size, its cells along each axis and whether to use it, its lists
     pub grid_min: Vec4,
     pub grid_dims: UVec4,
-    pub grid_start: Vec<u32>,
-    pub grid_idx: Vec<u32>,
+    /// the grid's lists in one: the cells' starts (counted from the buffer's beginning), then the lights' indices
+    pub grid: Vec<u32>,
     /// diffuse bounces a pixel follows (LB5)
     pub bounces: u32,
     /// the sun (LB6): the unit direction toward it and its angular radius; its irradiance (zero: none); the sky's
@@ -65,6 +65,11 @@ pub struct Frame {
     pub sun: Vec4,
     pub sun_e: Vec4,
     pub sky: Vec4,
+    /// the bounce reads the radiance cache (LB7); a cell's size at 1 m from the camera
+    pub cache: bool,
+    pub cell: f32,
+    /// the bounce traced for one pixel of each 2 x 2 block and upsampled (LB7)
+    pub half: bool,
 }
 
 pub struct LightPass;
@@ -99,12 +104,17 @@ struct Params {
     sun: Vec4,
     sun_e: Vec4,
     sky: Vec4,
+    cache: Vec4,
 }
 
 #[derive(Resource)]
 struct Pipeline {
     layout: BindGroupLayoutDescriptor,
     id: CachedComputePipelineId,
+    /// the radiance cache's resolve, after the pixels
+    resolve: CachedComputePipelineId,
+    /// the half-resolution bounce, before them
+    half: CachedComputePipelineId,
 }
 
 /// The BVH on the GPU, made from the SceneGpu it came from (by its pointer); the history's two pairs of textures
@@ -118,7 +128,14 @@ struct Buffers {
     stats: Option<(Buffer, Buffer)>,
     /// the pass's start and end timestamps, resolved, read back; nanoseconds a tick
     timer: Option<(wgpu::QuerySet, wgpu::Buffer, wgpu::Buffer, f64)>,
+    /// the radiance cache (cache.wgsl): its cells and their light
+    cache: Option<(Buffer, Buffer)>,
+    /// the half-resolution bounce (half.wgsl), one vec4 a 2 x 2 block
+    half: Option<Buffer>,
 }
+
+/// The radiance cache's slots (cache.wgsl's CELLS) and the words each takes.
+const CELLS: u64 = 262144;
 
 fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCache>) {
     let read = |n: u64| storage_buffer_read_only_sized(false, std::num::NonZeroU64::new(n));
@@ -140,22 +157,27 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
                 storage_buffer_sized(false, std::num::NonZeroU64::new(16)),
                 read(4),
-                read(4),
+                storage_buffer_sized(false, std::num::NonZeroU64::new(16)),
+                storage_buffer_sized(false, std::num::NonZeroU64::new(24)),
+                storage_buffer_sized(false, std::num::NonZeroU64::new(16)),
             ),
         ),
     );
-    let id = cache.queue_compute_pipeline(ComputePipelineDescriptor {
-        label: Some("lightbench_light".into()),
-        layout: vec![layout.clone()],
-        // the lighting and the rays it traces, one module
-        shader: assets.add(bevy::shader::Shader::from_wgsl(concat!(include_str!("light.wgsl"), "\n", include_str!("trace.wgsl")), "lightbench/light.wgsl")),
-        entry_point: Some("main".into()),
-        ..default()
-    });
-    commands.insert_resource(Pipeline { layout, id });
+    // the lighting, the rays it traces and the radiance cache, one module
+    let shader = assets.add(bevy::shader::Shader::from_wgsl(concat!(include_str!("light.wgsl"), "\n", include_str!("trace.wgsl"), "\n", include_str!("cache.wgsl"), "\n", include_str!("half.wgsl")), "lightbench/light.wgsl"));
+    // three entry points of one module, on one layout
+    let base = ComputePipelineDescriptor { layout: vec![layout.clone()], shader, ..default() };
+    let queue = |entry: &'static str| cache.queue_compute_pipeline(ComputePipelineDescriptor { label: Some(format!("lightbench_{entry}").into()), entry_point: Some(entry.into()), ..base.clone() });
+    let (id, resolve, half) = (queue("main"), queue("resolve"), queue("trace_half"));
+    commands.insert_resource(Pipeline { layout, id, resolve, half });
 }
 
 #[allow(clippy::too_many_arguments)]
+/// A 16-byte buffer: the ray counts and the timer's resolve and read-back.
+fn small(d: &wgpu::Device, label: &str, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+    d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: 16, usage, mapped_at_creation: false })
+}
+
 fn light(
     view: ViewQuery<(&ExtractedView, &ViewTarget, Option<&ViewPrepassTextures>)>,
     p: Option<Res<Pipeline>>,
@@ -168,7 +190,7 @@ fn light(
 ) {
     let (Some(p), Some(scene)) = (p, scene) else { return };
     let (extracted, target, prepass) = view.into_inner();
-    let Some(pipeline) = cache.get_compute_pipeline(p.id) else { return };
+    let (Some(pipeline), Some(resolve), Some(half)) = (cache.get_compute_pipeline(p.id), cache.get_compute_pipeline(p.resolve), cache.get_compute_pipeline(p.half)) else { return };
     let Some(prepass) = prepass else { return };
     let (Some(depth), Some(gbuf)) = (prepass.depth_only_view(), prepass.deferred_view()) else { return };
     if target.main_texture_format() != TextureFormat::Rgba16Float || frame.lights.is_empty() {
@@ -184,7 +206,7 @@ fn light(
     }
     let lights = device.create_buffer_with_data(&BufferInitDescriptor { label: Some("lightbench_lights"), contents: bytemuck::cast_slice(&frame.lights), usage: BufferUsages::STORAGE });
     let list = |label: &str, v: &[u32]| device.create_buffer_with_data(&BufferInitDescriptor { label: Some(label), contents: bytemuck::cast_slice(if v.is_empty() { &[0u32][..] } else { v }), usage: BufferUsages::STORAGE });
-    let (grid_start, grid_idx) = (list("lightbench_grid_start", &frame.grid_start), list("lightbench_grid_idx", &frame.grid_idx));
+    let grid = list("lightbench_grid", &frame.grid);
     let size = target.main_texture().size();
     let want = UVec2::new(size.width, size.height);
     let fresh = bufs.history.as_ref().map(|h| h.0) != Some(want);
@@ -205,6 +227,9 @@ fn light(
             (t, v)
         };
         bufs.history = Some((want, [make(0), make(1), make(2), make(3)]));
+        // a block's bounce, a 2 x 2 block a vec4
+        let blocks = (want.x.div_ceil(2) * want.y.div_ceil(2)) as u64;
+        bufs.half = Some(device.create_buffer(&BufferDescriptor { label: Some("lightbench_bounce_half"), size: blocks * 16, usage: BufferUsages::STORAGE, mapped_at_creation: false }));
     }
     let world_from_clip = extracted.world_from_view.to_matrix() * extracted.clip_from_view.inverse();
     let clip_from_world = extracted.clip_from_view * extracted.world_from_view.to_matrix().inverse();
@@ -213,17 +238,22 @@ fn light(
     let reset = fresh || frame.cut || bufs.prev.is_none();
     bufs.prev = Some((clip_from_world, eye));
     if bufs.stats.is_none() {
-        let make = |label: &str, usage: BufferUsages| device.create_buffer(&BufferDescriptor { label: Some(label), size: 16, usage, mapped_at_creation: false });
+        let make = |label: &str, usage: BufferUsages| Buffer::from(small(device.wgpu_device(), label, usage));
         bufs.stats = Some((make("lightbench_stats", BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC), make("lightbench_stats_read", BufferUsages::MAP_READ | BufferUsages::COPY_DST)));
     }
     if bufs.timer.is_none() && crate::timing() && device.features().contains(WgpuFeatures::TIMESTAMP_QUERY) {
         let d = device.wgpu_device();
         let set = d.create_query_set(&wgpu::QuerySetDescriptor { label: Some("lightbench_timer"), ty: wgpu::QueryType::Timestamp, count: 2 });
-        let buf = |label: &str, usage: wgpu::BufferUsages| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: 16, usage, mapped_at_creation: false });
-        let resolve = buf("lightbench_timer_resolve", wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC);
-        let read = buf("lightbench_timer_read", wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
+        let resolve = small(d, "lightbench_timer_resolve", wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC);
+        let read = small(d, "lightbench_timer_read", wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
         bufs.timer = Some((set, resolve, read, queue.get_timestamp_period() as f64));
     }
+    if bufs.cache.is_none() {
+        let make = |label: &str, size: u64| device.create_buffer(&BufferDescriptor { label: Some(label), size, usage: BufferUsages::STORAGE, mapped_at_creation: false });
+        bufs.cache = Some((make("lightbench_cells", CELLS * 6 * 4), make("lightbench_cell_light", CELLS * 16)));
+    }
+    let (cells, cell_light) = bufs.cache.as_ref().unwrap();
+    let half_res = frame.half && (frame.cache || frame.bounces > 0);
     let (stats, readback) = bufs.stats.as_ref().unwrap();
     queue.write_buffer(stats, 0, &[0u8; 16]);
     let (_, nodes, tris) = bufs.from.as_ref().unwrap();
@@ -240,25 +270,36 @@ fn light(
         temporal: UVec4::new(frame.raw as u32, reset as u32, frame.history.max(1), 0),
         grid_min: frame.grid_min,
         grid_dims: frame.grid_dims,
-        gi: UVec4::new(frame.bounces, 0, 0, 0),
+        gi: UVec4::new(frame.bounces, frame.cache as u32, half_res as u32, 0),
         sun: frame.sun,
         sun_e: frame.sun_e,
         sky: frame.sky,
+        cache: Vec4::new(frame.cell, 4096.0, 0.0, 0.0),
     });
     params.write_buffer(&device, &queue);
     let group = device.create_bind_group(
         "lightbench_light",
         &cache.get_bind_group_layout(&p.layout),
-        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view(), &h[r].1, &h[r + 1].1, &h[w].1, &h[w + 1].1, stats.as_entire_binding(), grid_start.as_entire_binding(), grid_idx.as_entire_binding())),
+        &BindGroupEntries::sequential((params.binding().unwrap(), depth, gbuf, nodes.as_entire_binding(), tris.as_entire_binding(), lights.as_entire_binding(), target.main_texture_view(), &h[r].1, &h[r + 1].1, &h[w].1, &h[w + 1].1, stats.as_entire_binding(), grid.as_entire_binding(), bufs.half.as_ref().unwrap().as_entire_binding(), cells.as_entire_binding(), cell_light.as_entire_binding())),
     );
     let encoder = ctx.command_encoder();
     // timed at the pass's own start and end: Apple's GPUs take timestamps there, not inside passes or between them
     let timer = bufs.timer.as_ref();
-    let writes = timer.map(|t| wgpu::ComputePassTimestampWrites { query_set: &t.0, beginning_of_pass_write_index: Some(0), end_of_pass_write_index: Some(1) });
+    let writes = timer.map(|(set, ..)| wgpu::ComputePassTimestampWrites { query_set: set, beginning_of_pass_write_index: Some(0), end_of_pass_write_index: Some(1) });
     let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor { label: Some("lightbench_light"), timestamp_writes: writes });
-    pass.set_pipeline(pipeline);
     pass.set_bind_group(0, &group, &[]);
+    // the bounce at half resolution first, so the pixels can take it up
+    if half_res {
+        pass.set_pipeline(half);
+        pass.dispatch_workgroups(size.width.div_ceil(2).div_ceil(8), size.height.div_ceil(2).div_ceil(8), 1);
+    }
+    pass.set_pipeline(pipeline);
     pass.dispatch_workgroups(size.width.div_ceil(8), size.height.div_ceil(8), 1);
+    // a dispatch is its own usage scope, so the resolve sees every pixel's samples
+    if frame.cache {
+        pass.set_pipeline(resolve);
+        pass.dispatch_workgroups((CELLS / 64) as u32, 1, 1);
+    }
     drop(pass);
     encoder.copy_buffer_to_buffer(stats, 0, readback, 0, 16);
     if let Some(t) = timer {

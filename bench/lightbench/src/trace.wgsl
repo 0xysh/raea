@@ -96,8 +96,20 @@ fn occluded(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> bool {
 
 struct Hit { t: f32, i: u32 }
 
-// the nearest triangle on the ray before tmax (i 0xFFFFFFFF if none): the BVH walked as `occluded` walks it, the
-// ray shortening at each hit so farther boxes drop out; every triangle with brute force
+// where the ray enters a box (0 if it starts inside), MISS if it doesn't before tmax
+fn box_t(o: vec3<f32>, inv: vec3<f32>, mn: vec3<f32>, mx: vec3<f32>, tmax: f32) -> f32 {
+    let t0 = (mn - o) * inv;
+    let t1 = (mx - o) * inv;
+    let lo = min(t0, t1);
+    let hi = max(t0, t1);
+    let near = max(max(lo.x, lo.y), max(lo.z, 0.0));
+    let far = min(min(hi.x, hi.y), min(hi.z, tmax));
+    return select(MISS, near, near <= far);
+}
+
+// the nearest triangle on the ray before tmax (i 0xFFFFFFFF if none): at each inner node the nearer child first and
+// the farther kept with where the ray enters it, so once a hit is nearer than a kept box that box is skipped; every
+// triangle with brute force
 fn closest(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
     rays += 1u;
     var best = Hit(tmax, 0xFFFFFFFFu);
@@ -112,31 +124,51 @@ fn closest(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
         return best;
     }
     let inv = 1.0 / select(d, vec3(1e-12), abs(d) < vec3(1e-12));
+    if box_t(o, inv, nodes[0].mn, nodes[0].mx, best.t) == MISS {
+        return best;
+    }
     var stack: array<u32, STACK>;
+    var enter: array<f32, STACK>;
     var sp = 0u;
     var i = 0u;
     loop {
         let n = nodes[i];
-        if hit_box(o, inv, n.mn, n.mx, best.t) {
-            if n.count > 0u {
-                for (var t = n.a; t < n.a + n.count; t++) {
-                    let h = tri_t(o, d, t);
-                    if h < best.t {
-                        best = Hit(h, t);
-                    }
+        var next = 0xFFFFFFFFu;
+        if n.count > 0u {
+            for (var t = n.a; t < n.a + n.count; t++) {
+                let h = tri_t(o, d, t);
+                if h < best.t {
+                    best = Hit(h, t);
                 }
-            } else if sp < STACK {
-                stack[sp] = n.a;
-                sp++;
-                i++;
-                continue;
+            }
+        } else {
+            let tl = box_t(o, inv, nodes[i + 1u].mn, nodes[i + 1u].mx, best.t);
+            let tr = box_t(o, inv, nodes[n.a].mn, nodes[n.a].mx, best.t);
+            if tl < MISS && tr < MISS {
+                let left_first = tl <= tr;
+                next = select(n.a, i + 1u, left_first);
+                if sp < STACK {
+                    stack[sp] = select(i + 1u, n.a, left_first);
+                    enter[sp] = max(tl, tr);
+                    sp++;
+                }
+            } else if tl < MISS {
+                next = i + 1u;
+            } else if tr < MISS {
+                next = n.a;
             }
         }
-        if sp == 0u {
+        // nothing to go down into: the nearest kept box the ray still reaches before its best hit
+        while next == 0xFFFFFFFFu && sp > 0u {
+            sp--;
+            if enter[sp] < best.t {
+                next = stack[sp];
+            }
+        }
+        if next == 0xFFFFFFFFu {
             break;
         }
-        sp--;
-        i = stack[sp];
+        i = next;
     }
     return best;
 }

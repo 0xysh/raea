@@ -48,6 +48,11 @@ const HELP: &str = "lightbench [switches]
                                 0.25, --bounce 2 unless given) (knot)
   --sun on|off                  a low sun from the left, one shadow ray to a point on its disc a pixel (off)
   --sun-size DEG                the sun's angular diameter: larger, softer shadows (0.53)
+  --cache on|off                 the bounce reads a world radiance cache at its first hit instead of tracing on, and
+                                feeds it: every bounce for two rays a pixel (off)
+  --bounce-res full|half        the bounce traced at every pixel, or at one of each 2 x 2 block (a different one each
+                                frame) and upsampled by depth and normal (full)
+  --cell M                      the cache's cell size at 1 m from the camera, doubling with each doubling (0.1)
   --sky X                       the sky's radiance (a blue-white), brought by bounce rays that leave the scene (0)
   --rows N                      the field's rows (6)
   --detail full|adaptive        every finest triangle, or the clusters each knot's distance asks for (adaptive)
@@ -87,10 +92,13 @@ pub struct Opts {
     pub sun: bool,
     pub sun_size: f32,
     pub sky: f32,
+    pub cache: bool,
+    pub cell: f32,
+    pub half: bool,
 }
 
 fn opts() -> Result<Opts, String> {
-    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0, grid: true, bounces: 0, sun: false, sun_size: 0.53, sky: 0.0 };
+    let mut o = Opts { mode: 0, k: 4, lights: 16, view: 0, brute: false, detail: 0, size: UVec2::new(1280, 720), t: None, exposure: 1.0, shot: None, frames: 4, bench: 0, pillar: true, raw: false, history: 32, camera: 0, cut_at: 8, scene: 0, rows: 6, full: false, tau: 1.0, fov: 45.0, grid: true, bounces: 0, sun: false, sun_size: 0.53, sky: 0.0, cache: false, cell: 0.1, half: false };
     // what --scene room turns on, unless the switches say otherwise
     let (mut sun, mut sky, mut bounces) = (None, None, None);
     let mut args = std::env::args().skip(1);
@@ -129,6 +137,9 @@ fn opts() -> Result<Opts, String> {
             "--sun" => sun = Some(val()? != "off"),
             "--sun-size" => o.sun_size = num(val()?)?.clamp(0.0, 30.0),
             "--sky" => sky = Some(num(val()?)?.max(0.0)),
+            "--cache" => o.cache = val()? != "off",
+            "--cell" => o.cell = num(val()?)?.clamp(0.01, 10.0),
+            "--bounce-res" => o.half = val()? == "half",
             "--size" => {
                 let v = val()?;
                 let (w, h) = v.split_once('x').ok_or("--size: WxH")?;
@@ -265,8 +276,8 @@ fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: 
     *frame = pass::Frame {
         grid_min: g.min.extend(g.cell),
         grid_dims: g.dims.extend(o.grid as u32),
-        grid_start: g.start,
-        grid_idx: g.idx,
+        // the starts count from the buffer's beginning, the indices following them
+        grid: g.start.iter().map(|s| s + g.start.len() as u32).chain(g.idx.iter().copied()).collect(),
         lights,
         mode: o.mode,
         k: o.k,
@@ -281,6 +292,9 @@ fn tick(o: Res<Opts>, time: Res<Time>, mut frame: ResMut<pass::Frame>, mut cam: 
         sun: SUN_TO.normalize().extend((o.sun_size * 0.5).to_radians()),
         sun_e: if o.sun { SUN_E.extend(0.0) } else { Vec4::ZERO },
         sky: (SKY * o.sky).extend(0.0),
+        cache: o.cache,
+        cell: o.cell,
+        half: o.half,
     };
 }
 
@@ -310,7 +324,7 @@ fn shoot(mut commands: Commands, o: Res<Opts>, counts: Res<field::Counts>, targe
         if n > n0 {
             println!("GPU lighting pass {:.2} ms ({} frames timed)", (ns - ns0) as f64 / 1e6 / (n - n0) as f64, n - n0);
         }
-        println!("FRAME {ms:.2} ms, the GPU waited for ({} frames, {}x{}, {} lights, mode {} k {}, bounces {})", drawn - d0, o.size.x, o.size.y, o.lights, ["all", "uniform", "weighted"][o.mode as usize], o.k, o.bounces);
+        println!("FRAME {ms:.2} ms, the GPU waited for ({} frames, {}x{}, {} lights, mode {} k {}, bounces {}{}{})", drawn - d0, o.size.x, o.size.y, o.lights, ["all", "uniform", "weighted"][o.mode as usize], o.k, o.bounces, if o.cache { ", cache" } else { "" }, if o.half { ", half-res" } else { "" });
     }
     commands.spawn(Screenshot::image(target.0.clone())).observe(move |shot: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
         match shot.image.clone().try_into_dynamic() {

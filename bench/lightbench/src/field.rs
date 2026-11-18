@@ -81,7 +81,7 @@ pub fn spawn(commands: &mut Commands, opts: &Opts, meshes: &mut Assets<Mesh>, ma
 fn build(pos: &[Vec3], nor: &[Vec3], dag: &[lod::Cluster], drawn: &[usize], coloured: bool) -> Mesh {
     let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     if !coloured {
-        let idx: Vec<u32> = drawn.iter().flat_map(|&c| dag[c].indices.iter().copied()).collect();
+        let idx = lod::indices_of(dag, drawn);
         return mesh.with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos.to_vec()).with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor.to_vec()).with_inserted_indices(Indices::U32(idx));
     }
     let (mut p, mut n, mut c) = (Vec::new(), Vec::new(), Vec::new());
@@ -141,7 +141,7 @@ pub fn choose(
         }
         *vis = Visibility::Inherited;
         let drawn: Vec<usize> = if opts.full {
-            (0..f.dag.len()).filter(|&k| f.dag[k].level == 0).collect()
+            f.dag.iter().enumerate().filter(|(_, c)| c.level == 0).map(|(k, _)| k).collect()
         } else {
             let to_obj = xf.to_matrix().inverse();
             let eye_obj = to_obj.transform_point3(at);

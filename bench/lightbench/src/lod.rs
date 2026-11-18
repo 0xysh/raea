@@ -84,7 +84,12 @@ pub struct Cluster {
 
 fn clusters_of(pos: &[Vec3], idx: &[u32]) -> Vec<Vec<u32>> {
     let m = meshopt::build_meshlets(idx, &adapter(pos), 128, 128, 0.0);
-    m.iter().map(|c| c.triangles.iter().map(|&t| c.vertices[t as usize]).collect()).collect()
+    m.iter().map(|c| c.triangles.iter().map(|&t| c.vertices[usize::from(t)]).collect()).collect()
+}
+
+/// The named clusters' triangles as one index list.
+pub fn indices_of(all: &[Cluster], which: &[usize]) -> Vec<u32> {
+    which.iter().flat_map(|&c| all[c].indices.iter().copied()).collect()
 }
 
 /// The cluster hierarchy of a closed mesh.
@@ -103,13 +108,13 @@ pub fn dag(pos: &[Vec3], idx: &[u32]) -> Vec<Cluster> {
         }
         // groups of about four clusters that share vertices
         let counts: Vec<u32> = level.iter().map(|&c| all[c].indices.len() as u32).collect();
-        let flat: Vec<u32> = level.iter().flat_map(|&c| all[c].indices.iter().copied()).collect();
+        let flat = indices_of(&all, &level);
         let mut part = vec![0u32; level.len()];
         let groups = meshopt::partition_clusters(&mut part, &flat, &counts, pos.len(), 4);
         let mut next = Vec::new();
         for g in 0..groups {
             let members: Vec<usize> = level.iter().zip(&part).filter(|(_, p)| **p as usize == g).map(|(c, _)| *c).collect();
-            let merged: Vec<u32> = members.iter().flat_map(|&c| all[c].indices.iter().copied()).collect();
+            let merged = indices_of(&all, &members);
             let mut err = 0.0;
             let simple = meshopt::simplify(&merged, &a, merged.len() / 2, f32::MAX, SimplifyOptions::LockBorder | SimplifyOptions::ErrorAbsolute, Some(&mut err));
             // a group that won't halve stays as it is: its clusters are roots

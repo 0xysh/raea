@@ -44,6 +44,10 @@ impl Aabb {
         self.min = self.min.min(p);
         self.max = self.max.max(p);
     }
+    /// The bin of BINS a centre falls in along an axis of this box (the centres' box)
+    fn bin(&self, c: Vec3, axis: usize) -> usize {
+        (((c[axis] - self.min[axis]) / (self.max[axis] - self.min[axis]) * BINS as f32) as usize).min(BINS - 1)
+    }
     fn join(&mut self, b: &Aabb) {
         self.min = self.min.min(b.min);
         self.max = self.max.max(b.max);
@@ -106,10 +110,9 @@ fn split(boxes: &[Aabb], cents: &[Vec3], idx: &mut [u32], lo: usize, hi: usize, 
         if ext[axis] <= 1e-9 {
             continue;
         }
-        let bin_of = |c: Vec3| (((c[axis] - cb.min[axis]) / ext[axis] * BINS as f32) as usize).min(BINS - 1);
         let mut bins = [(Aabb::EMPTY, 0usize); BINS];
         for &i in &idx[lo..hi] {
-            let b = &mut bins[bin_of(cents[i as usize])];
+            let b = &mut bins[cb.bin(cents[i as usize], axis)];
             b.0.join(&boxes[i as usize]);
             b.1 += 1;
         }
@@ -136,9 +139,8 @@ fn split(boxes: &[Aabb], cents: &[Vec3], idx: &mut [u32], lo: usize, hi: usize, 
     let mut mid = lo;
     if best.0.is_finite() {
         let (axis, s) = (best.1, best.2);
-        let bin_of = |c: Vec3| (((c[axis] - cb.min[axis]) / ext[axis] * BINS as f32) as usize).min(BINS - 1);
         for k in lo..hi {
-            if bin_of(cents[idx[k] as usize]) < s {
+            if cb.bin(cents[idx[k] as usize], axis) < s {
                 idx.swap(k, mid);
                 mid += 1;
             }

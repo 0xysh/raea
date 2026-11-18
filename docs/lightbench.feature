@@ -60,6 +60,13 @@ Feature: LightBench: a small Rust + Bevy renderer that proves raea's lighting an
     And in the room the bounce lights what the sun patch and the window don't, and converges to the reference
     And a sampled pixel traces at most K + 1 + 3N rays
 
+  Scenario: LB7 a world radiance cache and a half-resolution bounce, toward 60 fps
+    When LightBench draws with --cache on, and --bounce-res half
+    Then a bounce ray reads the hashed cell it hits and feeds it a fresh sample, so a pixel gets every bounce for two
+      rays, converging to a many-bounce reference with a small bias (written down by cell size)
+    And at half resolution one pixel of each 2 x 2 block traces the bounce and the rest take it up by depth and normal
+    And the room's frame time is measured on its own at 1280x720, toward 60+ fps
+
   # LB4: instrumentation and acceptance
   Scenario: LB4 sweeps
     Then camera and light-count sweeps at a fixed resolution print triangles drawn, rays a pixel and pass timings

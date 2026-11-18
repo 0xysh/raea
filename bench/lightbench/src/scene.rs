@@ -157,7 +157,7 @@ pub fn knot_data(p: u32, q: u32, seg: u32, ring: u32, r: f32) -> (Vec<Vec3>, Vec
 fn triangles(mesh: &Mesh, at: &Transform) -> Vec<[Vec3; 3]> {
     let Some(VertexAttributeValues::Float32x3(p)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else { return vec![] };
     let m = at.to_matrix();
-    let w: Vec<Vec3> = p.iter().map(|v| m.transform_point3(Vec3::from(*v))).collect();
+    let w: Vec<Vec3> = p.iter().map(|&v| m.transform_point3(v.into())).collect();
     let idx: Vec<usize> = match mesh.indices() {
         Some(i) => i.iter().collect(),
         None => (0..w.len()).collect(),
