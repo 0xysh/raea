@@ -47,6 +47,7 @@ raea_plugin! {
     FroxelGlassPlugin: super::froxel_glass::install, "Glass seen through froxel fog (froxel_glass.rs).";
     LookPlugin: super::look::install, "Models drawn as pixel art or the site's grain (look.rs).";
     OutlinePlugin: super::outline::install, "Ink outlines (outline.rs).";
+    SteadyPlugin: raea_sys_post::steady::install, "raea's temporal filter: each frame jittered and blended with those before it (raea-sys-post steady.rs, docs/realism.feature LT12).";
     ComposePlugin: super::compose::install, "Composition passes: each object's pass mask, read by Look, Outline, Bloom and Grade (compose.rs).";
     Text3dPlugin: super::text3d::install, "Text in the 3D world: bevy_rich_text3d and its faces (raea-sys-text3d).";
     FirePlugin: super::fire::install, "Flames drawn as volumes (fire.rs).";

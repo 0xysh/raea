@@ -363,16 +363,20 @@ export function AmbientOcclusion(props: AmbientOcclusionProps) {
 
 export interface AntiAliasingProps {
   /** "msaa" (4x multisampling, the default), "smaa" (morphological, high preset: the default with AmbientOcclusion,
-   * which can't multisample), "fxaa" (cheapest, softest) or "none". Each draws a frame from that frame alone, so a
-   * render equals its play (temporal anti-aliasing isn't offered: it needs the frames before) */
-  mode: "msaa" | "smaa" | "fxaa" | "none";
+   * which can't multisample), "fxaa" (cheapest, softest), "none", or "steady": raea's temporal filter, each frame
+   * drawn from a slightly different place inside its pixels and blended with the frames before it, so what one frame
+   * can only draw as a pattern of pixels (levels cross-fading by distance, far detail a pixel wide, noisy light)
+   * settles to its true share; single-sampled, with depth and motion prepasses (on Berlin's fly, faster than msaa).
+   * The others draw a frame from that frame alone, so a render equals its play; "steady" needs the frames before, so a
+   * render that starts partway through differs from its play for its first few frames */
+  mode: "msaa" | "smaa" | "fxaa" | "none" | "steady";
 }
 
 /** How the 3D's edges are smoothed. Put it inside the Canvas3D, once; each frame's is its own.
  * @bevy bevy_anti_alias::smaa::Smaa
  * @bevy bevy_anti_alias::fxaa::Fxaa */
 export function AntiAliasing(props: AntiAliasingProps) {
-  if (!["msaa", "smaa", "fxaa", "none"].includes(props.mode)) throw new RangeError(`AntiAliasing: mode must be "msaa", "smaa", "fxaa" or "none", got ${JSON.stringify(props.mode)}`);
+  if (!["msaa", "smaa", "fxaa", "none", "steady"].includes(props.mode)) throw new RangeError(`AntiAliasing: mode must be "msaa", "smaa", "fxaa", "none" or "steady", got ${JSON.stringify(props.mode)}`);
   return node3d("AntiAliasing", props as unknown as Record<string, unknown>);
 }
 

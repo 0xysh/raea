@@ -481,6 +481,21 @@ Feature: raea Light: raea's own real-time realism renderer, measured against rae
       And quality tiers scale it for smaller GPUs, each tier's numbers in LT1's table, down to a tier for GPUs with
         no ray-tracing hardware: screen traces and probes, the world cache filled by a compute traversal of the
         coarse ray scene, leaf translucency and the finish (LT19) intact, so the image degrades and never drops
+      And the temporal filter is raea's own (11-18; raea-sys-post steady.rs, <AntiAliasing mode="steady">, or
+        RAEA_STEADY on every 3D camera): 16 jitter places, one for each of the levels' cross-fade dither's 16, which
+        now moves each frame under a jittered view (raea's bevy_pbr pbr_functions.wesl, its prepass alike); the past
+        fetched by the depth and motion prepasses at the nearest neighbour's motion, clipped to the 3x3 YCoCg spread
+        (1.5 sigma still, 1 at 4 px a frame), blended in linear light at 1/n down to 1/32 still and 1/8 moving. MSAA
+        goes off under it. On Berlin's 1440p fly the dither's dot bands are gone at full size and the walk's heroes
+        leave no trail; the far city's roof slopes, a pixel wide, alias more without MSAA (prefiltered far levels,
+        LT21). Live 2560x1440 work p50, median of 3, MSAA 4x against steady: walk 53.0/55.0 ms, fly 47.3/42.5 (Bevy's
+        TAA: 52.9/53.5, 53.4/42.1). Off by default; a render's first frames have no past
+      And `raea light check` draws 16 frames before each still or shot that doesn't follow the frame before, unmeasured,
+        so what keeps a past has its own, and never steadies its reference (RAEA_STEADY's jitter moved the path-traced
+        shot by part of a pixel a frame: 0.478 stops of its own on FLOOR3, read as the paths' flicker). LT1 raster,
+        without and with the filter: FLOOR3 mean 1.379/1.392 stops, bias -0.801/-0.816, worst 3.370/3.392, flicker
+        0.101/0.111, live 12.6/14.5 ms (the prepasses cost more than MSAA saves on a small room); glade 1.758/1.750,
+        1.542/1.532, 3.000/2.953, flicker 0.817/0.788; gambit-walk live 49.0/44.1 ms; kitchen live 53.8/55.6 ms
 
     Scenario: LT19. The camera and the finish
       Given much of a photo's look is its camera's, not its light's (Shane's notes, 11-17: a good denoiser, AgX,

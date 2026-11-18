@@ -458,6 +458,10 @@ impl PrepassPipeline {
         if mesh_key.contains(MeshPipelineKey::DEPTH_PREPASS) {
             shader_defs.push("DEPTH_PREPASS".into());
         }
+        // raea: see check_prepass_views_need_specialization
+        if mesh_key.contains(MeshPipelineKey::TEMPORAL_JITTER) {
+            shader_defs.push("TEMPORAL_JITTER".into());
+        }
         if mesh_key.contains(MeshPipelineKey::MAY_DISCARD) {
             shader_defs.push("MAY_DISCARD".into());
         }
@@ -922,9 +926,10 @@ pub fn check_prepass_views_need_specialization(
         Option<&DepthPrepass>,
         Option<&NormalPrepass>,
         Option<&MotionVectorPrepass>,
+        bevy_ecs::query::Has<TemporalJitter>,
     )>,
 ) {
-    for (view, msaa, depth_prepass, normal_prepass, motion_vector_prepass) in views.iter_mut() {
+    for (view, msaa, depth_prepass, normal_prepass, motion_vector_prepass, jitter) in views.iter_mut() {
         let mut view_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
         if depth_prepass.is_some() {
             view_key |= MeshPipelineKey::DEPTH_PREPASS;
@@ -934,6 +939,11 @@ pub fn check_prepass_views_need_specialization(
         }
         if motion_vector_prepass.is_some() {
             view_key |= MeshPipelineKey::MOTION_VECTOR_PREPASS;
+        }
+        // raea: a jittered view's prepass moves the levels' dither each frame as its main pass does
+        // (pbr_functions.wesl visibility_range_dither)
+        if jitter {
+            view_key |= MeshPipelineKey::TEMPORAL_JITTER;
         }
 
         if let Some(current_key) = view_key_cache.get_mut(&view.retained_view_entity) {

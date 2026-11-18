@@ -88,7 +88,15 @@ fn visibility_range_dither(frag_coord: vec4<f32>, dither: i32) {
     }
 
     // Otherwise, check the dither pattern.
-    let coords = vec2<u32>(floor(frag_coord.xy)) % 4u;
+    var cell = vec2<u32>(floor(frag_coord.xy));
+    // raea: under a temporal filter (a jittered view) the pattern moves to another of its 16 places each frame, so the
+    // filter's history sees every threshold at every pixel and a cross-fade averages to its share, not a fixed pattern
+    // of dots (docs/realism.feature LT12). The prepass moves it the same way, so its depth keeps the same fragments.
+@if(TEMPORAL_JITTER) {
+    let k = (view_bindings::view.frame_count * 11u) % 16u;
+    cell += vec2(k % 4u, k / 4u);
+}
+    let coords = cell % 4u;
     let threshold = i32((DITHER_THRESHOLD_MAP[coords.y] >> (coords.x * 8)) & 0xff);
     if ((dither >= 0 && dither + threshold >= 16) || (dither < 0 && 1 + dither + threshold <= 0)) {
         discard;

@@ -16,6 +16,8 @@ pub mod motion_blur;
 pub mod dof;
 pub mod effect_stack;
 pub mod outline;
+// raea's temporal filter (docs/realism.feature LT12)
+pub mod steady;
 
 /// A live scene's camera made before its first 3D part (MSAA off, as a 2D scene's is) multisamples once a frame brings
 /// one, as a render's camera does from its load, which sees every frame's rows (#38: kept-mount's cube mounts at frame
