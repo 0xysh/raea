@@ -100,9 +100,18 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         let di_samples = select(constants.secondary_di_samples, constants.primary_di_samples, bounce == 0u);
         generate_nee_candidate(&path, F_ab, p_nee, di_samples, workgroup_id, bounce, rng);
 
+        // raea: Russian roulette on the first bounce (SolariLighting::first_bounce_probability): a workgroup (8 x 8
+        // pixels) traces it with probability q, and its light counts 1 / q (in the throughput every bounce-0 candidate
+        // is weighted by), so the estimate keeps its mean; a skipped pixel keeps its primary light sample and takes its
+        // bounce from reuse. The coin is the workgroup's, not each pixel's: a SIMD group waits for its slowest ray, so
+        // pixels skipped at random saved little (photo 3's forest, q 0.5: 10.25 -> 8.97 ms). At 1 nothing is drawn.
+        let q = constants.first_bounce_probability;
+        if bounce == 0u && q < 1.0 && first_bounce_coin(workgroup_id) >= q { break; }
+
         // Sample the BRDF and trace the next ray
-        let next_bounce = evaluate_and_sample_brdf(path.wo, path.normal, path.material, F_ab, rng);
+        var next_bounce = evaluate_and_sample_brdf(path.wo, path.normal, path.material, F_ab, rng);
         if next_bounce.pdf == 0.0 { break; }
+        if bounce == 0u && q < 1.0 { next_bounce.throughput /= q; }
         let ray = trace_ray(path.ray_origin, next_bounce.wi, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_NONE);
 
         if ray.kind == RAY_QUERY_INTERSECTION_NONE {
@@ -208,6 +217,13 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         result.reservoir = path.reservoir;
     }
     return result;
+}
+
+// raea: one draw in [0, 1) for a whole workgroup this frame (first_bounce_probability's coin)
+fn first_bounce_coin(workgroup_id: vec2<u32>) -> f32 {
+    var wg_rng = (workgroup_id.x * 5782582u) ^ (workgroup_id.y * 1103515245u) ^ constants.frame_rng;
+    wg_rng = wg_rng * 747796405u + 2891336453u;
+    return rand_f(&wg_rng);
 }
 
 fn generate_nee_candidate(

@@ -156,6 +156,13 @@ pub struct SolariLighting {
     /// multi-bounce lighting for specular paths.
     pub max_bounces: u32,
 
+    /// raea: the chance a pixel traces its first bounce this frame (Russian roulette on it). The bounce's light is
+    /// divided by it, so the picture keeps its light on average, and ReSTIR's reuse spreads what a pixel skipped from
+    /// its neighbours and last frames. The bounce is most of the frame's tracing in dense foliage: 0.5 halves it.
+    ///
+    /// Defaults to `1.0` (every pixel, every frame).
+    pub first_bounce_probability: f32,
+
     /// How responsive the world cache is to changes in lighting.
     ///
     /// Higher values accumulate more temporal history, giving more stable but
@@ -227,6 +234,7 @@ impl Default for SolariLighting {
             primary_di_samples: 8,
             secondary_di_samples: 4,
             max_bounces: 3,
+            first_bounce_probability: 1.0,
             world_cache_max_temporal_samples: 32.0,
             world_cache_direct_light_sample_count: 32,
             world_cache_max_gi_ray_distance: 50.0,
