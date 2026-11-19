@@ -13,11 +13,14 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 WINDOWS = os.name == "nt"
 MAC = sys.platform == "darwin"
+# a download's tries, each resuming where the last stopped
+TRIES = 8
 
 # the footage tools' venv (matchmove and splat), at the versions measured (2026-10-20; PyAV 2026-11-19), one set so uv's
 # cache serves both: COLMAP, OpenCV, Pillow, and PyAV, whose wheels carry FFmpeg's own libraries (no FFmpeg installed)
@@ -100,14 +103,40 @@ class Setup:
             shutil.copy2(src, dest)
 
     def download(self, url, to):
-        """`url` into the file `to`, through curl (its progress bar on a terminal; in a log, a render's or the CLI's
-        piped, only errors), else Python's own HTTP"""
+        """`url` into the file `to`, resumed from what an earlier try or run left there: a connection that drops
+        mid-file (curl's error 56 on Windows 11-18, 110 MB into SAO's 1.4 GB DiT) costs only what wasn't fetched. Through
+        curl (its progress bar on a terminal; in a log, a render's or the CLI's piped, only errors), else Python's own
+        HTTP"""
+        to = Path(to)
         curl = shutil.which("curl")
-        if curl:
-            self.run([curl, "-fL", "--retry", "3", *(["--progress-bar"] if sys.stderr.isatty() else ["-sS"]), "-o", to, url])
-            return
-        with urllib.request.urlopen(url, timeout=120) as r, open(to, "wb") as f:
-            shutil.copyfileobj(r, f, 1 << 20)
+        for attempt in range(1, TRIES + 1):
+            if curl:
+                quiet = ["--progress-bar"] if sys.stderr.isatty() else ["-sS"]
+                # -C -: from the size already there (a server answers 416 to a whole file, which curl takes as done)
+                ok = subprocess.run([curl, "-fL", "-C", "-", "--retry", "3", "--connect-timeout", "30", *quiet, "-o", str(to), url]).returncode == 0
+            else:
+                ok = self._urllib(url, to)
+            if ok:
+                return
+            have = to.stat().st_size if to.exists() else 0
+            if attempt < TRIES:
+                self.say(f"the download stopped at {have / 1e6:.0f} MB: resuming ({attempt} of {TRIES - 1})")
+                time.sleep(min(30, 2 * attempt))
+        sys.exit(f"{self.name} setup: couldn't download {url} after {TRIES} tries; {to} keeps what came, so running the setup again resumes it")
+
+    @staticmethod
+    def _urllib(url, to):
+        """One try with Python's own HTTP, resumed with a Range request from what `to` already has"""
+        have = to.stat().st_size if to.exists() else 0
+        req = urllib.request.Request(url, headers={"Range": f"bytes={have}-"} if have else {})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r, open(to, "ab" if r.status == 206 else "wb") as f:
+                shutil.copyfileobj(r, f, 1 << 20)
+            return True
+        except urllib.error.HTTPError as e:
+            return e.code == 416 and have > 0  # the whole file is already here
+        except OSError:
+            return False
 
     def fetch(self, dest, url, sha256=None):
         """A file of the install: kept when it's here, copied from the other install when that has it, else downloaded;
@@ -116,10 +145,11 @@ class Setup:
         if dest.is_file() and dest.stat().st_size > 0:
             return
         dest.parent.mkdir(parents=True, exist_ok=True)
+        # a .part left by a stopped download is resumed, not thrown away
         part = dest.with_name(dest.name + ".part")
-        part.unlink(missing_ok=True)
         theirs = self.other / dest if self.other else None
         if theirs and theirs.is_file() and theirs.stat().st_size > 0:
+            part.unlink(missing_ok=True)
             self.copy(theirs, part)
         else:
             self.say(f"downloading {dest.as_posix()}")
