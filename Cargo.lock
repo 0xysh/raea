@@ -15698,6 +15698,7 @@ name = "raea-sys-bake"
 version = "0.1.0"
 dependencies = [
  "image",
+ "raea-io-assets",
  "raea-io-home",
  "rapier3d",
  "serde_json",

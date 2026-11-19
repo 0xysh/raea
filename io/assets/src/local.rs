@@ -12,7 +12,7 @@ pub(crate) fn sao(prompt: &str, seed: u64, params: &J, part: &Path) -> Result<Ve
     // the runner's ffmpeg picks the container from the extension
     let wav = part.with_extension("wav");
     let runner = if dir.join("run.py").exists() && dir.join(".ready").exists() { "run.py" } else { "coreml_run.py" };
-    let mut cmd = std::process::Command::new(dir.join(".venv/bin/python"));
+    let mut cmd = std::process::Command::new(venv_python(&dir));
     // the spike's runner imports its sibling sao_test.py, so it can't run isolated (-I drops the script's folder)
     if runner == "run.py" {
         cmd.arg("-I");
@@ -51,7 +51,7 @@ pub(crate) fn tokensynth(prompt: &str, seed: u64, params: &J, part: &Path) -> Re
     }
     let dir = ensure_installed("tokensynth")?;
     let wav = part.with_extension("wav");
-    let out = std::process::Command::new(dir.join(".venv/bin/python"))
+    let out = std::process::Command::new(venv_python(&dir))
         .arg("-I")
         .arg(dir.join("run.py"))
         .args(["--timbre", prompt, "--seed", &seed.to_string()])
