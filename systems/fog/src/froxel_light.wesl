@@ -23,6 +23,7 @@ import bevy_pbr::render::view_transformations::position_ndc_to_view;
 import bevy_render::maths::orthonormalize;
 import bevy_pbr::render::clustered_forward as clustering;
 import bevy_pbr::render::pbr_lighting::getDistanceAttenuation;
+import raea_sys_fog::froxel_volume::volume_weight;
 
 struct Params {
     view_from_clip: mat4x4<f32>,
@@ -86,11 +87,11 @@ fn medium_light(P_view: vec3<f32>, pixel: vec2<f32>) -> vec4<f32> {
     for (var v = 0u; v < params.counts.x; v += 1u) {
         let vol = &volumes[v];
         let local = ((*vol).local_from_world * vec4(P_world, 1.0)).xyz;
-        if (any(abs(local) > vec3(0.5))) {
+        // thinning going up, the taper and the feathered faces (froxel_volume.wesl)
+        let w = volume_weight((*vol).shape, local);
+        if (w <= 0.0) {
             continue;
         }
-        // thinning going up from the box's floor
-        let w = exp(-(*vol).shape.x * (local.y + 0.5) * (*vol).shape.y);
         sigma_t += (*vol).scatter.a * w;
         k += (*vol).scatter.rgb * w;
         amb += (*vol).ambient.rgb * w;

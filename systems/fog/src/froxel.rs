@@ -82,6 +82,7 @@ pub fn insert(world: &mut World, e: Entity, fog: FroxelFog) {
 }
 
 pub fn install(app: &mut App) {
+    bevy::shader::load_shader_library!(app, "froxel_volume.wesl");
     bevy::asset::embedded_asset!(app, "froxel_light.wesl");
     bevy::asset::embedded_asset!(app, "froxel_grid.wesl");
     bevy::asset::embedded_asset!(app, "froxel_hero.wesl");
@@ -108,7 +109,8 @@ struct GpuVolume {
     scatter: Vec4,
     /// rgb: what of the ambient light it scatters per metre (fog colour x scattering x density); a: anisotropy
     ambient: Vec4,
-    /// x: falloff per metre up from the box's floor; y: the box's height in metres
+    /// x: falloff per metre up from the box's floor; y: the box's height in metres; z: the feathered share of the
+    /// half-size at each face (`soft`); w: how much narrower the floor is than the top (`taper`); froxel_volume.wesl
     shape: Vec4,
 }
 
@@ -121,9 +123,9 @@ pub struct Volumes {
     buffer: StorageBuffer<Vec<GpuVolume>>,
 }
 
-fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &GlobalTransform, Option<&FogRank>, Option<&FogThinning>)>>) {
+fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &GlobalTransform, Option<&FogRank>, Option<&FogShape>)>>) {
     let mut found: Vec<(String, GpuVolume, [Vec3; 8])> = Vec::new();
-    for (fv, t, rank, falloff) in &q {
+    for (fv, t, rank, shape) in &q {
         let affine = t.affine();
         // a hidden volume is shrunk to nothing (scene3d::fog_transform) and has no density
         if fv.density_factor <= 0.0 || affine.matrix3.determinant().abs() < 1e-9 {
@@ -147,7 +149,7 @@ fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &
                 local_from_world: Mat4::from(local_from_world),
                 scatter: light.extend(extinction),
                 ambient: (colour * fv.scattering * fv.density_factor).extend(fv.scattering_asymmetry),
-                shape: Vec4::new(falloff.map_or(0.0, |f| f.0), height, 0.0, 0.0),
+                shape: shape.map_or(Vec4::new(0.0, height, 0.0, 0.0), |s| Vec4::new(s.falloff, height, s.soft, s.taper)),
             },
             corners,
         ));
@@ -396,10 +398,16 @@ fn draw(
     ctx.command_encoder().pop_debug_group();
 }
 
-/// How fast a fog volume thins going up, per metre from its box's floor (`falloff`; 0: even). Only the froxel grid
-/// draws it (froxel.rs); Bevy's march fills the box evenly.
-#[derive(Component, Clone, Copy)]
-pub struct FogThinning(pub f32);
+/// A fog volume's shape inside its box (froxel_volume.wesl): how fast it thins going up, per metre from the box's
+/// floor (`falloff`; 0: even); the share of the box's half-size over which its density ramps in from every face
+/// (`soft`, 0 to 1; 0: a hard box); how much narrower its floor is than its top (`taper`, 0 to 1; a plume). Only the
+/// froxel grid draws it (froxel.rs); Bevy's march fills the box evenly.
+#[derive(Component, Clone, Copy, Default)]
+pub struct FogShape {
+    pub falloff: f32,
+    pub soft: f32,
+    pub taper: f32,
+}
 
 /// Where a fog volume comes in the order Bevy composites them (its row's id). Overlapping volumes blend in the order
 /// Bevy's render world iterates them, which is the order their render entities first got a FogVolume: a render of

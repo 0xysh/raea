@@ -39,6 +39,7 @@ import bevy_pbr::render::mesh_view_types::POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIV
 import bevy_pbr::render::view_transformations::frag_coord_to_ndc;
 import bevy_pbr::render::view_transformations::position_ndc_to_view;
 import bevy_render::maths::orthonormalize;
+import raea_sys_fog::froxel_volume::volume_weight;
 
 struct Params {
     view_from_clip: mat4x4<f32>,
@@ -219,10 +220,10 @@ fn medium(hero: Hero, p: vec3<f32>) -> vec3<f32> {
     for (var v = 0u; v < params.counts.x; v += 1u) {
         let vol = &volumes[v];
         let local = ((*vol).local_from_world * vec4(p, 1.0)).xyz;
-        if (any(abs(local) > vec3(0.5))) {
+        let w = volume_weight((*vol).shape, local);
+        if (w <= 0.0) {
             continue;
         }
-        let w = exp(-(*vol).shape.x * (local.y + 0.5) * (*vol).shape.y);
         var phase = 1.0;
         if (hero.kind == 1u) {
             phase = henyey_greenstein((*vol).ambient.a, hero.cos_view);

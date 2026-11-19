@@ -82,6 +82,12 @@ export interface FogVolumeProps {
    * fog that's a third as thick two metres up. A box wide and tall with a falloff is height fog. Only
    * <VolumetricFog mode="froxel"> draws it; the march draws the box evenly */
   falloff?: number;
+  /** how far in from each face its density ramps up, as a share of the box's half-size, 0 to 1 (0 by default: a hard
+   * box): 0.5 and up hides a small volume's edges (steam, a smoke column). Only <VolumetricFog mode="froxel"> */
+  soft?: number;
+  /** how much narrower its floor is than its top, 0 to 1 (0 by default: a box): 0.7 is a plume rising off a tank,
+   * widening as it climbs. Only <VolumetricFog mode="froxel"> */
+  taper?: number;
   /** Bevy's density_texture: a 3D .ktx2 image in the media folder whose values scale the density through the box (a
    * cloud, a bunny of smoke); the box draws evenly without one. Only the march draws it */
   density_texture?: string;
@@ -98,5 +104,6 @@ export function FogVolume(props: FogVolumeProps) {
   const tex = props.density_texture;
   if (tex !== undefined && !(typeof tex === "string" && /\.ktx2$/i.test(tex))) throw new TypeError(`FogVolume: density_texture is a 3D .ktx2 image, got ${JSON.stringify(tex)}`);
   if (props.falloff !== undefined && !(props.falloff >= 0 && Number.isFinite(props.falloff))) throw new RangeError(`FogVolume: falloff must be 0 or more, got ${props.falloff}`);
+  for (const k of ["soft", "taper"] as const) if (props[k] !== undefined && !(props[k]! >= 0 && props[k]! <= 1)) throw new RangeError(`FogVolume: ${k} must be between 0 and 1, got ${props[k]}`);
   return node3d("FogVolume", colours("FogVolume", (tex === undefined ? props : { ...props, density_texture: assetPath(tex) }) as Record<string, unknown>, ["color"]));
 }

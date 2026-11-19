@@ -15,6 +15,7 @@ import bevy_render::maths::{PI_2, orthonormalize};
 import bevy_pbr::render::utils::{rand_f, rand_vec2f};
 import bevy_solari::scene::bindings::{trace_ray, light_sources, RAY_T_MIN, RAY_T_MAX};
 import bevy_solari::scene::sampling::{generate_random_light_sample, trace_visibility, sample_environment_map_light, ResolvedLightSample};
+import raea_sys_fog::froxel_volume::volume_weight;
 
 enable wgpu_ray_query;
 
@@ -113,10 +114,11 @@ fn medium(P: vec3<f32>) -> vec4<f32> {
     for (var v = 0u; v < params.counts.x; v += 1u) {
         let vol = &volumes[v];
         let local = ((*vol).local_from_world * vec4(P, 1.0)).xyz;
-        if (any(abs(local) > vec3(0.5))) {
+        let w = volume_weight((*vol).shape, local);
+        if (w <= 0.0) {
             continue;
         }
-        let s = (*vol).ambient.rgb * exp(-(*vol).shape.x * (local.y + 0.5) * (*vol).shape.y);
+        let s = (*vol).ambient.rgb * w;
         sigma_s += s;
         g += (*vol).ambient.a * dot(s, LUMA);
         share += dot(s, LUMA);
