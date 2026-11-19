@@ -58,6 +58,21 @@ fn soft() -> R<Box<dyn Backend>> {
     raea_io_media::backend("soft")
 }
 
+/// A video's decoder from the first backend that reads it (raea_io_media::preferred: RAEA_MEDIA's, the platform's, the
+/// portable one, then FFmpeg), so a video the platform's decoder can't read is read through FFmpeg: off a Mac, H.264
+/// with B-frames, HEVC and VP9 (on Windows raea fetches its own FFmpeg the first time). Each backend's refusal is kept
+/// for the error.
+pub fn open_video(path: &Path) -> R<Box<dyn raea_io_media::VideoDecoder>> {
+    let mut why = Vec::new();
+    for b in raea_io_media::preferred() {
+        match b.open_video(path) {
+            Ok(d) => return Ok(d),
+            Err(e) => why.push(format!("{}: {e}", b.name())),
+        }
+    }
+    Err(format!("{}: no backend reads it ({})", path.display(), why.join("; ")))
+}
+
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"];
 const SWITCHES: &[&str] = &["mono"];
 

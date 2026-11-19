@@ -11,6 +11,20 @@ use raea_io_codec::{
 
 pub struct Ffmpeg;
 
+/// The ffmpeg or ffprobe to run: the PATH's, else raea's own (raea_io_assets::ffmpeg_tool). Opening a video (`fetch`)
+/// fetches raea's own on Windows the first time one needs it; sound, encoding and asking what FFmpeg can do (says)
+/// use FFmpeg when it's there and never fetch it (a silent clip's sound is tried on every backend).
+fn cli(name: &str, fetch: bool) -> R<Command> {
+    raea_io_assets::ffmpeg_tool(name, fetch).map(Command::new)
+}
+
+/// A file named as a video: only these fetch FFmpeg when it isn't there (an audio file or an image never does)
+fn named_video(path: &Path) -> bool {
+    const VIDEO: &[&str] = &["mp4", "mov", "m4v", "mkv", "webm", "avi", "mts", "m2ts", "ts", "3gp", "wmv", "flv", "mpg", "mpeg", "mxf", "ogv"];
+    let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    VIDEO.iter().any(|v| *v == ext)
+}
+
 /// Every decoded frame, once: -fps_mode from FFmpeg 5.1 on, -vsync before it (FFmpeg 8 took -vsync out, and the decoder
 /// read nothing: #113).
 pub fn passthrough() -> [&'static str; 2] {
@@ -28,14 +42,14 @@ pub fn passthrough() -> [&'static str; 2] {
 
 /// What `ffmpeg -hide_banner OPTION` prints (nothing without ffmpeg).
 fn says(option: &str) -> String {
-    let out = Command::new("ffmpeg").args(["-hide_banner", option]).output().map(|o| o.stdout).unwrap_or_default();
+    let out = cli("ffmpeg", false).ok().and_then(|mut c| c.args(["-hide_banner", option]).output().ok()).map(|o| o.stdout).unwrap_or_default();
     String::from_utf8_lossy(&out).into_owned()
 }
 
 /// The facts, the presentation times, whether the colour matrix is untagged, and the decoder a VP8 or VP9 stream with
 /// alpha needs (libvpx: ffmpeg's own VP9 decoder drops the alpha WebM keeps beside the picture, #113).
 fn probe(path: &Path) -> R<(Info, Vec<f64>, bool, Option<&'static str>)> {
-    let out = Command::new("ffprobe")
+    let out = cli("ffprobe", named_video(path))?
         .args([
             "-v",
             "error",
@@ -125,7 +139,7 @@ impl Decoder {
             let _ = c.wait();
         }
         let start = self.pts[at] - self.pts[0];
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = cli("ffmpeg", false)?;
         cmd.args(["-v", "error"]).args(self.vpx.map(|c| ["-c:v", c]).into_iter().flatten()).args(["-ss", &format!("{start:.6}"), "-i"]).arg(&self.path);
         if self.bt709 {
             cmd.args(["-vf", "scale=in_color_matrix=bt709:in_range=tv"]);
@@ -220,7 +234,7 @@ impl VideoEncoder for Encoder {
                 }
             }
             std::fs::write(&raw, bytes).map_err(|e| e.to_string())?;
-            let st = Command::new("ffmpeg")
+            let st = cli("ffmpeg", false)?
                 .args(["-v", "error", "-y", "-i"])
                 .arg(&self.video)
                 .args([
@@ -289,7 +303,7 @@ impl Backend for Ffmpeg {
         }))
     }
     fn decode_audio(&self, path: &Path) -> R<Audio> {
-        let ch = Command::new("ffprobe")
+        let ch = cli("ffprobe", false)?
             .args([
                 "-v",
                 "error",
@@ -307,7 +321,7 @@ impl Backend for Ffmpeg {
             .trim()
             .parse()
             .unwrap_or(1);
-        let out = Command::new("ffmpeg")
+        let out = cli("ffmpeg", false)?
             .args(["-v", "error", "-i"])
             .arg(path)
             .args(["-vn", "-f", "f32le", "-ar", "48000", "-"])
@@ -329,7 +343,7 @@ impl Backend for Ffmpeg {
     }
     fn encoder(&self, out: &Path, o: &EncodeOpts) -> R<Box<dyn VideoEncoder>> {
         let video = out.with_extension("video.mp4");
-        let child = Command::new("ffmpeg")
+        let child = cli("ffmpeg", false)?
             .args([
                 "-v",
                 "error",

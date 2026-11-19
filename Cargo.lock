@@ -14562,6 +14562,7 @@ dependencies = [
 name = "raea-io-ffmpeg"
 version = "0.1.0"
 dependencies = [
+ "raea-io-assets",
  "raea-io-codec",
  "serde_json",
 ]

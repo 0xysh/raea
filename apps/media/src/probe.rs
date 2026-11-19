@@ -27,7 +27,9 @@ pub fn probe_of(path: &Path) -> R<Probe> {
         return Ok(Probe { kind: "image", video: None, audio: None, image: Some((w, h)), duration: 0.0, bytes, track: None });
     }
     let track = video_track(path);
-    let video = backend()?.open_video(path).ok().map(|d| d.info().clone()).filter(|i| i.width > 0 && i.frames > 0).map(|mut i| {
+    let opened = open_video(path);
+    let why = opened.as_ref().err().cloned();
+    let video = opened.ok().map(|d| d.info().clone()).filter(|i| i.width > 0 && i.frames > 0).map(|mut i| {
         // the file's own timing over what the decoder counted
         if let Some(t) = &track {
             i.duration = t.duration;
@@ -38,7 +40,9 @@ pub fn probe_of(path: &Path) -> R<Probe> {
     });
     let audio = soft()?.decode_audio(path).ok().filter(|a| a.len() > 0).map(|a| (a.rate, a.channels.len(), a.duration()));
     if video.is_none() && audio.is_none() {
-        return Err(format!("{}: no picture or sound raea can read", path.display()));
+        // what each backend said about the picture: a missing FFmpeg, a codec none of them reads
+        let why = why.map(|w| format!(" ({})", w.split_once(": no backend reads it (").map_or(w.as_str(), |(_, r)| r.trim_end_matches(')')).to_string())).unwrap_or_default();
+        return Err(format!("{}: no picture or sound raea can read{why}", path.display()));
     }
     // the container's own duration when it says one (ffprobe's format duration), else the longest stream
     let duration = container_duration(path).unwrap_or_else(|| video.as_ref().map(|v| v.duration).unwrap_or(0.0).max(audio.map(|a| a.2).unwrap_or(0.0)));

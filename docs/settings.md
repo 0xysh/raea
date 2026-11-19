@@ -31,7 +31,7 @@ command asks for it (a few minutes, once), or ahead of time with `raea setup-aud
 | `RAEA_SAO` | Where Stable Audio Open Small lives (default `~/.cache/raea-sao`, about 2 GB, Core ML): foley and sound effects |
 | `RAEA_AUDIO_AUTOSETUP=0` | Don't install on first use; a missing model's error names the command (`tools/sao/setup.sh` on a Mac or Linux, `uv run --no-project --python 3.11 python -I tools\sao\setup.py` on Windows) |
 | `RAEA_SAO_CUDA` | SAO off a Mac: `1` installs ONNX Runtime with CUDA, `0` the CPU build; unset, an NVIDIA GPU (`nvidia-smi`) decides |
-| `RAEA_TOOLS_CACHE` | Where raea keeps the uv it fetches when there's none on the PATH (default `~/.cache/raea-tools`; uv 0.12.24, checked against its SHA-256); every local model's setup runs through it |
+| `RAEA_TOOLS_CACHE` | Where raea keeps the tools it fetches when they're not on the PATH (default `~/.cache/raea-tools`, each checked against its SHA-256): uv 0.12.24, which every local model's setup runs through; and on Windows FFmpeg 9.0.2 (about 210 MB), fetched the first time a video raea's own decoders can't read is opened (a phone's or a camera's: H.264 with B-frames, HEVC, VP9) |
 
 From the command line, `raea sao "PROMPT" -o hit.wav` and `raea tokensynth "TIMBRE" --notes C3,C4 -o
 notes/` make sounds through the same cache a composition's render uses, and `raea sounds` searches open sample

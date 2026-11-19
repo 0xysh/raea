@@ -21,7 +21,7 @@ fn on_path(tool: &str) -> bool {
 }
 
 fn open(video: &str) -> R<(Box<dyn VideoDecoder>, raea_io_media::Info)> {
-    let d = raea_app_media::backend()?.open_video(Path::new(video))?;
+    let d = raea_app_media::open_video(Path::new(video))?;
     let info = d.info().clone();
     Ok((d, info))
 }

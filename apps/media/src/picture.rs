@@ -19,7 +19,7 @@ pub(crate) fn save(img: &image::RgbaImage, out: &Path) -> R<()> {
 
 /// The frame showing at `t` (the last frame when `t` is past the end).
 pub(crate) fn frame(path: &Path, t: f64) -> R<image::RgbaImage> {
-    let mut d = backend()?.open_video(path)?;
+    let mut d = open_video(path)?;
     let dur = d.info().duration;
     let t = t.clamp(0.0, (dur - 0.5 / d.info().fps.max(1.0)).max(0.0));
     to_image(d.frame_at(t)?)
