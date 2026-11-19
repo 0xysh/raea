@@ -29,6 +29,7 @@ use bevy::render::renderer::{RenderContext, RenderDevice, ViewQuery};
 use bevy::render::camera::{ExtractedCamera, TemporalJitter};
 use bevy::render::view::{ExtractedView, ViewTarget};
 use bevy::solari::prelude::SolariLighting;
+use bevy::solari::realtime::SolariGuideTextures;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2::Message;
@@ -60,6 +61,11 @@ pub(crate) fn add(app: &mut App) {
     };
     core.add_systems(denoise.after(solari).before(main_opaque_pass_3d).in_set(Core3dSystems::MainPass));
     core.add_systems(denoise_up.before(super::upscale::upscale).in_set(Core3dSystems::EarlyPostProcess));
+    // Solari's own guides (primary surface replacement: a mirror's pixel takes what it reflects), unless
+    // RAEA_SOLARI_PSR=0, which guides from the G-buffer as before
+    if std::env::var("RAEA_SOLARI_PSR").as_deref() != Ok("0") {
+        r.world_mut().insert_resource(bevy::solari::realtime::SolariGuideBuffers);
+    }
 }
 
 /// The emission taken out before the denoiser and put back after (see DECODE_WGSL): gathered over frames by default
@@ -75,109 +81,9 @@ fn one_pass() -> bool {
     *ON.get_or_init(|| std::env::var("RAEA_SOLARI_UPSCALE").as_deref() != Ok("two"))
 }
 
-// Bevy's G-buffer (bevy_pbr deferred/functions.wesl, types.wesl) to MetalFX's guides: r = base colour (sRGB-ish, pow
-// 1/2.2) and perceptual roughness as unorm4x8; b = reflectance, metallic, occlusion, clearcoat as unorm4x8; a = a 24-bit
-// octahedral normal (two 12-bit halves) and flags; g = emissive as rgb9e5. Specular albedo is F0 (Bevy's 0.16
-// reflectance² for dielectrics, the base colour for metals).
-// What a surface emits is no noise. Denoised as lighting, a screen's picture or a sign's letters came out smeared, its
-// texture taken for noise against a near-black albedo (photo 2's monitor). So the emission's share of each pixel's
-// colour goes to MetalFX's denoise strength mask, which leaves a pixel marked 1 undenoised while still gathering its
-// frames (which anti-aliases its edges), and the emission, compressed as e / (1 + e), is added to its albedo, so what
-// the denoiser does smooth isn't swollen against a near-black one. A pixel with nothing in the G-buffer (a forward
-// mesh, the sky) is raster-lit, with nothing to denoise, and is marked 1. Measured on photo 2's monitor:
-// RAEA_SOLARI_EMISSIVE=split takes the emission (times the exposure, as Solari adds it) out of the colour into `emit`
-// and `restore` puts it back after MetalFX, the first way, and kept out of the denoiser an emissive edge stayed
-// stepped and crawled with the jitter (500 pixels jumping 80 levels a frame on the window's and curtain's edges);
-// emission as the albedo where it led, the screen's dark parts kept their noise; added to every albedo with no mask,
-// the picture blurred; split only where it was weak, pixels on the boundary counted it twice and sparkled
-const DECODE_WGSL: &str = r#"
-@group(0) @binding(0) var gbuf: texture_2d<u32>;
-@group(0) @binding(1) var diffuse: texture_storage_2d<rgba16float, write>;
-@group(0) @binding(2) var specular: texture_storage_2d<rgba16float, write>;
-@group(0) @binding(3) var normal: texture_storage_2d<rgba16float, write>;
-@group(0) @binding(4) var rough: texture_storage_2d<r32float, write>;
-@group(0) @binding(5) var color: texture_storage_2d<rgba16float, read_write>;
-// [0].x: the camera's exposure, .y: 1 to split all emission out (RAEA_SOLARI_EMISSIVE=split); [1]: the output's size
-// and the input's (the corner of the colour the main pass drew); [2].xyz: the camera's back, world-space; [3].xy: the
-// jitter MetalFX is told, in input pixels
-@group(0) @binding(6) var<uniform> params: array<vec4<f32>, 4>;
-// the emission `main` took out of the colour, at the input's size, for `restore` to put back
-@group(0) @binding(7) var emit: texture_storage_2d<rgba16float, read_write>;
-// MetalFX's denoise strength mask: 1 leaves a pixel undenoised
-@group(0) @binding(8) var mask: texture_storage_2d<r32float, write>;
-fn rgb9e5(v: u32) -> vec3<f32> {
-    let scale = exp2(f32(i32(extractBits(v, 27u, 5u)) - 15 - 9));
-    return vec3<f32>(f32(extractBits(v, 0u, 9u)), f32(extractBits(v, 9u, 9u)), f32(extractBits(v, 18u, 9u))) * scale;
-}
-fn unorm4x8(p: u32) -> vec4<f32> {
-    return vec4<f32>(f32(p & 255u), f32((p >> 8u) & 255u), f32((p >> 16u) & 255u), f32(p >> 24u)) / 255.0;
-}
-fn octahedral(v: vec2<f32>) -> vec3<f32> {
-    let f = v * 2.0 - 1.0;
-    var n = vec3<f32>(f, 1.0 - abs(f.x) - abs(f.y));
-    let t = saturate(-n.z);
-    let w = select(vec2<f32>(t), vec2<f32>(-t), n.xy >= vec2<f32>(0.0));
-    n = vec3<f32>(n.xy + w, n.z);
-    return normalize(n);
-}
-@compute @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    let size = textureDimensions(diffuse);
-    if (id.x >= size.x || id.y >= size.y) { return; }
-    let p = vec2<i32>(id.xy);
-    let g = textureLoad(gbuf, p, 0);
-    if (all(g == vec4<u32>(0u))) {
-        // nothing deferred here (a forward mesh, the sky): its colour as its albedo, so there's nothing to smooth
-        let c = textureLoad(color, p).rgb;
-        textureStore(diffuse, p, vec4<f32>(c / max(1.0, max(c.r, max(c.g, c.b))), 1.0));
-        textureStore(specular, p, vec4<f32>(0.0, 0.0, 0.0, 1.0));
-        textureStore(normal, p, vec4<f32>(params[2].xyz, 0.0));
-        textureStore(rough, p, vec4<f32>(1.0, 0.0, 0.0, 0.0));
-        textureStore(emit, p, vec4<f32>(0.0));
-        textureStore(mask, p, vec4<f32>(1.0, 0.0, 0.0, 0.0));
-        return;
-    }
-    let a = unorm4x8(g.r);
-    let props = unorm4x8(g.b);
-    let base = pow(a.rgb, vec3<f32>(2.2));
-    let metallic = props.y;
-    let f0 = mix(vec3<f32>(0.16 * props.x * props.x), base, metallic);
-    let n = octahedral(vec2<f32>(f32(g.a & 0xFFFu), f32((g.a >> 12u) & 0xFFFu)) / 4095.0);
-    textureStore(normal, p, vec4<f32>(n, 0.0));
-    textureStore(rough, p, vec4<f32>(a.w, 0.0, 0.0, 0.0));
-    let c = textureLoad(color, p);
-    let e = rgb9e5(g.g) * params[0].x;
-    textureStore(specular, p, vec4<f32>(f0, 1.0));
-    if (params[0].y > 0.5) {
-        let taken = min(e, c.rgb);
-        textureStore(diffuse, p, vec4<f32>(base * (1.0 - metallic), 1.0));
-        textureStore(color, p, vec4<f32>(c.rgb - taken, c.a));
-        textureStore(emit, p, vec4<f32>(taken, 0.0));
-        textureStore(mask, p, vec4<f32>(0.0));
-        return;
-    }
-    let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
-    let share = dot(e, luma) / max(dot(c.rgb, luma), 1e-4);
-    textureStore(diffuse, p, vec4<f32>(min(base * (1.0 - metallic) + e / (vec3<f32>(1.0) + e), vec3<f32>(1.0)), 1.0));
-    textureStore(mask, p, vec4<f32>(smoothstep(0.3, 0.7, share), 0.0, 0.0, 0.0));
-}
-fn emitted(i: vec2<i32>) -> vec3<f32> {
-    return textureLoad(emit, clamp(i, vec2<i32>(0), vec2<i32>(params[1].zw) - 1)).rgb;
-}
-@compute @workgroup_size(8, 8, 1)
-fn restore(@builtin(global_invocation_id) id: vec3<u32>) {
-    let size = vec2<u32>(params[1].xy);
-    if (id.x >= size.x || id.y >= size.y) { return; }
-    let p = vec2<i32>(id.xy);
-    // where this output pixel lies in the jittered G-buffer, between its pixels' centres
-    let q = (vec2<f32>(id.xy) + 0.5) * params[1].zw / params[1].xy - params[3].xy - 0.5;
-    let i = vec2<i32>(floor(q));
-    let t = q - floor(q);
-    let e = mix(mix(emitted(i), emitted(i + vec2<i32>(1, 0)), t.x), mix(emitted(i + vec2<i32>(0, 1)), emitted(i + vec2<i32>(1, 1)), t.x), t.y);
-    let c = textureLoad(color, p);
-    textureStore(color, p, vec4<f32>(c.rgb + e, c.a));
-}
-"#;
+// the guides' shader: what it writes and why (the emission's split) is in its file
+const DECODE_WGSL: &str = include_str!("metalfx_guides.wgsl");
+
 
 /// A view's denoiser and its textures, made again when its input's or output's size changes.
 struct View {
@@ -201,7 +107,7 @@ struct View {
 struct Kit {
     /// the guides (and the emissive out), the emissive back in, from this frame or gathered over frames (emit_taa.rs),
     /// and the sampler that reads the gathered emission's history
-    pipeline: Option<(wgpu::ComputePipeline, wgpu::ComputePipeline, wgpu::ComputePipeline, wgpu::Sampler)>,
+    pipeline: Option<(wgpu::ComputePipeline, wgpu::ComputePipeline, wgpu::ComputePipeline, wgpu::Sampler, wgpu::ComputePipeline)>,
     views: HashMap<Entity, View>,
     off: bool,
 }
@@ -337,7 +243,7 @@ fn matrices(s: &ProtocolObject<dyn MTLFXTemporalDenoisedScaler>, world_to_view: 
     }
 }
 
-type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static ExtractedView, &'static ExtractedCamera, &'static SolariLighting, Option<&'static MainPassResolutionOverride>, Option<&'static TemporalJitter>, Has<super::upscale::Upscaled>);
+type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static ExtractedView, &'static ExtractedCamera, &'static SolariLighting, Option<&'static MainPassResolutionOverride>, Option<&'static TemporalJitter>, Has<super::upscale::Upscaled>, Option<&'static SolariGuideTextures>);
 
 /// Before the forward meshes: a view at its full size, or one drawn small when RAEA_SOLARI_UPSCALE=two (its corner).
 fn denoise(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
@@ -359,7 +265,7 @@ fn denoise_up(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local
     run(entity, item, &device, &mut kit, &mut ctx, true);
 }
 
-type Item<'a> = (&'a ViewTarget, &'a ViewPrepassTextures, &'a ExtractedView, &'a ExtractedCamera, &'a SolariLighting, Option<&'a MainPassResolutionOverride>, Option<&'a TemporalJitter>, bool);
+type Item<'a> = (&'a ViewTarget, &'a ViewPrepassTextures, &'a ExtractedView, &'a ExtractedCamera, &'a SolariLighting, Option<&'a MainPassResolutionOverride>, Option<&'a TemporalJitter>, bool, Option<&'a SolariGuideTextures>);
 
 /// The guides from the G-buffer and the emissive out, at the main pass's size; MetalFX's denoiser, out to the whole
 /// view when `up`; its output over the colour and the emissive back in.
@@ -367,7 +273,7 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     if kit.off {
         return;
     }
-    let (target, pre, ext, cam, solari, part, jitter, _) = item;
+    let (target, pre, ext, cam, solari, part, jitter, _, guides) = item;
     let (Some(depth), Some(motion), Some(gbuf)) = (pre.depth.as_ref(), pre.motion_vectors.as_ref(), pre.deferred.as_ref()) else { return };
     if target.main_texture_format() != TextureFormat::Rgba16Float {
         return;
@@ -390,13 +296,13 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
             }
         }
     }
-    let (pipeline, restore, restore_taa, hist_sampler) = kit
+    let (pipeline, restore, restore_taa, hist_sampler, pipeline_psr) = kit
         .pipeline
         .get_or_insert_with(|| {
             let source = format!("{DECODE_WGSL}{}", super::emit_taa::WGSL);
             let module = dev.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("metalfx guides"), source: wgpu::ShaderSource::Wgsl(source.into()) });
             let make = |entry: &str| dev.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("metalfx guides"), layout: None, module: &module, entry_point: Some(entry), compilation_options: Default::default(), cache: None });
-            (make("main"), make("restore"), make("restore_taa"), super::emit_taa::sampler(&dev))
+            (make("main"), make("restore"), make("restore_taa"), super::emit_taa::sampler(&dev), make("main_psr"))
         })
         .clone();
     let color_view = color.create_view(&Default::default());
@@ -417,18 +323,31 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     entries.push(wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&emit) });
     let mask = v.mask.create_view(&Default::default());
     entries.push(wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::TextureView(&mask) });
+    // Solari's guides when it wrote them (guides.rs), else the G-buffer's
+    if let Some(g) = guides {
+        for (i, t) in [&g.diffuse_albedo, &g.specular_albedo, &g.normal_roughness].into_iter().enumerate() {
+            entries.push(wgpu::BindGroupEntry { binding: 9 + i as u32, resource: wgpu::BindingResource::TextureView(&*t.default_view) });
+        }
+    }
+    let pipeline = if guides.is_some() { &pipeline_psr } else { &pipeline };
     let bind = dev.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("metalfx guides"), layout: &pipeline.get_bind_group_layout(0), entries: &entries });
     {
         let mut pass = ctx.command_encoder().begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("metalfx guides"), timestamp_writes: None });
-        pass.set_pipeline(&pipeline);
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &bind, &[]);
         pass.dispatch_workgroups(size.x.div_ceil(8), size.y.div_ceil(8), 1);
     }
+    // with Solari's guides, its motion too: a mirror's pixel moves as what it reflects does (the prepass's is the glass's,
+    // and Solari can't write it there where the GPU has no read-write Rg16Float, as Apple's hasn't)
+    let guide_motion: &wgpu::Texture = match guides {
+        Some(g) => &g.specular_motion_vectors.texture,
+        None => &motion.texture.texture,
+    };
     // a command buffer of its own (wgpu won't mix its own commands and raw ones on one encoder), after the guides'
     let mut raw = dev.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("metalfx denoise") });
     let done = unsafe {
         raw.as_hal_mut::<Metal, _, _>(|e| match e.and_then(|e| e.raw_command_buffer()) {
-            Some(cb) => v.encode(cb, color, &depth.texture.texture, &motion.texture.texture, ext, jitter, solari.reset),
+            Some(cb) => v.encode(cb, color, &depth.texture.texture, guide_motion, ext, jitter, solari.reset),
             None => Err("wgpu gave no Metal command buffer"),
         })
     };

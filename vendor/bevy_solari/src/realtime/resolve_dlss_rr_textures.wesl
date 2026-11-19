@@ -108,9 +108,21 @@ fn psr_chain_mirror(psr: PsrState, plane_normal: vec3<f32>) -> PsrState {
     return chained;
 }
 
-fn psr_environment_miss(pixel_id: vec2<u32>, primary_wo: vec3<f32>) {
+fn psr_environment_miss(pixel_id: vec2<u32>, primary_wo: vec3<f32>, replace_fully: bool) {
     let far_position = view.world_position - (primary_wo * ENVIRONMENT_VIRTUAL_DISTANCE);
-    textureStore(specular_motion_vectors, pixel_id, vec4(calculate_motion_vector(far_position, far_position), vec2(0.0)));
+    let motion = calculate_motion_vector(far_position, far_position);
+    textureStore(specular_motion_vectors, pixel_id, vec4(motion, vec2(0.0)));
+    // raea: a mirror that shows the sky is guided as the sky's own pixels are: infinitely far, nothing to denoise.
+    // Its diffuse albedo's alpha 1 says so to a denoiser other than DLSS-RR (guides.rs); left as the glass's, the
+    // denoiser smoothed the clouds a mirror shows away
+    if replace_fully {
+        textureStore(dlss_rr_depth, pixel_id, vec4(0.0));
+        @if(MOTION_VECTORS_READ_WRITE)
+        textureStore(motion_vectors, pixel_id, vec4(motion, vec2(0.0)));
+        textureStore(diffuse_albedo, pixel_id, vec4(0.0, 0.0, 0.0, 1.0));
+        textureStore(specular_albedo, pixel_id, vec4(0.5));
+        textureStore(normal_roughness, pixel_id, vec4(0.0, 0.0, 1.0, 0.0));
+    }
 }
 
 /// Primary surface replacement for perfect mirrors. The reflection chain has been followed to its

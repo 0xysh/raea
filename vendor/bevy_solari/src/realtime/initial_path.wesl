@@ -117,7 +117,7 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         if ray.kind == RAY_QUERY_INTERSECTION_NONE {
             @if(DLSS_RR_GUIDE_BUFFERS)
             if !psr.finished && !next_bounce.diffuse_selected {
-                psr_environment_miss(pixel_id, wo);
+                psr_environment_miss(pixel_id, wo, psr.replace_fully);
             }
 
             // raea: the sun only off a mirror's specular lobe, which light sampling can't reach; elsewhere it finds the sun

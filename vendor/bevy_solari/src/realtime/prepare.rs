@@ -151,6 +151,8 @@ pub fn prepare_solari_lighting_resources(
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     frame_count: Res<FrameCount>,
+    // raea: the guides for a denoiser other than DLSS-RR (guides.rs)
+    guides: Option<Res<super::guides::SolariGuideBuffers>>,
     mut commands: Commands,
 ) {
     for query_item in &query {
@@ -250,6 +252,11 @@ pub fn prepare_solari_lighting_resources(
             world_cache_active_cells_dispatch,
             view_size,
         });
+        if guides.is_some() {
+            commands
+                .entity(entity)
+                .insert(super::guides::make(&render_device, view_size));
+        }
 
         #[cfg(all(feature = "dlss", not(feature = "force_disable_dlss")))]
         if has_dlss_rr {

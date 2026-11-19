@@ -1,4 +1,6 @@
 mod extract;
+// raea: the denoiser guides (primary surface replacement) without DLSS
+mod guides;
 mod node;
 mod prepare;
 // raea: RAEA_SOLARI_TIMES=1, each stage's GPU time
@@ -40,6 +42,8 @@ use prepare::{
     prepare_solari_lighting_resources, setup_raytracing_scene_needs_previous_frame_data,
 };
 use tracing::warn;
+
+pub use guides::{SolariGuideBuffers, SolariGuideTextures};
 
 /// Raytraced direct and indirect lighting.
 ///
