@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use parry3d::glamx::Vec3;
 use parry3d::shape::TriMesh;
 
-pub use spots::Spot;
+pub use spots::{Spot, thin_by};
 
 /// Bumped when the output would change for the same input (a bake that uses it keys on it).
 pub const VERSION: &str = "raea-sys-touch 5";

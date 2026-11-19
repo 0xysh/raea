@@ -83,12 +83,19 @@ fn thin(c: Vec<Spot>, gap: f32) -> Vec<Spot> {
 }
 
 /// As thin, keeping only candidates that pass `ok` (tested only on those the gap leaves).
-fn thin_if(mut c: Vec<Spot>, gap: f32, ok: impl Fn(&Spot) -> bool) -> Vec<Spot> {
-    c.sort_by_key(|s| seed(s.at));
-    let mut kept: Vec<Spot> = Vec::new();
-    for s in c {
-        if !kept.iter().any(|k| k.at.distance(s.at) < gap) && ok(&s) {
-            kept.push(s);
+fn thin_if(c: Vec<Spot>, gap: f32, ok: impl Fn(&Spot) -> bool) -> Vec<Spot> {
+    thin_by(c, gap, |s| s.at, ok)
+}
+
+/// Candidates of any kind kept in seed order of where each is (`at`), none nearer than `gap` to one kept, and only
+/// those that pass `ok` (tested only on those the gap leaves): thin's rule for what carries a spot (raea-sys-damage's
+/// debris with its loss).
+pub fn thin_by<T>(mut c: Vec<T>, gap: f32, at: impl Fn(&T) -> Vec3, ok: impl Fn(&T) -> bool) -> Vec<T> {
+    c.sort_by_cached_key(|x| seed(at(x)));
+    let mut kept: Vec<T> = Vec::new();
+    for x in c {
+        if !kept.iter().any(|k| at(k).distance(at(&x)) < gap) && ok(&x) {
+            kept.push(x);
         }
     }
     kept

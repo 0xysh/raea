@@ -13,6 +13,7 @@
 #[cfg(test)]
 mod tests;
 
+use parry3d::bounding_volume::Aabb;
 use parry3d::glamx::Vec3;
 use parry3d::query::{Ray, RayCast};
 use rayon::prelude::*;
@@ -181,8 +182,8 @@ pub fn cracks(s: &Surface, pts: &[Point]) -> (Vec<f32>, Vec<Corner>) {
         .iter()
         .map(|c| {
             let path = crack(s, c);
-            let (lo, hi) = path.iter().fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(l, h), &p| (l.min(p), h.max(p)));
-            (c.n, path, lo - Vec3::splat(REACH), hi + Vec3::splat(REACH))
+            let b = Aabb::from_points(path.iter().copied());
+            (c.n, path, b.mins - Vec3::splat(REACH), b.maxs + Vec3::splat(REACH))
         })
         .collect();
     let d = pts
@@ -217,7 +218,7 @@ fn landing(s: &Surface, q: &Point) -> Option<Vec3> {
 /// Debris on the walking surface in front of outdoor plaster whose loss potential is high, one a GAP_DEBRIS apart,
 /// each with the potential of the plaster above it.
 pub fn debris(s: &Surface, pts: &[Point], crack: &[f32]) -> Vec<(Spot, f32)> {
-    let mut c: Vec<(Spot, f32)> = pts
+    let c: Vec<(Spot, f32)> = pts
         .iter()
         .zip(crack)
         .filter(|(q, _)| standing(s, q) && s.mat[q.tri as usize] == Mat::Plaster && q.ground <= LOSS[1] && q.rain >= OUTDOORS)
@@ -225,13 +226,7 @@ pub fn debris(s: &Surface, pts: &[Point], crack: &[f32]) -> Vec<(Spot, f32)> {
         .filter(|(_, l)| *l >= DEBRIS_LOSS)
         .filter_map(|(q, l)| Some((Spot { what: "debris", by: "weather", at: landing(s, q)?, n: s.up, size: DEBRIS }, l)))
         .collect();
-    c.sort_by_key(|(sp, _)| raea_sys_touch::seed(sp.at));
-    let mut kept: Vec<(Spot, f32)> = Vec::new();
-    for x in c {
-        if !kept.iter().any(|k| k.0.at.distance(x.0.at) < GAP_DEBRIS) {
-            kept.push(x);
-        }
-    }
+    let mut kept = raea_sys_touch::thin_by(c, GAP_DEBRIS, |x| x.0.at, |_| true);
     kept.sort_by(|a, b| a.0.at.x.total_cmp(&b.0.at.x).then(a.0.at.z.total_cmp(&b.0.at.z)));
     kept
 }

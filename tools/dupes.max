@@ -30,4 +30,4 @@
 #          core/grow's would change every tree)
 #   near:  runtime/live props.rs Live::controls/held (accessors); io/av1 and io/soft Backend::sound (one-line forwards)
 exact=294
-near=59
+near=58
