@@ -81,6 +81,19 @@ fn one_pass() -> bool {
     *ON.get_or_init(|| std::env::var("RAEA_SOLARI_UPSCALE").as_deref() != Ok("two"))
 }
 
+/// What MetalFX divides the colour by before it denoises, and multiplies its output by after (RAEA_METALFX_PREEXPOSURE,
+/// 16 by default). It denoises bright light compressed, so a rare bright sample (the sky in a glossy reflection, a
+/// lamp's light found by one path in many) counts for less than its share, and Solari's one path a pixel is made of
+/// rare bright samples: at 1, the desk kept 0.74 of the path tracer's light, the forest's haze 0.72 and its far trunks
+/// 0.87, and Russian roulette's doubled samples lost more (photo 5's windows: q 0.5 kept 0.60 of q 1's light; 3.4
+/// stops darker, 0.97). At 16: the desk 0.86, the haze 1.03, the trunks 1.01, the hall's whole frame 0.935 -> 0.971
+/// and q 0.5 keeping 0.98 of q 1's; flicker 0.85 -> 0.88% of pixels. Higher keeps more and lets fireflies through:
+/// at 64 the desk 0.91 and the hall's dark corners 1.2; at 256 the desk's wall 1.59
+fn pre_exposure() -> f32 {
+    static ON: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RAEA_METALFX_PREEXPOSURE").ok().and_then(|v| v.parse().ok()).filter(|v: &f32| *v > 0.0).unwrap_or(16.0))
+}
+
 // the guides' shader: what it writes and why (the emission's split) is in its file
 const DECODE_WGSL: &str = include_str!("metalfx_guides.wgsl");
 
@@ -204,6 +217,7 @@ impl View {
             s.setJitterOffsetX(jitter.x);
             s.setJitterOffsetY(jitter.y);
             s.setDepthReversed(true);
+            s.setPreExposure(pre_exposure());
             s.setShouldResetHistory(reset || self.fresh);
             matrices(s, view.world_from_view.to_matrix().inverse(), view.clip_from_view);
             s.encodeToCommandBuffer(cb);
