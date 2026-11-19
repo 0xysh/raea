@@ -168,7 +168,7 @@ pub fn prepare_views(
             let along = (0..4).map(|i| params.hero_along[i]).max().unwrap_or(0).max(4);
             params.epi = UVec4::new(lines, along, e.every, n);
             params.epi_tol = Vec4::new(e.rel, e.abs, e.depth, spacing);
-            if std::env::var_os("RAEA_FOG_DEBUG").is_some() {
+            if raea_io_trace::stat("RAEA_FOG_DEBUG") {
                 eprintln!("froxel heroes: rects {:?} lines {:?} along {:?} layers {:?}", &params.hero_rect[..slot], params.hero_lines, params.hero_along, (cascades, points));
             }
         }

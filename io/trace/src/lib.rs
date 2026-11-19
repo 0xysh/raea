@@ -30,7 +30,7 @@ mod stats;
 
 use crash::*;
 pub use look::{sessions, status, summarize};
-pub use stats::{choose as choose_stats, chosen as chosen_stats, count, pass_ms, stat, stats, table as stats_table};
+pub use stats::{choose as choose_stats, chosen as chosen_stats, count, pass_ms, stat, stat_value, stats, table as stats_table};
 
 struct Session {
     dir: PathBuf,

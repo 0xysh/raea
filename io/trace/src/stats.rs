@@ -7,7 +7,8 @@
 //! (each of Bevy's render passes timed) `bevy_passes`. It's on when the run's TypeScript chose it
 //! (`native("stats.on", { channels: [...] })` at a composition's top level, which runs before the Engine opens), when
 //! RAEA_STATS lists it (`RAEA_STATS=bevy_passes,bake_trace`, or `all`), or when its own variable is set (not to 0), the
-//! override.
+//! override. A debug view that takes a value takes it the same way: `pass=depth` chooses RAEA_PASS's depth pass, and a
+//! channel chosen bare carries "1".
 
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -44,20 +45,37 @@ pub fn stat(var: &str) -> bool {
         return v != "0";
     }
     let name = var.trim_start_matches("RAEA_");
-    let on = |c: &Vec<String>| c.iter().any(|n| n == "all" || n.eq_ignore_ascii_case(name));
+    let on = |c: &Vec<String>| c.iter().any(|n| n == "all" || n.split('=').next().is_some_and(|n| n.eq_ignore_ascii_case(name)));
     match CHOSEN.read().ok().and_then(|c| c.as_ref().map(on)) {
         Some(o) => o,
         None => on(&chosen()),
     }
 }
 
-/// Channels turned on for the rest of this run (`stats.on`); a name is a RAEA_ variable's without RAEA_, or `all`.
+/// The value the channel of the variable `var` carries: the variable's own (the override), else the chosen channel's
+/// (`pass=depth`; chosen bare, or by `all`, "1"). None when it's off.
+pub fn stat_value(var: &str) -> Option<String> {
+    if let Ok(v) = std::env::var(var) {
+        return Some(v);
+    }
+    let name = var.trim_start_matches("RAEA_");
+    let c = chosen();
+    let own = c.iter().find_map(|n| match n.split_once('=') {
+        Some((k, v)) if k.eq_ignore_ascii_case(name) => Some(v.to_string()),
+        None if n.eq_ignore_ascii_case(name) => Some("1".to_string()),
+        _ => None,
+    });
+    own.or_else(|| c.iter().any(|n| n == "all").then(|| "1".to_string()))
+}
+
+/// Channels turned on for the rest of this run (`stats.on`); a name is a RAEA_ variable's without RAEA_, or `all`, and
+/// `name=value` gives a view its value (a channel chosen again takes the later value).
 pub fn choose(channels: &[String]) {
     let mut c = chosen();
     for n in channels.iter().map(|n| n.trim().trim_start_matches("RAEA_").to_ascii_lowercase()).filter(|n| !n.is_empty()) {
-        if !c.contains(&n) {
-            c.push(n);
-        }
+        let key = n.split('=').next().unwrap_or_default().to_string();
+        c.retain(|o| o.split('=').next() != Some(key.as_str()));
+        c.push(n);
     }
     if let Ok(mut w) = CHOSEN.write() {
         *w = Some(c);

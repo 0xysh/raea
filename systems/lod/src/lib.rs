@@ -57,15 +57,15 @@ struct ShadowLeft;
 pub fn install(app: &mut App) {
     app.register_type::<Detail>().add_systems(PostUpdate, apply.after(VisibilitySystems::CalculateBounds).after(bevy::transform::TransformSystems::Propagate).before(VisibilitySystems::CheckVisibility));
     shadow::install(app);
-    match std::env::var("RAEA_LOD_DEBUG").as_deref() {
-        Ok("time") => {
+    match raea_io_trace::stat_value("RAEA_LOD_DEBUG").as_deref() {
+        Some("time") => {
             app.init_resource::<LodTime>();
             app.add_systems(PostUpdate, timed.after(apply));
         }
-        Ok(_) => {
+        Some(_) => {
             app.add_systems(PostUpdate, report.after(VisibilitySystems::CheckVisibility));
         }
-        Err(_) => {}
+        None => {}
     }
 }
 
@@ -88,7 +88,7 @@ fn timed(mut t: ResMut<LodTime>, changed: Query<(), Changed<Detail>>, parts: Que
 /// name holds it (RAEA_LOD_DEBUG=tile-)
 #[allow(clippy::type_complexity)]
 fn report(views: Query<(Entity, Option<&Camera>, &GlobalTransform), Or<(With<Camera>, With<bevy::camera::ShadowLodOrigin>)>>, ranged: Query<(Entity, &VisibilityRange, &GlobalTransform, &ViewVisibility, &InheritedVisibility, Option<&Aabb>)>, ranges: Res<bevy::camera::visibility::VisibleEntityRanges>, parents: Query<&ChildOf>, named: Query<&Name, With<Detail>>, frame: Res<bevy::diagnostic::FrameCount>, vis: Query<(Option<&Visibility>, Option<&InheritedVisibility>, Option<&Name>)>) {
-    let only = std::env::var("RAEA_LOD_DEBUG").ok().filter(|v| v != "1");
+    let only = raea_io_trace::stat_value("RAEA_LOD_DEBUG").filter(|v| v != "1");
     let cams: Vec<_> = views.iter().collect();
     eprintln!("raea lod: frame {} {} views ({} active cameras)", frame.0, cams.len(), cams.iter().filter(|(_, c, _)| c.is_some_and(|c| c.is_active)).count());
     for (e, r, gt, vv, iv, aabb) in &ranged {

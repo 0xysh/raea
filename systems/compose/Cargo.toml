@@ -7,6 +7,7 @@ publish = false
 description = "Composition passes (which pass drew each pixel, frame-wide effects held back from some) and a frame's passes in place of its picture (depth, normal, albedo)"
 
 [dependencies]
+raea-io-trace = { path = "../../io/trace" }
 raea-sys-frame = { path = "../frame" }
 raea-sys-rt = { path = "../rt" }
 raea-core-program = { path = "../../core/program" }

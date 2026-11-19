@@ -231,7 +231,7 @@ pub fn hero_descriptor(p: &Pipelines, view_key: MeshPipelineViewLayoutKey, entry
     if tricubic {
         defs.push("TRICUBIC_TRANSMITTANCE".into());
     }
-    if std::env::var_os("RAEA_FOG_SHOW_FALLBACK").is_some() {
+    if raea_io_trace::stat("RAEA_FOG_SHOW_FALLBACK") {
         defs.push("SHOW_FALLBACK".into());
     }
     if ms {

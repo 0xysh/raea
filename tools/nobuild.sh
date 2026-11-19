@@ -25,7 +25,8 @@
 #   tools/nobuild.sh stats           NB2a's check: every stat variable decided done is read through raea_io_trace::stat;
 #                                    tools/nobuild/stats/stats.tsx chooses bevy_passes and trace from TypeScript and reads
 #                                    stats.read back; the run prints each pass and keeps stats.json; RAEA_TRACE=1 and
-#                                    RAEA_STATS give the same trace lines on the scene without stats.on. Exits 1 if one fails
+#                                    RAEA_STATS give the same trace lines on the scene without stats.on; pass=depth chosen
+#                                    from TypeScript draws RAEA_PASS=depth's frame. Exits 1 if one fails
 #
 # A decision row (tab-separated): kind:name, then its class, the TypeScript form it becomes, its check, its status
 # (open, doing, done, stays). Classes: frame (changes what a frame shows or costs: a prop), view (a debug view: NB2),
@@ -260,11 +261,11 @@ stats() {
   dir=$(mktemp -d "${TMPDIR:-/tmp}/nobuild-stats.XXXXXX") || exit 1
   check() { if [ "$2" = pass ]; then echo "  $1: pass ($3)"; else echo "  $1: FAIL ($3)"; fails=$((fails + 1)); fi; }
   echo "nobuild stats: tools/nobuild/stats/stats.tsx by $bin"
-  # each stat variable decided done is read through stat(), so TypeScript and RAEA_STATS reach it, never straight
-  for v in $(awk -F'\t' '$2 == "stat" && $5 == "done" && $1 ~ /^env:/ { sub(/^env:/, "", $1); print $1 }' "$RAEA/docs/nobuild/decisions.tsv"); do
+  # each stat or view variable decided done is read through stat() or stat_value(), so TypeScript and RAEA_STATS reach it
+  for v in $(awk -F'\t' '($2 == "stat" || $2 == "view") && $5 == "done" && $1 ~ /^env:/ { sub(/^env:/, "", $1); print $1 }' "$RAEA/docs/nobuild/decisions.tsv"); do
     n=$((n + 1)); raw+=$(cd "$RAEA" && git grep -n -E "env::var(_os)?\(\"$v\"\)" -- '*.rs' ':!vendor' ':!io/trace' | head -2)
   done
-  check "each done stat variable read through stat()" "$([ -z "$raw" ] && echo pass)" "${raw:-$n variables}"
+  check "each done stat or view variable read through stat()" "$([ -z "$raw" ] && echo pass)" "${raw:-$n variables}"
   # chosen from TypeScript, no variable set: stats.on at the scene's top level, stats.read on its last frame
   (cd "$here" && env -u RAEA_TRACE -u RAEA_BEVY_PASSES -u RAEA_STATS RAEA_TRACE_DIR="$dir/trace" "$bin" render stats.tsx -o "$dir/ts" > "$dir/ts.log" 2>&1)
   local read rows kept
@@ -284,6 +285,13 @@ stats() {
   (cd "$dir" && env -u RAEA_TRACE RAEA_STATS=trace,bevy_passes "$bin" render plain.tsx -o "$dir/list" > "$dir/list.log" 2>&1)
   (cd "$dir" && env -u RAEA_TRACE -u RAEA_BEVY_PASSES -u RAEA_STATS "$bin" render plain.tsx -o "$dir/none" > "$dir/none.log" 2>&1)
   check "nothing chosen: no trace lines, no table" "$([ -z "$(traced "$dir/none.log")" ] && ! grep -q '^raea stats' "$dir/none.log" && grep -q '^APPLIED' "$dir/none.log" && echo pass)" "$(traced "$dir/none.log" | wc -l | tr -d ' ') trace lines"
+  # a debug view chosen with its value: pass=depth from TypeScript draws RAEA_PASS=depth's frame, not the beauty
+  sed 's/channels: \["bevy_passes", "trace"\]/channels: ["pass=depth"]/' "$here/stats.tsx" > "$dir/view.tsx"
+  (cd "$dir" && env -u RAEA_PASS -u RAEA_STATS "$bin" render view.tsx -o "$dir/view" > "$dir/view.log" 2>&1)
+  (cd "$dir" && env -u RAEA_STATS RAEA_PASS=depth "$bin" render plain.tsx -o "$dir/penv" > "$dir/penv.log" 2>&1)
+  local pae beauty
+  pae=$(diff_levels PAE "$dir/view/frame-00006.png" "$dir/penv/frame-00006.png"); beauty=$(diff_levels PAE "$dir/view/frame-00006.png" "$dir/none/frame-00006.png")
+  check "pass=depth from TypeScript draws RAEA_PASS=depth's frame" "$([ "$pae" = 0.000 ] && [ -n "$beauty" ] && [ "$beauty" != 0.000 ] && echo pass)" "max ${pae:-no frame} levels apart; ${beauty:-no frame} from the beauty"
   check "RAEA_TRACE=1 the same trace lines" "$([ "$(traced "$dir/env.log")" = "$(traced "$dir/ts.log")" ] && ! grep -q '^raea stats' "$dir/env.log" && echo pass)" "$(traced "$dir/env.log" | wc -l | tr -d ' ') lines, no table"
   check "RAEA_STATS=trace,bevy_passes the same, with the table" "$([ "$(traced "$dir/list.log")" = "$(traced "$dir/ts.log")" ] && grep -q '^  bevy/' "$dir/list.log" && echo pass)" "$(traced "$dir/list.log" | wc -l | tr -d ' ') lines, $(grep -c '^  bevy/' "$dir/list.log") passes"
   echo "nobuild stats: $fails failing"
@@ -297,5 +305,5 @@ case ${1:-} in
   props) props ;;
   catalog) catalog ;;
   stats) stats ;;
-  *) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

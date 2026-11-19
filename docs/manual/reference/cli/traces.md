@@ -32,6 +32,13 @@ switches, named without `RAEA_` and in lower case: `bake_trace`, `seedling_trace
 itself still works and overrides the composition, and `RAEA_STATS=bevy_passes,trace` chooses channels for a run without
 touching the file.
 
+Debug views are channels too, and a view that takes a value takes it after `=`:
+
+```tsx
+native("stats.on", { channels: ["pass=depth"] });        // the depth pass instead of the picture (or normal, albedo, sun, sky)
+native("stats.on", { channels: ["lod_debug", "fog_debug", "volume_debug"] });
+```
+
 While the run goes, `native("stats.read", {})` gives what it has measured so far: each timed pass's runs and its mean
 and worst milliseconds, and the counters (`engine/draws`, `engine/updates`; two updates a draw means each frame was
 drawn twice). A render works out its frames ahead of the engine, so a frame's code can read the totals from before that

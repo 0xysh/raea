@@ -15366,6 +15366,7 @@ dependencies = [
  "miniz_oxide 0.8.9",
  "objc2 0.6.5",
  "raea-io-home",
+ "raea-io-trace",
  "rquickjs",
 ]
 
@@ -15788,6 +15789,7 @@ dependencies = [
  "bevy",
  "indexmap",
  "raea-core-program",
+ "raea-io-trace",
  "raea-sys-frame",
  "raea-sys-rt",
  "serde_json",
@@ -16157,6 +16159,7 @@ name = "raea-sys-lod"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "raea-io-trace",
  "raea-sys-frame",
 ]
 
@@ -16192,6 +16195,7 @@ dependencies = [
  "raea-core-program",
  "raea-core-shape",
  "raea-io-net",
+ "raea-io-trace",
  "raea-sys-frame",
  "raea-sys-mesh",
  "raea-sys-sampler",
@@ -16462,6 +16466,7 @@ dependencies = [
  "ort",
  "raea-io-home",
  "raea-io-media",
+ "raea-io-trace",
  "raea-sys-vision",
  "serde_json",
 ]
@@ -16596,6 +16601,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "raea-core-program",
+ "raea-io-trace",
  "raea-sys-frame",
  "serde_json",
 ]

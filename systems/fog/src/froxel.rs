@@ -277,8 +277,8 @@ fn draw(
     };
     let ms = !matches!(msaa, Msaa::Off);
     let device = ctx.render_device().clone();
-    // RAEA_FOG_SKIP=pass,...: those passes not drawn (timing their cost)
-    let skip = std::env::var("RAEA_FOG_SKIP").unwrap_or_default();
+    // the channel fog_skip=pass,... (stats.on, or RAEA_FOG_SKIP): those passes not drawn (timing their cost)
+    let skip = raea_io_trace::stat_value("RAEA_FOG_SKIP").unwrap_or_default();
     let g = grid.params.grid;
     ctx.command_encoder().push_debug_group("froxel_fog");
 
