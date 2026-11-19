@@ -243,7 +243,7 @@ class Runtime:
             if precision == "coreml":
                 missing += [f"../coreml/{p}" for p in ("dac_decoder.mlmodelc", "token_synth_step.mlmodelc") if not (self.C / p).exists()]
             if missing:
-                raise SystemExit(f"tokensynth: {precision} needs {', '.join(missing)} in {self.F} (tools/tokensynth/setup.sh runs convert.py)")
+                raise SystemExit(f"tokensynth: {precision} needs {', '.join(missing)} in {self.F} (tools/tokensynth/setup.py runs convert.py)")
             dtype = {"fp16": torch.float16, "bf16": torch.bfloat16, "coreml": torch.float16}.get(precision, torch.float32)
             synth = load_transformer(TokenSynth, self.F / "token_synth_aug.pt", dtype)
             uncond = load_transformer(TokenSynthUnconditional, self.F / "token_synth_unconditional.pt", dtype)

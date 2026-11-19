@@ -16,7 +16,7 @@ const GOO_CODE: [&str; 2] = ["run.py", "sph.py"];
 
 fn ensure_goo(script: &Path) -> R<PathBuf> {
     let dir = goo_dir();
-    let ready = |d: &Path| d.join(".venv/bin/python").exists() && GOO_CODE.iter().all(|f| d.join(f).exists()) && d.join(".ready").exists();
+    let ready = |d: &Path| raea_io_assets::venv_python(d).exists() && GOO_CODE.iter().all(|f| d.join(f).exists()) && d.join(".ready").exists();
     // a newer script in the tree than the install's: set up again (it copies them)
     let stale = GOO_CODE.iter().any(|f| {
         std::fs::metadata(script.with_file_name(f)).and_then(|m| m.modified()).ok()
@@ -27,12 +27,12 @@ fn ensure_goo(script: &Path) -> R<PathBuf> {
         return Ok(dir);
     }
     if std::env::var("RAEA_AUDIO_AUTOSETUP").as_deref() == Ok("0") && !ready(&dir) {
-        return Err(format!("the goo solver isn't installed: run {}", script.display()));
+        return Err(format!("the goo solver isn't installed: run {}", raea_io_assets::setup_how(script)));
     }
     eprintln!("raea: setting up the goo solver ({} into {})", script.display(), dir.display());
-    let st = std::process::Command::new("sh").arg(script).env("RAEA_GOO", &dir).stdout(std::io::stderr()).status().map_err(|e| format!("goo setup: {e}"))?;
+    let st = raea_io_assets::run_setup(script, "RAEA_GOO", &dir).map_err(|e| format!("goo setup: {e}"))?;
     if !st.success() || !ready(&dir) {
-        return Err(format!("goo setup didn't finish ({st}): run {}", script.display()));
+        return Err(format!("goo setup didn't finish ({st}): run {}", raea_io_assets::setup_how(script)));
     }
     Ok(dir)
 }
@@ -85,7 +85,7 @@ pub fn goo(at: &Place, v: &Value) -> R<Value> {
     let t0 = std::time::Instant::now();
     eprintln!("raea: baking goo ({} objects, {} frames) -> {}", spec["objects"].as_array().map(|a| a.len()).unwrap_or(0), spec["frames"], out.display());
     // (a bake is made once: a render's wait for the frame's commit doesn't count it, track::making)
-    let st = making(|| std::process::Command::new(tool.join(".venv/bin/python"))
+    let st = making(|| std::process::Command::new(raea_io_assets::venv_python(&tool))
         .arg("-I").arg(tool.join("run.py")).arg(&sp).arg(&tmp)
         .stdout(std::io::stderr())
         .status())

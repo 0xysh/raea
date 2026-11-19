@@ -5,8 +5,9 @@ Feature: Sound for picture: the local models on any Mac, open libraries and pack
   result in drones and pads and not actually design real complex music, scoring, sound effects, diegetic and
   non-diegetic."
 
-  Where it stands (2026-11-16): `raea setup-audio` installs both models through tools/sao/setup.sh and
-  tools/tokensynth/setup.sh, and `raea sounds` reaches four libraries (sdk/raea/library/sounds/catalog.json:
+  Where it stands (2026-11-19): `raea setup-audio` installs both models through tools/sao/setup.py and
+  tools/tokensynth/setup.py, run by uv on a Mac, Windows or Linux with nothing installed first (no Homebrew, git
+  or FFmpeg; raea fetches uv itself when the PATH has none), and `raea sounds` reaches four libraries (sdk/raea/library/sounds/catalog.json:
   salamander, fluid, tonejs-instruments, vcsl). The guides teach deciding what each scene is heard as, spotting the
   cut and composing for it (sdk/guides/craft/motion/music.md, sound.md), and list every vetted source with its licence
   and how to fetch it (motion/sources.md). What those guides had to write down as a gap is below.

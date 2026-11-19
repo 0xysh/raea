@@ -29,7 +29,9 @@ command asks for it (a few minutes, once), or ahead of time with `raea setup-aud
 |---|---|
 | `RAEA_TOKENSYNTH` | Where TokenSynth lives (default `~/.cache/raea-tokensynth`, about 6 GB): an instrument described in words, one note at a time, for a Tone.js `Sampler` |
 | `RAEA_SAO` | Where Stable Audio Open Small lives (default `~/.cache/raea-sao`, about 2 GB, Core ML): foley and sound effects |
-| `RAEA_AUDIO_AUTOSETUP=0` | Don't install on first use; a missing model's error names the command (`tools/sao/setup.sh`, `tools/tokensynth/setup.sh`) |
+| `RAEA_AUDIO_AUTOSETUP=0` | Don't install on first use; a missing model's error names the command (`tools/sao/setup.sh` on a Mac or Linux, `uv run --no-project --python 3.11 python -I tools\sao\setup.py` on Windows) |
+| `RAEA_SAO_CUDA` | SAO off a Mac: `1` installs ONNX Runtime with CUDA, `0` the CPU build; unset, an NVIDIA GPU (`nvidia-smi`) decides |
+| `RAEA_TOOLS_CACHE` | Where raea keeps the uv it fetches when there's none on the PATH (default `~/.cache/raea-tools`; uv 0.12.24, checked against its SHA-256); every local model's setup runs through it |
 
 From the command line, `raea sao "PROMPT" -o hit.wav` and `raea tokensynth "TIMBRE" --notes C3,C4 -o
 notes/` make sounds through the same cache a composition's render uses, and `raea sounds` searches open sample

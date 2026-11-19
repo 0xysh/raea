@@ -1,7 +1,7 @@
 """Stable Audio Open Small on Core ML (a Mac) or ONNX Runtime (Linux, Windows, raea's cloud GPUs): one sound for a
 prompt and a seed, as a 44.1 kHz stereo WAV peak-normalised to full scale. rdb's asset store runs it for
 make("sao", prompt, seed, {seconds}) and keeps the bytes under their hash (sdk/react/docs/audio-stack.md, "Generated
-sources"); tools/sao/setup.sh installs it beside the models.
+sources"); tools/sao/setup.py installs it beside the models.
     run.py --prompt TEXT --wav OUT.wav [--seed 1] [--seconds 4] [--steps 8] [--sampler pingpong|euler]
            [--backend coreml|onnx] [--dit-units cpu|gpu|all] [--device auto|cpu|cuda] [--times] [--dir DIR]
 
@@ -21,7 +21,7 @@ distilled for, on the exact schedule stable-audio-tools uses.
 This is ~/.cache/raea-sao/coreml_run.py (the 2026-10-15 spike) cut to what inference needs: numpy, coremltools and
 Hugging Face's `tokenizers` reading t5-base's tokenizer.json from the install, so a run needs neither torch nor
 stable-audio-tools nor the network. Same prompt and seed, same samples as the spike's runner (checked 2026-10-19)."""
-import argparse, json, os, shutil, subprocess, sys, time
+import argparse, json, os, shutil, sys, time, wave
 
 SR, LAT, AUDIO = 44100, 256, 524288
 TOKENS = 64
@@ -90,7 +90,7 @@ def onnx(a, np):
     device = a.device if a.device != "auto" else ("cuda" if "CUDAExecutionProvider" in have else "cpu")
     if device == "cuda":
         if "CUDAExecutionProvider" not in have:
-            raise SystemExit(f"sao: this onnxruntime has no CUDA ({', '.join(have)}): run tools/sao/setup.sh on a machine with an NVIDIA GPU")
+            raise SystemExit(f"sao: this onnxruntime has no CUDA ({', '.join(have)}): install SAO again with RAEA_SAO_CUDA=1 (raea setup-audio sao) on a machine with an NVIDIA GPU")
         # the CUDA and cuDNN libraries from their wheels (onnxruntime-gpu[cuda,cudnn]), not the system's
         if hasattr(ort, "preload_dlls"):
             ort.preload_dlls()
@@ -164,8 +164,13 @@ def main():
     audio = np.nan_to_num(audio)
     audio = audio / max(np.abs(audio).max(), 1e-6)
     pcm = (audio.T * 32767).astype("<i2").tobytes()
-    # ffmpeg writes the WAV, as the spike's runner did, so the bytes match it too
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "s16le", "-ar", str(SR), "-ac", "2", "-i", "-", a.wav], input=pcm, check=True)
+    # 16-bit stereo PCM, written by Python's own wave module (until 0.1.8 an installed ffmpeg wrote it, whose header
+    # also named the encoder: the samples are the same)
+    with wave.open(a.wav, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(pcm)
     if a.times:
         print(json.dumps({k: round(v, 3) if isinstance(v, float) else v for k, v in times.items()}), file=sys.stderr)
 

@@ -253,11 +253,11 @@ pub fn setup_audio(args: &[String]) -> R<String> {
         }
         let now = raea_io_assets::installed(m, &dir);
         missing += !now as usize;
-        let what = if m == "sao" { "foley (Stable Audio Open Small, Core ML)" } else { "music: an instrument's notes (TokenSynth)" };
+        let what = if m == "sao" { "foley (Stable Audio Open Small: Core ML on a Mac, else ONNX)" } else { "music: an instrument's notes (TokenSynth)" };
         let state = match (was, now) {
             (true, _) => "installed".to_string(),
             (false, true) => "installed now".to_string(),
-            (false, false) => format!("not installed: {} installs it", raea_io_assets::setup_script(m).display()),
+            (false, false) => format!("not installed: `raea setup-audio` or {} installs it", raea_io_assets::setup_how(&raea_io_assets::setup_script(m))),
         };
         lines.push(format!("  {m:<10} {state}; {what}\n             {} ({})", dir.display(), if now { raea_io_home::disk_use(&dir, false) } else { "-".into() }));
     }

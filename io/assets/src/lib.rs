@@ -6,8 +6,8 @@
 //! seed, what tests use), the two local audio models, `tokensynth` (an instrument's notes, for music) and `sao` (Stable
 //! Audio Open on Core ML, foley). Every model runs on this computer. `lyria` (music) and `fish` (narration, through
 //! raea's API) are retired: a take made before plays from the index, and a new one is refused. Narration is Pocket TTS
-//! (raea/speech), and Fish Audio is a `raea gen` backend like fal or Replicate (`fish:<model>`, the user's own key). The local models install themselves on first use (tools/sao/setup.sh,
-//! tools/tokensynth/setup.sh). Each made asset gets a line in `assets/made.jsonl` under its cache key, a hash of
+//! (raea/speech), and Fish Audio is a `raea gen` backend like fal or Replicate (`fish:<model>`, the user's own key). The local models install themselves on first use (tools/sao/setup.py,
+//! tools/tokensynth/setup.py, run through uv on any OS: setup.rs). Each made asset gets a line in `assets/made.jsonl` under its cache key, a hash of
 //! (model, prompt, seed, params); `made` reads only that index, so a render or a check that resolves a make() never
 //! generates.
 
@@ -24,6 +24,8 @@ pub use splat::{ensure_splat, splat_dir, splat_params};
 
 mod local;
 use local::*;
+mod setup;
+pub use setup::{run_setup, setup_how, uv, venv_python};
 #[cfg(test)]
 mod tests;
 
@@ -192,11 +194,11 @@ pub fn setup_script(model: &str) -> PathBuf {
     dunce::canonicalize(&p).unwrap_or(p)
 }
 
-/// Whether a local model can run from `dir`. SAO: the venv and either run.py with setup.sh's `.ready`, or the
+/// Whether a local model can run from `dir`. SAO: the venv and either run.py with its setup's `.ready`, or the
 /// hand-built spike's coreml_run.py (~/.cache/raea-sao before tools/sao existed, still served as it is). TokenSynth:
-/// the venv, run.py, and setup.sh's `.ready` or the fp16 runtime that every finished install has.
+/// the venv, run.py, and its setup's `.ready` or the fp16 runtime that every finished install has.
 pub fn installed(model: &str, dir: &Path) -> bool {
-    let py = dir.join(".venv/bin/python").exists();
+    let py = venv_python(dir).exists();
     match model {
         "sao" => py && ((dir.join("run.py").exists() && dir.join(".ready").exists()) || dir.join("coreml_run.py").exists()),
         "tokensynth" => py && dir.join("run.py").exists() && (dir.join(".ready").exists() || dir.join("weights-fp16/token_synth_aug.pt").exists()),
@@ -205,7 +207,7 @@ pub fn installed(model: &str, dir: &Path) -> bool {
     }
 }
 
-/// A local model's install, set up first if it isn't there: setup.sh runs once, its progress on stderr (a render's
+/// A local model's install, set up first if it isn't there: its setup runs once, its progress on stderr (a render's
 /// log, the CLI's terminal), unless $RAEA_AUDIO_AUTOSETUP=0, when the error names the one command that installs it.
 pub fn ensure_installed(model: &str) -> Result<PathBuf, String> {
     let dir = install_dir(model);
@@ -218,7 +220,7 @@ pub fn ensure_installed(model: &str) -> Result<PathBuf, String> {
         "matchmove" => "about 250 MB",
         _ => "about 6 GB",
     };
-    let how = format!("{} (installs it into {}, {size}, once)", script.display(), dir.display());
+    let how = format!("{} (installs it into {}, {size}, once)", setup_how(&script), dir.display());
     if std::env::var("RAEA_AUDIO_AUTOSETUP").as_deref() == Ok("0") {
         return Err(format!("{model} isn't installed: run {how}"));
     }
@@ -227,14 +229,7 @@ pub fn ensure_installed(model: &str) -> Result<PathBuf, String> {
         return Err(format!("{model} isn't installed in {}, and its setup script isn't at {}", dir.display(), script.display()));
     }
     eprintln!("raea: {model} isn't installed yet; setting it up now with {how}");
-    let env = install_var(model).0;
-    let status = std::process::Command::new("sh")
-        .arg(&script)
-        .env(env, &dir)
-        // its progress on stderr: stdout is the caller's answer (a render's APPLIED line, the CLI's)
-        .stdout(std::io::stderr())
-        .status()
-        .map_err(|e| format!("{model} setup: {e}"))?;
+    let status = run_setup(&script, install_var(model).0, &dir).map_err(|e| format!("{model} setup: {e}"))?;
     if !status.success() || !installed(model, &dir) {
         return Err(format!("{model} setup didn't finish ({status}): run {how}"));
     }
@@ -307,7 +302,7 @@ impl Store {
         std::fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
         let out = self.dir.join(format!(".matchmove-{key}.part"));
         let _ = std::fs::remove_dir_all(&out);
-        let mut cmd = std::process::Command::new(dir.join(".venv/bin/python"));
+        let mut cmd = std::process::Command::new(venv_python(&dir));
         // the repo's run.py when raea's files are here (so an edit to it is used without reinstalling), else the installed copy
         let repo = setup_script("matchmove").with_file_name("run.py");
         cmd.arg("-I").arg(if repo.exists() { repo } else { dir.join("run.py") }).arg("--video").arg(clip).arg("--out").arg(&out);
