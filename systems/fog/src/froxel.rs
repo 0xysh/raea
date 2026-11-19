@@ -58,6 +58,7 @@ mod views;
 pub use views::*;
 mod pipelines;
 pub use pipelines::*;
+mod solari;
 
 /// The camera's fog as a grid: the ambient light the fog scatters (linear, times its intensity), and the grid's
 /// slices along the view, its tile in pixels and the points lit a cell.
@@ -85,6 +86,7 @@ pub fn install(app: &mut App) {
     bevy::asset::embedded_asset!(app, "froxel_grid.wesl");
     bevy::asset::embedded_asset!(app, "froxel_hero.wesl");
     bevy::asset::embedded_asset!(app, "froxel_minmax.wgsl");
+    bevy::asset::embedded_asset!(app, "froxel_solari.wesl");
     app.add_plugins(ExtractComponentPlugin::<FroxelFog>::default());
     let Some(render_app) = app.get_sub_app_mut(RenderApp) else { return };
     render_app
@@ -92,7 +94,7 @@ pub fn install(app: &mut App) {
         .init_resource::<GridFires>()
         .add_systems(RenderStartup, init_pipelines.after(bevy::pbr::MeshPipelineSystems))
         .add_systems(ExtractSchedule, (extract_volumes, super::fire::extract_grid_fires))
-        .add_systems(Render, ((prepare_pipelines, prepare_volumes, prepare_fires, prepare_views).in_set(RenderSystems::Prepare), prepare_textures.in_set(RenderSystems::PrepareResources)))
+        .add_systems(Render, ((prepare_pipelines, prepare_volumes, prepare_fires, prepare_views).in_set(RenderSystems::Prepare), (prepare_textures, solari::prepare).in_set(RenderSystems::PrepareResources)))
         .add_systems(Core3d, draw.after(bevy::core_pipeline::core_3d::main_opaque_pass_3d).before(bevy::core_pipeline::core_3d::main_transparent_pass_3d));
 }
 
@@ -191,15 +193,27 @@ fn prepare_fires(mut fires: ResMut<GridFires>, device: Res<RenderDevice>, queue:
 
 #[allow(clippy::too_many_arguments)]
 fn draw(
-    view: ViewQuery<(&ViewTarget, &ViewDepthStencilTexture, &ViewPipelines, &ViewGrid, &GridTextures, &MeshViewBindGroup, &Msaa, Option<&ViewShadowBindings>)>,
+    view: ViewQuery<(
+        &ViewTarget,
+        &ViewDepthStencilTexture,
+        &ViewPipelines,
+        &ViewGrid,
+        &GridTextures,
+        &MeshViewBindGroup,
+        &Msaa,
+        Option<&ViewShadowBindings>,
+        Option<&solari::SolariFog>,
+        Option<&bevy::render::view::ViewUniformOffset>,
+    )>,
     cache: Res<PipelineCache>,
     pipelines: Option<Res<Pipelines>>,
     volumes: Res<Volumes>,
     fires: Res<GridFires>,
+    (solari_pipelines, scene, view_uniforms): (Option<Res<solari::SolariFogPipelines>>, Option<Res<bevy::solari::scene::RaytracingSceneBindings>>, Res<bevy::render::view::ViewUniforms>),
     mut ctx: RenderContext,
 ) {
     let Some(p) = pipelines else { return };
-    let (target, depth, ids, grid, tex, view_group, msaa, shadows) = view.into_inner();
+    let (target, depth, ids, grid, tex, view_group, msaa, shadows, solari_fog, view_offset) = view.into_inner();
     if volumes.list.is_empty() {
         return;
     }
@@ -237,8 +251,18 @@ fn draw(
         }
     }
 
+    // 1b. under Solari, what its emissive meshes and the sky scatter at each cell (froxel/solari.rs), which the
+    // integrate pass then adds to the atlas's light
+    let with_solari = if skip.contains("solari") {
+        None
+    } else {
+        solari::draw(&mut ctx, &cache, solari_pipelines.as_deref(), scene.as_deref(), &view_uniforms, solari_fog, view_offset, params.clone(), vols.clone(), &tex.atlas.default_view, &tex.grid)
+    };
+
     // 2. each column front to back
-    let group = device.create_bind_group("froxel_integrate", &cache.get_bind_group_layout(&p.integrate_layout), &BindGroupEntries::sequential((params.clone(), &tex.atlas.default_view, &tex.grid)));
+    let (integrate, group) = with_solari.unwrap_or_else(|| {
+        (integrate, device.create_bind_group("froxel_integrate", &cache.get_bind_group_layout(&p.integrate_layout), &BindGroupEntries::sequential((params.clone(), &tex.atlas.default_view, &tex.grid))))
+    });
     {
         let mut pass = ctx.command_encoder().begin_compute_pass(&ComputePassDescriptor { label: Some("froxel_integrate"), timestamp_writes: None });
         pass.set_pipeline(integrate);

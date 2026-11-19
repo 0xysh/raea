@@ -10,5 +10,5 @@ description = "Froxel fog (one medium in a grid along the view), glass seen thro
 raea-sys-frame = { path = "../frame" }
 raea-sys-volume = { path = "../volume" }
 raea-core-program = { path = "../../core/program" }
-bevy = { version = "=0.20.0", default-features = false, features = ["std", "default_app", "3d_bevy_render"] }
+bevy = { version = "=0.20.0", default-features = false, features = ["std", "default_app", "3d_bevy_render", "bevy_solari"] }
 bytemuck = "1"
