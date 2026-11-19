@@ -13,7 +13,7 @@ const USAGE: &str = "usage: raea workspace [--json] | raea workspace init [NAME]
 /// full name (a CI runner's, a container's) has no name either ("empty ident name ... not allowed"), and git has no
 /// fallback below user.name to give it, so when no user.name is set the author and committer are named for the account.
 pub(crate) fn git_cmd() -> Command {
-    let mut c = Command::new("git");
+    let mut c = Command::new(program());
     let user = std::env::var("USER").unwrap_or_else(|_| "raea".into());
     if std::env::var_os("EMAIL").is_none() {
         c.env("EMAIL", format!("{user}@raea.local"));
@@ -24,14 +24,33 @@ pub(crate) fn git_cmd() -> Command {
     c
 }
 
+/// The git raea runs (raea_io_assets::git: the PATH's, else on Windows the app's or raea's own, fetched once), found
+/// once a process; "git" when there's none, its spawn then failing as `missing` says.
+fn found() -> &'static Result<std::path::PathBuf, String> {
+    static GIT: std::sync::OnceLock<Result<std::path::PathBuf, String>> = std::sync::OnceLock::new();
+    GIT.get_or_init(raea_io_assets::git)
+}
+
+pub(crate) fn program() -> std::path::PathBuf {
+    found().clone().unwrap_or_else(|_| "git".into())
+}
+
+/// A git that didn't start, said as why: there's no git here (and how to get one), or what the system said
+pub(crate) fn missing(e: std::io::Error) -> String {
+    match found() {
+        Err(why) if e.kind() == std::io::ErrorKind::NotFound => why.clone(),
+        _ => format!("git: {e}"),
+    }
+}
+
 /// Whether git has a user.name to sign commits with (asked once a process).
 fn has_name() -> bool {
     static HAS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *HAS.get_or_init(|| Command::new("git").args(["config", "--get", "user.name"]).output().is_ok_and(|o| o.status.success() && !o.stdout.trim_ascii().is_empty()))
+    *HAS.get_or_init(|| Command::new(program()).args(["config", "--get", "user.name"]).output().is_ok_and(|o| o.status.success() && !o.stdout.trim_ascii().is_empty()))
 }
 
 pub(crate) fn git(dir: &Path, args: &[&str]) -> R<String> {
-    let out = git_cmd().arg("-C").arg(dir).args(args).output().map_err(|e| format!("git: {e}"))?;
+    let out = git_cmd().arg("-C").arg(dir).args(args).output().map_err(missing)?;
     if !out.status.success() {
         return Err(format!("git {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
     }
@@ -40,12 +59,12 @@ pub(crate) fn git(dir: &Path, args: &[&str]) -> R<String> {
 
 /// `git config` on a file (or the global config when `file` is None), its output trimmed; Err when git says no.
 pub(crate) fn config(file: Option<&Path>, args: &[&str]) -> R<String> {
-    let mut c = Command::new("git");
+    let mut c = Command::new(program());
     c.arg("config");
     if let Some(f) = file {
         c.arg("-f").arg(f);
     }
-    let out = c.args(args).output().map_err(|e| format!("git: {e}"))?;
+    let out = c.args(args).output().map_err(missing)?;
     if !out.status.success() {
         return Err(format!("git config {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
     }
@@ -111,7 +130,8 @@ pub fn default_root(home: &Path) -> PathBuf {
     if home.join("Library/Mobile Documents/com~apple~CloudDocs/Documents").is_dir() {
         home.join("raea")
     } else {
-        home.join("Documents/raea")
+        // a folder at a time: on Windows "Documents/raea" printed as C:\Users\you\Documents/raea\...
+        home.join("Documents").join("raea")
     }
 }
 

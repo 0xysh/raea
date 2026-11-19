@@ -30,6 +30,10 @@ paths for Windows in runtime/bundle). Its bin\ also carries, each with its licen
   uv (uv.exe; Astral, MIT OR Apache-2.0).
 The Windows app adds Git for Windows with Git LFS (dugite-native; GPLv2 and its parts' licences, in git\), which raea
 runs as a separate program; its complete corresponding source is published as the release tools-git-<tag>-sources.
+raea.exe, on a PC with no Git, fetches the same build once into its tools cache (io/assets git()).
+The Windows and Linux builds' JavaScript engine, QuickJS (rquickjs, MIT), carries FormatJS's Intl polyfills (MIT,
+Copyright FormatJS) and the Unicode CLDR locale data they're made with (Unicode-3.0), packed in
+runtime/jsengine/js/intl.pack; both licences are in runtime/jsengine/js/intl/LICENSE-FormatJS.md and in the pack.
 The native target (engine/rune, docs/targets.feature) builds on Rune (https://github.com/anomalyco/rune, Copyright
 2026 Anomaly, MIT; LICENSES/rune-0.0.1/repository-LICENSE): rune, rune-kit and their crates, by a pinned rev.
 

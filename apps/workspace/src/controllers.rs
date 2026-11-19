@@ -62,10 +62,10 @@ pub(crate) fn overrides(from: &Path) -> Vec<(String, String)> {
 }
 
 fn commit(ws: &Path, paths: &[&Path], what: &str, by: &str) -> R<()> {
-    let mut add = Command::new("git");
+    let mut add = Command::new(workspace::program());
     add.arg("-C").arg(ws).args(["add", "-A", "--"]).args(paths);
-    add.status().map_err(|e| format!("git: {e}"))?;
-    let ok = workspace::git_cmd().arg("-C").arg(ws).args(["-c", &format!("user.name={by}"), "commit", "-q", "-m", &format!("{by}: {what}"), "--"]).args(paths).status().map_err(|e| format!("git: {e}"))?;
+    add.status().map_err(workspace::missing)?;
+    let ok = workspace::git_cmd().arg("-C").arg(ws).args(["-c", &format!("user.name={by}"), "commit", "-q", "-m", &format!("{by}: {what}"), "--"]).args(paths).status().map_err(workspace::missing)?;
     if ok.success() { Ok(()) } else { Err(format!("couldn't commit {what}")) }
 }
 

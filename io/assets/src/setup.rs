@@ -124,6 +124,62 @@ pub fn uv() -> Result<PathBuf, String> {
     settle(&part, &dir, &bin, fetched, "uv")
 }
 
+/// The Git for Windows raea fetches where there's none (the app's host, apps/app host/tools.ts WIN_GIT, fetches the same
+/// into the same folder, so either finds the other's): dugite-native's portable build with git-lfs, GitHub Desktop's
+const WIN_GIT_URL: &str = "https://github.com/desktop/dugite-native/releases/download/v2.56.0-2/dugite-native-v2.56.0-a44aeca-windows-x64.tar.gz";
+const WIN_GIT_DIR: &str = "git-v2.56.0-2-windows-x64";
+const WIN_GIT_SUM: &str = "f1e17876337d7be143e5d51976da36643d65528125cfbc14d57f171de0fd5f14";
+
+/// git, which a workspace is (raea workspace, project, controller): $RAEA_GIT, else the one on the PATH. On Windows,
+/// where Git is rarely installed, then the raea app's (its installer puts Git in its folder, which Settings > Apps
+/// keeps as InstallLocation), a Git for Windows that isn't on the PATH, and raea's own in $RAEA_TOOLS_CACHE (else
+/// ~/.cache/raea-tools), fetched there the first time (47 MB). Until 0.1.8 raea.exe took git from the PATH only, and on
+/// a PC with only the app's every workspace command failed with "git: program not found" (#169).
+pub fn git() -> Result<PathBuf, String> {
+    if let Some(p) = std::env::var_os("RAEA_GIT").map(PathBuf::from).filter(|p| p.is_file()) {
+        return Ok(p);
+    }
+    if let Some(p) = on_path("git") {
+        return Ok(p);
+    }
+    if !cfg!(windows) {
+        let how = if cfg!(target_os = "macos") { "xcode-select --install" } else { "apt install git, or dnf install git" };
+        return Err(format!("raea's workspaces are git repos, and git isn't installed: {how}"));
+    }
+    let cache = raea_io_home::env_path("RAEA_TOOLS_CACHE", ".cache/raea-tools").join(WIN_GIT_DIR);
+    let bin = cache.join("cmd").join("git.exe");
+    if let Some(p) = windows_gits().into_iter().chain([bin.clone()]).find(|p| p.is_file()) {
+        return Ok(p);
+    }
+    static FETCHING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = FETCHING.lock().unwrap_or_else(|e| e.into_inner());
+    if bin.is_file() {
+        return Ok(bin);
+    }
+    raea_io_home::offline("fetching Git for Windows: raea's workspaces are git repos")?;
+    eprintln!("raea: a workspace is a git repo, and this PC has no Git; fetching raea's own (Git for Windows, once, 47 MB) into {}", cache.display());
+    let part = cache.with_file_name(format!("{WIN_GIT_DIR}.part{}", std::process::id()));
+    let fetched = fetch_archive(&part, WIN_GIT_URL, "git.tar.gz", WIN_GIT_SUM, false, &[]);
+    // it runs before it's taken, as the app's host checks it
+    let runs = |p: &Path| std::process::Command::new(p).arg("--version").output().is_ok_and(|o| o.status.success());
+    let fetched = fetched.and_then(|()| if runs(&part.join("cmd").join("git.exe")) { Ok(()) } else { Err("the Git raea fetched doesn't run".into()) });
+    settle(&part, &cache, &bin, fetched, "Git for Windows")
+}
+
+/// The gits a Windows PC may have off its PATH: the raea app's (its install folder's git\cmd), else in the folder its
+/// installer uses by default, and Git for Windows' own for everyone and for the one account.
+fn windows_gits() -> Vec<PathBuf> {
+    let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\raea";
+    let reg = std::process::Command::new("reg").args(["query", key, "/v", "InstallLocation"]).output().ok();
+    let app = reg.and_then(|o| String::from_utf8_lossy(&o.stdout).lines().find_map(|l| l.trim().strip_prefix("InstallLocation").map(|v| v.trim().trim_start_matches("REG_EXPAND_SZ").trim_start_matches("REG_SZ").trim().to_string())));
+    let env = |k: &str| std::env::var_os(k).map(PathBuf::from);
+    let mut at: Vec<PathBuf> = app.filter(|d| !d.is_empty()).map(|d| PathBuf::from(d).join("git")).into_iter().collect();
+    at.extend(env("LOCALAPPDATA").map(|d| d.join("Programs").join("raea").join("git")));
+    at.extend(env("ProgramFiles").map(|d| d.join("Git")));
+    at.extend(env("LOCALAPPDATA").map(|d| d.join("Programs").join("Git")));
+    at.into_iter().map(|d| d.join("cmd").join("git.exe")).collect()
+}
+
 /// A fetch's end: its `part` folder moved in as `dir` when it's whole and nothing got there first, the part removed,
 /// and, once the tool is in place, the parts stopped fetches left beside it swept (`NAME.part<pid>`, from a Ctrl+C or
 /// a killed process: FFmpeg's held a 114 MB zip, and each run made a new one). A part another process is still
