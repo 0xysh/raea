@@ -20,6 +20,18 @@ export interface NativeCalls {
   "asset.load": { args: { path: string }; answer: { path: string; bytes: number; width?: number; height?: number } };
   /** a file's bytes (absolute, from the edit's folder, or an http(s) URL through raea's cache), read now, as base64 (R3F's loaders, docs/r3f.feature R3F13) */
   "asset.read": { args: { path: string }; answer: { path: string; base64: string } };
+  /** a method of the app's BRP table (world.query, world.trigger_event, avian3d/cast_ray, ...) run now */
+  "bevy.app.call": { args: { app: number; method: string; params?: unknown }; answer: unknown };
+  /** drop an app */
+  "bevy.app.close": { args: { app: number }; answer: null };
+  /** a headless Bevy App with the plugins named (this build's), BRP's method table, and BRP over HTTP on port `serve` when given */
+  "bevy.app.open": { args: { plugins: string[]; fps?: number; serve?: number }; answer: { app: number; methods: string[] } };
+  /** the app's frame run schedule by schedule up to and including `until` (a schedule of Bevy's frame: PreUpdate, Update, PostUpdate...), or to its end; starts the next frame when none is part way */
+  "bevy.app.run": { args: { app: number; until?: string; fixed?: boolean }; answer: { frame: number; done: boolean; schedules: string[] } };
+  /** the schedules a frame of the app runs, in order (Bevy's MainScheduleOrder) */
+  "bevy.app.schedules": { args: { app: number }; answer: string[] };
+  /** the apps stepped together, a frame at a time (Time one frame on in each); each one's frame after */
+  "bevy.app.step": { args: { apps: number[]; frames?: number }; answer: number[] };
   /** a queued call's answer once the Engine has run it (null before) */
   "bevy.world.answer": { args: { ticket: number }; answer: { value?: unknown; error?: string } | null };
   /** a BRP method (world.query, world.mutate_components, a plugin's method...) queued for the live Engine's next update: its ticket */
@@ -282,6 +294,10 @@ export interface NativeCalls {
   "speech.stats": { args: {}; answer: unknown };
   /** SQL run by SQLite on a database file (or ":memory:") */
   "sqlite.exec": { args: { path: string; sql: string; readonly?: boolean }; answer: { sets: { columns: string[]; rows: (number | string | null | { blob: string })[][] }[]; error: string | null; changes: number } };
+  /** stat channels on for the rest of the run: a RAEA_ variable's name without RAEA_, in lower case (bevy_passes, bake_trace), or all; at a composition's top level, before the Engine opens (docs/nobuild.feature NB2a) */
+  "stats.on": { args: { channels: string[] }; answer: { chosen: string[] } };
+  /** the run so far: its stat channels, each timed pass's runs and mean and worst ms, each counter (docs/nobuild.feature NB2a) */
+  "stats.read": { args: {}; answer: { chosen: string[]; passes: Record<string, { n: number; mean_ms: number; max_ms: number }>; counters: Record<string, number> } };
   /** tar on project files: create, extract (paths kept inside) or list, gzipped or not */
   "tar.run": { args: { root: string; cwd: string; create?: boolean; extract?: boolean; list?: boolean; gzip?: boolean; file: string; members?: string[]; dir?: string; verbose?: boolean }; answer: { stdout: string } };
   /** a URL parsed by the WHATWG rules (null when invalid) */

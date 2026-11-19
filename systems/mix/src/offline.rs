@@ -147,7 +147,7 @@ pub fn bounce(frames: &[Cue], fps: f64, master: Option<(f64, f64)>) -> Result<ra
         pull_s += t.elapsed().as_secs_f64();
         done = end;
     }
-    if std::env::var_os("RAEA_MASTER_TRACE").is_some() {
+    if raea_io_trace::stat("RAEA_MASTER_TRACE") {
         eprintln!("bounce: {} frames, feed {:.0} ms, process {:.0} ms", frames.len(), feed_s * 1e3, pull_s * 1e3);
     }
     let l: Vec<f32> = out.iter().step_by(2).copied().collect();

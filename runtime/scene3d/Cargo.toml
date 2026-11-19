@@ -7,6 +7,7 @@ publish = false
 description = "The 3D kinds raea's 3D SDK writes, drawn with Bevy: meshes, lights, the camera and its post-processing, fog volumes and glTF models, moved frame by frame from the rows"
 
 [dependencies]
+raea-io-trace = { path = "../../io/trace" }
 raea-sys-frame = { path = "../../systems/frame" }
 raea-sys-material = { path = "../../systems/material" }
 raea-sys-framepass = { path = "../../systems/framepass" }

@@ -286,7 +286,7 @@ pub fn arm(world: &mut World) {
     }
     let step = f == c.stepped + 1;
     c.advancing = step;
-    if std::env::var_os("RAEA_PLUGIN_TRACE").is_some() {
+    if raea_io_trace::stat("RAEA_PLUGIN_TRACE") {
         eprintln!("plugin clock: frame {f}, stepped {}, {}", c.stepped, if step { "step" } else { "hold" });
     }
     let dt = if step {

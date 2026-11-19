@@ -14824,6 +14824,7 @@ dependencies = [
  "raea-io-media",
  "raea-io-net-calls",
  "raea-io-os",
+ "raea-io-trace",
  "raea-page",
  "raea-page-sound",
  "raea-page-stage",
@@ -14860,6 +14861,7 @@ dependencies = [
  "blitz-dom",
  "raea-gpu-device",
  "raea-io-home",
+ "raea-io-trace",
  "raea-runtime-bake",
  "raea-runtime-dom",
  "raea-runtime-js",
@@ -14983,6 +14985,7 @@ name = "raea-rune-bevy"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "raea-io-trace",
  "rune",
  "wgpu",
 ]
@@ -15110,6 +15113,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "raea-io-home",
+ "raea-io-trace",
  "raea-modules",
  "raea-runtime-bundle",
  "raea-runtime-react",
@@ -15126,6 +15130,7 @@ dependencies = [
  "raea-core-scene",
  "raea-io-home",
  "raea-io-media",
+ "raea-io-trace",
  "raea-native",
  "raea-runtime-bundle-lib",
  "raea-runtime-cssurls",
@@ -15159,6 +15164,7 @@ dependencies = [
  "raea-core-shape",
  "raea-io-media",
  "raea-io-net",
+ "raea-io-trace",
  "raea-native",
  "raea-runtime-plugins",
  "raea-runtime-wear",
@@ -15199,6 +15205,7 @@ dependencies = [
  "keyboard-types",
  "raea-core-wire",
  "raea-io-net",
+ "raea-io-trace",
  "raea-runtime-dom-media",
  "raea-runtime-js",
  "raea-runtime-twins",
@@ -15216,6 +15223,7 @@ dependencies = [
  "bevy",
  "blitz-dom",
  "raea-io-net",
+ "raea-io-trace",
  "raea-runtime-js",
  "raea-sys-image",
  "raea-sys-page",
@@ -15273,6 +15281,7 @@ dependencies = [
  "raea-io-kept",
  "raea-io-media",
  "raea-io-net",
+ "raea-io-trace",
  "raea-page",
  "raea-render",
  "raea-runtime-bake",
@@ -15304,6 +15313,7 @@ dependencies = [
  "raea-core-k",
  "raea-core-program",
  "raea-gpu-device",
+ "raea-io-trace",
  "raea-runtime-view",
  "raea-sys-frame",
  "raea-sys-k",
@@ -15341,6 +15351,7 @@ dependencies = [
  "raea-io-net",
  "raea-io-net-calls",
  "raea-io-os",
+ "raea-io-trace",
  "raea-runtime-bundle",
  "raea-runtime-jsengine",
  "serde",
@@ -15519,6 +15530,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "raea-core-program",
+ "raea-io-trace",
  "raea-runtime-plugins",
  "raea-sys-compute",
  "raea-sys-copies",
@@ -15542,6 +15554,7 @@ dependencies = [
  "muxide",
  "raea-io-codec",
  "raea-io-media",
+ "raea-io-trace",
  "re_mp4",
 ]
 
@@ -15573,6 +15586,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "raea-io-assets",
+ "raea-io-trace",
  "raea-runtime-calls",
  "raea-runtime-react",
  "raea-seedling",
@@ -15626,6 +15640,7 @@ dependencies = [
  "raea-gpu-device",
  "raea-io-home",
  "raea-io-media",
+ "raea-io-trace",
  "raea-page",
  "raea-sys-frame",
  "raea-sys-k",
@@ -15680,6 +15695,7 @@ dependencies = [
  "bevy_seedling",
  "firewheel",
  "raea-io-media",
+ "raea-io-trace",
  "raea-sys-mix",
  "raea-sys-tone",
  "serde_json",
@@ -15798,6 +15814,7 @@ dependencies = [
  "raea-core-meshcheck",
  "raea-core-scene",
  "raea-core-shape",
+ "raea-io-trace",
  "serde_json",
 ]
 
@@ -16262,6 +16279,7 @@ dependencies = [
  "raea-core-facts",
  "raea-core-wire",
  "raea-gpu-device",
+ "raea-io-trace",
  "raea-sys-filters",
  "raea-sys-fonts",
  "raea-sys-image",

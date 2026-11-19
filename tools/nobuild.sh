@@ -22,6 +22,10 @@
 #                                    package.json chose both. Then each props.tsv scene that draws the same pixels twice
 #                                    (raster, the path tracer) and tools/nobuild/card.tsx draw the same by it as by RAEA_BIN:
 #                                    a plugin compiled in and not chosen changes nothing. Exits 1 if one fails
+#   tools/nobuild.sh stats           NB2a's check: every stat variable decided done is read through raea_io_trace::stat;
+#                                    tools/nobuild/stats/stats.tsx chooses bevy_passes and trace from TypeScript and reads
+#                                    stats.read back; the run prints each pass and keeps stats.json; RAEA_TRACE=1 and
+#                                    RAEA_STATS give the same trace lines on the scene without stats.on. Exits 1 if one fails
 #
 # A decision row (tab-separated): kind:name, then its class, the TypeScript form it becomes, its check, its status
 # (open, doing, done, stays). Classes: frame (changes what a frame shows or costs: a prop), view (a debug view: NB2),
@@ -249,11 +253,49 @@ catalog() {
   if [ "$fails" = 0 ]; then rm -rf -- "${dir:?}"; else echo "nobuild: renders and logs kept in $dir"; exit 1; fi
 }
 
+stats() {
+  bin=${RAEA_BIN:-$RAEA/target/release/raea}
+  local here=$RAEA/tools/nobuild/stats dir fails=0 v raw="" n=0
+  [ -x "$bin" ] || { echo "nobuild: needs raea at $bin (RAEA_BIN)" >&2; exit 1; }
+  dir=$(mktemp -d "${TMPDIR:-/tmp}/nobuild-stats.XXXXXX") || exit 1
+  check() { if [ "$2" = pass ]; then echo "  $1: pass ($3)"; else echo "  $1: FAIL ($3)"; fails=$((fails + 1)); fi; }
+  echo "nobuild stats: tools/nobuild/stats/stats.tsx by $bin"
+  # each stat variable decided done is read through stat(), so TypeScript and RAEA_STATS reach it, never straight
+  for v in $(awk -F'\t' '$2 == "stat" && $5 == "done" && $1 ~ /^env:/ { sub(/^env:/, "", $1); print $1 }' "$RAEA/docs/nobuild/decisions.tsv"); do
+    n=$((n + 1)); raw+=$(cd "$RAEA" && git grep -n -E "env::var(_os)?\(\"$v\"\)" -- '*.rs' ':!vendor' ':!io/trace' | head -2)
+  done
+  check "each done stat variable read through stat()" "$([ -z "$raw" ] && echo pass)" "${raw:-$n variables}"
+  # chosen from TypeScript, no variable set: stats.on at the scene's top level, stats.read on its last frame
+  (cd "$here" && env -u RAEA_TRACE -u RAEA_BEVY_PASSES -u RAEA_STATS RAEA_TRACE_DIR="$dir/trace" "$bin" render stats.tsx -o "$dir/ts" > "$dir/ts.log" 2>&1)
+  local read rows kept
+  # the trace channel's lines (RAEA_TRACE's: which path drew the frame), one of each
+  traced() { grep -E '^trace ' "$1" | sort -u; }
+  check "stats.on turned trace on" "$([ -n "$(traced "$dir/ts.log")" ] && echo pass)" "$(traced "$dir/ts.log" | head -1)"
+  # the last frame's, as the engine draws it (a render evaluates the edit's frames ahead of the engine too)
+  read=$(grep '^stats.read:' "$dir/ts.log" | tail -1)
+  check "stats.read from TypeScript" "$(awk '{ for (i = 1; i < NF; i++) if ($(i + 1) == "bevy" && $i + 0 > 0) ok = 1 } END { print ok ? "pass" : "x" }' <<<"$read")" "${read:-no stats.read line}"
+  rows=$(grep -c '^  bevy/' "$dir/ts.log")
+  check "the run's end printed each pass" "$([ "$rows" -gt 0 ] && grep -q '^raea stats (bevy_passes, trace):' "$dir/ts.log" && echo pass)" "$rows of Bevy's passes"
+  kept=$(find "$dir/trace" -name stats.json -exec jq -r '[.passes | keys[] | select(startswith("bevy/"))] | length' {} + 2>/dev/null | head -1)
+  check "stats.json kept in the run's trace" "$([ "${kept:-0}" -gt 0 ] && echo pass)" "${kept:-no stats.json}: Bevy's passes"
+  # the overrides, on the scene without stats.on: the channel's own variable, and RAEA_STATS
+  sed '/^native("stats.on"/d' "$here/stats.tsx" > "$dir/plain.tsx"
+  (cd "$dir" && env -u RAEA_STATS RAEA_TRACE=1 "$bin" render plain.tsx -o "$dir/env" > "$dir/env.log" 2>&1)
+  (cd "$dir" && env -u RAEA_TRACE RAEA_STATS=trace,bevy_passes "$bin" render plain.tsx -o "$dir/list" > "$dir/list.log" 2>&1)
+  (cd "$dir" && env -u RAEA_TRACE -u RAEA_BEVY_PASSES -u RAEA_STATS "$bin" render plain.tsx -o "$dir/none" > "$dir/none.log" 2>&1)
+  check "nothing chosen: no trace lines, no table" "$([ -z "$(traced "$dir/none.log")" ] && ! grep -q '^raea stats' "$dir/none.log" && grep -q '^APPLIED' "$dir/none.log" && echo pass)" "$(traced "$dir/none.log" | wc -l | tr -d ' ') trace lines"
+  check "RAEA_TRACE=1 the same trace lines" "$([ "$(traced "$dir/env.log")" = "$(traced "$dir/ts.log")" ] && ! grep -q '^raea stats' "$dir/env.log" && echo pass)" "$(traced "$dir/env.log" | wc -l | tr -d ' ') lines, no table"
+  check "RAEA_STATS=trace,bevy_passes the same, with the table" "$([ "$(traced "$dir/list.log")" = "$(traced "$dir/ts.log")" ] && grep -q '^  bevy/' "$dir/list.log" && echo pass)" "$(traced "$dir/list.log" | wc -l | tr -d ' ') lines, $(grep -c '^  bevy/' "$dir/list.log") passes"
+  echo "nobuild stats: $fails failing"
+  if [ "$fails" = 0 ]; then rm -rf -- "${dir:?}"; else echo "nobuild: renders and logs kept in $dir"; exit 1; fi
+}
+
 case ${1:-} in
   builds) shift; builds "$@" ;;
   scan) scan ;;
   consts) consts ;;
   props) props ;;
   catalog) catalog ;;
-  *) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  stats) stats ;;
+  *) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

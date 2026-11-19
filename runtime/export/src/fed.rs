@@ -318,7 +318,7 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
             if let Some(p) = std::env::var_os("RAEA_AUDIO_BOUNCE") {
                 raea_sys_mix::write_wav(&a, Path::new(&p))?;
             }
-            if std::env::var_os("RAEA_MASTER_TRACE").is_some() {
+            if raea_io_trace::stat("RAEA_MASTER_TRACE") {
                 eprintln!("core bounce (streamed): {:.2} s of sound, master {master:?}; the bounce finished {bounce_ms:.0} ms after the last frame, the master took {:.0} ms", a.duration(), t_master.elapsed().as_secs_f64() * 1e3);
             }
             Ok(Some(a))

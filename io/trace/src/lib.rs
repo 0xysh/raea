@@ -26,9 +26,11 @@ use serde_json::{Value, json};
 
 mod crash;
 mod look;
+mod stats;
 
 use crash::*;
 pub use look::{sessions, status, summarize};
+pub use stats::{choose as choose_stats, chosen as chosen_stats, count, pass_ms, stat, stats, table as stats_table};
 
 struct Session {
     dir: PathBuf,
@@ -183,14 +185,18 @@ pub fn start(app: &str) -> Option<PathBuf> {
     Some(dir)
 }
 
-/// A clean exit: `end.json` written (a session without it ended unclean).
+/// A clean exit: `end.json` written (a session without it ended unclean), and the stats the run chose (stats.rs).
 pub fn end() {
     let Ok(mut g) = SESSION.lock() else { return };
+    let dir = g.as_ref().map(|s| s.dir.clone());
     if let Some(s) = g.as_mut() {
         flush_second(s, true);
         let (iso, _) = utc(SystemTime::now());
         let _ = std::fs::write(s.dir.join("end.json"), json!({"ended": iso, "seconds": s.t0.elapsed().as_secs_f64(), "glitches": s.glitches}).to_string());
     }
+    // printed with the session unlocked (stderr's tee writes into it)
+    drop(g);
+    stats::finish(dir.as_deref());
 }
 
 fn write_line(s: &mut Session, line: String) {
@@ -298,6 +304,7 @@ pub fn gpu_passes(source: &str, passes: &[(&str, f64)], budget_ms: f64) {
         use std::fmt::Write as _;
         s.key.clear();
         let _ = write!(s.key, "{source}/{name}");
+        stats::pass_ms(&s.key, ms);
         match s.gpu_time.get_mut(s.key.as_str()) {
             Some(v) => v.push(ms),
             None => {

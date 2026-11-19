@@ -414,7 +414,7 @@ pub fn told(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec<
         eprintln!("raea: {}", f.line());
     }
     raea_core_facts::finding::said(&found);
-    if std::env::var_os("RAEA_TIMES").is_some() {
+    if raea_io_trace::stat("RAEA_TIMES") {
         eprintln!("raea times: the clipping check {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
     }
     found

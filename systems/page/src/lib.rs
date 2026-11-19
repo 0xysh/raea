@@ -154,7 +154,7 @@ impl Times {
     pub fn report(&self) -> Option<String> {
         use std::sync::atomic::Ordering::Relaxed;
         let n = self.frames.load(Relaxed);
-        (std::env::var_os("RAEA_PAGE_TIMES").is_some() && n > 0).then(|| {
+        (raea_io_trace::stat("RAEA_PAGE_TIMES") && n > 0).then(|| {
             let (r, e) = (self.resolve_us.load(Relaxed), self.encode_us.load(Relaxed));
             format!("{{\"page_frames\": {n}, \"resolve_ms\": {:.3}, \"encode_ms\": {:.3}}}", r as f64 / n as f64 / 1e3, e as f64 / n as f64 / 1e3)
         })

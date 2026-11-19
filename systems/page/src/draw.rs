@@ -238,7 +238,7 @@ pub fn draw(mut scenes: ResMut<Scenes>, mut vello: ResMut<Vello>, device: Res<Re
         for layer in layers {
             renderer.override_image(&layer.image, None);
         }
-        if std::env::var_os("RAEA_TRACE").is_some() {
+        if raea_io_trace::stat("RAEA_TRACE") {
             eprintln!("trace raea-page: page drawn {}x{}, full bump {}, {}", px.x, px.y, REDRAW_FULL.load(std::sync::atomic::Ordering::Relaxed), drew.as_ref().map_or_else(Clone::clone, |_| "ok".into()));
         }
         if let Err(err) = drew {

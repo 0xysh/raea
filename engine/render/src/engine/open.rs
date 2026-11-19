@@ -61,8 +61,7 @@ impl Engine {
         #[cfg(not(target_arch = "wasm32"))]
         let group = group.disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>();
         // the registered plugins' changes (of the catalog's, those the project chose: nobuild NB4a), no WinitPlugin (no event loop, #182)
-        let chosen = plugins::choose(prog, dir);
-        app.add_plugins(plugins::group_chosen(group, &chosen)).insert_resource(chosen);
+        { let chosen = plugins::choose(prog, dir); app.add_plugins(plugins::group_chosen(group, &chosen)).insert_resource(chosen); }
         #[cfg(feature = "raytracing")]
         if raea_render_raytrace::wanted(prog) {
             raea_render_raytrace::add(&mut app);
@@ -117,11 +116,11 @@ impl Engine {
             );
         }
         // each render pass's time (CPU side on Metal, where wgpu has no timestamps inside passes), into the run's trace
-        // once a second as `bevy_passes`: a slow frame shows which of Bevy's passes it was. RAEA_BEVY_PASSES=1 only: its
+        // once a second as `bevy_passes`: a slow frame shows which of Bevy's passes it was. The stat channel bevy_passes only: its
         // statistics buffer is read back every frame, and play and a render's page path read nothing back (docs/blitz-
         // bevy.feature B1d)
         #[cfg(feature = "native")]
-        if std::env::var("RAEA_BEVY_PASSES").as_deref() == Ok("1") {
+        if raea_io_trace::stat("RAEA_BEVY_PASSES") {
             app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin).add_systems(Last, forward_render_diagnostics);
         }
         // raea's modules as Bevy plugins, in the order they were installed one by one (raea_plugins.rs), then the
@@ -160,7 +159,7 @@ impl Engine {
                 }
         }
         // RAEA_MEM_MARKS: the render world's sets, marked through the first updates (where start-up memory goes)
-        if std::env::var_os("RAEA_MEM_MARKS").is_some() {
+        if super::stat("RAEA_MEM_MARKS") {
             use bevy::render::{Render, RenderSystems as RS};
             fn at(name: &'static str) -> impl FnMut() {
                 let mut n = 0u32;

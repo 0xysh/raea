@@ -299,6 +299,12 @@ pub fn register() {
                 },
             );
         }
+        // the run's stat channels, and its timings and counters so far, from TypeScript (docs/nobuild.feature NB2a)
+        raea_native::register("stats.on", "{ channels: string[] }", "{ chosen: string[] }", "stat channels on for the rest of the run: a RAEA_ variable's name without RAEA_, in lower case (bevy_passes, bake_trace), or all; at a composition's top level, before the Engine opens (docs/nobuild.feature NB2a)", |v| {
+            raea_io_trace::choose_stats(&v["channels"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(str::to_string)).collect::<Vec<_>>());
+            Ok(json!({"chosen": raea_io_trace::chosen_stats()}))
+        });
+        raea_native::register("stats.read", "{}", "{ chosen: string[]; passes: Record<string, { n: number; mean_ms: number; max_ms: number }>; counters: Record<string, number> }", "the run so far: its stat channels, each timed pass's runs and mean and worst ms, each counter (docs/nobuild.feature NB2a)", |_| Ok(raea_io_trace::stats()));
         // an asset loaded now, before the frame that names it uses it, as the Engine loads a handle's (S2b useAsset)
         raea_native::register("asset.load", "{ path: string }", "{ path: string; bytes: number; width?: number; height?: number }", "an asset by its path (absolute, or from the edit's folder), loaded now: the file found and read, a picture's size; an error when it isn't there (S2b useAsset)", |v| {
             let p = s(v, "path")?;

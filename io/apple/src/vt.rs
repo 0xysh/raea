@@ -216,7 +216,7 @@ impl VtEncoder {
                 None => o.realtime,
             };
             set(kVTCompressionPropertyKey_RealTime, CFBoolean::new(realtime))?;
-            if std::env::var_os("RAEA_MEM_MARKS").is_some() {
+            if raea_io_trace::stat("RAEA_MEM_MARKS") {
                 eprintln!("vt_mark session realtime {realtime}");
             }
             set(kVTCompressionPropertyKey_ProfileLevel, if hevc10 { kVTProfileLevel_HEVC_Main10_AutoLevel } else { kVTProfileLevel_H264_High_AutoLevel })?;
@@ -286,7 +286,7 @@ impl VtEncoder {
             }
             st.inflight += 1;
             st.max_inflight = st.max_inflight.max(st.inflight);
-            if std::env::var_os("RAEA_MEM_MARKS").is_some() && self.n % 25 == 0 {
+            if raea_io_trace::stat("RAEA_MEM_MARKS") && self.n % 25 == 0 {
                 eprintln!("vt_mark frame {} in_flight {} max_in_flight {} kept_bytes {}", self.n, st.inflight, st.max_inflight, st.kept);
             }
         }
@@ -403,7 +403,7 @@ impl VideoEncoder for VtEncoder {
         })
     }
     fn finish(self: Box<Self>, audio: Option<&Audio>) -> R<EncodeStats> {
-        if std::env::var_os("RAEA_ENC_TRACE").is_some() && self.n > 0 {
+        if raea_io_trace::stat("RAEA_ENC_TRACE") && self.n > 0 {
             let ms = |i: usize| VT_PUSH_NS[i].load(std::sync::atomic::Ordering::Relaxed) as f64 / 1e6 / self.n as f64;
             eprintln!("raea encode: {} frames, a frame's submit: waiting for room and a buffer {:.3} ms, the copy into it {:.3} ms, encode_frame {:.3} ms (max in flight {})", self.n, ms(0), ms(1), ms(2), self.cap);
         }
@@ -437,7 +437,7 @@ impl VideoEncoder for VtEncoder {
         if frames.len() != self.n as usize {
             return Err(format!("VideoToolbox: {} of {} frames came out", frames.len(), self.n));
         }
-        if std::env::var_os("RAEA_MEM_MARKS").is_some() {
+        if raea_io_trace::stat("RAEA_MEM_MARKS") {
             eprintln!("vt_mark finish frames {} max_in_flight {} kept_bytes {}", frames.len(), st.max_inflight, st.kept);
         }
         if st.discard {

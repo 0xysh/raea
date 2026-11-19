@@ -185,7 +185,7 @@ pub fn bundle_fresh(tsx: &Path, out_js: &Path, o: &CompOpts, portable: Option<&P
     let (js_text, css) = inproc::bundle(&work.join("entry.tsx"), serde_json::json!({"z3": o.lite, "edit": {"dir": dir, "js": js}, "stamps": stamps()})).map_err(|e| format!("couldn't bundle {file}: {}", e.lines().filter(|l| !l.trim().is_empty()).take(6).collect::<Vec<_>>().join(" | ")))?;
     // its CSS rides in the bundle's last line (bundle_css), so every copy and cache of it carries it
     let code = if css.is_empty() { js_text } else { format!("{js_text}\n//# raea-css={}\n", serde_json::to_string(&css).unwrap_or_default()) };
-    if std::env::var_os("RAEA_BUNDLE_TRACE").is_some() {
+    if raea_io_trace::stat("RAEA_BUNDLE_TRACE") {
         eprintln!("raea bundle: {} in {:.1} ms: the work folder {:.1} ms, Rolldown {:.1} ms", tsx.display(), t0.elapsed().as_secs_f64() * 1e3, t_work.as_secs_f64() * 1e3, (t0.elapsed() - t_work).as_secs_f64() * 1e3);
     }
     std::fs::write(out_js, code).map_err(|e| format!("{}: {e}", out_js.display()))?;

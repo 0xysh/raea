@@ -365,7 +365,7 @@ pub(crate) fn render_bundle_with(js: &Path, dir: &Path, out: &Path, wanted: Opti
     let t0 = std::time::Instant::now();
     // RAEA_TIMES: where a render's frames go (React's commit, the page recorded and submitted, the page before
     // collected and stored), totals in ms
-    let times = std::env::var_os("RAEA_TIMES").is_some();
+    let times = raea_io_trace::stat("RAEA_TIMES");
     let (mut t_react, mut t_snap, mut t_page) = (0f64, 0f64, 0f64);
     for &f in &wanted {
         let t0 = std::time::Instant::now();
