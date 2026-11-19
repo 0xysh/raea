@@ -46,6 +46,18 @@ fn says(option: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// The H.264 encoder this machine's ffmpeg has, as its arguments, for a clip a person plays (in a browser or on a
+/// phone): libx264 where ffmpeg was built with it (Homebrew's, Linux distributions'), else the system's own (Windows'
+/// Media Foundation, h264_mf, in the LGPL build raea ships there; macOS's VideoToolbox) at 8 Mb/s; None without one.
+pub fn h264() -> Option<Vec<&'static str>> {
+    static ENCODERS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let have = ENCODERS.get_or_init(|| says("-encoders"));
+    let has = |c: &str| have.split_whitespace().any(|w| w == c);
+    let enc = ["libx264", "h264_mf", "h264_videotoolbox"].into_iter().find(|c| has(c))?;
+    let rate: &[&'static str] = if enc == "libx264" { &[] } else { &["-b:v", "8M"] };
+    Some([&["-c:v", enc][..], rate, &["-pix_fmt", "yuv420p"]].concat())
+}
+
 /// The facts, the presentation times, whether the colour matrix is untagged, and the decoder a VP8 or VP9 stream with
 /// alpha needs (libvpx: ffmpeg's own VP9 decoder drops the alpha WebM keeps beside the picture, #113).
 fn probe(path: &Path) -> R<(Info, Vec<f64>, bool, Option<&'static str>)> {
