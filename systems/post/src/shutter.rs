@@ -28,6 +28,8 @@ use bevy::{
     },
 };
 
+use crate::cut::CameraCut;
+
 /// A camera drawn with its shutter open for `open` of each frame, gathered by `taps` taps a pixel. Brings the depth
 /// and motion prepasses it reads.
 #[derive(Component, Clone, Copy, PartialEq, Debug, ExtractComponent)]
@@ -163,9 +165,13 @@ fn pass(ctx: &mut RenderContext, label: &'static str, out: &TextureView, rp: &Re
     pass.draw(0..3, 0..1);
 }
 
-fn draw(view: ViewQuery<(&ExtractedCamera, &ViewTarget, &ViewPrepassTextures, &ShutterFrame, &Msaa)>, pipeline: Option<Res<ShutterPipeline>>, cache: Res<PipelineCache>, mut ctx: RenderContext) {
+fn draw(view: ViewQuery<(&ExtractedCamera, &ViewTarget, &ViewPrepassTextures, &ShutterFrame, &Msaa, Option<&CameraCut>)>, pipeline: Option<Res<ShutterPipeline>>, cache: Res<PipelineCache>, mut ctx: RenderContext) {
     let Some(p) = pipeline else { return };
-    let (camera, target, prepass, f, msaa) = view.into_inner();
+    let (camera, target, prepass, f, msaa, cut) = view.into_inner();
+    // a cut's motion is the jump, not anything the shutter saw (cut.rs)
+    if cut.is_some_and(|c| c.0) {
+        return;
+    }
     let r = if msaa.samples() > 1 { &p.multi } else { &p.single };
     let id = if target.main_texture_format() == super::bevy_api::HDR_FORMAT { r.hdr } else { r.ldr };
     let (Some(rows), Some(longest), Some(near), Some(gather), Some(motion), Some(depth)) = (

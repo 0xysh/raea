@@ -75,6 +75,7 @@ raea_plugin! {
     PhaseItemPlugin: raea_sys_phase::install, "Your own draws in a camera's opaque phase, as Bevy's custom_phase_item queues one (raea-sys-phase).";
     LensPlugin: super::lens::install, "The camera's lens (Fisheye, LensDistortion), after tone mapping (lens.rs).";
     ParityPlugin: raea_sys_parity::install, "The parity probe: a frame's cost and World, written when RAEA_PARITY is set (raea-sys-parity, docs/control.feature FC0a).";
+    CameraCutPlugin: super::cut::install, "A camera that jumps is a cut: its history starts again and its motion blur waits (cut.rs, RT31).";
     MotionBlurPlugin: super::motion_blur::install, "Motion blur's frame counter pinned to the frame (motion_blur.rs).";
 }
 

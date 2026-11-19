@@ -87,18 +87,18 @@ fn env(name: &str, default: f32) -> f32 {
 }
 
 /// Each steadied view's histories, swapped each frame, and its parameters: the slowest and fastest rates a frame, the
-/// motion in pixels where the fastest is reached, and whether the history starts again (a view's first frame, or a
-/// new size).
+/// motion in pixels where the fastest is reached, and whether the history starts again (a view's first frame, a new
+/// size, or a cut: cut.rs).
 fn textures(
     mut commands: Commands,
     mut cache: ResMut<TextureCache>,
     device: Res<RenderDevice>,
     frame: Res<FrameCount>,
-    views: Query<(Entity, &ExtractedCamera), With<Steady>>,
+    views: Query<(Entity, &ExtractedCamera, Option<&crate::cut::CameraCut>), With<Steady>>,
     mut seen: Local<HashMap<Entity, UVec2>>,
 ) {
     let (still, moving, px) = (1.0 / env("RAEA_STEADY_STILL", 32.0), 1.0 / env("RAEA_STEADY_MOVING", 8.0), env("RAEA_STEADY_PX", 4.0));
-    for (e, camera) in &views {
+    for (e, camera, cut) in &views {
         let Some(size) = camera.physical_target_size else { continue };
         let desc = |label: &'static str| TextureDescriptor {
             label: Some(label),
@@ -112,7 +112,7 @@ fn textures(
         };
         let (a, b) = (cache.get(&device, desc("steady_a")), cache.get(&device, desc("steady_b")));
         let (read, write) = if frame.0 % 2 == 0 { (b, a) } else { (a, b) };
-        let reset = seen.insert(e, size) != Some(size);
+        let reset = seen.insert(e, size) != Some(size) || cut.is_some_and(|c| c.0);
         let words: Vec<u8> = [still.to_bits(), moving.to_bits(), px.to_bits(), reset as u32].iter().flat_map(|w| w.to_le_bytes()).collect();
         let params = device.create_buffer_with_data(&BufferInitDescriptor { label: Some("steady_params"), contents: &words, usage: BufferUsages::UNIFORM });
         commands.entity(e).insert(SteadyFrame { read, write, params });

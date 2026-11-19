@@ -65,6 +65,7 @@ impl Engine {
         #[cfg(feature = "raytracing")]
         if raea_render_raytrace::wanted(prog) {
             raea_render_raytrace::add(&mut app);
+            app.add_systems(PostUpdate, solari_cut.after(raea_sys_post::cut::DetectCuts));
         }
         app
         .init_resource::<Clock>()
@@ -279,3 +280,13 @@ impl Engine {
     }
 }
 
+/// A camera that jumped (raea-sys-post cut.rs, RT31): Solari's history starts again, and with it MetalFX's denoiser's,
+/// its scaler's and emit_taa's, which follow Solari's reset.
+#[cfg(feature = "raytracing")]
+fn solari_cut(mut cams: Query<(&raea_sys_post::cut::CameraCut, &mut bevy::solari::prelude::SolariLighting)>) {
+    for (cut, mut s) in &mut cams {
+        if cut.0 {
+            s.reset = true;
+        }
+    }
+}

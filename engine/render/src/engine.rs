@@ -87,6 +87,7 @@ use raea_sys_shader as shader_ext;
 use raea_sys_post::lens;
 // the camera's motion blur (<MotionBlur>), a function of the frame
 use raea_sys_post::motion_blur;
+use raea_sys_post::cut;
 // Bevy's depth of field, patched to keep the frame's alpha (the paint look's sky)
 use raea_sys_post::dof;
 use raea_sys_post::effect_stack;
