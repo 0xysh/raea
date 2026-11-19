@@ -104,5 +104,8 @@ sdk/raea/.scratch-*/
 
 # the Tripo CLI writes its last task id into the directory it runs in
 .tripo/
+# examples/materials/wear: its house is made by make-house.ts (media/) and baked at render time (assets/wear/)
+/examples/materials/wear/media/
+/examples/materials/wear/assets/
 # tools/bevy-parity links each example folder's assets/ to Bevy's checkout at run time (an absolute, per-machine path)
 /sdk/raea/bench/bevy-parity/**/assets
