@@ -32,6 +32,10 @@ export const DEBUG_CAUSES = {
   litter: "vec3<f32>(1.0, 0.5, 0.1) * c.litter",
   /** the material class, by WEAR_CLASSES' colour; magenta where the bake found none */
   class: "wear_class_colour(c.cls)",
+  /** nearness to a crack from an opening's corner (WR6), in red */
+  crack: "vec3<f32>(1.0, 0.25, 0.1) * (1.0 - c.crack / 0.25)",
+  /** how readily the coat comes off (WR6): the damp foot, soaked faces, knocked arrises, cracks */
+  loss: "vec3<f32>(wear_loss(c))",
 } as const;
 
 export type WearCause = keyof typeof DEBUG_CAUSES;

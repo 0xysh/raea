@@ -103,6 +103,7 @@ raea-sys-weathering = "systems"
 raea-sys-runoff = "systems"
 raea-sys-touch = "systems"
 raea-sys-exposure = "systems"
+raea-sys-damage = "systems"
 raea-sys-glb = "systems"
 raea-sys-procmat = "systems"
 raea-sys-grass = "systems"
@@ -293,5 +294,7 @@ raea-sys-runoff = true
 raea-sys-touch = true
 # what a model is exposed to through the year: the sun by date, driven snow, where blown things settle (the weathering bake's causes3)
 raea-sys-exposure = true
+# where a building breaks: cracks from its openings' corners, how readily a coat comes off, debris under the losses (the weathering bake's causes3 a and debris)
+raea-sys-damage = true
 # a .glb read as JSON and bytes and written back (the weathering bake reads and rewrites models through it)
 raea-sys-glb = true

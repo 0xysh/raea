@@ -11,7 +11,8 @@
 //! causes0 = (sky: rain reach, sun: share of the sun's path seen, cavity: occlusion within CAVITY_REACH, edge:
 //! nearness to a convex arris); causes1 = (flow, deposit, deposit kind, touch); causes2 = (ground: height over the
 //! walking surface, 0-4 m; element: the chart's own number; open: the share of the whole sky seen; class: the
-//! triangle's material class as `Class::code`); causes3 = (winter sun, drift, litter, spare).
+//! triangle's material class as `Class::code`); causes3 = (winter sun, drift, litter, crack: 1 - the distance to the
+//! nearest crack from an opening's corner over raea-sys-damage's REACH).
 
 mod charts;
 mod flow;
@@ -35,7 +36,7 @@ pub use scene::{Class, Classes};
 type R<T> = Result<T, String>;
 
 /// Bumped when a bake's bytes would change for the same request.
-const VERSION: &str = "raea-sys-weathering 6";
+const VERSION: &str = "raea-sys-weathering 7";
 
 /// The world the bake's causes come from.
 #[derive(Clone, Debug)]
@@ -146,6 +147,7 @@ pub fn bake(store: &Path, src: &Path, req: &Value) -> R<Value> {
     key.update(raea_sys_runoff::VERSION.as_bytes());
     key.update(raea_sys_touch::VERSION.as_bytes());
     key.update(raea_sys_exposure::VERSION.as_bytes());
+    key.update(raea_sys_damage::VERSION.as_bytes());
     key.update(canonical(&strip_src(req)).as_bytes());
     key.update(&bytes);
     let key: String = key.finalize().iter().take(12).map(|b| format!("{b:02x}")).collect();
@@ -168,7 +170,10 @@ pub fn bake(store: &Path, src: &Path, req: &Value) -> R<Value> {
     let (mut c0, mut c1, mut c2, mut c3) = (vec![[0u8; 4]; n], vec![[0u8; 4]; n], vec![[0u8; 4]; n], vec![[0u8; 4]; n]);
     rays::causes(&sc, &at, &env, &mesh, &mut c0, &mut c2, &mut c3);
     flow::flow(&sc, &at, &env, &mesh, &c0, &mut c1);
-    let spots = touch::touch(&sc, &at, &env, &mesh, &c0, &mut c1, &c2);
+    let (spots, crack) = touch::touch(&sc, &at, &env, &mesh, &c0, &mut c1, &c2);
+    for (tx, b) in at.texels.iter().zip(crack) {
+        c3[at.px(tx.x, tx.y)][3] = b;
+    }
     let t3 = Instant::now();
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let model = dir.join("model.glb");

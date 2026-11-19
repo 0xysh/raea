@@ -107,6 +107,7 @@ members = [
     "systems/runoff",
     "systems/touch",
     "systems/exposure",
+    "systems/damage",
     "systems/glb",
     "systems/procmat",
     "systems/page",

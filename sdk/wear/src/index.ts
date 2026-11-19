@@ -10,29 +10,33 @@
 //
 // The same spec goes on one glTF material (<StandardMaterial material="facade"/> as the base), a
 // <MeshStandardMaterial shader={wear}>, or a <SurfaceShader {...wear}> over the whole scene. A surface without the
-// bake's second UV set is drawn as it was.
+// bake's second UV set is drawn as it was. Crumbling (WR6) follows the same age: render lost to the brick, paint to
+// the primer and the wood, enamel to the iron, cracks from the openings' corners, panes broken or boarded, slates
+// gone; `wearDebris(baked, age)` is the debris that age has brought down, where the bake put it.
 import { hasNative, native, type NativeCalls } from "@raea/app/native";
-import { CAUSES } from "./causes";
+import { ABANDON_FROM, CAUSES } from "./causes";
 import { debugHook, DEBUG_CAUSES, type WearCause } from "./debug";
 import { HELPERS, RECIPES, SHARED, WEATHER } from "./recipes";
 
 export { DEBUG_CAUSES, type WearCause } from "./debug";
+export { ABANDON_FROM, CRACK_REACH, CRACK_WEIGHT, LOSS } from "./causes";
+export { WEAR_CONDITIONS, WEATHER_RATES, weatherAt, type WearCondition, type WearSpell } from "./weather";
 
 /** The material classes, in the bake's order (causes2's alpha is 16 x (the place + 1)), each with its colour in the
  *  debug view and what the causes do to it. */
 export const WEAR_CLASSES = [
-  { name: "plaster", colour: [0.95, 0.9, 0.75], marks: "washed clean and chalky; soot grey where sheltered, darkest under cornices; dark tears from sill ends; splash to 0.4 m and a damp tide at 0.6-1.2 m; blown at the foot; chipped arrises low down; a grease band" },
-  { name: "brick", colour: [0.75, 0.3, 0.2], marks: "mortar washed out; soot black where sheltered; efflorescence under ledges; a tide line, green on north faces; spalled faces" },
+  { name: "plaster", colour: [0.95, 0.9, 0.75], marks: "washed clean and chalky; soot grey where sheltered, darkest under cornices; dark tears from sill ends; splash to 0.4 m and a damp tide at 0.6-1.2 m; by neglect blown to the brick behind at the damp foot, under sills, at knocked arrises and along cracks, and cracked from the openings' corners; chipped arrises low down; a grease band" },
+  { name: "brick", colour: [0.75, 0.3, 0.2], marks: "mortar washed out; soot black where sheltered; efflorescence under ledges; a tide line, green on north faces; spalled faces; cracks stepping along the joints from the openings' corners" },
   { name: "sandstone", colour: [0.9, 0.75, 0.45], marks: "washed light; a black crust where sheltered; black and white streaks under ledges; rounded arrises" },
   { name: "granite", colour: [0.6, 0.6, 0.62], marks: "little: soot where sheltered" },
-  { name: "wood", colour: [0.55, 0.35, 0.15], marks: "sun-faded and alligatored on the faces the sun reaches; peeling at bottom rails; rot at the foot; worn to the wood where held and kicked" },
+  { name: "wood", colour: [0.55, 0.35, 0.15], marks: "sun-faded and alligatored on the faces the sun reaches; peeling to the primer and the wood at bottom rails, and by neglect wherever the coat's loosened; rot at the foot; worn to the wood where held and kicked" },
   { name: "iron", colour: [0.25, 0.3, 0.4], marks: "paint flaking at joints and arrises; rust at the foot and on the stone below; bright where held" },
   { name: "zinc", colour: [0.7, 0.8, 0.85], marks: "a pale patina where rain-washed; white streaks below" },
   { name: "copper", colour: [0.3, 0.7, 0.55], marks: "verdigris where rain-washed, brown-black where sheltered; green streaks below" },
-  { name: "slate", colour: [0.35, 0.35, 0.45], marks: "lichen where the sun misses; soot in the laps" },
+  { name: "slate", colour: [0.35, 0.35, 0.45], marks: "lichen where the sun misses; soot in the laps; slates gone by neglect, most along ridges, verges and eaves" },
   { name: "felt", colour: [0.15, 0.15, 0.15], marks: "greyed by the sun; washed where the rain runs" },
-  { name: "glass", colour: [0.5, 0.85, 1.0], marks: "a grime film where sheltered, thickest at the bottom and corners" },
-  { name: "enamel", colour: [0.2, 0.3, 0.9], marks: "rust bled from its screws; chipped to black iron at holes and edges" },
+  { name: "glass", colour: [0.5, 0.85, 1.0], marks: "a grime film where sheltered, thickest at the bottom and corners; panes broken or boarded by neglect" },
+  { name: "enamel", colour: [0.2, 0.3, 0.9], marks: "rust bled from its screws; chipped to black iron at holes and edges, and by neglect flaking in sheets to rusting iron" },
   { name: "brass", colour: [0.9, 0.7, 0.2], marks: "dull brown, more where rain-washed; bright where touched" },
   { name: "ground", colour: [0.4, 0.55, 0.3], marks: "dirt in corners and at the wall's foot; moss where the sun misses; polished where feet pass" },
 ] as const satisfies readonly { name: string; colour: [number, number, number]; marks: string }[];
@@ -88,6 +92,59 @@ export interface WearWeather {
   leaves?: number;
   /** December's sun thinning snow between falls, 0..1 */
   melt?: number;
+}
+
+/** A thing the bake's rules put on the model (spots.json, docs/wear.feature WR3, WR6): what, who put it there, its
+ *  middle, the face it's on and its size (across, up); debris also carries the loss potential of the plaster above it. */
+export interface WearSpot {
+  what: "bill" | "street plate" | "nameplate" | "debris";
+  by: string;
+  at: [number, number, number];
+  n: [number, number, number];
+  size: [number, number];
+  loss?: number;
+}
+
+const spotsOf = new Map<string, WearSpot[]>();
+
+/** The spots the bake put down (bills, street plates, nameplates, debris), read once from its spots.json. */
+export function wearSpots(baked: Pick<WearBaked, "spots">): WearSpot[] {
+  const path = baked?.spots;
+  if (typeof path !== "string") throw new TypeError("wearSpots: baked is wearBake's answer, with its spots");
+  let s = spotsOf.get(path);
+  if (!s) {
+    if (!hasNative()) throw new Error("wearSpots: reading the bake's spots needs the raea engine (raea render)");
+    const got = native("asset.read", { path });
+    // spots.json is ASCII (the rules' names and numbers), so atob's binary string is its text
+    s = JSON.parse(atob(got.base64)) as WearSpot[];
+    spotsOf.set(path, s);
+  }
+  return s;
+}
+
+/** How far neglect has let things go at an age (wearShader's own: the marks' age, less what upkeep keeps up). */
+export function neglectOf(age: WearAge = {}): number {
+  const years = age.years ?? 30;
+  const upkeep = age.upkeep ?? 0.5;
+  return Math.min(1, Math.max(0, (1 - Math.exp(-Math.max(years, 0) / 25)) * (1.15 - upkeep)));
+}
+
+/** How far a house is left empty at an age, 0..1 (wearShader's own): neglect past ABANDON_FROM. A lived-in house
+ *  mends its panes and slates and sweeps its walk however poorly it is kept. */
+export function abandonOf(age: WearAge = {}): number {
+  const t = Math.min(1, Math.max(0, (neglectOf(age) - ABANDON_FROM) / (1 - ABANDON_FROM)));
+  return t * t * (3 - 2 * t);
+}
+
+/** A heap shows where the plaster above it has come off and nobody sweeps: loss potential x abandonment past this. */
+export const DEBRIS_AT = 0.3;
+
+/** The debris an age has left lying (WR6): the bake's debris under plaster whose loss potential has let it go, on
+ *  the walk of a house left empty. `spots` is wearSpots' answer, or wearBake's to read it. */
+export function wearDebris(spots: readonly WearSpot[] | Pick<WearBaked, "spots">, age: WearAge = {}): WearSpot[] {
+  const all = Array.isArray(spots) ? (spots as readonly WearSpot[]) : wearSpots(spots as Pick<WearBaked, "spots">);
+  const a = abandonOf(age);
+  return all.filter((s) => s.what === "debris" && (s.loss ?? 0) * a >= DEBRIS_AT);
 }
 
 export interface WearShaderOptions {
@@ -179,8 +236,9 @@ ${cases.join("\n")}
 
 const SURFACE = /* wgsl */ `
 fn wear_surface(uv: vec2<f32>, pbr: ptr<function, PbrInput>) {
+  let px = length(fwidth((*pbr).world_position.xyz));
   let c = wear_causes(uv);
-  let g = wear_geo((*pbr).world_position.xyz, (*pbr).world_normal, c);
+  let g = wear_geo((*pbr).world_position.xyz, (*pbr).world_normal, c, (*pbr).V, px);
   let m = wear_marks(c, g);
   var s = WearSurf((*pbr).material.base_color.rgb, (*pbr).material.perceptual_roughness, (*pbr).material.metallic);
   if (!wear_class(&s, c, g, m)) { return; }

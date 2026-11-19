@@ -4,9 +4,8 @@
 //!     facing open ground, GAP_BILL apart;
 //!   - street plates (the city): on a building's corner, 2.5-3 m up, one on each face, where the arris runs from the
 //!     walking surface to 3.5 m and both faces look onto open ground;
-//!   - nameplates (the tenant): beside a single door's lock side, 1.5 m up, on the wall;
-//!   - debris (the weather): on the ground under plaster that run-off and rain soak at its foot (blown plaster's
-//!     place, until WR6 decides where plaster is lost).
+//!   - nameplates (the tenant): beside a single door's lock side, 1.5 m up, on the wall.
+//! Debris under lost plaster is raea-sys-damage's (WR6), by the loss potential raea/wear's recipes use.
 //! Candidates are taken in the order of a seed from their place, each kept if none kept is nearer than its gap.
 
 use std::collections::BTreeMap;
@@ -36,8 +35,6 @@ const PLATE: [f32; 2] = [0.6, 0.18];
 const CORNER: f32 = 0.4;
 const GAP_PLATE: f32 = 2.0;
 const NAMEPLATE: [f32; 2] = [0.3, 0.12];
-const DEBRIS: [f32; 2] = [0.5, 0.3];
-const GAP_DEBRIS: f32 = 1.5;
 /// open ground in front: a ray out of the face runs this far free
 const OPEN: f32 = 2.0;
 /// a ray that runs this far free reaches the sky
@@ -157,11 +154,6 @@ pub(crate) fn spots(s: &Surface, doors: &[Door], pts: &[Point]) -> Vec<Spot> {
             out.push(Spot { what: "nameplate", by: "tenant", at, n, size: NAMEPLATE });
         }
     }
-
-    // debris: under plaster soaked at its foot, on the walking surface in front
-    let soaked = pts.iter().filter(|q| s.mat[q.tri as usize] == Mat::Plaster && standing(s, q) && q.ground <= 1.2 && q.flow > 0.5 && q.rain > 0.5);
-    let debris = soaked.map(|q| Spot { what: "debris", by: "weather", at: q.p - s.up * q.ground + q.n * 0.2, n: s.up, size: DEBRIS }).collect();
-    out.extend(thin(debris, GAP_DEBRIS));
 
     out.sort_by(|a, b| a.what.cmp(b.what).then(a.at.x.total_cmp(&b.at.x)).then(a.at.y.total_cmp(&b.at.y)).then(a.at.z.total_cmp(&b.at.z)));
     out

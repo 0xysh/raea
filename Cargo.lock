@@ -15806,6 +15806,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-sys-damage"
+version = "0.1.0"
+dependencies = [
+ "parry3d",
+ "raea-sys-touch",
+ "rayon",
+]
+
+[[package]]
 name = "raea-sys-environment"
 version = "0.1.0"
 dependencies = [
@@ -16539,6 +16548,7 @@ dependencies = [
  "image",
  "parry3d",
  "raea-core-meshcheck",
+ "raea-sys-damage",
  "raea-sys-exposure",
  "raea-sys-glb",
  "raea-sys-runoff",
