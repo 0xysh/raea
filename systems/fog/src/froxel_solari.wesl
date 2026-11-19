@@ -6,6 +6,12 @@
 // light pass's; Solari's directional lights are left out here, as they'd count the sun twice.
 // `solari`: each frame's estimate of the light arriving (phase-weighted, before the medium's scattering) goes into the
 // cell's history, found where the cell's centre was in the last frame's view, an average of its last `frames` frames.
+// The sky through a small opening (photo 5's skylight) is found by few of the rays drawn from the phase, so each cell
+// keeps a guide: a running sum of the directions that reached the sky from it, each weighted by the light it brought
+// over its pdf (so the guide learns where the sky's light comes from, not where the rays were drawn), its own and half
+// a neighbour's carried from the last frame. Half its rays are then drawn from a cone round their mean (as wide as
+// their spread), half from the phase, each weighted by the two's mixed pdf: whatever the guide holds, the estimate
+// stays unbiased (the phase covers every direction), and once a cell has found the opening most rays go through it.
 // `filter`: the history blurred over the cell's 3 x 3 x 3 neighbours (a tent), then scattered by the medium at the
 // cell's centre, which is what the integrate pass adds. The light is blurred, not the light the medium scatters, so a
 // dense edge (the steam's) stays sharp while its light settles.
@@ -44,7 +50,8 @@ struct SolariFog {
     prev_slab: vec4<f32>,
     // x: the frame's number; y: 1 to start the history again; z: candidates a cell; w: frames the history averages
     frame: vec4<u32>,
-    // x: what lights it (1 the emissive meshes, 2 the sky); y: sky rays a cell; z: 1 to filter
+    // x: what lights it (1 the emissive meshes, 2 the sky); y: sky rays a cell; z: 1 to filter; w: what the sky's
+    // guide is made of (1 the cell's own last, 2 half a neighbour's; 0 no guide, the rays drawn from the phase)
     more: vec4<u32>,
 }
 
@@ -56,9 +63,18 @@ struct SolariFog {
 @group(1) @binding(4) var history: texture_2d<f32>;
 // solari: this frame's history; filter: what the integrate pass adds
 @group(1) @binding(5) var out: texture_storage_2d<rgba16float, write>;
+// the sky's guides, the last frame's and this one's: the sum of the directions that reached the sky (xyz) and of their
+// weights (w), each weighted by its light over its pdf, fading (the filter binds them and leaves them be)
+@group(1) @binding(6) var guides_was: texture_2d<f32>;
+@group(1) @binding(7) var guides: texture_storage_2d<rgba32float, write>;
 
 const FRAC_4_PI: f32 = 0.07957747154594767;
 const LUMA = vec3(0.2126, 0.7152, 0.0722);
+// how much of a guide is kept from one frame to the next, so it follows a camera, an opening closed or the sun moved
+const GUIDE_KEEP: f32 = 0.9;
+// the guide's cone: no wider than 60 degrees, no narrower than 2
+const COS_WIDEST: f32 = 0.5;
+const COS_NARROWEST: f32 = 0.99939;
 
 fn henyey_greenstein(g: f32, cos_theta: f32) -> f32 {
     let denom = 1.0 + g * g - 2.0 * g * cos_theta;
@@ -66,8 +82,7 @@ fn henyey_greenstein(g: f32, cos_theta: f32) -> f32 {
 }
 
 // a direction toward the light drawn from the phase about the view's direction V (pdf: the phase itself)
-fn sample_phase(g: f32, V: vec3<f32>, rng: ptr<function, u32>) -> vec3<f32> {
-    let u = rand_vec2f(rng);
+fn sample_phase(g: f32, V: vec3<f32>, u: vec2<f32>) -> vec3<f32> {
     var cos_theta = 1.0 - 2.0 * u.x;
     if (abs(g) > 1e-3) {
         let s = (1.0 - g * g) / (1.0 - g + 2.0 * g * u.x);
@@ -137,6 +152,104 @@ fn cell_texel(cell: vec2<u32>, slice: u32) -> vec2<u32> {
     return vec2(cell.x + (slice % cols) * params.grid.x, cell.y + (slice / cols) * params.grid.y);
 }
 
+fn inside_grid(c: vec3<i32>) -> bool {
+    return all(c >= vec3(0)) && c.x < i32(params.grid.x) && c.y < i32(params.grid.y) && c.z < i32(params.grid.z);
+}
+
+// where world point C was in the last frame's grid: its cell and slice (x < 0 when it was outside)
+fn last_cell(C: vec3<f32>) -> vec3<i32> {
+    let was = fog.prev_clip_from_world * vec4(C, 1.0);
+    if (was.w <= 0.0) {
+        return vec3(-1);
+    }
+    let ndc = was.xy / was.w;
+    let px = vec2((ndc.x + 1.0) * 0.5 * params.viewport.z, (1.0 - ndc.y) * 0.5 * params.viewport.w);
+    let c = vec3(vec2<i32>(floor(px / params.slab.x)), i32(floor(f32(params.grid.z) * log(was.w / fog.prev_slab.y) / fog.prev_slab.w)));
+    return select(vec3(-1), c, inside_grid(c));
+}
+
+// the n-th point of the R3 sequence (Roberts' generalised golden ratio) shifted by `offset`: over the frames its points
+// spread through the unit cube far more evenly than random ones, so an average of a cell's last frames (its history)
+// covers the cell sooner. n wraps at 4096, where the float's step is still 1/4000
+fn stratified(n: u32, offset: vec3<f32>) -> vec3<f32> {
+    return fract(offset + f32(n % 4096u) * vec3(0.8191725134, 0.6710436067, 0.5497004779));
+}
+
+// a direction drawn evenly in the cone round `axis` out to cos_max (pdf 1 / (2 pi (1 - cos_max)))
+fn sample_cone(axis: vec3<f32>, cos_max: f32, u: vec2<f32>) -> vec3<f32> {
+    let cos_theta = 1.0 - u.x * (1.0 - cos_max);
+    let sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+    let phi = u.y * PI_2;
+    return orthonormalize(axis) * vec3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
+}
+
+fn guide_at(c: vec3<i32>) -> vec4<f32> {
+    if (!inside_grid(c)) {
+        return vec4(0.0);
+    }
+    return textureLoad(guides_was, cell_texel(vec2<u32>(c.xy), u32(c.z)), 0);
+}
+
+// the sky's light toward the eye at P (phase-weighted, as the lamps'): `rays` directions, each from the guide's cone
+// or the phase, weighted by their mixed pdf. The guide is the cell's last (where its centre C was) and half a
+// neighbour's within 2 cells and a slice, unless the history starts again; this cell's new one is stored at texel t
+fn sky_guided(P: vec3<f32>, C: vec3<f32>, V: vec3<f32>, g: f32, rays: u32, t: vec2<u32>, rng: ptr<function, u32>) -> vec3<f32> {
+    var guide = vec4(0.0);
+    var parts = 0.0;
+    if (fog.frame.y == 0u) {
+        let was = last_cell(C);
+        if (was.x >= 0) {
+            if ((fog.more.w & 1u) != 0u) {
+                guide += guide_at(was);
+                parts += 1.0;
+            }
+            if ((fog.more.w & 2u) != 0u) {
+                let d = vec3(vec2<i32>(floor(rand_vec2f(rng) * 5.0)) - vec2(2), i32(floor(rand_f(rng) * 3.0)) - 1);
+                guide += 0.5 * guide_at(was + d);
+                parts += 0.5;
+            }
+        }
+    }
+    // the cone: round the escapes' mean, as wide as a uniform cone with their spread (mean length R: cos = 2R - 1)
+    var axis = vec3(0.0, 0.0, 1.0);
+    var cos_max = COS_WIDEST;
+    var share = 0.0;
+    if (guide.w > 0.0) {
+        let mean = guide.xyz / guide.w;
+        let R = length(mean);
+        if (R > 1e-3) {
+            axis = mean / R;
+            cos_max = clamp(2.0 * R - 1.0, COS_WIDEST, COS_NARROWEST);
+            share = 0.5;
+        }
+    }
+    let cone_pdf = 1.0 / (PI_2 * (1.0 - cos_max));
+    var sky = vec3(0.0);
+    var found = vec4(0.0);
+    for (var i = 0u; i < rays; i += 1u) {
+        var L: vec3<f32>;
+        // random, not stratified: the guide adapts to the last frames' rays, and a sequence would tie this frame's to
+        // theirs (white fog under a uniform sky came out 2-3% too bright)
+        if (rand_f(rng) < share) {
+            L = sample_cone(axis, cos_max, rand_vec2f(rng));
+        } else {
+            L = sample_phase(g, V, rand_vec2f(rng));
+        }
+        let phase = henyey_greenstein(g, dot(L, V));
+        let pdf = (1.0 - share) * phase + share * select(0.0, cone_pdf, dot(L, axis) >= cos_max);
+        let hit = trace_ray(P, L, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_TERMINATE_ON_FIRST_HIT);
+        if (hit.kind == RAY_QUERY_INTERSECTION_NONE && pdf > 0.0) {
+            let arrives = sample_environment_map_light(L) * (phase / pdf);
+            sky += arrives;
+            // weighted by what it brought: a cone's own rays, crowded in it, would otherwise narrow it frame by frame
+            found += vec4(L, 1.0) * dot(arrives, LUMA);
+        }
+    }
+    // the guide carried on, scaled so a neighbour's half doesn't make it grow, with this frame's escapes added
+    textureStore(guides, t, guide * (GUIDE_KEEP / max(parts, 1.0)) + found);
+    return sky / f32(max(rays, 1u));
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn solari(@builtin(global_invocation_id) id: vec3<u32>) {
     let size = textureDimensions(out);
@@ -146,12 +259,17 @@ fn solari(@builtin(global_invocation_id) id: vec3<u32>) {
     let c = texel_cell(id.xy);
     if (c.z >= params.grid.z) {
         textureStore(out, id.xy, vec4(0.0));
+        textureStore(guides, id.xy, vec4(0.0));
         return;
     }
     var rng = (id.x * 1973u + id.y * 9277u + fog.frame.x * 26699u) | 1u;
+    let C = cell_point(c.xy, c.z, vec3(0.5));
+    // the cell's own offsets for its sequences, the same every frame (Cranley-Patterson rotation)
+    var cell_rng = (id.x * 7919u + id.y * 104729u) | 1u;
+    let offset = vec3(rand_vec2f(&cell_rng), rand_f(&cell_rng));
 
-    // this frame's point: anywhere in the cell, so the history averages the whole cell
-    let P = cell_point(c.xy, c.z, vec3(rand_vec2f(&rng), rand_f(&rng)));
+    // this frame's point: anywhere in the cell, stratified over the frames, so the history averages the whole cell
+    let P = cell_point(c.xy, c.z, stratified(fog.frame.x, offset));
     let V = normalize(P - view.world_position);
     let m = medium(P);
     let held = any(m.rgb > vec3(0.0));
@@ -181,17 +299,24 @@ fn solari(@builtin(global_invocation_id) id: vec3<u32>) {
         if (kept_weight > 0.0) {
             light += toward_eye(kept, P, V, g) * (w_sum / (f32(count) * kept_weight)) * trace_visibility(P, kept.world_position);
         }
-        // the sky, through what opens onto it: directions drawn from the phase, so the phase cancels
+        // the sky, through what opens onto it: guided, or directions drawn from the phase (so the phase cancels)
         let rays = select(0u, fog.more.y, (fog.more.x & 2u) != 0u);
-        var sky = vec3(0.0);
-        for (var i = 0u; i < rays; i += 1u) {
-            let L = sample_phase(g, V, &rng);
-            let hit = trace_ray(P, L, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_TERMINATE_ON_FIRST_HIT);
-            if (hit.kind == RAY_QUERY_INTERSECTION_NONE) {
-                sky += sample_environment_map_light(L);
+        if (rays > 0u && fog.more.w != 0u) {
+            light += sky_guided(P, C, V, g, rays, id.xy, &rng);
+        } else {
+            var sky = vec3(0.0);
+            for (var i = 0u; i < rays; i += 1u) {
+                let L = sample_phase(g, V, rand_vec2f(&rng));
+                let hit = trace_ray(P, L, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_TERMINATE_ON_FIRST_HIT);
+                if (hit.kind == RAY_QUERY_INTERSECTION_NONE) {
+                    sky += sample_environment_map_light(L);
+                }
             }
+            light += sky / f32(max(rays, 1u));
+            textureStore(guides, id.xy, vec4(0.0));
         }
-        light += sky / f32(max(rays, 1u));
+    } else {
+        textureStore(guides, id.xy, vec4(0.0));
     }
     let now = light * view.exposure;
 
@@ -199,18 +324,11 @@ fn solari(@builtin(global_invocation_id) id: vec3<u32>) {
     var n = 1.0;
     var result = now;
     if (fog.frame.y == 0u) {
-        let C = cell_point(c.xy, c.z, vec3(0.5));
-        let was = fog.prev_clip_from_world * vec4(C, 1.0);
-        if (was.w > 0.0) {
-            let ndc = was.xy / was.w;
-            let px = vec2((ndc.x + 1.0) * 0.5 * params.viewport.z, (1.0 - ndc.y) * 0.5 * params.viewport.w);
-            let pc = vec2<i32>(floor(px / params.slab.x));
-            let ps = i32(floor(f32(params.grid.z) * log(was.w / fog.prev_slab.y) / fog.prev_slab.w));
-            if (all(pc >= vec2(0)) && pc.x < i32(params.grid.x) && pc.y < i32(params.grid.y) && ps >= 0 && ps < i32(params.grid.z)) {
-                let h = textureLoad(history, cell_texel(vec2<u32>(pc), u32(ps)), 0);
-                n = min(h.a + 1.0, f32(fog.frame.w));
-                result = mix(h.rgb, now, 1.0 / n);
-            }
+        let was = last_cell(C);
+        if (was.x >= 0) {
+            let h = textureLoad(history, cell_texel(vec2<u32>(was.xy), u32(was.z)), 0);
+            n = min(h.a + 1.0, f32(fog.frame.w));
+            result = mix(h.rgb, now, 1.0 / n);
         }
     }
     // a cell outside every volume keeps no history (and the filter leaves it out)

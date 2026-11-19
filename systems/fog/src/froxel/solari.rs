@@ -7,7 +7,9 @@
 //! light. A second pass blurs that light over each cell's neighbours before the medium scatters it.
 //! RAEA_FOG_SOLARI=0 leaves it all out (the A/B); RAEA_FOG_SOLARI_CANDIDATES (8) lights drawn a cell,
 //! RAEA_FOG_SOLARI_SKY (1) sky rays a cell, RAEA_FOG_SOLARI_FRAMES (16) frames its history averages,
-//! RAEA_FOG_SOLARI_PARTS (lamps,sky) which of them light it, RAEA_FOG_SOLARI_FILTER=0 no blur.
+//! RAEA_FOG_SOLARI_PARTS (lamps,sky) which of them light it, RAEA_FOG_SOLARI_FILTER=0 no blur,
+//! RAEA_FOG_SOLARI_GUIDE what each cell's sky guide is made of (3: 1 its own last, 2 half a neighbour's; 0 no guide,
+//! the sky's rays drawn from the phase alone).
 
 use super::*;
 use bevy::render::render_resource::binding_types::texture_storage_2d;
@@ -22,16 +24,18 @@ pub struct SolariFogParams {
     pub prev_slab: Vec4,
     /// x: the frame's number; y: 1 to start the history again; z: candidates a cell; w: frames the history averages
     pub frame: UVec4,
-    /// x: what lights it (1 the emissive meshes, 2 the sky); y: sky rays a cell; z: 1 to blur
+    /// x: what lights it (1 the emissive meshes, 2 the sky); y: sky rays a cell; z: 1 to blur; w: what the sky's
+    /// guide is made of (1 the cell's own last, 2 half a neighbour's)
     pub more: UVec4,
 }
 
-/// A view's Solari light for the grid: three textures of the atlas's size, this frame's light and the last's (its
-/// history, the two swapped each frame), and what the integrate pass adds.
+/// A view's Solari light for the grid: textures of the atlas's size, this frame's light and the last's (its history,
+/// the two swapped each frame), what the integrate pass adds, and the sky's guides, this frame's and the last's.
 #[derive(Component)]
 pub struct SolariFog {
     textures: [(Texture, TextureView); 2],
     filtered: (Texture, TextureView),
+    guides: [(Texture, TextureView); 2],
     size: UVec2,
     frame: u32,
     prev: (Mat4, Vec4),
@@ -44,6 +48,9 @@ impl SolariFog {
     }
     fn was(&self) -> &TextureView {
         &self.textures[((self.frame + 1) & 1) as usize].1
+    }
+    fn guides(&self) -> (&TextureView, &TextureView) {
+        (&self.guides[((self.frame + 1) & 1) as usize].1, &self.guides[(self.frame & 1) as usize].1)
     }
 }
 
@@ -78,6 +85,8 @@ fn make_pipelines(cache: &PipelineCache, assets: &AssetServer, scene: &Raytracin
                 uniform_buffer::<SolariFogParams>(false),
                 texture_2d(TextureSampleType::Float { filterable: false }),
                 texture_storage_2d(TextureFormat::Rgba16Float, StorageTextureAccess::WriteOnly),
+                texture_2d(TextureSampleType::Float { filterable: false }),
+                texture_storage_2d(TextureFormat::Rgba32Float, StorageTextureAccess::WriteOnly),
             ),
         ),
     );
@@ -116,12 +125,12 @@ fn make_pipelines(cache: &PipelineCache, assets: &AssetServer, scene: &Raytracin
 
 fn texture(device: &RenderDevice, size: UVec2, i: usize) -> (Texture, TextureView) {
     let t = device.create_texture(&TextureDescriptor {
-        label: Some(["froxel_solari_a", "froxel_solari_b", "froxel_solari_filtered"][i]),
+        label: Some(["froxel_solari_a", "froxel_solari_b", "froxel_solari_filtered", "froxel_solari_guide_a", "froxel_solari_guide_b"][i]),
         size: Extent3d { width: size.x, height: size.y, depth_or_array_layers: 1 },
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,
-        format: TextureFormat::Rgba16Float,
+        format: if i < 3 { TextureFormat::Rgba16Float } else { TextureFormat::Rgba32Float },
         usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
@@ -153,6 +162,7 @@ pub fn prepare(
     let parts = std::env::var("RAEA_FOG_SOLARI_PARTS").unwrap_or_else(|_| "lamps,sky".into());
     let parts = parts.contains("lamps") as u32 | (parts.contains("sky") as u32) << 1;
     let filter = (std::env::var("RAEA_FOG_SOLARI_FILTER").as_deref() != Ok("0")) as u32;
+    let guide = std::env::var("RAEA_FOG_SOLARI_GUIDE").ok().and_then(|v| v.parse().ok()).unwrap_or(3u32) & 3;
     for (e, grid, view, solari, fog) in &mut views {
         let g = grid.params.grid;
         let size = UVec2::new(g.x * g.w, g.y * g.z.div_ceil(g.w));
@@ -160,7 +170,15 @@ pub fn prepare(
         let mut fresh = None;
         let fog = match fog {
             Some(f) if f.size == size => f.into_inner(),
-            _ => fresh.insert(SolariFog { textures: [texture(&device, size, 0), texture(&device, size, 1)], filtered: texture(&device, size, 2), size, frame: 0, prev: now, buffer: default() }),
+            _ => fresh.insert(SolariFog {
+                textures: [texture(&device, size, 0), texture(&device, size, 1)],
+                filtered: texture(&device, size, 2),
+                guides: [texture(&device, size, 3), texture(&device, size, 4)],
+                size,
+                frame: 0,
+                prev: now,
+                buffer: default(),
+            }),
         };
         let reset = fog.frame == 0 || solari.reset;
         if fog.frame > 0 {
@@ -169,7 +187,7 @@ pub fn prepare(
             // the first frame writes texture 1, so the next reads it as its history
             fog.frame = 1;
         }
-        *fog.buffer.get_mut() = SolariFogParams { prev_clip_from_world: fog.prev.0, prev_slab: fog.prev.1, frame: UVec4::new(fog.frame, reset as u32, candidates, frames), more: UVec4::new(parts, sky, filter, 0) };
+        *fog.buffer.get_mut() = SolariFogParams { prev_clip_from_world: fog.prev.0, prev_slab: fog.prev.1, frame: UVec4::new(fog.frame, reset as u32, candidates, frames), more: UVec4::new(parts, sky, filter, guide) };
         fog.buffer.write_buffer(&device, &queue);
         fog.prev = now;
         if let Some(f) = fresh {
@@ -208,9 +226,12 @@ pub fn draw<'a>(
     let layout = cache.get_bind_group_layout(&p.layout);
     let fog_params = fog.buffer.binding()?;
     // the light found this frame into its history, then the history blurred and scattered
+    // (the filter binds the guides too, the layout being shared, and leaves them be)
+    let (sky_was, sky_now) = fog.guides();
     let steps = [("froxel_solari", pass, fog.was(), fog.now()), ("froxel_solari_filter", filter, fog.now(), &fog.filtered.1)];
     for (label, pipeline, input, output) in steps {
-        let group = device.create_bind_group(label, &layout, &BindGroupEntries::sequential((params.clone(), volumes.clone(), view.clone(), fog_params.clone(), input, output)));
+        let entries = (params.clone(), volumes.clone(), view.clone(), fog_params.clone(), input, output, sky_was, sky_now);
+        let group = device.create_bind_group(label, &layout, &BindGroupEntries::sequential(entries));
         let mut c = ctx.command_encoder().begin_compute_pass(&ComputePassDescriptor { label: Some(label), timestamp_writes: None });
         c.set_pipeline(pipeline);
         c.set_bind_group(0, scene_group, &[]);
