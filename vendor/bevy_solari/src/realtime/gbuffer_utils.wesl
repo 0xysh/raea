@@ -3,6 +3,7 @@ import bevy_pbr::render::rgb9e5::rgb9e5_to_vec3_;
 import bevy_render::utils::octahedral_decode;
 import bevy_render::view::{View, depth_ndc_to_view_z};
 import package::scene::bindings::{facing_normal, ResolvedMaterial};
+import package::realtime::bindings::view;
 
 struct ResolvedGPixel {
     world_position: vec3<f32>,
@@ -30,7 +31,8 @@ fn gpixel_resolve(gpixel: vec4<u32>, depth: f32, pixel_id: vec2<u32>, view_size:
     let props = unpack4x8unorm(gpixel.b);
     let reflectance = props.r;
     let metallic = props.g;
-    let emissive = rgb9e5_to_vec3_(gpixel.g);
+    // raea: Bevy's G-buffer holds it pre-exposed (bevy_pbr deferred/functions.wesl), so a bright lamp doesn't clip
+    let emissive = rgb9e5_to_vec3_(gpixel.g) / view.exposure;
     let material = ResolvedMaterial(base_color, emissive, reflectance, perceptual_roughness, roughness, metallic);
 
     return ResolvedGPixel(world_position, world_normal, material);

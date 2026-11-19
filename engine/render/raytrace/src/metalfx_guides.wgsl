@@ -2,7 +2,7 @@
 // emission split out; `restore` puts the emission back after the denoiser.
 // Bevy's G-buffer (bevy_pbr deferred/functions.wesl, types.wesl) to MetalFX's guides: r = base colour (sRGB-ish, pow
 // 1/2.2) and perceptual roughness as unorm4x8; b = reflectance, metallic, occlusion, clearcoat as unorm4x8; a = a 24-bit
-// octahedral normal (two 12-bit halves) and flags; g = emissive as rgb9e5.
+// octahedral normal (two 12-bit halves) and flags; g = emissive as rgb9e5, pre-exposed (times the camera's exposure).
 // What a surface emits is no noise. Denoised as lighting, a screen's picture or a sign's letters came out smeared, its
 // texture taken for noise against a near-black albedo (photo 2's monitor). So the emission's share of each pixel's
 // colour goes to MetalFX's denoise strength mask, which leaves a pixel marked 1 undenoised while still gathering its
@@ -90,7 +90,8 @@ fn store(p: vec2<i32>, g: vec4<u32>, s: Surface) {
     textureStore(rough, p, vec4<f32>(s.rough, 0.0, 0.0, 0.0));
     textureStore(specular, p, vec4<f32>(s.specular, 1.0));
     let c = textureLoad(color, p);
-    let e = rgb9e5(g.g) * params[0].x;
+    // the G-buffer's emission is pre-exposed already: as Solari adds it to the colour
+    let e = rgb9e5(g.g);
     if (params[0].y > 0.5) {
         let taken = min(e, c.rgb);
         textureStore(diffuse, p, vec4<f32>(s.diffuse, 1.0));

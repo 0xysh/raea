@@ -76,7 +76,9 @@ fn deferred_gbuffer_from_pbr_input(in: PbrInput) -> vec4<u32> {
 
     let deferred = vec4(
         deferred_types::pack_unorm4x8_(vec4(base_color_srgb, in.material.perceptual_roughness)),
-        rgb9e5::vec3_to_rgb9e5_(emissive),
+        // raea: pre-exposed (times the view's exposure), so a bright emitter (a 75000-nit lamp) keeps its light under
+        // rgb9e5's top, 65408; every reader divides it back out
+        rgb9e5::vec3_to_rgb9e5_(emissive * view.exposure),
         props,
         deferred_types::pack_24bit_normal_and_flags(octahedral_normal, flags),
     );
@@ -94,7 +96,8 @@ fn pbr_input_from_deferred_gbuffer(frag_coord: vec4<f32>, gbuffer: vec4<u32>) ->
 
     let base_rough = deferred_types::unpack_unorm4x8_(gbuffer.r);
     pbr.material.perceptual_roughness = base_rough.a;
-    let emissive = rgb9e5::rgb9e5_to_vec3_(gbuffer.g);
+    // raea: stored pre-exposed (deferred_gbuffer_from_pbr_input)
+    let emissive = rgb9e5::rgb9e5_to_vec3_(gbuffer.g) / view.exposure;
     if ((pbr.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) != 0u) {
         pbr.material.base_color = vec4(emissive, 1.0);
         pbr.material.emissive = vec4(vec3(0.0), 0.0);
