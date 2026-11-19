@@ -194,7 +194,13 @@ pub(crate) fn engine_before(app: &App, cx: &mut Ctx, f: i64) {
         return;
     }
     if let Some(e) = cx.scene3d.as_mut() {
-        e.draw(f - 1);
+        // in order, frame f - 1 is the one drawn last and its World is f - 1's already. Drawn again, it was a whole update
+        // more: every frame of a render drew twice, and every temporal pass (Solari's, MetalFX's, the split emission's)
+        // took a second frame in which nothing moved, which live play never draws (a moving orb's rim, seen still,
+        // stayed as rings at every place it had been)
+        if e.drawn() != Some(f - 1) {
+            e.draw(f - 1);
+        }
     }
     raea_runtime_react::shared::engine_flush(app.world().resource::<ReactOutbox>());
 }

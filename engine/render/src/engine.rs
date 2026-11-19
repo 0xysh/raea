@@ -226,6 +226,9 @@ impl Engine {
         Engine::build(prog, inserted, dir, None, true)
     }
 
+    /// The frame `draw` drew last, if any.
+    pub fn drawn(&self) -> Option<i64> { self.drawn }
+
     /// Frame `f` drawn into the target (one update: the pipeline is synchronous, so it's on the GPU's queue when this
     /// returns, ahead of anything the paint device is given next).
     pub fn draw(&mut self, f: i64) {
