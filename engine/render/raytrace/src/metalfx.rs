@@ -62,10 +62,11 @@ pub(crate) fn add(app: &mut App) {
     core.add_systems(denoise_up.before(super::upscale::upscale).in_set(Core3dSystems::EarlyPostProcess));
 }
 
-/// RAEA_SOLARI_EMISSIVE=split: the emission taken out before the denoiser and put back after (see DECODE_WGSL).
+/// The emission taken out before the denoiser and put back after (see DECODE_WGSL): gathered over frames by default
+/// (emit_taa.rs), each frame's alone with RAEA_SOLARI_EMISSIVE=split; =mask leaves it in, for the denoiser.
 fn split() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_EMISSIVE").as_deref() == Ok("split"))
+    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_EMISSIVE").as_deref() == Ok("split") || super::emit_taa::on())
 }
 
 /// A view drawn small is denoised and brought up in one pass (unless RAEA_SOLARI_UPSCALE=two).
@@ -191,13 +192,16 @@ struct View {
     emit: wgpu::Texture,
     mask: wgpu::Texture,
     out: wgpu::Texture,
+    /// the split emission's history (RAEA_SOLARI_EMISSIVE=taa, emit_taa.rs)
+    taa: Option<super::emit_taa::History>,
     fresh: bool,
 }
 
 #[derive(Default)]
 struct Kit {
-    /// the guides (and the emissive out), and the emissive back in
-    pipeline: Option<(wgpu::ComputePipeline, wgpu::ComputePipeline)>,
+    /// the guides (and the emissive out), the emissive back in, from this frame or gathered over frames (emit_taa.rs),
+    /// and the sampler that reads the gathered emission's history
+    pipeline: Option<(wgpu::ComputePipeline, wgpu::ComputePipeline, wgpu::ComputePipeline, wgpu::Sampler)>,
     views: HashMap<Entity, View>,
     off: bool,
 }
@@ -205,7 +209,7 @@ struct Kit {
 unsafe impl Send for Kit {}
 unsafe impl Sync for Kit {}
 
-fn texture(dev: &wgpu::Device, size: UVec2, format: wgpu::TextureFormat, usage: wgpu::TextureUsages, label: &str) -> wgpu::Texture {
+pub(super) fn texture(dev: &wgpu::Device, size: UVec2, format: wgpu::TextureFormat, usage: wgpu::TextureUsages, label: &str) -> wgpu::Texture {
     dev.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d { width: size.x, height: size.y, depth_or_array_layers: 1 },
@@ -262,6 +266,7 @@ impl View {
                 emit: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx split emission"),
                 mask: texture(dev, size, wgpu::TextureFormat::R32Float, guide, "metalfx denoise strength"),
                 out: texture(dev, out_size, wgpu::TextureFormat::Rgba16Float, guide | U::RENDER_ATTACHMENT | U::COPY_SRC, "metalfx output"),
+                taa: super::emit_taa::on().then(|| super::emit_taa::History::new(dev, out_size)),
                 fresh: true,
             })
         }
@@ -385,17 +390,19 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
             }
         }
     }
-    let (pipeline, restore) = kit
+    let (pipeline, restore, restore_taa, hist_sampler) = kit
         .pipeline
         .get_or_insert_with(|| {
-            let module = dev.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("metalfx guides"), source: wgpu::ShaderSource::Wgsl(DECODE_WGSL.into()) });
+            let source = format!("{DECODE_WGSL}{}", super::emit_taa::WGSL);
+            let module = dev.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("metalfx guides"), source: wgpu::ShaderSource::Wgsl(source.into()) });
             let make = |entry: &str| dev.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("metalfx guides"), layout: None, module: &module, entry_point: Some(entry), compilation_options: Default::default(), cache: None });
-            (make("main"), make("restore"))
+            (make("main"), make("restore"), make("restore_taa"), super::emit_taa::sampler(&dev))
         })
         .clone();
     let color_view = color.create_view(&Default::default());
     let back = ext.world_from_view.back();
-    let words: [f32; 16] = [cam.exposure, if split() { 1.0 } else { 0.0 }, 0.0, 0.0, out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, 0.0, jitter.x, jitter.y, 0.0, 0.0];
+    let reset = solari.reset || kit.views.get(&entity).is_none_or(|v| v.fresh);
+    let words: [f32; 16] = [cam.exposure, if split() { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, super::emit_taa::sharp(), jitter.x, jitter.y, 0.0, 0.0];
     let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
     let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx params"), contents: &bytes, usage: wgpu::BufferUsages::UNIFORM });
     let v = kit.views.get_mut(&entity).unwrap();
@@ -428,18 +435,23 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     ctx.add_command_buffer(raw.finish());
     // the emissive back in, after the denoiser's command buffer (add_command_buffer flushed the encoder before it)
     if split() {
-    let back = dev.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("metalfx emissive back"),
-        layout: &restore.get_bind_group_layout(0),
-        entries: &[
-            wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) },
-            wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&emit) },
-        ],
-    });
+    let mut entries = vec![
+        wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) },
+        wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() },
+        wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&emit) },
+    ];
+    let taa_views = v.taa.as_ref().map(|h| h.views(&depth.texture.texture, &motion.texture.texture));
+    if let Some(views) = &taa_views {
+        entries.extend(super::emit_taa::entries(views, &hist_sampler));
+    }
+    let put = if taa_views.is_some() { &restore_taa } else { &restore };
+    let back = dev.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("metalfx emissive back"), layout: &put.get_bind_group_layout(0), entries: &entries });
+    if let Some(h) = v.taa.as_mut() {
+        h.advance();
+    }
     {
         let mut pass = ctx.command_encoder().begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("metalfx emissive back"), timestamp_writes: None });
-        pass.set_pipeline(&restore);
+        pass.set_pipeline(put);
         pass.set_bind_group(0, &back, &[]);
         pass.dispatch_workgroups(out_size.x.div_ceil(8), out_size.y.div_ceil(8), 1);
     }

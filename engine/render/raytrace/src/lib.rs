@@ -10,6 +10,8 @@ mod solari;
 #[cfg(target_os = "macos")]
 mod metalfx;
 #[cfg(target_os = "macos")]
+mod emit_taa;
+#[cfg(target_os = "macos")]
 mod upscale;
 // RAEA_LIGHT: one light path for every camera (docs/realism.feature LT1)
 pub mod force;
