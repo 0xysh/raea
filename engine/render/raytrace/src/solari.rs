@@ -326,7 +326,7 @@ fn traceable(src: &Mesh, mapped: bool) -> Option<Traceable> {
     // draws into the G-buffer, lit by Solari; it just isn't in the traced scene
     let ids: Vec<_> = src.try_attributes().ok()?.map(|(a, _)| a.id).collect();
     let indices = src.try_indices_option().ok()?;
-    let layout = [Mesh::ATTRIBUTE_POSITION.id, Mesh::ATTRIBUTE_NORMAL.id, Mesh::ATTRIBUTE_UV_0.id, Mesh::ATTRIBUTE_TANGENT.id];
+    let layout = [Mesh::ATTRIBUTE_POSITION.id, Mesh::ATTRIBUTE_NORMAL.id, Mesh::ATTRIBUTE_UV_0.id, Mesh::ATTRIBUTE_TANGENT.id, Mesh::ATTRIBUTE_COLOR.id];
     if ids == layout && matches!(indices, Some(Indices::U32(_))) {
         return Some(Traceable::Same);
     }
@@ -338,6 +338,13 @@ fn traceable(src: &Mesh, mapped: bool) -> Option<Traceable> {
     out.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     out.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normal);
     out.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+    // its vertex colours, which the base colour is multiplied by traced as in raster (vendored Solari's PackedVertex),
+    // or white. Without them a forest's vertex-coloured bark and moss traced grey
+    let color = match src.attribute(Mesh::ATTRIBUTE_COLOR) {
+        Some(VertexAttributeValues::Float32x4(c)) if c.len() == n => c.clone(),
+        _ => vec![[1.0f32; 4]; n],
+    };
+    out.insert_attribute(Mesh::ATTRIBUTE_COLOR, color);
     let idx: Vec<u32> = match indices {
         Some(Indices::U32(v)) => v.clone(),
         Some(Indices::U16(v)) => v.iter().map(|&i| i as u32).collect(),
@@ -385,6 +392,23 @@ mod tests {
             assert!((v.length() - 1.0).abs() < 1e-5 && v.dot(Vec3::Z).abs() < 1e-5 && t[3] == 1.0, "{t:?}");
         }
         assert_eq!(tangents(true).len(), 3);
+    }
+
+    /// A mesh's vertex colours go into its traced copy, which the tracer multiplies the base colour by; a mesh with none
+    /// is traced white.
+    #[test]
+    fn vertex_colours_are_traced() {
+        let colour = |m: &Mesh| match traceable(m, false) {
+            Some(Traceable::Copy(c)) => match c.attribute(Mesh::ATTRIBUTE_COLOR) {
+                Some(VertexAttributeValues::Float32x4(v)) => v.clone(),
+                _ => panic!("no colour in the copy"),
+            },
+            _ => panic!("not a copy"),
+        };
+        assert_eq!(colour(&quad(RenderAssetUsages::default())), vec![[1.0f32; 4]; 3]);
+        let mut green = quad(RenderAssetUsages::default());
+        green.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[0.1f32, 0.3, 0.05, 1.0]; 3]);
+        assert_eq!(colour(&green), vec![[0.1f32, 0.3, 0.05, 1.0]; 3]);
     }
 
     #[test]

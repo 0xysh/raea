@@ -16,10 +16,13 @@ struct VertexBuffer { vertices: array<PackedVertex> }
 
 struct IndexBuffer { indices: array<u32> }
 
+// raea: the vertex colour after the tangent (Bevy lays a mesh's attributes out by id: position, normal, uv, tangent,
+// colour). A mesh without one is traced white (raea-render-raytrace solari.rs traceable)
 struct PackedVertex {
     a: vec4<f32>,
     b: vec4<f32>,
     tangent: vec4<f32>,
+    color: vec4<f32>,
 }
 
 struct Vertex {
@@ -27,6 +30,7 @@ struct Vertex {
     normal: vec3<f32>,
     uv: vec2<f32>,
     tangent: vec4<f32>,
+    color: vec4<f32>,
 }
 
 fn unpack_vertex(packed: PackedVertex) -> Vertex {
@@ -35,6 +39,7 @@ fn unpack_vertex(packed: PackedVertex) -> Vertex {
     vertex.normal = vec3(packed.a.w, packed.b.xy);
     vertex.uv = packed.b.zw;
     vertex.tangent = packed.tangent;
+    vertex.color = packed.color;
     return vertex;
 }
 
@@ -355,7 +360,9 @@ fn resolve_triangle_data_full(instance_id: u32, triangle_id: u32, barycentrics: 
     let triangle_edge1 = world_vertices[0] - world_vertices[2];
     let triangle_area = length(cross(triangle_edge0, triangle_edge1)) / 2.0;
 
-    let resolved_material = resolve_material(material, uv);
+    var resolved_material = resolve_material(material, uv);
+    // raea: the vertex colour multiplies the base colour, as Bevy's StandardMaterial does in raster
+    resolved_material.base_color *= (mat3x4(vertices[0].color, vertices[1].color, vertices[2].color) * barycentrics).rgb;
 
     return ResolvedRayHitFull(
         world_position,
