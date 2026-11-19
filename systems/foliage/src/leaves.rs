@@ -130,10 +130,7 @@ pub(crate) fn leaves(sp: &Species, req: &Request, nodes: &[Node], env: &Envelope
 }
 
 /// 0 below `a`, 1 above `b`, smoothly between (a leaf's gaps, its teeth's roots in atlas.rs).
-pub(crate) fn smooth(a: f32, b: f32, x: f32) -> f32 {
-    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
+pub(crate) use raea_core_ease::smoothstep as smooth;
 
 /// Value noise in 3D, 0 to 1, from a seed.
 fn noise3(p: Vec3, seed: u64) -> f32 {

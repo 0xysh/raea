@@ -10,3 +10,5 @@ description = "Where a building breaks: cracks from the corners of its openings,
 parry3d = "0.31"
 rayon = "1"
 raea-sys-touch = { path = "../touch" }
+# smoothstep, shared with raea-sys-foliage
+raea-core-ease = { path = "../../core/ease" }

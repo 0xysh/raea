@@ -17,6 +17,7 @@ use parry3d::glamx::Vec3;
 use parry3d::query::{Ray, RayCast};
 use rayon::prelude::*;
 
+use raea_core_ease::smoothstep as smooth;
 use raea_sys_touch::{Mat, Point, Spot, Surface};
 
 /// A cache key's part: a change to the rules changes every bake that used them.
@@ -52,11 +53,6 @@ const DROP: f32 = 0.5;
 /// a wall the rain reaches less than this is indoors (a room's wall, the back of a hollow model): nothing falls on a
 /// walk from it
 const OUTDOORS: f32 = 0.02;
-
-fn smooth(a: f32, b: f32, x: f32) -> f32 {
-    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
 
 /// How readily the coat at `q` comes off (0-1), with `crack` its distance to the nearest crack (metres).
 pub fn loss(q: &Point, crack: f32) -> f32 {
