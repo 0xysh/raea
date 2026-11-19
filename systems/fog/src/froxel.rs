@@ -52,6 +52,7 @@ use bevy::{
         Extract, ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems,
     },
     shader::ShaderDefVal,
+    solari::pathtracer::PathtracerMedia,
 };
 
 mod views;
@@ -159,7 +160,7 @@ fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &
     volumes.corners = found.iter().map(|f| f.2).collect();
 }
 
-fn prepare_volumes(mut volumes: ResMut<Volumes>, device: Res<RenderDevice>, queue: Res<RenderQueue>) {
+fn prepare_volumes(mut volumes: ResMut<Volumes>, device: Res<RenderDevice>, queue: Res<RenderQueue>, media: Option<ResMut<PathtracerMedia>>) {
     // never empty: a storage buffer needs a size
     let mut list = volumes.list.clone();
     if list.is_empty() {
@@ -167,6 +168,13 @@ fn prepare_volumes(mut volumes: ResMut<Volumes>, device: Res<RenderDevice>, queu
     }
     *volumes.buffer.get_mut() = list;
     volumes.buffer.write_buffer(&device, &queue);
+    // the reference path tracer walks the same volumes (bevy_solari pathtracer/media.wesl); RAEA_PT_MEDIA=0 leaves
+    // them out of it, for a frame without its air
+    if let Some(mut media) = media {
+        static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let off = *OFF.get_or_init(|| std::env::var("RAEA_PT_MEDIA").is_ok_and(|v| v == "0"));
+        media.0 = if off { None } else { volumes.buffer.buffer().cloned() };
+    }
 }
 
 /// A fire as the grid's light pass reads it (froxel_light.wesl's `GridFire`): it lights the fog around it, as its

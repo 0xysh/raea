@@ -23,7 +23,7 @@ import bevy_pbr::render::view_transformations::position_ndc_to_view;
 import bevy_render::maths::orthonormalize;
 import bevy_pbr::render::clustered_forward as clustering;
 import bevy_pbr::render::pbr_lighting::getDistanceAttenuation;
-import raea_sys_fog::froxel_volume::volume_weight;
+import raea_sys_fog::froxel_volume::{Volume, volume_weight, henyey_greenstein};
 
 struct Params {
     view_from_clip: mat4x4<f32>,
@@ -33,13 +33,6 @@ struct Params {
     ambient: vec4<f32>,
     counts: vec4<u32>,
     heroes: vec4<u32>,
-}
-
-struct Volume {
-    local_from_world: mat4x4<f32>,
-    scatter: vec4<f32>,
-    ambient: vec4<f32>,
-    shape: vec4<f32>,
 }
 
 struct GridFire {
@@ -59,15 +52,10 @@ struct GridFire {
 @group(1) @binding(3) var depth_texture: texture_depth_2d;
 }
 
-const FRAC_4_PI: f32 = 0.07957747154594767;
 // the volumes a point can be in at once that directional lights are phased for
 const HELD: u32 = 8u;
 const DIRECTIONAL: u32 = 4u;
 
-fn henyey_greenstein(g: f32, neg_LdotV: f32) -> f32 {
-    let denom = 1.0 + g * g - 2.0 * g * neg_LdotV;
-    return FRAC_4_PI * (1.0 - g * g) / (denom * sqrt(denom));
-}
 
 // the medium at a point of the view (every volume holding it, summed) and the light it scatters toward the eye per
 // metre: rgb scattered, a extinction. `pixel` is the frame's pixel the point is seen through (its light cluster)

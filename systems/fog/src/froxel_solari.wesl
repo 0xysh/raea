@@ -21,7 +21,7 @@ import bevy_render::maths::{PI_2, orthonormalize};
 import bevy_pbr::render::utils::{rand_f, rand_vec2f};
 import bevy_solari::scene::bindings::{trace_ray, light_sources, RAY_T_MIN, RAY_T_MAX};
 import bevy_solari::scene::sampling::{generate_random_light_sample, trace_visibility, sample_environment_map_light, ResolvedLightSample};
-import raea_sys_fog::froxel_volume::volume_weight;
+import raea_sys_fog::froxel_volume::{Volume, volume_weight, henyey_greenstein, sample_phase};
 
 enable wgpu_ray_query;
 
@@ -34,13 +34,6 @@ struct Params {
     ambient: vec4<f32>,
     counts: vec4<u32>,
     heroes: vec4<u32>,
-}
-
-struct Volume {
-    local_from_world: mat4x4<f32>,
-    scatter: vec4<f32>,
-    ambient: vec4<f32>,
-    shape: vec4<f32>,
 }
 
 // froxel/solari.rs SolariFogParams
@@ -68,30 +61,12 @@ struct SolariFog {
 @group(1) @binding(6) var guides_was: texture_2d<f32>;
 @group(1) @binding(7) var guides: texture_storage_2d<rgba32float, write>;
 
-const FRAC_4_PI: f32 = 0.07957747154594767;
 const LUMA = vec3(0.2126, 0.7152, 0.0722);
 // how much of a guide is kept from one frame to the next, so it follows a camera, an opening closed or the sun moved
 const GUIDE_KEEP: f32 = 0.9;
 // the guide's cone: no wider than 60 degrees, no narrower than 2
 const COS_WIDEST: f32 = 0.5;
 const COS_NARROWEST: f32 = 0.99939;
-
-fn henyey_greenstein(g: f32, cos_theta: f32) -> f32 {
-    let denom = 1.0 + g * g - 2.0 * g * cos_theta;
-    return FRAC_4_PI * (1.0 - g * g) / (denom * sqrt(denom));
-}
-
-// a direction toward the light drawn from the phase about the view's direction V (pdf: the phase itself)
-fn sample_phase(g: f32, V: vec3<f32>, u: vec2<f32>) -> vec3<f32> {
-    var cos_theta = 1.0 - 2.0 * u.x;
-    if (abs(g) > 1e-3) {
-        let s = (1.0 - g * g) / (1.0 - g + 2.0 * g * u.x);
-        cos_theta = clamp((1.0 + g * g - s * s) / (2.0 * g), -1.0, 1.0);
-    }
-    let sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
-    let phi = u.y * PI_2;
-    return orthonormalize(V) * vec3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
-}
 
 // what a light sample sends to point P toward the eye, before its pdf: emitted radiance x its cosine / distance^2 x
 // the phase

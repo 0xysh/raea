@@ -2,7 +2,9 @@ import bevy_core_pipeline::tonemapping::tonemapping_luminance as luminance;
 import bevy_pbr::render::utils::{rand_f, rand_vec2f};
 import bevy_render::view::View;
 import package::scene::brdf::{evaluate_brdf, evaluate_and_sample_brdf, brdf_pdf, F_AB};
-import package::scene::sampling::{sample_random_light, random_emissive_light_pdf, power_heuristic, sample_environment_map_light_and_sun};
+import package::scene::sampling::{generate_random_light_sample, calculate_resolved_light_contribution, trace_visibility, LightContribution, random_emissive_light_pdf, power_heuristic, sample_environment_map_light_and_sun};
+import package::pathtracer::media::{media_collision, media_transmittance};
+import raea_sys_fog::froxel_volume::{henyey_greenstein, sample_phase};
 import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN, RAY_T_MAX, MIRROR_ROUGHNESS_THRESHOLD, materials, material_ids, material_alpha, coat_albedo, facing_normal, ALPHA_PREMULTIPLIED};
 
 enable wgpu_ray_query;
@@ -10,6 +12,20 @@ enable wgpu_ray_query;
 @group(1) @binding(0) var accumulation_texture: texture_storage_2d<rgba32float, read_write>;
 @group(1) @binding(1) var view_output: texture_storage_2d<rgba16float, write>;
 @group(1) @binding(2) var<uniform> view: View;
+
+// raea: a light sample's contribution at p (sample_random_light's), dimmed by the media on its way to p
+fn sample_light_through_media(p: vec3<f32>, normal: vec3<f32>, rng: ptr<function, u32>) -> LightContribution {
+    let sample = generate_random_light_sample(rng);
+    let light = sample.resolved_light_sample.world_position;
+    var contribution = calculate_resolved_light_contribution(sample.resolved_light_sample, p, normal);
+    if trace_visibility(p, light) == 0.0 {
+        contribution.radiance = vec3(0.0);
+        return contribution;
+    }
+    let reach = select(RAY_T_MAX, distance(light.xyz, p), light.w == 1.0);
+    contribution.radiance *= media_transmittance(p, contribution.wi, 0.0, reach, rng);
+    return contribution;
+}
 
 @compute @workgroup_size(8, 8, 1)
 fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -42,6 +58,32 @@ fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var sees_sun = true;
     loop {
         let ray = trace_ray(ray_origin, ray_direction, ray_t_min, RAY_T_MAX, RAY_FLAG_NONE);
+        // raea: the media (fog volumes, media.wesl) before the surface: a collision scatters the path there. Light is
+        // sampled at it by the phase (weighted against the phase's own rays reaching an emissive surface), and the
+        // path goes on along a direction drawn from the phase, which the phase's pdf cancels
+        let t_hit = select(RAY_T_MAX, ray.t, ray.kind != RAY_QUERY_INTERSECTION_NONE);
+        let collision = media_collision(ray_origin, ray_direction, ray_t_min, t_hit, &rng);
+        if collision.t >= 0.0 {
+            let p = ray_origin + ray_direction * collision.t;
+            throughput *= collision.albedo;
+            let light = sample_light_through_media(p, ray_direction, &rng);
+            let phase = henyey_greenstein(collision.g, dot(light.wi, ray_direction));
+            var weight = 1.0;
+            if light.brdf_rays_can_hit {
+                weight = power_heuristic(1.0 / light.inverse_solid_angle_pdf, phase);
+            }
+            radiance += weight * throughput * light.radiance * light.inverse_pdf * phase;
+            let next = sample_phase(collision.g, ray_direction, rand_vec2f(&rng));
+            p_bounce = henyey_greenstein(collision.g, dot(next, ray_direction));
+            ray_origin = p;
+            ray_direction = next;
+            ray_t_min = 0.0;
+            sees_sun = false;
+            let rr = saturate(luminance(throughput));
+            if rand_f(&rng) >= rr { break; }
+            throughput /= rr;
+            continue;
+        }
         if ray.kind != RAY_QUERY_INTERSECTION_NONE {
             var ray_hit = resolve_ray_hit_full(ray);
             // raea: a premultiplied surface the ray stopped at: shaded in full for its alpha's share of the stops, else as
@@ -74,7 +116,7 @@ fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
             // Sample direct lighting, but only if the surface is not mirror-like
             let is_perfectly_specular = ray_hit.material.roughness <= MIRROR_ROUGHNESS_THRESHOLD && ray_hit.material.metallic > 0.9999;
             if !is_perfectly_specular {
-                let direct_lighting = sample_random_light(ray_hit.world_position, ray_hit.world_normal, &rng);
+                let direct_lighting = sample_light_through_media(ray_hit.world_position, ray_hit.world_normal, &rng);
 
                 mis_weight = 1.0;
                 if direct_lighting.brdf_rays_can_hit {
