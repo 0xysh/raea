@@ -2,8 +2,8 @@ import bevy_core_pipeline::tonemapping::tonemapping_luminance as luminance;
 import bevy_pbr::render::utils::{rand_f, rand_range_u, sample_cosine_hemisphere};
 import bevy_render::maths::PI;
 import package::realtime::presample_light_tiles::unpack_resolved_light_sample;
-import package::scene::sampling::{calculate_resolved_light_contribution, trace_visibility, sample_environment_map_light, sky_portal_light_pdf};
-import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN, RAY_T_MAX};
+import package::scene::sampling::{calculate_resolved_light_contribution, trace_visibility, sample_environment_map_light, sky_portal_light_pdf, ray_origin_toward_sample};
+import package::scene::bindings::{trace_ray, resolve_ray_hit_full, face_hit, RAY_T_MIN, RAY_T_MAX};
 import package::realtime::world_cache_query::query_world_cache_found;
 import package::realtime::bindings::{
     light_tile_resolved_samples,
@@ -44,7 +44,8 @@ fn sample_gi(@builtin(workgroup_id) workgroup_id: vec3<u32>, @builtin(global_inv
     let ray_direction = sample_cosine_hemisphere(geometry_data.world_normal, &rng);
     let ray = trace_ray(geometry_data.world_position + (geometry_data.world_normal * RAY_T_MIN), ray_direction, RAY_T_MIN, constants.world_cache_max_gi_ray_distance, RAY_FLAG_NONE);
     if ray.kind != RAY_QUERY_INTERSECTION_NONE {
-        let ray_hit = resolve_ray_hit_full(ray);
+        // raea: a hit seen from its back as its front (bindings.wesl face_hit): its own cell, its light from its side
+        let ray_hit = face_hit(resolve_ray_hit_full(ray), -ray_direction);
         let cell_life = atomicLoad(&world_cache.life[cell_index]);
         let cached = query_world_cache_found(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray.t, cell_life, &rng);
         // raea: a hit whose cell holds no light yet is no sample for a cell that has light: this update is skipped
@@ -55,7 +56,7 @@ fn sample_gi(@builtin(workgroup_id) workgroup_id: vec3<u32>, @builtin(global_inv
             return;
         }
         // raea: the lights' own light on the surface the ray found, sampled there, with what has bounced onto it
-        let direct = sample_random_light_ris(ray_hit.world_position, ray_hit.geometric_world_normal, workgroup_id.xy, &rng);
+        let direct = sample_random_light_ris(ray_hit.world_position, ray_hit.geometric_world_normal, ray_hit.material.diffuse_transmission, workgroup_id.xy, &rng);
         world_cache.active_cells_new_radiance[active_cell_id.x] += ray_hit.material.base_color * (direct + cached.rgb);
     } else {
         // The ray is cut short at world_cache_max_gi_ray_distance to save on traversal costs, so a miss may be a surface
@@ -108,7 +109,7 @@ fn blend_new_samples(@builtin(global_invocation_id) active_cell_id: vec3<u32>) {
     world_cache.luminance_deltas[cell_index] = blended_luminance_delta;
 }
 
-fn sample_random_light_ris(world_position: vec3<f32>, world_normal: vec3<f32>, workgroup_id: vec2<u32>, rng: ptr<function, u32>) -> vec3<f32> {
+fn sample_random_light_ris(world_position: vec3<f32>, world_normal: vec3<f32>, diffuse_transmission: f32, workgroup_id: vec2<u32>, rng: ptr<function, u32>) -> vec3<f32> {
     var workgroup_rng = (workgroup_id.x * 5782582u) + workgroup_id.y;
     let light_tile_start = rand_range_u(128u, &workgroup_rng) * 1024u;
 
@@ -122,7 +123,10 @@ fn sample_random_light_ris(world_position: vec3<f32>, world_normal: vec3<f32>, w
         let resolved_light_sample = unpack_resolved_light_sample(light_tile_resolved_samples[tile_sample], view.exposure);
         let light_contribution = calculate_resolved_light_contribution(resolved_light_sample, world_position, world_normal);
 
-        let contribution = light_contribution.radiance * saturate(dot(light_contribution.wi, world_normal));
+        // raea: light from behind a thin surface for the share it lets through (diffuse transmission), the rest from in front
+        let cos_l = dot(light_contribution.wi, world_normal);
+        let cos_share = select(diffuse_transmission * -cos_l, (1.0 - diffuse_transmission) * cos_l, cos_l >= 0.0);
+        let contribution = light_contribution.radiance * min(max(cos_share, 0.0), 1.0);
         let target_function = luminance(contribution);
         let resampling_weight = mis_weight * (target_function * light_contribution.inverse_pdf);
 
@@ -140,7 +144,7 @@ fn sample_random_light_ris(world_position: vec3<f32>, world_normal: vec3<f32>, w
         let inverse_target_function = select(0.0, 1.0 / selected_sample_target_function, selected_sample_target_function > 0.0);
         unbiased_contribution_weight = weight_sum * inverse_target_function;
 
-        unbiased_contribution_weight *= trace_visibility(world_position + (world_normal * RAY_T_MIN), selected_sample_world_position);
+        unbiased_contribution_weight *= trace_visibility(ray_origin_toward_sample(world_position, world_normal, selected_sample_world_position), selected_sample_world_position);
     }
 
     return selected_sample_radiance * unbiased_contribution_weight;

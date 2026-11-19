@@ -6,7 +6,7 @@ import package::scene::brdf::{brdf_pdf, evaluate_and_sample_brdf, evaluate_brdf,
 import package::realtime::presample_light_tiles::unpack_resolved_light_sample;
 import package::realtime::bindings::{empty_reservoir, light_tile_resolved_samples, light_tile_samples, Reservoir, constants, view};
 import package::scene::sampling::{calculate_resolved_light_contribution, isinf, LightSample, NULL_LIGHT_ID, power_heuristic, trace_visibility, sample_environment_map_light_and_sun, sky_portal_mis_weight};
-import package::scene::bindings::{facing_normal, light_sources, MIRROR_ROUGHNESS_THRESHOLD, RAY_T_MAX, RAY_T_MIN, resolve_ray_hit_full, ResolvedMaterial, ResolvedRayHitFull, trace_ray};
+import package::scene::bindings::{face_hit, light_sources, MIRROR_ROUGHNESS_THRESHOLD, RAY_T_MAX, RAY_T_MIN, resolve_ray_hit_full, ResolvedMaterial, ResolvedRayHitFull, trace_ray};
 import package::realtime::world_cache_query::{get_cell_size, query_world_cache, query_world_cache_found, WORLD_CACHE_CELL_LIFETIME};
 
 @if(DLSS_RR_GUIDE_BUFFERS)
@@ -34,6 +34,8 @@ struct InitialSamplingResult {
 /// surface), x2 = first BRDF-sampled hit (the reconnection vertex).
 struct PathState {
     ray_origin: vec3<f32>,
+    // raea: what ray_origin is off the vertex along, RAY_T_MIN out (path_origin)
+    origin_normal: vec3<f32>,
     normal: vec3<f32>,
     wo: vec3<f32>,
     material: ResolvedMaterial,
@@ -57,6 +59,7 @@ struct PathState {
 fn new_path_state(world_position: vec3<f32>, world_normal: vec3<f32>, wo: vec3<f32>, material: ResolvedMaterial) -> PathState {
     var path: PathState;
     path.ray_origin = world_position + (world_normal * RAY_T_MIN);
+    path.origin_normal = world_normal;
     path.normal = world_normal;
     path.wo = wo;
     path.material = material;
@@ -112,7 +115,7 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         var next_bounce = evaluate_and_sample_brdf(path.wo, path.normal, path.material, F_ab, rng);
         if next_bounce.pdf == 0.0 { break; }
         if bounce == 0u && q < 1.0 { next_bounce.throughput /= q; }
-        let ray = trace_ray(path.ray_origin, next_bounce.wi, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_NONE);
+        let ray = trace_ray(path_origin(path, next_bounce.wi), next_bounce.wi, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_NONE);
 
         if ray.kind == RAY_QUERY_INTERSECTION_NONE {
             @if(DLSS_RR_GUIDE_BUFFERS)
@@ -134,8 +137,11 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         }
 
         var ray_hit = resolve_ray_hit_full(ray);
-        // raea: a hit's normal turned from the ray (a crest seen in a mirror) bent back to face it, as the primary's is
-        ray_hit.world_normal = facing_normal(ray_hit.world_normal, ray_hit.geometric_world_normal, -next_bounce.wi);
+        // raea: a hit seen from its back shaded as its front (bindings.wesl face_hit), and a normal turned from the ray (a
+        // crest seen in a mirror) bent back to face it, as the primary's is. Its light only from its front, as light
+        // sampling finds it
+        let hit_front = dot(ray_hit.geometric_world_normal, next_bounce.wi) <= 0.0;
+        ray_hit = face_hit(ray_hit, -next_bounce.wi);
         let p_brdf = next_bounce.pdf;
 
         @if(DLSS_RR_GUIDE_BUFFERS)
@@ -182,7 +188,7 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         }
 
         // Resample emissive hits
-        if any(ray_hit.material.emissive > vec3(0.0)) && dot(ray_hit.world_normal, -next_bounce.wi) > 0.0 {
+        if any(ray_hit.material.emissive > vec3(0.0)) && hit_front {
             generate_emissive_candidate(&path, ray_hit, next_bounce.wi, p_brdf, ray.t, p_nee, di_samples, bounce, rng);
         }
 
@@ -193,6 +199,7 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
 
         // Advance to the next vertex
         path.ray_origin = ray_hit.world_position + (ray_hit.geometric_world_normal * RAY_T_MIN);
+        path.origin_normal = ray_hit.geometric_world_normal;
         path.normal = ray_hit.world_normal;
         path.wo = -next_bounce.wi;
         path.material = ray_hit.material;
@@ -223,6 +230,12 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
     return result;
 }
 
+// raea: where a ray from the path's vertex toward wi starts: ray_origin, off the side the normal faces, or as far off the
+// other for a ray through to the far side (diffuse transmission)
+fn path_origin(path: PathState, wi: vec3<f32>) -> vec3<f32> {
+    return select(path.ray_origin - path.origin_normal * (2.0 * RAY_T_MIN), path.ray_origin, dot(path.normal, wi) >= 0.0);
+}
+
 // raea: one draw in [0, 1) for a whole workgroup this frame (first_bounce_probability's coin)
 fn first_bounce_coin(workgroup_id: vec2<u32>) -> f32 {
     var wg_rng = (workgroup_id.x * 5782582u) ^ (workgroup_id.y * 1103515245u) ^ constants.frame_rng;
@@ -241,7 +254,7 @@ fn generate_nee_candidate(
 ) {
     if rand_f(rng) >= p_nee { return; }
 
-    let di = sample_light_ris((*path).ray_origin, (*path).normal, (*path).wo, (*path).material, F_ab, di_samples, workgroup_id, bounce, rng);
+    let di = sample_light_ris((*path).ray_origin, (*path).origin_normal, (*path).normal, (*path).wo, (*path).material, F_ab, di_samples, workgroup_id, bounce, rng);
     let di_target_function = luminance(di.brdf_radiance);
     if di_target_function <= 0.0 { return; }
 
@@ -290,7 +303,7 @@ struct DiSample {
     brdf_rays_can_hit: bool,
 }
 
-fn sample_light_ris(ray_origin: vec3<f32>, normal: vec3<f32>, wo: vec3<f32>, material: ResolvedMaterial, F_ab: vec2<f32>, di_samples: u32, workgroup_id: vec2<u32>, bounce: u32, rng: ptr<function, u32>) -> DiSample {
+fn sample_light_ris(ray_origin: vec3<f32>, origin_normal: vec3<f32>, normal: vec3<f32>, wo: vec3<f32>, material: ResolvedMaterial, F_ab: vec2<f32>, di_samples: u32, workgroup_id: vec2<u32>, bounce: u32, rng: ptr<function, u32>) -> DiSample {
     var workgroup_rng = (workgroup_id.x * 5782582u) + workgroup_id.y + bounce;
     let light_tile_start = rand_range_u(128u, &workgroup_rng) * 1024u;
 
@@ -329,7 +342,9 @@ fn sample_light_ris(ray_origin: vec3<f32>, normal: vec3<f32>, wo: vec3<f32>, mat
     var unbiased_contribution_weight = 0.0;
     if selected_target_function > 0.0 {
         unbiased_contribution_weight = weight_sum / selected_target_function;
-        unbiased_contribution_weight *= trace_visibility(ray_origin, selected_world_position);
+        // raea: from the far side for light let through to this one (diffuse transmission)
+        let origin = select(ray_origin - origin_normal * (2.0 * RAY_T_MIN), ray_origin, dot(normal, selected_wi) >= 0.0);
+        unbiased_contribution_weight *= trace_visibility(origin, selected_world_position);
     }
 
     return DiSample(unbiased_contribution_weight, light_tile_samples[selected_tile_sample], selected_wi, selected_brdf_radiance, selected_inverse_solid_angle_pdf, selected_brdf_rays_can_hit);
@@ -465,7 +480,7 @@ fn terminate_into_cache(
     let hit_wo = -wi;
     let hit_F_ab = F_AB(ray_hit.material.perceptual_roughness, max(dot(ray_hit.world_normal, hit_wo), 0.0001));
     let hit_origin = ray_hit.world_position + (ray_hit.geometric_world_normal * RAY_T_MIN);
-    let di = sample_light_ris(hit_origin, ray_hit.world_normal, hit_wo, ray_hit.material, hit_F_ab, max(constants.world_cache_direct_light_sample_count, 1u), workgroup_id, bounce + 1u, rng);
+    let di = sample_light_ris(hit_origin, ray_hit.geometric_world_normal, ray_hit.world_normal, hit_wo, ray_hit.material, hit_F_ab, max(constants.world_cache_direct_light_sample_count, 1u), workgroup_id, bounce + 1u, rng);
 
     let cache_outgoing = di.brdf_radiance * di.unbiased_contribution_weight + (ray_hit.material.base_color / PI) * cached_radiance;
     let cache_L_at_reconnection = (*path).throughput_past_first_hit * cache_outgoing;

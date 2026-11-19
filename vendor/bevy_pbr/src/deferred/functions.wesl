@@ -47,7 +47,10 @@ fn deferred_gbuffer_from_pbr_input(in: PbrInput) -> vec4<u32> {
         in.material.metallic, // could be fewer bits
         diffuse_occlusion, // is this worth including?
         clearcoat_props));
-    let flags = deferred_types::deferred_flags_from_mesh_material_flags(in.flags, in.material.flags);
+    // raea: the diffuse transmission in the flags' top five bits (0-31), for Solari, which shades the light through a
+    // leaf or a curtain from the G-buffer (bevy_solari gbuffer_utils.wesl); Bevy's readers mask the three below
+    let flags = deferred_types::deferred_flags_from_mesh_material_flags(in.flags, in.material.flags)
+        | (u32(round(saturate(in.material.diffuse_transmission) * 31.0)) << 3u);
     let octahedral_normal = octahedral_encode(normalize(in.N));
     var base_color_srgb = vec3(0.0);
     var emissive = in.material.emissive.rgb;

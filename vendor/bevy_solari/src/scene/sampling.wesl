@@ -1,7 +1,7 @@
 import bevy_pbr::render::pbr_lighting::D_GGX;
 import bevy_pbr::render::utils::{rand_vec2f, rand_u, rand_range_u};
 import bevy_render::maths::{PI_2, orthonormalize};
-import package::scene::bindings::{trace_ray, trace_ray_previous_frame, RAY_T_MIN, RAY_T_MAX, light_sources, directional_lights, environment_map, environment_map_sampler, environment_map_light, LightSource, LIGHT_SOURCE_KIND_DIRECTIONAL, LIGHT_SOURCE_KIND_SKY_PORTAL, sky_portal, resolve_triangle_data_full, ResolvedRayHitFull, MIRROR_ROUGHNESS_THRESHOLD};
+import package::scene::bindings::{trace_ray, trace_ray_previous_frame, RAY_T_MIN, RAY_T_MAX, light_sources, directional_lights, environment_map, environment_map_sampler, environment_map_light, LightSource, LIGHT_SOURCE_KIND_DIRECTIONAL, LIGHT_SOURCE_KIND_SKY_PORTAL, sky_portal, resolve_triangle_data_full, ResolvedRayHitFull, MIRROR_ROUGHNESS_THRESHOLD, offset_ray_origin};
 
 enable wgpu_ray_query;
 
@@ -288,6 +288,12 @@ fn sky_portal_mis_weight(origin: vec3<f32>, wi: vec3<f32>, bounce_pdf: f32, nee_
     let p_light = sky_portal_light_pdf(origin, wi);
     if p_light <= 0.0 { return 1.0; }
     return power_heuristic(bounce_pdf, p_light * nee_scale);
+}
+
+// raea: where a visibility ray from a surface at p toward a light sample's point starts (w 0: the point is a direction),
+// off the side the light comes in by: the far side for light let through (diffuse transmission)
+fn ray_origin_toward_sample(p: vec3<f32>, normal: vec3<f32>, point: vec4<f32>) -> vec3<f32> {
+    return offset_ray_origin(p, normal, normal, select(point.xyz - p, point.xyz, point.w == 0.0));
 }
 
 fn trace_visibility(ray_origin: vec3<f32>, point: vec4<f32>) -> f32 {

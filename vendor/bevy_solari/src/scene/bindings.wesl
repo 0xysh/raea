@@ -58,9 +58,12 @@ struct Material {
     alpha_mode: u32,
     alpha_cutoff: f32,
     reflectance: f32,
-    // raea: StandardMaterial's uv_transform: columns x (xy) and y (zw), then the translation (xy)
+    // raea: StandardMaterial's uv_transform: columns x (xy) and y (zw), then the translation
     uv_transform_xy: vec4<f32>,
-    uv_transform_t: vec4<f32>,
+    uv_transform_t: vec2<f32>,
+    // raea: StandardMaterial's diffuse_transmission: the share of the diffuse light let through to the far side
+    diffuse_transmission: f32,
+    padding: f32,
 }
 
 const TEXTURE_MAP_NONE = 0xFFFFFFFFu;
@@ -94,6 +97,28 @@ fn facing_normal(world_normal: vec3<f32>, geometric_world_normal: vec3<f32>, wo:
     if dot(away, away) < 1e-8 { return geometric_world_normal; }
     let tangent = normalize(away);
     return normalize(min_cos * wo + sqrt(1.0 - min_cos * min_cos) * tangent);
+}
+
+// raea: a hit seen from its back (a leaf's underside, a curtain from the window's side) shaded as its front: both its
+// normals turned toward the ray, as raster turns a double-sided material's. A ray found a back face black before (its
+// BRDF has nothing below the normal), in the path tracer and in Solari alike. Light passes a thin surface by its
+// material's diffuse_transmission (brdf.wesl), never by which side was hit. Emission stays one-sided, as light sampling
+// has it: a caller checks the side before the turn
+fn face_hit(hit: ResolvedRayHitFull, wo: vec3<f32>) -> ResolvedRayHitFull {
+    var faced = hit;
+    if dot(faced.geometric_world_normal, wo) < 0.0 {
+        faced.geometric_world_normal = -faced.geometric_world_normal;
+        faced.world_normal = -faced.world_normal;
+    }
+    faced.world_normal = facing_normal(faced.world_normal, faced.geometric_world_normal, wo);
+    return faced;
+}
+
+// raea: where a ray leaving a surface at p starts: off the side it leaves by, along offset_normal (the geometric normal
+// at a hit). A ray below the shading normal has passed through (diffuse transmission) and starts off the far side, or
+// it would stop on the surface it left
+fn offset_ray_origin(p: vec3<f32>, offset_normal: vec3<f32>, shading_normal: vec3<f32>, direction: vec3<f32>) -> vec3<f32> {
+    return p + offset_normal * select(-RAY_T_MIN, RAY_T_MIN, dot(shading_normal, direction) >= 0.0);
 }
 
 // raea: the share of light a premultiplied surface's clear coat reflects at an angle (Schlick, F0 from its reflectance)
@@ -271,6 +296,8 @@ struct ResolvedMaterial {
     perceptual_roughness: f32,
     roughness: f32,
     metallic: f32,
+    // raea: Material's
+    diffuse_transmission: f32,
 }
 
 struct ResolvedRayHitFull {
@@ -309,6 +336,7 @@ fn resolve_material(material: Material, uv: vec2<f32>) -> ResolvedMaterial {
     }
 
     m.roughness = m.perceptual_roughness * m.perceptual_roughness;
+    m.diffuse_transmission = material.diffuse_transmission;
 
     return m;
 }

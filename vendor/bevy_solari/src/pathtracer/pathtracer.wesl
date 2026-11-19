@@ -5,7 +5,7 @@ import package::scene::brdf::{evaluate_brdf, evaluate_and_sample_brdf, brdf_pdf,
 import package::scene::sampling::{sky_portal_mis_weight, generate_random_light_sample, calculate_resolved_light_contribution, trace_visibility, LightContribution, random_emissive_light_pdf, power_heuristic, sample_environment_map_light_and_sun};
 import package::pathtracer::media::{media_collision, media_transmittance};
 import raea_sys_fog::froxel_volume::{henyey_greenstein, sample_phase};
-import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN, RAY_T_MAX, MIRROR_ROUGHNESS_THRESHOLD, materials, material_ids, material_alpha, coat_albedo, facing_normal, ALPHA_PREMULTIPLIED};
+import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN, RAY_T_MAX, MIRROR_ROUGHNESS_THRESHOLD, materials, material_ids, material_alpha, coat_albedo, face_hit, offset_ray_origin, ALPHA_PREMULTIPLIED};
 
 enable wgpu_ray_query;
 
@@ -99,7 +99,10 @@ fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 }
             }
             let wo = -ray_direction;
-            ray_hit.world_normal = facing_normal(ray_hit.world_normal, ray_hit.geometric_world_normal, wo);
+            // raea: a hit seen from its back shaded as its front (bindings.wesl face_hit); its light only from its front,
+            // as light sampling finds it
+            let hit_front = dot(ray_hit.geometric_world_normal, wo) >= 0.0;
+            ray_hit = face_hit(ray_hit, wo);
             let NdotV = max(dot(ray_hit.world_normal, wo), 0.0001);
             let F_ab = F_AB(ray_hit.material.perceptual_roughness, NdotV);
 
@@ -109,7 +112,7 @@ fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 let p_light = random_emissive_light_pdf(ray_hit, ray.t, NdotV);
                 mis_weight = power_heuristic(p_bounce, p_light);
             }
-            if dot(ray_hit.world_normal, wo) > 0.0 {
+            if hit_front {
                 radiance += mis_weight * throughput * ray_hit.material.emissive;
             }
 
@@ -134,7 +137,7 @@ fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
             // raea: off a mirror's specular lobe, which light sampling can't reach, the ray sees the sun itself
             sees_sun = ray_hit.material.roughness <= MIRROR_ROUGHNESS_THRESHOLD && !next_bounce.diffuse_selected;
             ray_direction = next_bounce.wi;
-            ray_origin = ray_hit.world_position + (ray_hit.geometric_world_normal * RAY_T_MIN);
+            ray_origin = offset_ray_origin(ray_hit.world_position, ray_hit.geometric_world_normal, ray_hit.world_normal, ray_direction);
             ray_t_min = RAY_T_MIN;
             p_bounce = next_bounce.pdf;
             throughput *= next_bounce.throughput;

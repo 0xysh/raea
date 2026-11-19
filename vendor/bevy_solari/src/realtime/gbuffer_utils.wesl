@@ -33,7 +33,9 @@ fn gpixel_resolve(gpixel: vec4<u32>, depth: f32, pixel_id: vec2<u32>, view_size:
     let metallic = props.g;
     // raea: Bevy's G-buffer holds it pre-exposed (bevy_pbr deferred/functions.wesl), so a bright lamp doesn't clip
     let emissive = rgb9e5_to_vec3_(gpixel.g) / view.exposure;
-    let material = ResolvedMaterial(base_color, emissive, reflectance, perceptual_roughness, roughness, metallic);
+    // raea: the diffuse transmission, in the flags' top five bits (bevy_pbr deferred/functions.wesl)
+    let diffuse_transmission = f32((gpixel.a >> 27u) & 31u) / 31.0;
+    let material = ResolvedMaterial(base_color, emissive, reflectance, perceptual_roughness, roughness, metallic, diffuse_transmission);
 
     return ResolvedGPixel(world_position, world_normal, material);
 }
