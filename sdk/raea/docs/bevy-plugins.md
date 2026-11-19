@@ -232,7 +232,10 @@ They are, by group:
 - rendering: area_light_luts (rect lights), experimental_pbr_pcss (soft shadows), every pbr_* texture, the dfg, smaa
   and tonemapping LUTs, bluenoise_texture, meshlet and meshlet_processor, bevy_solari;
 - images: png, jpeg, ktx2, zstd_rust, basis-universal, exr, hdr, webp, dds, tga, bmp, gif, ico, qoi, pnm, tiff, and
-  the compressed image saver;
+  compressed_image_saver_universal. compressed_image_saver is left out (0.1.8): its encoders (ctt's etcpak, astcenc and
+  compressonator) build a copy for AVX2 whose C++ tables are set up before main on every CPU, so raea.exe stopped at
+  start on a PC without AVX (a Goldmont Celeron, a Nehalem; Intel's SDE showed it), and raea never runs Bevy's asset
+  processing, its only user;
 - audio: bevy_audio with mp3, flac, vorbis, wav and aac;
 - animation: bevy_animation, gltf_animation, morph and morph_animation;
 - tools: bevy_gizmos, bevy_dev_tools, debug, bevy_ui_debug, bevy_debug_stepping, sysinfo_plugin, reflect_functions,
