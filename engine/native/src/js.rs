@@ -186,7 +186,9 @@ fn run_here(root: &Path, cwd: &Path, entry: Entry, argv: Vec<String>, env: serde
     let globals = [
         ("__raea_argv", json!(argv)),
         ("__raea_env", Value::Object(env)),
-        ("__raea_platform", json!(if cfg!(target_os = "ios") { "ios" } else { std::env::consts::OS })),
+        // process.platform in Node's words (darwin, win32, linux): until 0.1.8 Rust's (macos, windows), so the agent
+        // shell's every test for a Mac or a Windows PC was false (#169)
+        ("__raea_platform", json!(match std::env::consts::OS { "macos" => "darwin", "windows" => "win32", os => os })),
         ("__raea_stdin", json!(stdin)),
         ("__raea_cwd", json!(cwd.display().to_string())),
     ];

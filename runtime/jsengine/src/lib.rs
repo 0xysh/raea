@@ -230,6 +230,52 @@ mod tests {
         assert!(stopped(&e), "{}: {e}", js.name());
     }
 
+    /// What a composition formats, as JavaScriptCore formats it (#169: QuickJS had no Intl, so these threw on Windows
+    /// and Linux): numbers, money, percents and compact counts, dates in a zone, plural rules, relative times, lists,
+    /// and words sorted. Each case is [expression, JavaScriptCore's answer].
+    const INTL: [(&str, &str); 14] = [
+        ("(1234567.891).toLocaleString('en-US')", "1,234,567.891"),
+        ("(1234567.891).toLocaleString('de-DE')", "1.234.567,891"),
+        ("new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(12.5)", "$12.50"),
+        ("new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(5000)", "\u{20ac}5,000.00"),
+        ("new Intl.NumberFormat('en', { notation: 'compact' }).format(1234567)", "1.2M"),
+        ("(0.256).toLocaleString('en-US', { style: 'percent' })", "26%"),
+        ("new Intl.NumberFormat('zh-TW').format(1234.5)", "1,234.5"),
+        ("new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, 10, 19)))", "19 November 2026"),
+        ("new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, 10, 19)))", "jeudi 19 novembre"),
+        ("new Date(Date.UTC(2026, 10, 19, 15, 4)).toLocaleDateString('en-US', { timeZone: 'UTC' })", "11/19/2026"),
+        ("[new Intl.PluralRules('en-US').select(2), new Intl.PluralRules('ru').select(3)].join(' ')", "other few"),
+        ("new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(-1, 'day')", "yesterday"),
+        ("new Intl.ListFormat('en', { type: 'conjunction' }).format(['a', 'b', 'c'])", "a, b, and c"),
+        ("['b', 'a', 'B', '\\u00e1'].sort((x, y) => x.localeCompare(y)).join(',')", "a,\u{e1},b,B"),
+    ];
+
+    /// Each INTL case's answer on `engine`, or what it threw
+    fn intl(engine: Engine) -> Vec<String> {
+        let mut js = engine.start().unwrap();
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let s = seen.clone();
+        js.native("note", Box::new(move |a| {
+            s.borrow_mut().push(a.join("|"));
+            Ok(Ret::Undefined)
+        }))
+        .unwrap();
+        for (expr, _) in INTL {
+            js.eval(&format!("try {{ note({expr}) }} catch (e) {{ note('threw ' + e) }}"), "intl.js").unwrap();
+        }
+        seen.take()
+    }
+
+    #[cfg(any(feature = "portable", not(target_vendor = "apple")))]
+    #[test]
+    fn quickjs_formats_as_javascriptcore_does() {
+        let got = intl(Engine::QuickJs);
+        assert_eq!(got, INTL.map(|(_, want)| want.to_string()));
+        // and on a Mac, as the engine there does
+        #[cfg(target_vendor = "apple")]
+        assert_eq!(got, intl(Engine::Jsc));
+    }
+
     #[cfg(target_vendor = "apple")]
     #[test]
     fn jsc() {

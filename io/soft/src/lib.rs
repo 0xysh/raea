@@ -282,6 +282,12 @@ pub fn h264_encoder(out: &Path, o: &EncodeOpts, intra_qp: Option<u8>) -> R<Box<d
         .rate_control_mode(RateControlMode::Bitrate)
         // every frame is a sample: rate control may not drop one (the edit has a frame for every tick)
         .skip_frames(false)
+        // no background detection: it takes a slowly changing dark ground (a night scene's sky, a glow drifting over
+        // black) for still and copies its old blocks forward, which undoes the bits adaptive quantization gives flat
+        // darks. A dim glow drifting at --quality master blotched in every sampled frame (6-8% of dark blocks
+        // stepping, raea check) at any bitrate or quantiser; without it, 0.1%, as a lossless encode of the same
+        // frames (#169). Adaptive quantization stays on: off, the darks blotch with or without this.
+        .background_detection(false)
         // BT.709 limited range, as raea_io_codec::yuv converts the frames and as the Mac's encoder tags them (vt.rs):
         // untagged, ffmpeg and other players read it as BT.601 and shift reds and greens
         .vui(openh264::encoder::VuiConfig::bt709());

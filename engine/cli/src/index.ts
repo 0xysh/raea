@@ -24,7 +24,7 @@ const out = (stdout: string, exitCode = 0, stderr = "") => ({ stdout, stderr, ex
 // `raea library` (library.ts), kept apart from the imports above
 import { libraryVerb } from "./library";
 // `raea show` (show.ts): what a session shows the person, in the raea app
-import { labelsIn, showVerb } from "./show";
+import { absolute, fromCwd, labelsIn, showVerb } from "./show";
 // `raea clothes` (clothes.ts): garments for SOMA's body from words
 import { clothesVerb } from "./clothes";
 // `raea bug` (bug.ts): an agent's report of a bug in raea, to raea's server
@@ -113,8 +113,12 @@ Not there: React hooks come from "react" (useMemo, useState), not from raea.
 
 /** The workspace a folder is in: the nearest folder at or above it holding .raea/workspace, through the shell's fs. */
 async function workspaceAbove(c: Ctx, from: string): Promise<string | undefined> {
-  for (let d = from.replace(/\/$/, ""); d; d = d.slice(0, d.lastIndexOf("/"))) {
+  // up to the root, / or on Windows C:
+  for (let d = from.replace(/[\\/]+$/, ""); d; ) {
     if (await c.fs.exists(`${d}/.raea/workspace`)) return d;
+    const up = Math.max(d.lastIndexOf("/"), d.lastIndexOf("\\"));
+    if (up < 0) break;
+    d = d.slice(0, up);
   }
   return undefined;
 }
@@ -123,7 +127,7 @@ async function workspaceAbove(c: Ctx, from: string): Promise<string | undefined>
 export function raeaHandler(host?: Host, engine?: Engine) {
   return async (args: string[], ctx: unknown) => {
     const c = ctx as unknown as Ctx;
-    const p = (rel: string) => (rel.startsWith("/") ? rel : `${c.cwd.replace(/\/$/, "")}/${rel}`);
+    const p = (rel: string) => fromCwd(c.cwd, rel);
     const ask = (op: string, a: Record<string, unknown> = {}) => {
       if (!host) throw new Error(`raea ${op} needs a host (the native raea's src/native.ts); this shell has none`);
       return host(op, a);
@@ -163,7 +167,7 @@ export function raeaHandler(host?: Host, engine?: Engine) {
           if (args.includes("--layout") && args[args.indexOf("--layout") + 1] !== "feature") return out("", 2, "raea init [--layout feature]\n");
           if (args.includes("--layout")) {
             for (const d of FEATURE_DIRS) await c.fs.mkdir(p(d), { recursive: true });
-            const name = c.cwd.replace(/\/$/, "").split("/").pop() || "project";
+            const name = c.cwd.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "project";
             for (const [f, body] of Object.entries(featureLayout(name, shape))) await put(f, body);
             return out(made.length ? `made ${made.join(", ")}; render it with raea render src/main.tsx\n` : "nothing to make: the project's files are here\n");
           }
@@ -205,7 +209,7 @@ export function raeaHandler(host?: Host, engine?: Engine) {
           }
           await c.fs.mkdir(p(home), { recursive: true });
           const done: string[] = [];
-          const shown = (rel: string) => (home.startsWith("/") ? `shared/components/${rel.slice(home.length + 1)}` : rel);
+          const shown = (rel: string) => (absolute(home) ? `shared/components/${rel.slice(home.length + 1)}` : rel);
           for (const n of names) {
             const set = REGISTRY[n];
             if (set) {

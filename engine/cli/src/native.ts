@@ -7,16 +7,17 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, extname } from "node:path";
-import { brandKit } from "./brand";
+import { brandKit, pixelsOf } from "./brand";
 import { readSite, stylesOf } from "./scrape";
 import { wordsOf } from "./heard";
 import { harness, library, show, task } from "./app";
+import { fromCwd } from "./show";
 import { clothesHost } from "./wardrobe";
 import { raeaHandler, type Engine, type Host } from "./index";
 
 const [raea, ...args] = process.argv.slice(2);
 const cwd = process.cwd();
-const at = (p: string) => (p.startsWith("/") ? p : `${cwd}/${p}`);
+const at = (p: string) => fromCwd(cwd, p);
 
 /** The project's shape: its cut's (cuts.json's edit), else a 1080x1920 vertical at 30 fps */
 function shape() {
@@ -98,6 +99,9 @@ function ensure(name: string): string {
 }
 
 function hearTake(take: string, out: string) {
+  // parakeet-mlx is Apple silicon's (MLX); elsewhere raea has no transcriber yet, so the two ways that work there
+  if (process.platform !== "darwin")
+    throw new Error(`cutting ${take} by its words needs its transcript, and raea transcribes only on a Mac so far: give it one as ${basename(out)} ([{ "text", "start_ms", "end_ms" }], beside it), or cut it by time: --at A-B`);
   const dir = mkdtempSync(`${tmpdir()}/raea-hear-`);
   try {
     const wav = `${dir}/take.wav`;
@@ -339,13 +343,15 @@ function curl(url: string, o: { out?: string; secs?: number } = {}): { body: str
   return { body, url: final || url };
 }
 
-/** A logo's size: an SVG's viewBox or width/height, a raster's pixels by sips */
+/** A logo's size: an SVG's viewBox or width/height, a raster's pixels from its header (else, on a Mac, by sips) */
 function sizeOf(file: string): { width?: number; height?: number } {
   if (file.endsWith(".svg")) {
     const head = readFileSync(file, "utf8").slice(0, 2000);
     const vb = /viewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(head);
     return vb ? { width: Math.round(+vb[1]), height: Math.round(+vb[2]) } : {};
   }
+  const own = pixelsOf(readFileSync(file));
+  if (own || process.platform !== "darwin") return own ?? {};
   const r = spawnSync("sips", ["-g", "pixelWidth", "-g", "pixelHeight", file], { encoding: "utf8" });
   const n = (k: string) => Number(new RegExp(`${k}: (\\d+)`).exec(r.stdout ?? "")?.[1]) || undefined;
   return { width: n("pixelWidth"), height: n("pixelHeight") };

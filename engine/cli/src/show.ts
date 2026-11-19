@@ -50,6 +50,14 @@ const FLAGS = new Set(["--open"]);
 
 /** The harness an agent runs in, named as the feed shows it, from the program that started this command (native.ts
  *  walks up its parents): any harness, not only the ones that mark their shells. */
+/** Whether a path is absolute: POSIX's /..., and Windows' C:\... (or C:/...), \\server\share\... and \... Until 0.1.8
+ *  only a POSIX one was, so on Windows `raea show C:\...\cut.mp4` named a file under the cwd (#169). Here, not node:path:
+ *  index.ts runs in the app's own shell too, with no Node. */
+export const absolute = (f: string) => /^(?:[\\/]|[A-Za-z]:[\\/])/.test(f);
+
+/** `f` from `cwd`: itself when it's absolute */
+export const fromCwd = (cwd: string, f: string) => (absolute(f) ? f : `${cwd.replace(/[\\/]$/, "")}/${f}`);
+
 export const HARNESSES: [RegExp, string][] = [
   [/^claude$/, "Claude Code"], [/^codex/, "Codex"], [/^gemini$/, "Gemini"], [/^kimi$/, "Kimi"], [/^opencode$/, "OpenCode"],
   [/^goose$/, "Goose"], [/^cursor-agent$/, "Cursor"], [/^amp$/, "Amp"], [/^qwen$/, "Qwen Code"], [/^crush$/, "Crush"], [/^aider$/, "Aider"],
@@ -80,7 +88,7 @@ export function parseShow(args: string[], cwd: string) {
   const choices = many("--choice");
   const unknown = args.find((a, i) => a.startsWith("--") && !WITH_VALUE.has(a) && !FLAGS.has(a) && !WITH_VALUE.has(args[i - 1] ?? ""));
   if (unknown) throw new Error(`no ${unknown} here\n${SHOW_USAGE}`);
-  const abs = (f: string) => (f.startsWith("/") ? f : `${cwd.replace(/\/$/, "")}/${f}`);
+  const abs = (f: string) => fromCwd(cwd, f);
   const files = args.filter((a, i) => !a.startsWith("--") && !WITH_VALUE.has(args[i - 1] ?? "")).map(abs);
   // the questions in order: each --question starts one and its --choice's follow; a --preview after a --choice is that
   // choice's, after the --question (before any choice) the question's own
@@ -151,7 +159,7 @@ export function showVerb(ask: Ask, args: string[], cwd: string, env: Record<stri
   if (a.sign !== undefined && (a.working.length !== 1 || a.done.length || !a.clip || !a.render)) throw new Error(`--sign N shows one comment's clip: raea show --on ITEM --working ID --sign N --clip FILE --render HASH\n${SHOW_USAGE}`);
   if ((a.clip || a.render) && a.sign === undefined) throw new Error(`--clip and --render go with --sign N, the ask the clip is for\n${SHOW_USAGE}`);
   if (a.states && a.asks.length && a.states.length !== a.asks.length) throw new Error(`--states says one state for each --ask: ${a.asks.length} asks, ${a.states.length} states\n${SHOW_USAGE}`);
-  const sign = a.sign === undefined ? undefined : { ask: Number(a.sign), clip: a.clip!.startsWith("/") ? a.clip : `${cwd.replace(/\/$/, "")}/${a.clip}`, render: a.render };
+  const sign = a.sign === undefined ? undefined : { ask: Number(a.sign), clip: fromCwd(cwd, a.clip!), render: a.render };
   const mark = (item: string, comments: string[], state: "working" | "done", version?: string) =>
     ask("task", { item, comments, state, by, sub: a.sub, note: state === "done" ? a.note : undefined, asks: state === "working" && a.asks.length ? a.asks : undefined, version, ...(state === "working" ? { status: a.status, states: a.states, sign } : {}) }) as { item: string; comments: string[] };
   const said = (m: { item: string; comments: string[] }, state: string) => `Marked ${m.comments.join(", ")} ${state} on ${m.item}: the person sees ${a.sub ? `${by.name} · ${a.sub}` : by.name} ${state === "working" ? "on them" : "finished them"}${state === "working" && a.status ? `; it reads "${a.status}"${a.states?.length ? ` (its asks: ${a.states.join(", ")})` : ""}` : ""}.`;

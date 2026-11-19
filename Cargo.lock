@@ -14051,6 +14051,7 @@ dependencies = [
  "raea-app-registry",
  "raea-core-brief",
  "raea-core-facts",
+ "raea-io-assets",
  "raea-io-home",
  "serde_json",
 ]
@@ -15349,6 +15350,8 @@ dependencies = [
 name = "raea-runtime-jsengine"
 version = "0.1.0"
 dependencies = [
+ "iana-time-zone",
+ "miniz_oxide 0.8.9",
  "objc2 0.6.5",
  "raea-io-home",
  "rquickjs",
