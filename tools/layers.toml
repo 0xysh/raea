@@ -98,7 +98,6 @@ raea-sys-measure = "systems"
 raea-sys-canvas = "systems"
 raea-sys-tweak = "systems"
 raea-sys-filters = "systems"
-raea-sys-wear = "systems"
 raea-sys-weathering = "systems"
 raea-sys-runoff = "systems"
 raea-sys-touch = "systems"
@@ -275,7 +274,6 @@ raea-sys-fingerprint = true
 raea-sys-fingerprint-use = true
 raea-sys-song = true
 raea-sys-k = true
-raea-sys-wear = true
 raea-sys-procmat = true
 # trees grown by species as meshes: crowns, leaves, bark and roots (the city's tree LODs build on them)
 raea-sys-foliage = true

@@ -102,7 +102,6 @@ members = [
     "systems/canvas",
     "systems/tweak",
     "systems/filters",
-    "systems/wear",
     "systems/weathering",
     "systems/runoff",
     "systems/touch",

@@ -14953,7 +14953,6 @@ dependencies = [
  "raea-sys-three-shader",
  "raea-sys-viewbox",
  "raea-sys-volume",
- "raea-sys-wear",
  "serde_json",
  "wgpu",
 ]
@@ -15495,7 +15494,6 @@ dependencies = [
  "raea-sys-frame",
  "raea-sys-layers",
  "raea-sys-procmat",
- "raea-sys-wear",
  "serde_json",
 ]
 
@@ -16529,15 +16527,6 @@ dependencies = [
  "bevy",
  "raea-core-program",
  "raea-sys-frame",
- "serde_json",
-]
-
-[[package]]
-name = "raea-sys-wear"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "raea-core-program",
  "serde_json",
 ]
 

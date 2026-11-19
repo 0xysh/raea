@@ -1,12 +1,13 @@
 // raea/wear's demo (docs/wear.feature WR7): the corner house (house.ts) baked once and shaded. It is drawn new,
 // after 80 years of a coal-burning city, and as a ruin. Each cause appears in false colour, and the house stands
-// under each of WR9's eight conditions by day and at dusk. A shower crosses it as a timelapse (rain-passes).
+// under each of WR9's eight conditions by day and at dusk. A shower crosses it as a timelapse (rain-passes). `paint`
+// is the other wear, worn paint with no bake (<WearExtension>, a material's `wear`; docs/examples.feature EX9).
 //   bun examples/materials/wear/make-house.ts            (once: writes media/house.glb)
 //   raea render examples/materials/wear/wear.tsx --composition after
 // The south front faces +z and the east front +x, so north is -z. The corner stands at (12, 0, 0).
 import { AbsoluteFill, Composition, registerRoot, staticFile, useCurrentFrame } from "raea";
-import { Cuboid, Model, ToneMapping } from "raea/3d";
-import { ExtendedMaterial, ShaderExtension, StandardMaterial } from "raea/pbr";
+import { Cuboid, Cylinder, Model, ToneMapping } from "raea/3d";
+import { ExtendedMaterial, ShaderExtension, StandardMaterial, WearExtension, type WearExtensionProps } from "raea/pbr";
 import { Camera3d } from "raea/camera";
 import { AmbientLight, DirectionalLight } from "raea/light";
 import { Mesh3d } from "raea/mesh";
@@ -121,6 +122,35 @@ function RainPasses() {
   return <House look={{ ...old, weather }} sky={raining ? "overcast" : "clear"} />;
 }
 
+/** Worn paint with no bake: street iron painted green, its edges chipped to the metal, grime low and rust run down,
+ *  by how worn each is (a bollard, a cabinet turned on the walk, a railing post). */
+export const PAINTED: { at: V3; yaw: number; shape: "bollard" | "cabinet" | "post"; wear: WearExtensionProps }[] = [
+  { at: [-1.4, 0, 0], yaw: 0, shape: "bollard", wear: { amount: 0.5 } },
+  { at: [0.2, 0, -0.3], yaw: 0.6, shape: "cabinet", wear: { amount: 0.8, grime: 0.7, seed: 3 } },
+  { at: [1.6, 0, 0.2], yaw: 0, shape: "post", wear: { amount: 1, chips: 0.9, rust: 0.7, rust_color: "#7e4220", seed: 5 } },
+];
+
+function Paint() {
+  const green = <StandardMaterial base_color="#2e5a3c" perceptual_roughness={0.45} metallic={0.1} />;
+  return (
+    <AbsoluteFill style={{ background: "#b9c2cc" }}>
+      <>
+        <Camera3d transform={Transform.fromXyz(0.4, 1.6, 4.6).lookingAt([0.2, 0.6, 0])} projection={{ Perspective: { fov: 0.7, near: 0.05, far: 50 } }} />
+        <ToneMapping mode="agx" />
+        <AmbientLight brightness={500} color="#c4ccd6" />
+        <DirectionalLight transform={Transform.fromXyz(-3, 5, 4).lookingAt([0, 0, 0])} illuminance={9000} color="#f2ece0" shadow_maps_enabled />
+        {PAINTED.map(({ at, yaw, shape, wear }) => (
+          <Mesh3d key={shape} transform={Transform.fromXyz(at[0], at[1] + (shape === "cabinet" ? 0.6 : shape === "post" ? 0.55 : 0.45), at[2]).withRotation(Quat.fromEuler("XYZ", 0, yaw, 0))}>
+            {shape === "cabinet" ? <Cuboid half_size={[0.4, 0.6, 0.22]} /> : <Cylinder radius={shape === "post" ? 0.06 : 0.11} half_height={shape === "post" ? 0.55 : 0.45} />}
+            <ExtendedMaterial base={green} extension={<WearExtension {...wear} />} />
+          </Mesh3d>
+        ))}
+        <Mesh3d transform={Transform.fromXyz(0, -0.05, 0)}><Cuboid half_size={[4, 0.05, 3]} /><StandardMaterial base_color="#8d8a84" perceptual_roughness={0.9} /></Mesh3d>
+      </>
+    </AbsoluteFill>
+  );
+}
+
 const CAUSES: WearCause[] = ["class", "sky", "sun", "cavity", "edge", "flow", "deposit", "touch", "ground", "element", "open", "winter", "drift", "litter", "crack", "loss"];
 const CONDITIONS = Object.keys(WEAR_CONDITIONS) as WearCondition[];
 
@@ -131,6 +161,7 @@ export const SHOTS: Record<string, () => JSX.Element> = {
   ruin: () => <House look={{ age: AGES.ruin, weather: { day: 172 } }} />,
   "ruin-near": () => <House look={{ age: AGES.ruin, weather: { day: 172 } }} {...NEAR} />,
   door: () => <House look={{ ...old, weather: { day: 172 } }} {...DOOR} />,
+  paint: () => <Paint />,
   ...Object.fromEntries(CAUSES.map((c) => [`debug-${c}`, () => <House debug={c} />])),
   ...Object.fromEntries(CONDITIONS.flatMap((c) => [
     [c, () => <House look={{ ...old, weather: WEAR_CONDITIONS[c] }} sky={SKY[c]} />],

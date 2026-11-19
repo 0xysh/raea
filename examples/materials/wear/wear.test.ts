@@ -1,6 +1,6 @@
 // The corner house (house.ts) and raea/wear's demo (wear.tsx): every part docs/wear.feature WR7 lists, openings cut
-// through the walls (where cracks start), a valid .glb with one material per class, and a still for every cause and
-// for each of WR9's eight conditions by day and at dusk.
+// through the walls (where cracks start), a valid .glb with one material per class, a still for every cause and for
+// each of WR9's eight conditions by day and at dusk, and worn paint (docs/examples.feature EX9).
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -70,6 +70,12 @@ describe("the demo", () => {
   test("has a still of every cause in false colour", () => {
     const listed = src.match(/const CAUSES: WearCause\[\] = \[([^\]]+)\]/)![1].match(/"(\w+)"/g)!.map((s) => s.slice(1, -1));
     expect(listed.sort()).toEqual(Object.keys(DEBUG_CAUSES).sort());
+  });
+  test("draws worn paint with no bake, as <WearExtension> (EX9), from light to heavy", () => {
+    expect(src).toContain("paint: () => <Paint />");
+    const amounts = [...src.matchAll(/shape: "\w+", wear: \{ amount: ([\d.]+)/g)].map((m) => Number(m[1]));
+    expect(amounts).toEqual([0.5, 0.8, 1]);
+    expect(src).toContain("extension={<WearExtension {...wear} />}");
   });
   test("draws each of WR9's eight conditions by day and at dusk", () => {
     expect(Object.keys(WEAR_CONDITIONS)).toHaveLength(8);
