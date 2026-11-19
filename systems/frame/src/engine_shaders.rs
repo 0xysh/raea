@@ -17,12 +17,16 @@
 use bevy::asset::io::embedded::EmbeddedAssetRegistry;
 use bevy::prelude::*;
 use bevy::shader::{Shader, Source};
+use raea_core_program::ir::Program;
+
+// <ShaderConstants>: a const in an engine shader set from TypeScript when the Engine opens (NB1a)
+pub mod consts;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Replaces the embedded shaders a project's engine-shaders folder or RAEA_ENGINE_SHADERS has files for. Call once
-/// every plugin is built, before app.finish.
-pub fn shadow(app: &mut App, edit_dir: &Path) {
+/// Replaces the embedded shaders a project's engine-shaders folder or RAEA_ENGINE_SHADERS has files for, then sets the
+/// constants the program's first frame asks for (consts.rs). Call once every plugin is built, before app.finish.
+pub fn shadow(app: &mut App, edit_dir: &Path, prog: &Program) {
     let mut done: Vec<String> = Vec::new();
     *PROJECT.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = project_dir(edit_dir);
     let mut swaps = Vec::new();
@@ -61,6 +65,20 @@ pub fn shadow(app: &mut App, edit_dir: &Path) {
     if let Some(root) = std::env::var_os("RAEA_ENGINE_SHADERS").map(PathBuf::from) {
         from_tree(app, &root, &done, &mut swaps);
     }
+    app.register_type::<consts::ShaderConstants>();
+    let set = consts::gather(prog);
+    let constants = with_constants(app, &set, &mut swaps);
+    CONSTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone_from(&set);
+    app.insert_resource(consts::Loaded(set)).add_systems(PostUpdate, consts::changed_later);
+    // what each shader unlike the binary's was compiled from, by its text's hash: two runs drew with the same shaders
+    // when these agree (a TS constant against the same edit in engine-shaders/), whatever their pixels' noise
+    if !swaps.is_empty() {
+        let list: Vec<_> = swaps
+            .iter()
+            .map(|(rel, t)| serde_json::json!({ "shader": rel, "fnv": format!("{:#x}", super::bevy_api::fnv1a(t.as_bytes())), "project": done.contains(rel), "constants": constants.contains(rel) }))
+            .collect();
+        raea_io_trace::event("engine_shaders", serde_json::json!({ "shaders": list }));
+    }
     if !swaps.is_empty() {
         app.insert_resource(Swaps(swaps)).add_systems(PreUpdate, swap_loaded.after(bevy::asset::AssetTrackingSystems));
     }
@@ -98,6 +116,55 @@ static PROJECT: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 /// RAEA_ENGINE_SHADERS' tree as the last Engine opened read it (from_tree): each shader's path and its file, for `text`.
 static TREE: std::sync::Mutex<Vec<(String, PathBuf)>> = std::sync::Mutex::new(Vec::new());
 
+/// The constants the last Engine opened with (shadow), for `text`.
+static CONSTS: std::sync::Mutex<Vec<consts::ShaderConstant>> = std::sync::Mutex::new(Vec::new());
+
+/// The program's shader constants written into the text each shader will compile from: an embedded one's in the
+/// registry and `swaps`, a declared one's checked here and applied by `text`. Says what it set, and what it couldn't;
+/// the embedded shaders it changed.
+fn with_constants(app: &mut App, set: &[consts::ShaderConstant], swaps: &mut Vec<(String, String)>) -> Vec<String> {
+    let mut shaders: Vec<&str> = set.iter().map(|c| c.shader.as_str()).collect();
+    shaders.sort_unstable();
+    shaders.dedup();
+    let declared = DECLARED.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+    let (mut said, mut changed) = (Vec::new(), Vec::new());
+    for shader in shaders {
+        let builtin = declared.iter().find(|(r, _)| *r == shader).map(|(_, t)| *t);
+        let base = match builtin {
+            Some(b) => Some(source(shader, b).into_owned()),
+            None => original(app, shader).and_then(|b| String::from_utf8(b).ok()),
+        };
+        let Some(mut s) = base else {
+            eprintln!("raea: <ShaderConstants>: no engine shader at {shader} (<crate>/<path under its src>, as Bevy embeds it)");
+            continue;
+        };
+        let before = s.clone();
+        for c in set.iter().filter(|c| c.shader == shader) {
+            match consts::rewrite(&s, &c.name, c.value) {
+                Ok((t, old)) => {
+                    said.push(format!("{shader} {} {old} -> {}", c.name, c.value));
+                    s = t;
+                }
+                Err(e) => eprintln!("raea: <ShaderConstants> {shader}: {e}; left as the shader has it"),
+            }
+        }
+        if builtin.is_none() && s != before {
+            let reg = app.world().resource::<EmbeddedAssetRegistry>();
+            reg.remove_asset(Path::new(shader));
+            reg.insert_asset(PathBuf::from(file!()), Path::new(shader), s.clone().into_bytes());
+            match swaps.iter_mut().find(|(r, _)| r == shader) {
+                Some(w) => w.1 = s,
+                None => swaps.push((shader.to_string(), s)),
+            }
+            changed.push(shader.to_string());
+        }
+    }
+    if !said.is_empty() {
+        eprintln!("raea: shader constants from the scene, compiled in at load: {}", said.join(", "));
+    }
+    changed
+}
+
 /// The shaders crates read through `text` (`declare`), each path and its built-in text: a project's file for one isn't
 /// stray, and an empty one is filled with it.
 static DECLARED: std::sync::Mutex<Vec<(&'static str, &'static str)>> = std::sync::Mutex::new(Vec::new());
@@ -125,6 +192,20 @@ fn original(app: &App, rel: &str) -> Option<Vec<u8>> {
 /// `rel` (`<crate>/<path under its src>`, named first with `declare`), else RAEA_ENGINE_SHADERS' file for it, else
 /// `builtin`. Says so when what it reads isn't `builtin`.
 pub fn text(rel: &str, builtin: &'static str) -> std::borrow::Cow<'static, str> {
+    let mut s = source(rel, builtin);
+    for c in CONSTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).iter().filter(|c| c.shader == rel) {
+        if let Ok((t, _)) = consts::rewrite(&s, &c.name, c.value) {
+            s = t.into();
+        }
+    }
+    if s != builtin {
+        raea_io_trace::event("engine_shader_text", serde_json::json!({ "shader": rel, "fnv": format!("{:#x}", super::bevy_api::fnv1a(s.as_bytes())) }));
+    }
+    s
+}
+
+/// The text `text` starts from: a project's or the tree's file, else `builtin`.
+fn source(rel: &str, builtin: &'static str) -> std::borrow::Cow<'static, str> {
     let project = PROJECT.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone().map(|d| d.join(rel)).filter(|f| f.is_file());
     let tree = || TREE.lock().unwrap_or_else(std::sync::PoisonError::into_inner).iter().find(|(r, _)| r == rel).map(|(_, f)| f.clone());
     let Some(file) = project.or_else(tree) else { return builtin.into() };

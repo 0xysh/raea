@@ -26,6 +26,10 @@
   defaults are the measured best, so leave them unless a test scene shows otherwise. A developer's environment
   variable of the same setting (`RAEA_SOLARI_DENOISE=0`, `RAEA_METALFX_PREEXPOSURE=4`) overrides the prop on every
   camera, for an A/B across many scenes at once.
+- The numbers inside Solari's and the denoiser's shaders are props too: `constants` (`spatialReuse`,
+  `mirrorRoughness`, `cacheEnd`, `cacheLifetime`, `cacheSearch`, the `reconnect...` three, `mirror`'s four rules,
+  `emissiveHistory`). They're compiled into the shaders when the scene loads, so set them from the first frame; a value
+  that changes later isn't drawn. `<ShaderConstants>` sets a constant in any other engine shader (`bevy/limits`).
 - Keep a look's settings as a TypeScript object and spread it: `const LIVE = { primarySamples: 4, scale: 0.67 }`,
   then `<SolariLighting {...LIVE} />` or `<SolariLighting {...LIVE} preexposure={32} />`.
 - For a still to judge the look against, use `<Pathtracer />` in its place: exact and slow, accumulating while the

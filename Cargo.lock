@@ -15963,6 +15963,7 @@ dependencies = [
  "raea-core-program",
  "raea-core-scene",
  "raea-io-media",
+ "raea-io-trace",
  "raea-sys-layers",
  "raea-sys-shots",
  "serde_json",

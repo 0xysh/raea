@@ -29,7 +29,7 @@ const Ball = () => (
 import { AmbientOcclusion, Decal, ExtendedMaterial, Fire } from "raea/pbr"
 ```
 
-`raea/pbr` exports 22 components, 1 function, 1 value, 35 types. Bevy's counterpart: `bevy_pbr, bevy_material`. Source: [sdk/raea/src/pbr.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/pbr.ts).
+`raea/pbr` exports 23 components, 1 function, 1 value, 37 types. Bevy's counterpart: `bevy_pbr, bevy_material`. Source: [sdk/raea/src/pbr.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/pbr.ts).
 
 ## Components
 
@@ -178,6 +178,19 @@ colour, texture or finish each gives, the rest of it kept (a run of cabinets pai
 | --- | --- | --- |
 | `materials` (required) | `MeshStandardMaterialProps[]` | the finishes, each a <MeshStandardMaterial>'s props, over every glTF material or the one its `material` names |
 | `children` | `ReactNode` | the models refinished |
+
+### `ShaderConstants`
+
+Sets constants in one of the engine's own shaders (raea's, Bevy's, Solari's) for this scene. Each `const NAME =...;`
+named is rewritten when the scene loads, before anything compiles, so a value is tried in a composition instead of a
+build; the shader's own value is the default. Compiled in once: a value that changes later in the composition isn't
+drawn, and raea says so. A name the shader doesn't declare is reported and left. One per shader. The common ones have
+typed props (<SolariLighting constants>); this reaches the rest.
+
+| Prop | Type | What it does |
+| --- | --- | --- |
+| `shader` (required) | `string` | the shader as the engine embeds it, `<crate>/<path under its src>`: "bevy_solari/realtime/restir.wesl", "raea_render_raytrace/emit_taa.wgsl". To read its constants, put an empty file of that name in the project's engine-shaders/ folder and render once: raea fills it with the shader |
+| `values` (required) | `Record<string, ShaderConstantValue>` | each `const NAME` to set, and its value; the const keeps its type |
 
 ### `ShaderExtension`
 
@@ -441,6 +454,18 @@ ImageSamplerDescriptor ({ path: "checker.png", sampler: { filter: "nearest" } } 
 | --- | --- | --- |
 | `path` (required) | `string` | the picture, in the media folder |
 | `sampler` (required) | `SamplerSpec` | how it's sampled: filter, address modes |
+
+### `ShaderConstantsProps`
+
+The props of [`ShaderConstants`](#shaderconstants), tabled there.
+
+### `ShaderConstantValue`
+
+A shader constant's value: a number (a float or a whole number, as the const is) or a boolean
+
+```ts
+type ShaderConstantValue = number | boolean
+```
 
 ### `ShaderExtensionProps`
 

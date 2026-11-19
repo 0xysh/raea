@@ -1,5 +1,6 @@
 // Ray-traced lighting: Bevy's Solari (docs/raytracing.feature RT3), on the camera it's inside.
 import { BevyComponent } from "../3d";
+import { shaderConstants } from "./shaders";
 
 export interface SolariLightingProps {
   /** ReSTIR: reuse light samples between pixels and frames (finer shadows, steadier in hard light; slower). Off by
@@ -68,6 +69,73 @@ export interface SolariLightingProps {
   /** how fast a sample's weight falls with its distance from a pixel's centre in the emission's history, exp(-k d²) in
    * output pixels: lower is softer. Default 6; RAEA_EMIT_TAA_SHARP overrides it */
   emissiveSharpness?: number;
+  /** constants in Solari's and the denoiser's shaders, compiled in when the scene loads (a value changed later in the
+   * composition isn't drawn); each left out keeps the shader's own, given in brackets. <ShaderConstants> reaches the
+   * rest */
+  constants?: {
+    /** how far ReSTIR looks for a neighbour's light samples, pixels (30): smaller keeps a shadow's edge, larger evens
+     * out noise */
+    spatialReuse?: number;
+    /** a surface smoother than this roughness is traced as a perfect mirror (0.001) */
+    mirrorRoughness?: number;
+    /** a bounce whose lobe is at least this wide, steradians, ends its path in the world cache (π): smaller ends paths
+     * sooner, cheaper and blotchier */
+    cacheEnd?: number;
+    /** frames a world-cache cell lives without being read (10) */
+    cacheLifetime?: number;
+    /** tries to find a world-cache cell after a hash collision (3) */
+    cacheSearch?: number;
+    /** ReSTIR's reconnection of a path to a neighbour's: only at a surface at least this rough (0.6) */
+    reconnectRoughness?: number;
+    /** past this distance, metres, the far surface's roughness floor falls with the ray's length (1) */
+    reconnectRelax?: number;
+    /** only when the bounce's footprint is at least this percent of the pixel's (0.02) */
+    reconnectFootprint?: number;
+    /** the mirror guides' rules (RT17): when a surface is drawn as what it reflects */
+    mirror?: {
+      /** the share of its reflectance that must leave through the mirror lobe (0.9) */
+      replaceFraction?: number;
+      /** how far its reflection's depth may shift between neighbouring pixels, as a share of that depth, before it
+       * counts as too curved (0.002) */
+      depthJitter?: number;
+      /** the normal change a flat surface still measures, the G-buffer's rounding (0.002) */
+      normalFloor?: number;
+      /** metres standing in for "infinitely far" when a mirror ray finds nothing (10000) */
+      skyDistance?: number;
+    };
+    /** the most frames an emissive surface's own light is gathered over (emissive "taa", 16): higher is smoother and
+     * slower to follow a change */
+    emissiveHistory?: number;
+  };
+}
+
+/** <SolariLighting constants> as the engine's shader constants (docs/nobuild.feature NB1a), or undefined. */
+export function solariConstants(c: SolariLightingProps["constants"]) {
+  if (!c) return undefined;
+  const at = (v: number | undefined, prop: string, whole = false) => {
+    if (v !== undefined && (!(Number.isFinite(v) && v >= 0) || (whole && !Number.isInteger(v)))) throw new RangeError(`SolariLighting: constants.${prop} is ${whole ? "a whole number" : "a number"} of 0 or more, got ${v}`);
+    return v;
+  };
+  const restir = "bevy_solari/realtime/restir.wesl";
+  const path = "bevy_solari/realtime/initial_path.wesl";
+  const cache = "bevy_solari/realtime/world_cache_query.wesl";
+  const mirror = "bevy_solari/realtime/resolve_dlss_rr_textures.wesl";
+  const m = c.mirror ?? {};
+  return shaderConstants([
+    [restir, "SPATIAL_REUSE_RADIUS_PIXELS", at(c.spatialReuse, "spatialReuse")],
+    ["bevy_solari/scene/bindings.wesl", "MIRROR_ROUGHNESS_THRESHOLD", at(c.mirrorRoughness, "mirrorRoughness")],
+    [path, "CACHE_TERMINATION_MIN_SOLID_ANGLE", at(c.cacheEnd, "cacheEnd")],
+    [cache, "WORLD_CACHE_CELL_LIFETIME", at(c.cacheLifetime, "cacheLifetime", true)],
+    [cache, "WORLD_CACHE_MAX_SEARCH_STEPS", at(c.cacheSearch, "cacheSearch", true)],
+    [path, "RECONNECTION_ROUGHNESS_MIN", at(c.reconnectRoughness, "reconnectRoughness")],
+    [path, "RECONNECTION_RELAX_DISTANCE", at(c.reconnectRelax, "reconnectRelax")],
+    [path, "RECONNECTION_FOOTPRINT_KAPPA", at(c.reconnectFootprint, "reconnectFootprint")],
+    [mirror, "FULL_REPLACEMENT_FRACTION", at(m.replaceFraction, "mirror.replaceFraction")],
+    [mirror, "MAX_VIRTUAL_DEPTH_JITTER", at(m.depthJitter, "mirror.depthJitter")],
+    [mirror, "NORMAL_QUANTIZATION_FLOOR", at(m.normalFloor, "mirror.normalFloor")],
+    [mirror, "ENVIRONMENT_VIRTUAL_DISTANCE", at(m.skyDistance, "mirror.skyDistance")],
+    ["raea_render_raytrace/emit_taa.wgsl", "HISTORY_CAP", at(c.emissiveHistory, "emissiveHistory")],
+  ]);
 }
 
 /** <SolariLighting>'s denoiser, guide, emission and jitter props as raea_render_raytrace::SolariSettings' fields (only
@@ -129,14 +197,16 @@ export function SolariLighting(p: SolariLightingProps = {}) {
   field("cache.cellSize", "world_cache_position_base_cell_size", c.cellSize);
   field("cache.lodScale", "world_cache_position_lod_scale", c.lodScale);
   const settings = solariSettings(p);
+  const constants = solariConstants(p.constants);
   const lighting = <BevyComponent type="bevy_solari::realtime::SolariLighting" value={value} />;
   const scaled = p.scale !== undefined && p.scale !== 1;
-  if (!scaled && !settings) return lighting;
+  if (!scaled && !settings && !constants) return lighting;
   return (
     <>
       {lighting}
       {scaled && <BevyComponent type="raea_render_raytrace::RenderScale" value={{ scale: p.scale }} />}
       {settings && <BevyComponent type="raea_render_raytrace::SolariSettings" value={settings} />}
+      {constants}
     </>
   );
 }

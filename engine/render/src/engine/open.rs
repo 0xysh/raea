@@ -199,7 +199,7 @@ impl Engine {
         let ss = supersampling(live);
         let (w, h) = (prog.width * ss, prog.height * ss);
         // every plugin has embedded its shaders by now: a project's engine-shaders/ and RAEA_ENGINE_SHADERS replace them
-        raea_sys_frame::engine_shaders::shadow(&mut app, dir);
+        raea_sys_frame::engine_shaders::shadow(&mut app, dir, prog);
         app.finish();
         mem_mark("engine: plugins finished");
         // RT4: MetalFX's denoiser goes in after Solari's lighting, which Solari's plugin adds as it finishes
