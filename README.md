@@ -86,8 +86,8 @@ On Windows 10 or 11, in PowerShell:
 irm https://raea.io/install.ps1 | iex
 ```
 
-It does the same under `~\.raea` and adds raea to your PATH. raea needs the Microsoft Visual C++ Redistributable
-(x64), which most machines already have, and a DirectX 12 or Vulkan GPU driver.
+It does the same under `~\.raea` and adds raea to your PATH. raea needs a DirectX 12 or Vulkan GPU driver; what
+else it needs (the Visual C++ runtime, FFmpeg and uv) is in its `bin\` folder.
 
 ## Hello
 

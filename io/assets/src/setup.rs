@@ -30,18 +30,32 @@ fn on_path(name: &str) -> Option<PathBuf> {
     std::env::split_paths(&std::env::var_os("PATH")?).map(|d| d.join(&exe)).find(|p| p.is_file())
 }
 
-/// The FFmpeg raea fetches on Windows when none is installed: GyanD's essentials build (the one winget's
-/// Gyan.FFmpeg.Essentials installs), kept on GitHub for each release; its SHA-256 is GitHub's digest for the asset
-const FFMPEG: &str = "9.0.2";
-const FFMPEG_SUM: &str = "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba";
+/// The tool shipped beside raea's own executable: on Windows the release puts FFmpeg and uv in raea.exe's bin/// (tools/release/win-bundle.sh), so raea finds them however it was started and fetches nothing
+fn beside_exe(name: &str) -> Option<PathBuf> {
+    beside(&std::env::current_exe().ok()?, name)
+}
 
-/// `ffmpeg` or `ffprobe` as raea runs it: the one on the PATH; else raea's own in $RAEA_TOOLS_CACHE (else
-/// ~/.cache/raea-tools)/ffmpeg/bin. On Windows, where FFmpeg is rarely installed, raea's own is fetched there once
-/// (114 MB; ffmpeg.exe, ffprobe.exe and its LICENSE kept, about 210 MB) the first time a video raea's own decoders
-/// can't read needs it, when `fetch`: H.264 with B-frames, HEVC, VP9 (a phone's or a camera's). Elsewhere FFmpeg is
-/// the system's: a Mac reads those on VideoToolbox, and Linux has FFmpeg in its package manager.
+fn beside(exe_path: &Path, name: &str) -> Option<PathBuf> {
+    Some(exe_path.parent()?.join(exe(name))).filter(|p| p.is_file())
+}
+
+/// The FFmpeg raea ships beside raea.exe on Windows and fetches where it isn't: raea's own build of FFmpeg's release,
+/// LGPL 2.1 or later: FFmpeg's own code, zlib and libvpx's decoders, its H.264 encoder Windows' own (Media
+/// Foundation) (tools/release/ffmpeg-win.sh, published with its source as the prerelease tools-ffmpeg-9.0.2-lgpl). Until 0.1.8 raea fetched GyanD's essentials build, GPLv3 with GPL libraries
+/// linked in, which raea couldn't ship. tools/release/win-bundle.sh reads these pins.
+const FFMPEG: &str = "9.0.2";
+const FFMPEG_TOP: &str = "ffmpeg-9.0.2-lgpl-win64";
+const FFMPEG_URL: &str = "https://github.com/shinyobjectz/raea/releases/download/tools-ffmpeg-9.0.2-lgpl/ffmpeg-9.0.2-lgpl-win64.zip";
+const FFMPEG_SUM: &str = "d3a3d8cdcd3ee488a94328200293a312e9c81923902b9fc3c9fa5dd18779ba8c";
+
+/// `ffmpeg` or `ffprobe` as raea runs it: the one on the PATH; else the one beside raea's executable (the Windows
+/// release ships it there); else raea's own in $RAEA_TOOLS_CACHE (else ~/.cache/raea-tools)/ffmpeg/bin. On Windows,
+/// where FFmpeg is rarely installed, raea's own is fetched there once the first time a video raea's own decoders
+/// can't read needs it, when `fetch`, if the release's copy is missing: H.264 with B-frames, HEVC, VP9 (a phone's or a
+/// camera's). Elsewhere FFmpeg is the system's: a Mac reads those on VideoToolbox, and Linux has FFmpeg in its package
+/// manager.
 pub fn ffmpeg_tool(name: &str, fetch: bool) -> Result<PathBuf, String> {
-    if let Some(p) = on_path(name) {
+    if let Some(p) = on_path(name).or_else(|| beside_exe(name)) {
         return Ok(p);
     }
     let dir = raea_io_home::env_path("RAEA_TOOLS_CACHE", ".cache/raea-tools").join("ffmpeg");
@@ -63,13 +77,11 @@ pub fn ffmpeg_tool(name: &str, fetch: bool) -> Result<PathBuf, String> {
         return Ok(bin);
     }
     raea_io_home::offline(&format!("fetching FFmpeg {FFMPEG} to read a video raea's own decoders can't"))?;
-    eprintln!("raea: this video needs FFmpeg, which isn't installed; fetching FFmpeg {FFMPEG} (114 MB, once) into {}", dir.display());
-    let name_zip = format!("ffmpeg-{FFMPEG}-essentials_build.zip");
-    let url = format!("https://github.com/GyanD/codexffmpeg/releases/download/{FFMPEG}/{name_zip}");
-    let top = format!("ffmpeg-{FFMPEG}-essentials_build");
-    let members = [format!("{top}/bin/ffmpeg.exe"), format!("{top}/bin/ffprobe.exe"), format!("{top}/LICENSE")];
+    eprintln!("raea: this video needs FFmpeg, which isn't installed; fetching FFmpeg {FFMPEG} (once) into {}", dir.display());
+    let name_zip = format!("{FFMPEG_TOP}.zip");
+    let members = [format!("{FFMPEG_TOP}/bin/ffmpeg.exe"), format!("{FFMPEG_TOP}/bin/ffprobe.exe"), format!("{FFMPEG_TOP}/LICENSE")];
     let part = dir.with_file_name(format!("ffmpeg.part{}", std::process::id()));
-    let fetched = fetch_archive(&part, &url, &name_zip, FFMPEG_SUM, true, &members.each_ref().map(String::as_str));
+    let fetched = fetch_archive(&part, FFMPEG_URL, &name_zip, FFMPEG_SUM, true, &members.each_ref().map(String::as_str));
     settle(&part, &dir, &bin, fetched, "FFmpeg")
 }
 
@@ -78,13 +90,14 @@ pub fn venv_python(dir: &Path) -> PathBuf {
     if cfg!(windows) { dir.join(".venv").join("Scripts").join("python.exe") } else { dir.join(".venv").join("bin").join("python") }
 }
 
-/// uv: $RAEA_UV, the one on the PATH, or raea's own, fetched the first time (about 20 MB) into $RAEA_TOOLS_CACHE (else
-/// ~/.cache/raea-tools)/uv, as tools/ensure.sh does
+/// uv: $RAEA_UV, the one on the PATH, the one beside raea's executable (the Windows release ships it there), or
+/// raea's own, fetched the first time (about 20 MB) into $RAEA_TOOLS_CACHE (else ~/.cache/raea-tools)/uv, as
+/// tools/ensure.sh does
 pub fn uv() -> Result<PathBuf, String> {
     if let Some(p) = std::env::var_os("RAEA_UV").map(PathBuf::from).filter(|p| p.is_file()) {
         return Ok(p);
     }
-    if let Some(p) = on_path("uv") {
+    if let Some(p) = on_path("uv").or_else(|| beside_exe("uv")) {
         return Ok(p);
     }
     let dir = raea_io_home::env_path("RAEA_TOOLS_CACHE", ".cache/raea-tools").join("uv");
@@ -192,6 +205,31 @@ pub fn run_setup(script: &Path, var: &str, dir: &Path) -> Result<std::process::E
 mod tests {
     use super::*;
 
+    // the release's own copy beside the executable is found; a missing one isn't
+    #[test]
+    fn a_tool_beside_the_executable_is_found() {
+        let root = std::env::temp_dir().join(format!("raea-beside-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::write(root.join("bin").join(exe("ffmpeg")), b"").unwrap();
+        let raea = root.join("bin").join(exe("raea"));
+        assert_eq!(beside(&raea, "ffmpeg"), Some(root.join("bin").join(exe("ffmpeg"))));
+        assert_eq!(beside(&raea, "uv"), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // the pins tools/release/win-bundle.sh reads: one line each, as its sed expects
+    #[test]
+    fn the_bundle_reads_these_pins() {
+        let src = include_str!("setup.rs");
+        for c in ["FFMPEG_URL", "FFMPEG_SUM", "FFMPEG_TOP", "UV"] {
+            assert_eq!(src.lines().filter(|l| l.starts_with(&format!("const {c}: &str = \""))).count(), 1, "{c}");
+        }
+        assert!(FFMPEG_URL.ends_with(&format!("/{FFMPEG_TOP}.zip")) && FFMPEG_TOP.contains(FFMPEG));
+        assert!(FFMPEG_SUM.len() == 64 && FFMPEG_SUM.bytes().all(|b| b.is_ascii_hexdigit()), "FFMPEG_SUM is a sha256");
+        assert!(src.contains("    (\"x86_64-pc-windows-msvc\", \""));
+    }
+
     // a fetch's end sweeps the parts stopped fetches left beside its tool, and only those
     #[test]
     fn settle_sweeps_stopped_fetches() {
@@ -203,7 +241,7 @@ mod tests {
             std::fs::write(p.join(f), b"x").unwrap();
         };
         // two stopped fetches (one with its zip), another tool's part, and this run's finished part
-        mk(&root.join("ffmpeg.part111"), "ffmpeg-9.0.2-essentials_build.zip");
+        mk(&root.join("ffmpeg.part111"), "ffmpeg-9.0.2-lgpl-win64.zip");
         mk(&root.join("ffmpeg.part222"), "x");
         mk(&root.join("uv.part333"), "x");
         let part = root.join("ffmpeg.part444");

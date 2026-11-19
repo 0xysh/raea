@@ -137,11 +137,15 @@ loader (Debian and Ubuntu: apt install libxkbcommon-x11-0 libxcursor1 libxi6 lib
       [ -f "$bin/$f" ] || { echo "release.sh: $bin has no $f (tools/release/onnxruntime.sh $bin)" >&2; exit 1; }
       cp "$bin/$f" "$stage/bin/"
     done
-    # the C runtime isn't in the zip (ort's ONNX Runtime needs its DLLs, and they're Microsoft's to ship): the VC++
-    # redistributable, which most Windows machines already have, provides it
+    # and what a PC with nothing installed and no downloads needs (tools/release/win-bundle.sh): the VC++ runtime
+    # raea.exe and onnxruntime.dll import, FFmpeg (raea's LGPL build) and uv, each with its licence
+    for f in $(cat "$root/tools/release/win-bundle.files"); do
+      [ -f "$bin/$f" ] || { echo "release.sh: $bin has no $f (tools/release/win-bundle.sh $bin)" >&2; exit 1; }
+      cp "$bin/$f" "$stage/bin/"
+    done
     printf '%s\r\n' "raea $version for Windows x86_64 (Windows 10 or 11, a DirectX 12 or Vulkan GPU driver; with no GPU, Mesa's lavapipe and WGPU_BACKEND=vulkan)." \
-      "It needs the Microsoft Visual C++ Redistributable (x64), which most machines already have:" \
-      "https://aka.ms/vs/17/release/vc_redist.x64.exe" > "$stage/README.txt" ;;
+      "bin\\ carries what raea needs from outside it: Microsoft's Visual C++ runtime and ONNX Runtime, FFmpeg (LGPL) and uv," \
+      "each with its licence beside it (ffmpeg-README.txt says where FFmpeg's source is)." > "$stage/README.txt" ;;
   *) cp "$bin/raea" "$bin/libraea_bundle.dylib" "$bin/raea-perceive" "$bin/raea-rune-host" "$bin/raea-page-host" "$stage/bin/"
     # stripped as they linked (tools/link-jit.sh, #88); a binary that still holds its debug map is a build from before
     for f in raea raea-page-host raea-rune-host raea-perceive; do
