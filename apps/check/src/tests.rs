@@ -356,15 +356,23 @@ fn a_card_sharing_one_word_with_another_line_isnt_held_to_it() {
 fn clipping_is_found_and_a_loud_clean_tone_isnt() {
     // a clean tone near full scale, then the same tone clamped (a limiter's flat tops), then pushed past full scale
     let loud = tone(3.0, &[(0.0, 3.0, -1.0)]);
-    assert!(clipped(&loud).is_empty(), "{:?}", clipped(&loud));
+    let one = |x: &[f32]| clipped(&[x.to_vec()]);
+    assert!(one(&loud).is_empty(), "{:?}", one(&loud));
     let clamped: Vec<f32> = loud.iter().map(|v| (v * 10.0).clamp(-0.3, 0.3)).collect();
-    assert_eq!(clipped(&clamped).len(), 1);
+    assert_eq!(one(&clamped).len(), 1);
     let over: Vec<f32> = loud.iter().map(|v| (v * 2.0).clamp(-1.0, 1.0)).collect();
-    assert_eq!(clipped(&over).len(), 1);
+    assert_eq!(one(&over).len(), 1);
     // one transient hitting full scale once isn't clipping
     let mut once = tone(3.0, &[(0.0, 3.0, -20.0)]);
     once[SR] = 1.0;
-    assert!(clipped(&once).is_empty());
+    assert!(one(&once).is_empty());
+    // clipping is a channel's: one side clipped is found; a centred voice at -1.6 dBFS a side is clean, though the mono
+    // fold (L + R) * 0.707 takes it past full scale (11-19: the walkaround's master read as clipping)
+    assert_eq!(clipped(&[loud.clone(), over.clone()]).len(), 1);
+    let centred: Vec<f32> = loud.iter().map(|v| v * 0.92).collect();
+    assert!(clipped(&[centred.clone(), centred.clone()]).is_empty());
+    let folded: Vec<f32> = centred.iter().map(|v| (v + v) * 0.7071).collect();
+    assert_eq!(one(&folded).len(), 1);
 }
 
 #[test]

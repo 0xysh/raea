@@ -152,7 +152,30 @@ pub fn flash_frames(video: &str, w: usize, h: usize, mut each: impl FnMut(f64, &
 
 /// `ffmpeg -i V -vn -ac 1 -ar RATE -f f32le -` (sound.rs sound): the sound folded to mono at `rate`
 pub fn mono(video: &str, rate: u32) -> R<Vec<f32>> {
-    Ok(raea_app_media::audio_folded(Path::new(video), rate, true, None, None, false)?.channels.swap_remove(0))
+    if native() {
+        return Ok(raea_app_media::audio_folded(Path::new(video), rate, true, None, None, false)?.channels.swap_remove(0));
+    }
+    ffmpeg_f32(video, 1, rate)
+}
+
+/// `ffmpeg -i V -vn -ac N -ar R -f f32le -`: the sound as N interleaved channels of floats
+fn ffmpeg_f32(video: &str, channels: u32, rate: u32) -> R<Vec<f32>> {
+    let out = Command::new("ffmpeg").args(["-v", "error", "-i", video, "-vn", "-ac", &channels.to_string(), "-ar", &rate.to_string(), "-f", "f32le", "-"]).output().map_err(|e| format!("ffmpeg: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("ffmpeg couldn't read the sound of {video}: {}", String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    Ok(out.stdout.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect())
+}
+
+/// `ffmpeg -i V -vn -ac 2 -ar R -f f32le -` (defects.rs clipping): each channel at its own level. Clipping is a
+/// channel's: on the mono fold (L + R) * 0.707 a centred voice reads 3 dB hotter than either side, and a master at
+/// -1.6 dBTP read as full scale (11-19, the walkaround's flat tops).
+pub fn channels(video: &str, rate: u32) -> R<Vec<Vec<f32>>> {
+    if native() {
+        return Ok(raea_app_media::audio_folded(Path::new(video), rate, false, None, None, false)?.channels);
+    }
+    let x = ffmpeg_f32(video, 2, rate)?;
+    Ok(vec![x.iter().step_by(2).copied().collect(), x.iter().skip(1).step_by(2).copied().collect()])
 }
 
 /// `ffmpeg -i V -vn -af ebur128=metadata=1,ametadata=print:key=lavfi.r128.M:file=- -f null -` (sound.rs sound): the

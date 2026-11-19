@@ -162,17 +162,9 @@ pub(crate) fn bed_up(rms: &[f64], speak: &[bool]) -> Vec<(f64, String)> {
 /// The sound's rules on an export: dead stops always; with the voice's words, a stretch with no voice over it and a bed
 /// too close under it
 pub(crate) fn sound(video: &str, words: Option<&[Word]>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
-    let x = if crate::read::native() {
-        crate::read::mono(video, SR as u32)?
-    } else {
-        let out = Command::new("ffmpeg").args(["-v", "error", "-i", video, "-vn", "-ac", "1", "-ar", &SR.to_string(), "-f", "f32le", "-"]).output().map_err(|e| format!("ffmpeg: {e}"))?;
-        if !out.status.success() {
-            return Err(format!("ffmpeg couldn't read the sound of {video}: {}", String::from_utf8_lossy(&out.stderr).trim()));
-        }
-        out.stdout.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
-    };
+    let x = crate::read::mono(video, SR as u32)?;
     let (rms, bands) = levels(&x);
-    sound_defects(&x, issues, passed);
+    sound_defects(&x, &crate::read::channels(video, SR as u32)?, issues, passed);
     let found = |list: Vec<(f64, String)>, p: u8| crate::defects::moments("sound", p, list);
     let stops = dead_stops(&rms, &bands);
     if stops.is_empty() {
