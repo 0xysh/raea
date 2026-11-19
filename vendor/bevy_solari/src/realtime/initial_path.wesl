@@ -5,7 +5,7 @@ import bevy_render::utils::octahedral_encode;
 import package::scene::brdf::{brdf_pdf, evaluate_and_sample_brdf, evaluate_brdf, EvaluateAndSampleBrdfResult, F_AB};
 import package::realtime::presample_light_tiles::unpack_resolved_light_sample;
 import package::realtime::bindings::{empty_reservoir, light_tile_resolved_samples, light_tile_samples, Reservoir, constants, view};
-import package::scene::sampling::{calculate_resolved_light_contribution, isinf, LightSample, NULL_LIGHT_ID, power_heuristic, trace_visibility, sample_environment_map_light_and_sun};
+import package::scene::sampling::{calculate_resolved_light_contribution, isinf, LightSample, NULL_LIGHT_ID, power_heuristic, trace_visibility, sample_environment_map_light_and_sun, sky_portal_mis_weight};
 import package::scene::bindings::{facing_normal, light_sources, MIRROR_ROUGHNESS_THRESHOLD, RAY_T_MAX, RAY_T_MIN, resolve_ray_hit_full, ResolvedMaterial, ResolvedRayHitFull, trace_ray};
 import package::realtime::world_cache_query::{get_cell_size, query_world_cache, query_world_cache_found, WORLD_CACHE_CELL_LIFETIME};
 
@@ -121,7 +121,9 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
             }
 
             // raea: the sun only off a mirror's specular lobe, which light sampling can't reach; elsewhere it finds the sun
-            let environment_map_light_radiance = sample_environment_map_light_and_sun(next_bounce.wi, path.material.roughness <= MIRROR_ROUGHNESS_THRESHOLD && !next_bounce.diffuse_selected);
+            // raea: and through a sky portal, weighted against light sampling, which finds that light too
+            let environment_map_light_radiance = sample_environment_map_light_and_sun(next_bounce.wi, path.material.roughness <= MIRROR_ROUGHNESS_THRESHOLD && !next_bounce.diffuse_selected)
+                * sky_portal_mis_weight(path.ray_origin, next_bounce.wi, next_bounce.pdf, p_nee * f32(di_samples));
             @if(RESTIR) {
                 generate_environment_map_light_candidate(&path, next_bounce, environment_map_light_radiance, primary_F_ab, bounce, rng);
             } @else {

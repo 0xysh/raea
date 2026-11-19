@@ -259,8 +259,8 @@ fn solari(@builtin(global_invocation_id) id: vec3<u32>) {
         var w_sum = 0.0;
         for (var i = 0u; i < count; i += 1u) {
             let s = generate_random_light_sample(&rng).resolved_light_sample;
-            // a directional light (w 0) is the light pass's
-            if (s.world_position.w == 0.0) {
+            // a directional light (w 0) is the light pass's, a sky portal's sky (w 2) the sky term's
+            if (s.world_position.w != 1.0) {
                 continue;
             }
             let p_hat = dot(toward_eye(s, P, V, g), LUMA);

@@ -2,7 +2,7 @@ import bevy_core_pipeline::tonemapping::tonemapping_luminance as luminance;
 import bevy_pbr::render::utils::{rand_f, rand_range_u, sample_cosine_hemisphere};
 import bevy_render::maths::PI;
 import package::realtime::presample_light_tiles::unpack_resolved_light_sample;
-import package::scene::sampling::{calculate_resolved_light_contribution, trace_visibility, sample_environment_map_light};
+import package::scene::sampling::{calculate_resolved_light_contribution, trace_visibility, sample_environment_map_light, sky_portal_light_pdf};
 import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN, RAY_T_MAX};
 import package::realtime::world_cache_query::query_world_cache_found;
 import package::realtime::bindings::{
@@ -70,7 +70,9 @@ fn sample_gi(@builtin(workgroup_id) workgroup_id: vec3<u32>, @builtin(global_inv
             let origin = geometry_data.world_position + (geometry_data.world_normal * RAY_T_MIN) + ray_direction * cut;
             escapes = trace_ray(origin, ray_direction, 0.0, RAY_T_MAX, RAY_FLAG_TERMINATE_ON_FIRST_HIT).kind == RAY_QUERY_INTERSECTION_NONE;
         }
-        if escapes {
+        // raea: light that came in through a sky portal is light sampling's (the cache's light is what it can't sample, as
+        // an emissive's own light is left out of it)
+        if escapes && sky_portal_light_pdf(geometry_data.world_position, ray_direction) == 0.0 {
             world_cache.active_cells_new_radiance[active_cell_id.x] += PI * sample_environment_map_light(ray_direction);
         }
     }

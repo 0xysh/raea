@@ -30,6 +30,20 @@ pub fn env_shown(sent: Option<&V>, cam: &mut BTreeMap<String, V>) {
 
 /// An <Environment>'s source in env_srcs: its panorama's path, or for <Environment room> `room:` and its blur (three's
 /// RoomEnvironment, which raea-sys-environment's room.rs makes, #165).
+/// <Environment portals>' openings, each four corners in order round it, as a corner and its two neighbours
+fn portal_corners(list: &[Value]) -> Vec<[[f64; 3]; 3]> {
+    let point = |p: &Value| -> Option<[f64; 3]> {
+        let a = p.as_array()?;
+        Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?, a.get(2)?.as_f64()?])
+    };
+    list.iter()
+        .filter_map(|q| {
+            let c: Vec<[f64; 3]> = q.as_array()?.iter().filter_map(point).collect();
+            (c.len() == 4).then(|| [c[0], c[1], c[3]])
+        })
+        .collect()
+}
+
 pub fn env_src(e: &Item) -> Option<String> {
     if e.props.get("room") == Some(&Value::Bool(true)) {
         return Some(format!("room:{}", n(&e.props, "blur", 0.0)));
@@ -181,6 +195,10 @@ fn lit(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String, V>, id: &s
         }).collect();
         if sky.iter().any(|s| *s > 0.0) {
             column(p, row, id, "sky_k", &sky);
+        }
+        // its sky portals (<Environment portals>), the first frame's: each a corner and its two neighbours
+        if let Some(list) = envs.iter().flatten().find_map(|e| e.props.get("portals")).and_then(Value::as_array) {
+            row.insert("env_portals".into(), V::S(serde_json::to_string(&portal_corners(list)).unwrap_or_default()));
         }
     }
     // a <Grade>'s colour fringes, keyed: each frame's own (0 where a frame has none), so a glitch's spike draws on its

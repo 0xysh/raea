@@ -111,6 +111,8 @@ struct LightSource {
 
 const LIGHT_SOURCE_KIND_EMISSIVE_MESH = 0u;
 const LIGHT_SOURCE_KIND_DIRECTIONAL = 1u;
+// raea: an opening the environment map lights the scene through (SkyPortals); id: its index in environment_map_light
+const LIGHT_SOURCE_KIND_SKY_PORTAL = 3u;
 
 struct DirectionalLight {
     direction_to_light: vec3<f32>,
@@ -128,6 +130,25 @@ struct EnvironmentMapLight {
     sky: vec3<f32>,
     // raea: 1 when some material is see-through (bind_group.rs), else trace_ray skips its second query
     any_alpha: u32,
+    // raea: the sky portals (bind_group.rs pack_sky_portals): three rows each, the corner and the area, then the edges
+    portal_count: u32,
+    portals: array<vec4<f32>, 24>,
+}
+
+// raea: a sky portal, the parallelogram corner + a u + b v for a and b from 0 to 1; normal: cross(u, v), unit length
+struct SkyPortal {
+    corner: vec3<f32>,
+    area: f32,
+    u: vec3<f32>,
+    v: vec3<f32>,
+    normal: vec3<f32>,
+}
+
+fn sky_portal(id: u32) -> SkyPortal {
+    let c = environment_map_light.portals[3u * id];
+    let u = environment_map_light.portals[3u * id + 1u].xyz;
+    let v = environment_map_light.portals[3u * id + 2u].xyz;
+    return SkyPortal(c.xyz, c.w, u, v, normalize(cross(u, v)));
 }
 
 const LIGHT_NOT_PRESENT_THIS_FRAME = 0xFFFFFFFFu;

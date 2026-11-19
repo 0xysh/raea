@@ -265,6 +265,27 @@ export interface EnvironmentProps {
   background?: boolean;
   /** the sky's brightness, when it should differ from the light's (`intensity` by default) */
   backgroundIntensity?: number;
+  /** the openings the sky lights a room through (a skylight, a window), each its four corners in order round it, in
+   * metres (a rectangle or any parallelogram). Traced lighting (Solari, the path tracer) samples the sky through each
+   * as it samples a lamp, so a room lit through a small opening gets that light smooth and whole, where rays bounced at
+   * random find it too rarely for the denoiser to keep (photo 5's hall: half its floor's sky light). Light passes both
+   * ways; up to 8; the first frame's hold. Raster lighting doesn't read them */
+  portals?: [number, number, number][][];
+}
+
+/** an <Environment>'s portals: each four corners, a parallelogram with some area */
+function checkPortals(portals: unknown) {
+  if (portals === undefined) return;
+  const bad = (why: string) => new TypeError(`Environment: portals ${why}, got ${JSON.stringify(portals)}`);
+  if (!Array.isArray(portals) || portals.length > 8) throw bad("is a list of up to 8 openings");
+  for (const q of portals) {
+    if (!(Array.isArray(q) && q.length === 4 && q.every((p) => Array.isArray(p) && p.length === 3 && p.every((x) => typeof x === "number" && Number.isFinite(x))))) throw bad("are each four corners [x, y, z]");
+    const [a, b, c, d] = q as [number, number, number][];
+    const u = b.map((x, i) => x - a[i]), v = d.map((x, i) => x - a[i]);
+    const edge = Math.max(Math.hypot(...u), Math.hypot(...v));
+    if (!(edge > 0) || Math.hypot(...a.map((x, i) => x + c[i] - b[i] - d[i])) > 0.01 * edge) throw bad("are each a parallelogram, corners in order round it");
+    if (Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) < 1e-6) throw bad("each have some area");
+  }
 }
 
 /** Light from all around, out of a panorama: soft light from the sky and reflections of it in every glossy or metal
@@ -288,6 +309,7 @@ export function Environment(props: EnvironmentProps) {
     if (v !== undefined && !(typeof v === "number" && v >= 0 && Number.isFinite(v))) throw new RangeError(`Environment: ${k} must be 0 or more, got ${v}`);
   }
   if (props.rotation !== undefined && !(typeof props.rotation === "number" && Number.isFinite(props.rotation))) throw new RangeError(`Environment: rotation must be a number of radians, got ${props.rotation}`);
+  checkPortals(props.portals);
   return node3d("Environment", props as unknown as Record<string, unknown>);
 }
 

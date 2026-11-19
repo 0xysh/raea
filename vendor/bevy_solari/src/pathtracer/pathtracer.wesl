@@ -2,7 +2,7 @@ import bevy_core_pipeline::tonemapping::tonemapping_luminance as luminance;
 import bevy_pbr::render::utils::{rand_f, rand_vec2f};
 import bevy_render::view::View;
 import package::scene::brdf::{evaluate_brdf, evaluate_and_sample_brdf, brdf_pdf, F_AB};
-import package::scene::sampling::{generate_random_light_sample, calculate_resolved_light_contribution, trace_visibility, LightContribution, random_emissive_light_pdf, power_heuristic, sample_environment_map_light_and_sun};
+import package::scene::sampling::{sky_portal_mis_weight, generate_random_light_sample, calculate_resolved_light_contribution, trace_visibility, LightContribution, random_emissive_light_pdf, power_heuristic, sample_environment_map_light_and_sun};
 import package::pathtracer::media::{media_collision, media_transmittance};
 import raea_sys_fog::froxel_volume::{henyey_greenstein, sample_phase};
 import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN, RAY_T_MAX, MIRROR_ROUGHNESS_THRESHOLD, materials, material_ids, material_alpha, coat_albedo, facing_normal, ALPHA_PREMULTIPLIED};
@@ -144,7 +144,8 @@ fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
             if rand_f(&rng) >= rr { break; }
             throughput /= rr;
         } else {
-            radiance += throughput * sample_environment_map_light_and_sun(ray_direction, sees_sun);
+            // raea: through a sky portal, weighted against light sampling, which finds that light too
+            radiance += throughput * sample_environment_map_light_and_sun(ray_direction, sees_sun) * sky_portal_mis_weight(ray_origin, ray_direction, p_bounce, 1.0);
             break;
         }
     }
