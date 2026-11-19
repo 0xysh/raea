@@ -39,6 +39,26 @@ export interface VolumetricFogProps {
    * al.'s epipolar sampling), more of them where the depth or the light changes, and each pixel read from the
    * samples either side of it at its depth; false lights them in the grid's cells with the rest */
   hero?: boolean;
+  /** what dims a light on its way through a volume to a point of it: "absorb" (the default: what the medium absorbs,
+   * which matched the path tracer best), "delta" (absorption and the share of scattering that turns light aside),
+   * "full" (the whole extinction), "off" (not dimmed) or "bevy" (Bevy's march's rule: each volume's light dimmed
+   * once by its own radius) */
+  shadow?: "absorb" | "delta" | "full" | "off" | "bevy";
+  /** the hero lights integrated at every pixel instead of at epipolar samples (false by default): several times
+   * slower, the reference the samples are measured against */
+  heroExact?: boolean;
+  /** the hero lights' epipolar samples: lines `lineGap` pixels apart round each light's rectangle on screen (8),
+   * samples `spacing` pixels apart along each (6), every `every`th traced (16) and those between traced too where
+   * they differ by more than `relTolerance` (0.2), `absTolerance` (2/255) or `depthTolerance` (0.02, relative) */
+  epipolar?: { lineGap?: number; spacing?: number; every?: number; relTolerance?: number; absTolerance?: number; depthTolerance?: number };
+  /** the hero passes read the grid's transmittance tricubic, as the apply pass reads its light (false by default:
+   * trilinear) */
+  tricubic?: boolean;
+  /** under <SolariLighting>, the fog's light from Solari's scene: false lights it as without Solari; or its
+   * settings: light candidates a cell (8), frames its history averages (16), sky rays a cell (1), what lights it
+   * (`lamps`, the emissive meshes, and `sky`, both on), the history's filter (on), and what the sky's guide is made
+   * of (`guide` 3: 1 the cell's own last, 2 half a neighbour's, 3 both, 0 none) */
+  solari?: boolean | { candidates?: number; frames?: number; skyRays?: number; lamps?: boolean; sky?: boolean; filter?: boolean; guide?: 0 | 1 | 2 | 3 };
 }
 
 /** Volumetric fog on the camera: light in the air, drawn inside every <FogVolume>, with shafts from the lights marked
@@ -54,6 +74,15 @@ export function VolumetricFog(props: VolumetricFogProps) {
   if (props.slices !== undefined && !(Number.isInteger(props.slices) && props.slices >= 32 && props.slices <= 256)) throw new RangeError(`VolumetricFog: slices must be a whole number from 32 to 256, got ${props.slices}`);
   if (props.tile !== undefined && ![4, 8, 16].includes(props.tile)) throw new RangeError(`VolumetricFog: tile must be 4, 8 or 16, got ${props.tile}`);
   if (props.samples !== undefined && !(Number.isInteger(props.samples) && props.samples >= 1 && props.samples <= 8)) throw new RangeError(`VolumetricFog: samples must be a whole number from 1 to 8, got ${props.samples}`);
+  if (props.shadow !== undefined && !["absorb", "delta", "full", "off", "bevy"].includes(props.shadow)) throw new RangeError(`VolumetricFog: shadow must be "absorb", "delta", "full", "off" or "bevy", got ${JSON.stringify(props.shadow)}`);
+  for (const [k, v] of Object.entries(props.epipolar ?? {})) if (!(typeof v === "number" && v > 0)) throw new RangeError(`VolumetricFog: epipolar.${k} must be a number over 0, got ${v}`);
+  if (typeof props.solari === "object") {
+    for (const k of ["candidates", "frames", "skyRays"] as const) {
+      const v = props.solari[k];
+      if (v !== undefined && !(Number.isInteger(v) && v >= 1)) throw new RangeError(`VolumetricFog: solari.${k} must be a whole number from 1, got ${v}`);
+    }
+    if (props.solari.guide !== undefined && ![0, 1, 2, 3].includes(props.solari.guide)) throw new RangeError(`VolumetricFog: solari.guide must be 0, 1, 2 or 3, got ${props.solari.guide}`);
+  }
   return node3d("VolumetricFog", colours("VolumetricFog", props as Record<string, unknown>, ["ambientColor"]));
 }
 

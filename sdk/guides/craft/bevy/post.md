@@ -31,6 +31,10 @@ Put these beside the camera, once each:
   0.966 / 52.7 dB at 7.7 ms (the march 0.751 / 28.8 dB at 3.4). `hero={false}` drops the exact shafts for the grid's
   softer ones (Mean Streets 2.8 ms a frame): use it when no shaft has a hard edge in shot. `slices` (128), `tile`
   (8 px) and `samples` (2 a cell) set the grid: more slices for a deep shot with fog close to the camera and far off.
+  The rest is tuning, each prop's default the measured best: `shadow` (what dims light passing through a volume,
+  "absorb"), `epipolar` (how densely the shafts are sampled), `heroExact` (every pixel integrated, the slow
+  reference), `tricubic`, and under <SolariLighting> `solari` (`false`, or its candidates, history frames, sky rays,
+  what lights it, filter and guide).
 - `<VolumetricFog mode="march" steps dither resolution />`: Bevy's ray march through each volume instead, as raea
   drew fog before the grid. Only for matching an older piece: it grains or steps where the grid doesn't, composites
   overlapping volumes in row order, and lights a volume's whole box with `ambient`. `steps` (64) is how finely each

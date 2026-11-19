@@ -60,6 +60,7 @@ pub use views::*;
 mod pipelines;
 pub use pipelines::*;
 mod solari;
+pub mod tuning;
 
 /// The camera's fog as a grid: the ambient light the fog scatters (linear, times its intensity), and the grid's
 /// slices along the view, its tile in pixels and the points lit a cell.
@@ -72,6 +73,8 @@ pub struct FroxelFog {
     pub samples: u32,
     /// the volumetric spot and directional lights integrated exactly per pixel (froxel_hero.wesl), not in the grid
     pub hero: bool,
+    /// what <VolumetricFog> tunes beyond its look (tuning.rs)
+    pub tune: tuning::Tuning,
 }
 
 pub fn insert(world: &mut World, e: Entity, fog: FroxelFog) {
@@ -118,14 +121,14 @@ struct GpuVolume {
     shadow: Vec4,
 }
 
-/// How the fog dims light on its way to a point of it (RAEA_FOG_SHADOW). The froxel passes scatter light once, so
+/// How the fog dims light on its way to a point of it (<VolumetricFog shadow>). The froxel passes scatter light once, so
 /// dimming it by the whole extinction loses the light the medium scatters on toward the point (white fog under a
 /// uniform sky: 0.75 of the truth's); not dimming it keeps light that a grey or thick medium absorbs (grey fog: 0.60
 /// against 0.40). The path tracer is the truth they're measured against (bevy_solari pathtracer/media.wesl):
 /// absorption alone matched it (grey 0.411 against 0.398, white 1.000; the hall's air 0.955 of the truth's, Bevy's
 /// 0.939), so it's the default.
 #[derive(Clone, Copy, PartialEq, Debug)]
-enum ShadowRule {
+pub enum ShadowRule {
     /// Bevy's: a constant exp(-extinction x the box's half-diagonal) on every point of it, nothing else
     Bevy,
     /// not dimmed
@@ -138,17 +141,6 @@ enum ShadowRule {
     Full,
 }
 
-fn shadow_rule() -> ShadowRule {
-    static RULE: std::sync::OnceLock<ShadowRule> = std::sync::OnceLock::new();
-    *RULE.get_or_init(|| match std::env::var("RAEA_FOG_SHADOW").as_deref() {
-        Ok("off") => ShadowRule::Off,
-        Ok("absorb") => ShadowRule::Absorb,
-        Ok("delta") => ShadowRule::Delta,
-        Ok("full") => ShadowRule::Full,
-        Ok("bevy") => ShadowRule::Bevy,
-        _ => ShadowRule::Absorb,
-    })
-}
 
 /// The frame's fog volumes, in rank order (their row ids), so the medium sums them in one order every frame.
 #[derive(Resource, Default)]
@@ -159,7 +151,9 @@ pub struct Volumes {
     buffer: StorageBuffer<Vec<GpuVolume>>,
 }
 
-fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &GlobalTransform, Option<&FogRank>, Option<&FogShape>)>>) {
+fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &GlobalTransform, Option<&FogRank>, Option<&FogShape>)>>, cams: Extract<Query<&FroxelFog>>) {
+    // the volumes are written once for every view: the first fog camera's rule
+    let rule = cams.iter().next().map_or(ShadowRule::Absorb, |f| f.tune.shadow);
     let mut found: Vec<(String, GpuVolume, [Vec3; 8])> = Vec::new();
     for (fv, t, rank, shape) in &q {
         let affine = t.affine();
@@ -173,7 +167,6 @@ fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &
         let extinction = fv.density_factor * (fv.absorption + fv.scattering);
         let colour = fv.fog_color.to_linear().to_vec3();
         let tint = fv.light_tint.to_linear().to_vec3();
-        let rule = shadow_rule();
         let bevy = if rule == ShadowRule::Bevy { (-extinction * radius).exp() } else { 1.0 };
         let light = colour * tint * fv.light_intensity * fv.scattering * fv.density_factor * bevy;
         let shadow = fv.density_factor
@@ -259,6 +252,7 @@ fn draw(
         Option<&ViewShadowBindings>,
         Option<&solari::SolariFog>,
         Option<&bevy::render::view::ViewUniformOffset>,
+        &FroxelFog,
     )>,
     cache: Res<PipelineCache>,
     pipelines: Option<Res<Pipelines>>,
@@ -268,7 +262,7 @@ fn draw(
     mut ctx: RenderContext,
 ) {
     let Some(p) = pipelines else { return };
-    let (target, depth, ids, grid, tex, view_group, msaa, shadows, solari_fog, view_offset) = view.into_inner();
+    let (target, depth, ids, grid, tex, view_group, msaa, shadows, solari_fog, view_offset, fog) = view.into_inner();
     if volumes.list.is_empty() {
         return;
     }
@@ -380,7 +374,7 @@ fn draw(
         );
         let epi = [0, 1, 2, 3].map(|i| cache.get_render_pipeline(ids.epi[i]));
         match (tex.epi.as_ref(), epi) {
-            (Some(t), [Some(coarse), Some(mark), Some(fine), Some(over)]) if std::env::var_os("RAEA_FOG_HERO_EXACT").is_none() => {
+            (Some(t), [Some(coarse), Some(mark), Some(fine), Some(over)]) if !fog.tune.hero_exact => {
                 // each light's samples along its lines: their depth; the coarse ones' light; every one's, interpolated
                 // or marked; the marked integrated
                 let reads = |a: &CachedTexture| device.create_bind_group("froxel_epipolar", &cache.get_bind_group_layout(&p.epi_layout), &BindGroupEntries::single(&a.default_view));

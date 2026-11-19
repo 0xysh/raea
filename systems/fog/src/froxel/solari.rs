@@ -64,15 +64,6 @@ pub struct SolariFogPipelines {
     integrate: CachedComputePipelineId,
 }
 
-fn on() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_FOG_SOLARI").as_deref() != Ok("0"))
-}
-
-fn setting(name: &str, default: u32) -> u32 {
-    std::env::var(name).ok().and_then(|v| v.parse().ok()).filter(|v: &u32| *v > 0).unwrap_or(default)
-}
-
 fn make_pipelines(cache: &PipelineCache, assets: &AssetServer, scene: &RaytracingSceneBindings) -> SolariFogPipelines {
     let layout = BindGroupLayoutDescriptor::new(
         "froxel_solari_layout",
@@ -148,9 +139,10 @@ pub fn prepare(
     assets: Res<AssetServer>,
     pipelines: Option<Res<SolariFogPipelines>>,
     scene: Option<Res<RaytracingSceneBindings>>,
-    mut views: Query<(Entity, &ViewGrid, &ExtractedView, &SolariLighting, Option<&mut SolariFog>)>,
+    mut views: Query<(Entity, &ViewGrid, &ExtractedView, &SolariLighting, Option<&mut SolariFog>, &super::FroxelFog)>,
 ) {
-    if !on() {
+    // <VolumetricFog solari>, RAEA_FOG_SOLARI_* over it (tuning.rs); a view with it off integrates as without Solari
+    if !views.iter().any(|v| v.5.tune.solari.on) {
         return;
     }
     let Some(scene) = scene else { return };
@@ -158,12 +150,17 @@ pub fn prepare(
         commands.insert_resource(make_pipelines(&cache, &assets, &scene));
         return;
     }
-    let (candidates, frames, sky) = (setting("RAEA_FOG_SOLARI_CANDIDATES", 8), setting("RAEA_FOG_SOLARI_FRAMES", 16), setting("RAEA_FOG_SOLARI_SKY", 1));
-    let parts = std::env::var("RAEA_FOG_SOLARI_PARTS").unwrap_or_else(|_| "lamps,sky".into());
-    let parts = parts.contains("lamps") as u32 | (parts.contains("sky") as u32) << 1;
-    let filter = (std::env::var("RAEA_FOG_SOLARI_FILTER").as_deref() != Ok("0")) as u32;
-    let guide = std::env::var("RAEA_FOG_SOLARI_GUIDE").ok().and_then(|v| v.parse().ok()).unwrap_or(3u32) & 3;
-    for (e, grid, view, solari, fog) in &mut views {
+    for (e, grid, view, solari, fog, tuned) in &mut views {
+        let t = tuned.tune.solari;
+        if !t.on {
+            if fog.is_some() {
+                commands.entity(e).remove::<SolariFog>();
+            }
+            continue;
+        }
+        let (candidates, frames, sky) = (t.candidates, t.frames, t.sky_rays);
+        let parts = t.lamps as u32 | (t.sky as u32) << 1;
+        let (filter, guide) = (t.filter as u32, t.guide);
         let g = grid.params.grid;
         let size = UVec2::new(g.x * g.w, g.y * g.z.div_ceil(g.w));
         let now = (view.clip_from_view * view.world_from_view.to_matrix().inverse(), grid.params.slab);

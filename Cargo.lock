@@ -15895,8 +15895,10 @@ dependencies = [
  "bevy",
  "bytemuck",
  "raea-core-program",
+ "raea-io-trace",
  "raea-sys-frame",
  "raea-sys-volume",
+ "serde_json",
 ]
 
 [[package]]

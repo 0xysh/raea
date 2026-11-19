@@ -1,0 +1,13 @@
+# Each knob's prop against the variable it replaced (tools/nobuild.sh props, docs/nobuild.feature NB1a): the scene, the
+# composition that sets the prop, the variables the scene's base composition is rendered with instead, the light path
+# (raster or solari) and the frame compared. Raster frames are compared exactly; Solari's against two base runs' noise.
+# scene	composition	variables	light	frame
+fog.tsx	shadow	RAEA_FOG_SHADOW=off	raster	1
+fog.tsx	exact	RAEA_FOG_HERO_EXACT=1	raster	1
+fog.tsx	tricubic	RAEA_FOG_TRICUBIC_T=1	raster	1
+fog.tsx	epi	RAEA_FOG_EPI=16,6,4	raster	1
+fog.tsx	grid	RAEA_FOG_GRID=8,96,1	raster	1
+fog.tsx	nohero	RAEA_FOG_HERO=0	raster	1
+fog.tsx	march	RAEA_FOG_MODE=march	raster	1
+fog.tsx	solari	RAEA_FOG_SOLARI_CANDIDATES=1 RAEA_FOG_SOLARI_FRAMES=1 RAEA_FOG_SOLARI_SKY=2 RAEA_FOG_SOLARI_PARTS=lamps RAEA_FOG_SOLARI_FILTER=0 RAEA_FOG_SOLARI_GUIDE=1	solari	23
+fog.tsx	solarioff	RAEA_FOG_SOLARI=0	solari	23

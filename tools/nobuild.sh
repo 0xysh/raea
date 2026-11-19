@@ -12,6 +12,10 @@
 #                                    RAEA_BIN (target/release/raea) renders with every pass on: settable (raea set it), refused
 #                                    (an array, a vector, not found) or absent (that Engine doesn't load the shader);
 #                                    written to docs/nobuild/consts.tsv, NB1a's check for each row
+#   tools/nobuild.sh props           each prop in tools/nobuild/props.tsv against the variable it replaced: its scene's
+#                                    composition that sets it, and the scene's base with the variable, rendered by
+#                                    RAEA_BIN and compared (the frame, and the settings the trace records); written to
+#                                    docs/nobuild/props.tsv, exits 1 if one fails
 #
 # A decision row (tab-separated): kind:name, then its class, the TypeScript form it becomes, its check, its status
 # (open, doing, done, stays). Classes: frame (changes what a frame shows or costs: a prop), view (a debug view: NB2),
@@ -47,13 +51,13 @@ causes() {
   cd "$RAEA" || exit 1
   # every RAEA_* variable the code names (its first mention), raea's own and its patches to vendored crates: any quoted
   # literal, as many are read through a helper (a switch(name), a settings table) rather than env::var at the name
-  # (git grep: tracked files only, so no target/ or node_modules)
-  git grep -nE '"RAEA_[A-Z0-9_]+"' -- '*.rs' ':!vendor' 'vendor/bevy_solari' 'vendor/blitz-dom' \
+  # (git grep: tracked and new files, never what .gitignore leaves out: no target/ or node_modules)
+  git grep --untracked -nE '"RAEA_[A-Z0-9_]+"' -- '*.rs' ':!vendor' 'vendor/bevy_solari' 'vendor/blitz-dom' \
       'vendor/blitz-paint' 'vendor/parley_engine' 'vendor/bevy_pbr' 'vendor/bevy_ui' |
     awk -F: '{ w = $1 ":" $2; s = $0; while (match(s, /"RAEA_[A-Z0-9_]+"/)) { print "env\t" substr(s, RSTART + 1, RLENGTH - 2) "\t" w; s = substr(s, RSTART + RLENGTH) } }' |
     sort -t$'\t' -k2,2 -u
   # constants in raea's and the vendored Solari's shaders (bench/ is LightBench's own)
-  git grep -nE '^[[:space:]]*const [A-Z][A-Z0-9_]*[[:space:]]*(:|=)' -- 'engine/*.wgsl' 'engine/*.wesl' 'systems/*.wgsl' 'systems/*.wesl' \
+  git grep --untracked -nE '^[[:space:]]*const [A-Z][A-Z0-9_]*[[:space:]]*(:|=)' -- 'engine/*.wgsl' 'engine/*.wesl' 'systems/*.wgsl' 'systems/*.wesl' \
       'vendor/bevy_solari/*.wgsl' 'vendor/bevy_solari/*.wesl' |
     sed -E 's/^([^:]+):([0-9]+):[[:space:]]*const ([A-Z][A-Z0-9_]*).*/shader\t\3\t\1:\2/' | sort -t$'\t' -k2,2 -k3,3 -u
   # optional features of every binary raea ships or its sessions build (each a binary that differs from the shipped one)
@@ -141,9 +145,65 @@ consts() {
   grep -q "unknown" "$out" || rm -rf -- "${dir:?}"
 }
 
+# a frame's difference from another in 8-bit levels: ImageMagick's METRIC (MAE the mean, PAE the largest), normalised
+diff_levels() {
+  magick compare -metric "$1" "$2" "$3" null: 2>&1 | sed -nE 's/.*\(([0-9.e+-]+)\).*/\1/p' | awk '{ printf "%.3f", $1 * 255 }'
+}
+
+# one render of a props.tsv scene: its composition on its light path with the variables given, into OUT; beside it
+# OUT.settings, the run's settings records (fog_settings, solari_settings) without what names the run
+props_render() {
+  local scene=$1 comp=$2 light=$3 out=$4; shift 4
+  local tdir=$out.trace l=()
+  rm -rf -- "${out:?}" "${tdir:?}"
+  mkdir -p "$tdir"
+  [ "$light" = solari ] && l=(RAEA_LIGHT=solari)
+  (cd "$RAEA/tools/nobuild" && env RAEA_TRACE_DIR="$tdir" ${l[@]+"${l[@]}"} "$@" "$bin" render "$scene" --composition "$comp" -o "$out" > /dev/null 2> "$out.err")
+  find "$tdir" -name events.jsonl -exec cat {} + 2>/dev/null | jq -c 'select(.kind == "fog_settings" or .kind == "solari_settings") | del(.camera, .view, .env, .t, .ts, .seq, .span)' | sort -u > "$out.settings"
+}
+
+props() {
+  bin=${RAEA_BIN:-$RAEA/target/release/raea}
+  local rows=$RAEA/tools/nobuild/props.tsv out=$DOCS/props.tsv
+  [ -x "$bin" ] || { echo "nobuild: no raea at $bin (RAEA_BIN)" >&2; exit 1; }
+  local dir; dir=$(mktemp -d "${TMPDIR:-/tmp}/nobuild-props.XXXXXX") || exit 1
+  printf '# scene\tcomposition\tvariables\tlight\tframe\tprop vs variable (mean, max levels)\tnoise (base twice, mean)\tprop vs base (mean)\tsettings in the trace\tverdict\n' > "$out"
+  local fails=0
+  while IFS=$'\t' read -r scene comp vars light frame; do
+    case $scene in '#'* | '') continue ;; esac
+    local f; f=$(printf 'frame-%05d.png' "$frame")
+    local b="$dir/${scene%.tsx}-$light-base"
+    # the scene's base twice, once a scene and light path: their difference is the run-to-run noise
+    if [ ! -d "$b" ]; then
+      props_render "$scene" base "$light" "$b"
+      props_render "$scene" base "$light" "$b.2"
+    fi
+    local p="$dir/$comp-prop" v="$dir/$comp-var"
+    props_render "$scene" "$comp" "$light" "$p"
+    # shellcheck disable=SC2086 # the variables are words
+    props_render "$scene" base "$light" "$v" $vars
+    local mae pae noise moved trace verdict
+    mae=$(diff_levels MAE "$p/$f" "$v/$f"); pae=$(diff_levels PAE "$p/$f" "$v/$f")
+    noise=$(diff_levels MAE "$b/$f" "$b.2/$f"); moved=$(diff_levels MAE "$p/$f" "$b/$f")
+    if [ -s "$p.settings" ] && cmp -s "$p.settings" "$v.settings"; then trace=same; else trace=differ; fi
+    # raster draws the same pixels twice: the prop and the variable must too; Solari's frames differ run to run, so
+    # theirs must be as near as two base runs and the prop must move the frame well past that
+    verdict=$(awk -v l="$light" -v mae="$mae" -v pae="$pae" -v n="$noise" -v m="$moved" -v t="$trace" -v img="$p/$f" 'BEGIN {
+      if (mae == "" || m == "") { print "no frame (" img ")"; exit }
+      same = l == "raster" ? pae == 0 : mae <= 2 * n + 0.002
+      moves = l == "raster" ? m > 0 : m > 4 * n + 0.01
+      print (same && moves && t == "same") ? "pass" : "FAIL" (same ? "" : ": prop and variable differ") (moves ? "" : ": the prop changes nothing") (t == "same" ? "" : ": settings differ") }')
+    [ "$verdict" = pass ] || fails=$((fails + 1))
+    printf '%s\t%s\t%s\t%s\t%s\t%s, %s\t%s\t%s\t%s\t%s\n' "$scene" "$comp" "$vars" "$light" "$frame" "$mae" "$pae" "$noise" "$moved" "$trace" "$verdict" | tee -a "$out"
+  done < "$rows"
+  echo "nobuild: $(grep -vc '^#' "$out") props against their variables in ${out#"$RAEA"/}, $fails failing, by $bin"
+  if [ "$fails" = 0 ]; then rm -rf -- "${dir:?}"; else echo "nobuild: renders kept in $dir"; exit 1; fi
+}
+
 case ${1:-} in
   builds) shift; builds "$@" ;;
   scan) scan ;;
   consts) consts ;;
-  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  props) props ;;
+  *) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
