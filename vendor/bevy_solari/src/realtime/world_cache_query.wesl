@@ -45,7 +45,10 @@ fn query_world_cache_found(world_position_in: vec3<f32>, world_normal: vec3<f32>
     // lining on one side, its dark cladding on the other) shared cells, and the lining lost a sixth of its light
     // (LightBench emitter.tsx cavity-8: 0.84 of the path tracer's at 15 cm cells). The jitter stays in the tangent
     // plane, so a flat surface keeps one plane. Without the size, cells of two LOD levels could share a key
-    let plane = bitcast<u32>(i32(floor(dot(world_position, world_normal) / (cell_size * 0.25))));
+    // Measured from the cell's centre, not the world's origin: from the origin, a curved surface a metre or more away
+    // changed planes every half degree of its normal, cut into strips of cells too thin to be found again
+    let cell_centre = (quantize_position(world_position, cell_size) + 0.5) * cell_size;
+    let plane = bitcast<u32>(i32(floor(dot(world_position - cell_centre, world_normal) / (cell_size * 0.25))));
     let level = bitcast<u32>(cell_size);
     var key = compute_key(world_position_quantized, world_normal_quantized, plane, level);
     let checksum = compute_checksum(world_position_quantized, world_normal_quantized, plane, level);
