@@ -443,6 +443,7 @@ pub fn init_solari_lighting_pipelines(
 ) {
     // raea: the pipelines that write the guides, for DLSS-RR or for guides.rs's
     let psr = guides.is_some() || cfg!(all(feature = "dlss", not(feature = "force_disable_dlss")));
+    let guides_rs = guides.is_some_and(|g| g.reflection_depth);
     let motion_vectors_storage_read_write = render_adapter
         .get_texture_format_features(MOTION_VECTOR_PREPASS_FORMAT)
         .flags
@@ -553,6 +554,11 @@ pub fn init_solari_lighting_pipelines(
             }
             ExtraBindGroup::DlssRrGuideBuffers => {
                 shader_defs.push("DLSS_RR_GUIDE_BUFFERS".into());
+                // raea: guides.rs's guides (MetalFX's) take one depth a pixel, so a pixel moving as its reflection does
+                // is as far off as it (resolve_dlss_rr_textures.wesl); DLSS-RR has a specular motion of its own
+                if guides_rs {
+                    shader_defs.push("PSR_DEPTH_FOLLOWS_MOTION".into());
+                }
             }
         }
         shader_defs.extend_from_slice(&extra_shader_defs);

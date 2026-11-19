@@ -21,7 +21,11 @@ use bevy_render::{
 /// In the render world: every Solari view writes the guides (primary surface replacement included) to its
 /// [`SolariGuideTextures`]. Inserted by the denoiser that reads them, before the render app starts.
 #[derive(Resource, Clone, Copy, Default)]
-pub struct SolariGuideBuffers;
+pub struct SolariGuideBuffers {
+    /// a glossy pixel that moves as its reflection does (perceptual roughness up to 0.25) and mostly reflects is as far
+    /// off as its reflection in the guide depth, as a mirror's is (resolve_dlss_rr_textures.wesl PSR_DEPTH_FOLLOWS_MOTION)
+    pub reflection_depth: bool,
+}
 
 /// A Solari view's guides, at its main pass's size, written each frame by its lighting pass, as DLSS-RR's are:
 /// diffuse and specular albedo (Rgba8Unorm, linear), world normal and perceptual roughness (Rgba16Float), depth

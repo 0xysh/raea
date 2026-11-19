@@ -64,7 +64,7 @@ pub(crate) fn add(app: &mut App) {
     // Solari's own guides (primary surface replacement: a mirror's pixel takes what it reflects), unless
     // RAEA_SOLARI_PSR=0, which guides from the G-buffer as before
     if std::env::var("RAEA_SOLARI_PSR").as_deref() != Ok("0") {
-        r.world_mut().insert_resource(bevy::solari::realtime::SolariGuideBuffers);
+        r.world_mut().insert_resource(bevy::solari::realtime::SolariGuideBuffers { reflection_depth: psr_depth() });
     }
 }
 
@@ -98,11 +98,14 @@ fn pre_exposure() -> f32 {
 const DECODE_WGSL: &str = include_str!("metalfx_guides.wgsl");
 
 
-/// A view's denoiser and its textures, made again when its input's or output's size changes.
+/// A view's denoiser and its textures, made again when its input's or output's size changes, or its depth's kind.
 struct View {
     /// the main pass's size (the guides'), and the denoised frame's
     size: UVec2,
     out_size: UVec2,
+    /// whether its depth is Solari's guide depth (R32Float: what a mirror's pixel reflects, as far as the reflection
+    /// goes) rather than the prepass's (Depth32Float, the glass's own)
+    guide_depth: bool,
     scaler: Retained<ProtocolObject<dyn MTLFXTemporalDenoisedScaler>>,
     diffuse: wgpu::Texture,
     specular: wgpu::Texture,
@@ -147,7 +150,7 @@ fn mtl(t: &wgpu::Texture) -> Option<Retained<ProtocolObject<dyn MTLTexture>>> {
 }
 
 impl View {
-    fn new(dev: &wgpu::Device, size: UVec2, out_size: UVec2) -> Result<View, String> {
+    fn new(dev: &wgpu::Device, size: UVec2, out_size: UVec2, guide_depth: bool) -> Result<View, String> {
         let hal = unsafe { dev.as_hal::<Metal>() }.ok_or("the GPU isn't on Metal")?;
         let device = hal.raw_device();
         unsafe {
@@ -156,7 +159,7 @@ impl View {
             }
             let d = MTLFXTemporalDenoisedScalerDescriptor::new();
             d.setColorTextureFormat(MTLPixelFormat::RGBA16Float);
-            d.setDepthTextureFormat(MTLPixelFormat::Depth32Float);
+            d.setDepthTextureFormat(if guide_depth { MTLPixelFormat::R32Float } else { MTLPixelFormat::Depth32Float });
             d.setMotionTextureFormat(MTLPixelFormat::RG16Float);
             d.setDiffuseAlbedoTextureFormat(MTLPixelFormat::RGBA16Float);
             d.setSpecularAlbedoTextureFormat(MTLPixelFormat::RGBA16Float);
@@ -177,6 +180,7 @@ impl View {
             Ok(View {
                 size,
                 out_size,
+                guide_depth,
                 scaler,
                 diffuse: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx diffuse albedo"),
                 specular: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx specular albedo"),
@@ -279,6 +283,15 @@ fn denoise_up(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local
     run(entity, item, &device, &mut kit, &mut ctx, true);
 }
 
+/// The denoiser's depth is Solari's guide depth, where a glossy pixel is as far off as what it reflects (docs/raytracing.feature
+/// RT34): an orb's reflection in a monitor's glass no longer trails it (+0.71 -> +0.08 stops). RAEA_SOLARI_PSR_DEPTH=0
+/// gives it the prepass's depth, as before. A glossy pixel whose reflection leaves the scene must have its depth too: left
+/// unwritten (0, the sky's) MetalFX darkened window.tsx's shelves, far from those pixels, by 8%
+fn psr_depth() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_PSR_DEPTH").as_deref() != Ok("0"))
+}
+
 type Item<'a> = (&'a ViewTarget, &'a ViewPrepassTextures, &'a ExtractedView, &'a ExtractedCamera, &'a SolariLighting, Option<&'a MainPassResolutionOverride>, Option<&'a TemporalJitter>, bool, Option<&'a SolariGuideTextures>);
 
 /// The guides from the G-buffer and the emissive out, at the main pass's size; MetalFX's denoiser, out to the whole
@@ -298,8 +311,11 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     let out_size = if up { full } else { size };
     let jitter = jitter.map_or(Vec2::ZERO, |j| -j.offset * super::upscale::jitter_gain(true, true));
     let dev = device.wgpu_device().clone();
-    if kit.views.get(&entity).map(|v| (v.size, v.out_size)) != Some((size, out_size)) {
-        match View::new(&dev, size, out_size) {
+    // with Solari's guides, the denoiser's depth is theirs: a mirror's pixel as far off as what it reflects, so when what
+    // it reflects moves off (an orb in a monitor's glass) the wall now there is a disocclusion and its history goes
+    let guide_depth = guides.is_some() && psr_depth();
+    if kit.views.get(&entity).map(|v| (v.size, v.out_size, v.guide_depth)) != Some((size, out_size, guide_depth)) {
+        match View::new(&dev, size, out_size, guide_depth) {
             Ok(v) => {
                 kit.views.insert(entity, v);
             }
@@ -363,7 +379,7 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     let mut raw = dev.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("metalfx denoise") });
     let done = unsafe {
         raw.as_hal_mut::<Metal, _, _>(|e| match e.and_then(|e| e.raw_command_buffer()) {
-            Some(cb) => v.encode(cb, color, &depth.texture.texture, guide_motion, ext, jitter, solari.reset),
+            Some(cb) => v.encode(cb, color, match guides { Some(g) if v.guide_depth => &g.depth.texture, _ => &depth.texture.texture }, guide_motion, ext, jitter, solari.reset),
             None => Err("wgpu gave no Metal command buffer"),
         })
     };
