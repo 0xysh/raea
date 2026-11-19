@@ -24,7 +24,10 @@
 - **Without `--manifest`**, `raea render` writes the export alone, without the measurements `raea check` reads. Render
   another deliverable from its own file the same way (`raea render NAME.tsx -o NAME.mp4 --manifest NAME.json`) and
   check it.
-- **Loudness** comes out at -14 LUFS integrated (±1) with true peak at or below -1 dBTP when `<Mix>` is in the tree.
+- **Loudness** comes out at -14 LUFS integrated (±1) with true peak at or below -1 dBTP: raea levels each line of
+  dialogue (the `voice` bus, or footage on no bus) to the same loudness and masters the piece, so don't measure lines
+  or set `gainDb` to level them, and don't master the voice outside raea. `gainDb` is for a deliberate change, on top
+  of raea's level. `<Mix lufs={…} ceiling={…}>` sets another target.
 
 ## Why
 

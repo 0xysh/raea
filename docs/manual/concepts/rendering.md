@@ -109,8 +109,14 @@ out of order, a phrase `word()` can't find, or a missing prop.
 
 ## Loudness
 
-When the composition has a `<Mix>`, the export comes out at -14 LUFS integrated (within 1) with true peak at or below
--1 dBTP, which is what the major platforms play back at.
+raea mixes and masters every render's sound. First the mix: each line of dialogue (a clip on the `voice` bus, or
+footage's own sound on no bus) is measured over the part of its take it plays and brought to the same level, so no line
+is louder or quieter than the next. Room tone and silent takes keep their level, and so do music, effects and anything
+on another bus, which sit under the dialogue as their buses set them. A clip's `gainDb` is an offset on top of the
+level. Then the master: a leveller rounds the loud passages, the whole piece comes up to its loudness, and a true-peak
+limiter holds it at the ceiling. A join that drops into dead silence gets the room's own tone. The export comes out at
+-14 LUFS integrated (within 1) with true peak at or below -1 dBTP, which is what the major platforms play back at;
+`<Mix lufs={…} ceiling={…}>` sets another target.
 
 ## Mistakes to avoid
 

@@ -80,6 +80,7 @@ members = [
     "systems/k",
     "systems/tone",
     "systems/mix",
+    "systems/mix/level",
     "systems/ml",
     "systems/mlx",
     "systems/kimodo",

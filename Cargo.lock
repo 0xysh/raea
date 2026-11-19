@@ -16101,8 +16101,16 @@ dependencies = [
  "cpal 0.15.3",
  "firewheel",
  "raea-io-media",
+ "raea-sys-mix-level",
  "raea-sys-tone",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-mix-level"
+version = "0.1.0"
+dependencies = [
+ "raea-io-media",
 ]
 
 [[package]]

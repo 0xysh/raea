@@ -181,15 +181,31 @@ pub fn master_raw(raw: &raea_io_media::Audio, master: Option<(f64, f64)>) -> rae
     raea_io_media::Audio { rate: raw.rate, channels: vec![l, r] }
 }
 
+/// What raea masters a piece to when it has no <Mix>: the major platforms' loudness (LUFS) and a -1 dBTP ceiling
+pub const MIX: (f64, f64) = (-14.0, -1.0);
+
 /// The master over a raw bounce, the one function every render uses (react's fed and page renders, raea-render's SQL renders, a
 /// play's master-gain): with a <Mix> (`mix`: target LUFS, ceiling dBTP), the gain from the raw sound to the target, then
 /// the limiter at the ceiling, the ceiling lowered by any overshoot `encode` (an AAC round trip) puts back (twice at most);
-/// without one, the live default. Returns the master it used and the mastered sound.
+/// without one, MIX; the leveller (nodes::LEVEL) rounds the loud passages first, and the gain is made up for what it
+/// took. Returns the master it used and the mastered sound.
 pub fn master_mix(raw: &raea_io_media::Audio, mix: Option<(f64, f64)>, encode: Option<&dyn Fn(&raea_io_media::Audio) -> Result<raea_io_media::Audio, String>>) -> (Option<(f64, f64)>, raea_io_media::Audio) {
-    let Some((lufs, ceiling)) = mix.filter(|_| raea_io_media::audio::lufs(raw).is_finite()) else { return (None, master_raw(raw, None)) };
-    let gain = raea_io_media::audio::master_gained(raw, lufs, ceiling).1;
+    // raea masters whatever it renders (11-19): without a <Mix>, to MIX's loudness and ceiling
+    let Some((lufs, ceiling)) = mix.or(Some(MIX)).filter(|_| raea_io_media::audio::lufs(raw).is_finite()) else { return (None, master_raw(raw, None)) };
+    let mut gain = raea_io_media::audio::master_gained(raw, lufs, ceiling).1;
+    // a join the mix drops into dead silence gets the room's tone, found at the level the master plays it (joins.rs)
+    let raw = &crate::joins::filled(raw, gain);
+    let mut a = master_raw(raw, Some((gain, ceiling)));
+    // the leveller takes a little loudness with the peaks: made up, twice at most
+    for _ in 0..2 {
+        let got = raea_io_media::audio::lufs(&a);
+        if !got.is_finite() || (got - lufs).abs() <= 0.2 {
+            break;
+        }
+        gain += lufs - got;
+        a = master_raw(raw, Some((gain, ceiling)));
+    }
     let mut master = Some((gain, ceiling));
-    let mut a = master_raw(raw, master);
     if let Some(enc) = encode {
         let mut c = ceiling;
         for _ in 0..2 {

@@ -188,6 +188,8 @@ fn push_sound(cx: &mut Ctx, props: &Map<String, Value>, skey: &str) {
         // a sound track with samples: a short window says so (decoding the whole take for it held a long take whole)
         let audible = *cx.audible.entry(file.clone()).or_insert_with(|| raea_io_media::decode_audio_window(&file, 0.0, 0.05).is_ok_and(|a| a.len() > 0));
         if !muted && volume > 0.0 && audible {
+            // raea's mix: dialogue at one level, gainDb an offset on it (raea-sys-mix level.rs), as live play has it
+            let volume = volume * raea_sys_mix::level::gain(&file, num(props, "data-clip-from").unwrap_or(0.0), num(props, "data-clip-to"), props.get("data-bus").and_then(|v| v.as_str())) as f64;
             cx.sounds.push(Sound { src: file.display().to_string(), at, volume, rate: num(props, "data-playback-rate").unwrap_or(1.0), key: skey.to_string(), fade_in: num(props, "data-fade-in"), fade_out: num(props, "data-fade-out"), bus: props.get("data-bus").and_then(|v| v.as_str()).map(str::to_string) });
         }
     }
