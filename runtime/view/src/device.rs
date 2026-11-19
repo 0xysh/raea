@@ -16,7 +16,7 @@ pub fn render_creation() -> bevy::render::settings::RenderCreation {
                 RenderInstance::new(instance),
             )
         }
-        // Bevy's own device asks for the backends raea's would (WGPU_BACKEND, else DX12 for an Intel GPU on Windows)
+        // Bevy's own device asks for the backends raea's would (WGPU_BACKEND, else DX12 for an Intel or AMD GPU on Windows)
         Some(Err(e)) => {
             eprintln!("raea: the shared GPU device isn't there ({e}); Bevy makes its own");
             own()

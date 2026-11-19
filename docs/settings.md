@@ -48,6 +48,7 @@ libraries (pianos, General MIDI instruments, orchestral and percussion samples, 
 
 | Setting | What |
 |---|---|
+| `WGPU_BACKEND` | The GPU driver API raea draws with: `dx12`, `vulkan`, `gl` (or several, comma-separated). Unset, raea picks: on Windows, DirectX 12 when the PC has an Intel or AMD GPU (also beside an NVIDIA one: their OpenGL and Vulkan drivers crashed raea there), else wgpu's own pick, which is Vulkan on an NVIDIA-only PC. Set it when the window or a render fails on a GPU, e.g. `WGPU_BACKEND=dx12` |
 | `RAEA_VELLO_BUMP=full` | Pages are drawn with Vello's own buffer sizes from the first frame, instead of raea's smaller ones (about 100 MB less GPU memory). A page past raea's sizes is found and drawn again at Vello's anyway, with a line on stderr, so this only saves that redraw |
 | `RAEA_PAGE_DRAWN_CHECK=0` | Pages are drawn without checking that Vello drew them. For measuring what the check costs (about 2% in one test): a page past Vello's buffers then shows the frame before it again, or nothing |
 | `RAEA_NOT_APPLIED=0` | A page's CSS is parsed without noting what stylo drops, so a render ends without its NOTE of what the page didn't apply (and its manifest's `not_applied` lists only loads that failed). For measuring what the note costs |
