@@ -1,8 +1,10 @@
 //! A local model's install on any OS, with nothing from Homebrew or the system's package manager: its
 //! tools/<model>/setup.py, run by uv (which makes the venv and brings its own Python), and the venv's Python run after.
 //! uv is the one on the PATH, else raea's own: a pinned release fetched once into ~/.cache/raea-tools/uv and checked
-//! against its SHA-256 (where tools/ensure.sh puts the same uv on a Mac, so either finds the other's). Until 0.1.8 each setup was a `sh` script needing uv already installed (`brew install uv`), so Windows
-//! had no way to install any local model, and a Mac without Homebrew none either.
+//! against its SHA-256 (where tools/ensure.sh puts the same uv on a Mac, so either finds the other's). Until 0.1.8 each
+//! setup was a `sh` script needing uv already installed (`brew install uv`), so Windows had no way to install any local
+//! model, and a Mac without Homebrew none either. FFmpeg, on Windows (ffmpeg_tool), is fetched the same way the first
+//! time a video needs it.
 
 use super::*;
 
@@ -26,6 +28,54 @@ fn exe(name: &str) -> String {
 fn on_path(name: &str) -> Option<PathBuf> {
     let exe = exe(name);
     std::env::split_paths(&std::env::var_os("PATH")?).map(|d| d.join(&exe)).find(|p| p.is_file())
+}
+
+/// The FFmpeg raea fetches on Windows when none is installed: GyanD's essentials build (the one winget's
+/// Gyan.FFmpeg.Essentials installs), kept on GitHub for each release; its SHA-256 is GitHub's digest for the asset
+const FFMPEG: &str = "9.0.2";
+const FFMPEG_SUM: &str = "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba";
+
+/// `ffmpeg` or `ffprobe` as raea runs it: the one on the PATH; else raea's own in $RAEA_TOOLS_CACHE (else
+/// ~/.cache/raea-tools)/ffmpeg/bin. On Windows, where FFmpeg is rarely installed, raea's own is fetched there once
+/// (114 MB; ffmpeg.exe, ffprobe.exe and its LICENSE kept, about 210 MB) the first time a video raea's own decoders
+/// can't read needs it, when `fetch`: H.264 with B-frames, HEVC, VP9 (a phone's or a camera's). Elsewhere FFmpeg is
+/// the system's: a Mac reads those on VideoToolbox, and Linux has FFmpeg in its package manager.
+pub fn ffmpeg_tool(name: &str, fetch: bool) -> Result<PathBuf, String> {
+    if let Some(p) = on_path(name) {
+        return Ok(p);
+    }
+    let dir = raea_io_home::env_path("RAEA_TOOLS_CACHE", ".cache/raea-tools").join("ffmpeg");
+    let bin = dir.join("bin").join(exe(name));
+    if bin.is_file() {
+        return Ok(bin);
+    }
+    if !cfg!(windows) {
+        return Err(format!("{name} isn't installed: raea reads this video through FFmpeg (apt install ffmpeg, dnf install ffmpeg or brew install ffmpeg)"));
+    }
+    if !fetch {
+        return Err(format!("{name} isn't installed yet (raea fetches its own the first time a video needs it)"));
+    }
+    // one fetch at a time in a process (a render opens its videos on several threads); another process's is a
+    // separate .part folder, and whichever finishes first is moved in
+    static FETCHING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = FETCHING.lock().unwrap_or_else(|e| e.into_inner());
+    if bin.is_file() {
+        return Ok(bin);
+    }
+    raea_io_home::offline(&format!("fetching FFmpeg {FFMPEG} to read a video raea's own decoders can't"))?;
+    eprintln!("raea: this video needs FFmpeg, which isn't installed; fetching FFmpeg {FFMPEG} (114 MB, once) into {}", dir.display());
+    let name_zip = format!("ffmpeg-{FFMPEG}-essentials_build.zip");
+    let url = format!("https://github.com/GyanD/codexffmpeg/releases/download/{FFMPEG}/{name_zip}");
+    let top = format!("ffmpeg-{FFMPEG}-essentials_build");
+    let members = [format!("{top}/bin/ffmpeg.exe"), format!("{top}/bin/ffprobe.exe"), format!("{top}/LICENSE")];
+    let part = dir.with_file_name(format!("ffmpeg.part{}", std::process::id()));
+    let fetched = fetch_archive(&part, &url, &name_zip, FFMPEG_SUM, true, &members.each_ref().map(String::as_str));
+    if fetched.is_ok() && !bin.is_file() {
+        let _ = std::fs::rename(&part, &dir);
+    }
+    let _ = std::fs::remove_dir_all(&part);
+    fetched?;
+    if bin.is_file() { Ok(bin) } else { Err(format!("couldn't put FFmpeg in {}", dir.display())) }
 }
 
 /// The Python of the venv in an install folder: .venv/bin/python, or .venv\Scripts\python.exe on Windows
@@ -61,7 +111,8 @@ pub fn uv() -> Result<PathBuf, String> {
     eprintln!("raea: fetching uv {UV} ({name}) into {}", dir.display());
     // unpacked beside it first and moved in whole, so a stopped fetch never leaves a uv that looks installed
     let part = dir.with_file_name(format!("uv.part{}", std::process::id()));
-    let fetched = fetch_uv(&part, &name, sum, os != "windows");
+    let url = format!("https://github.com/astral-sh/uv/releases/download/{UV}/{name}");
+    let fetched = fetch_archive(&part, &url, &name, sum, os != "windows", &[]);
     if fetched.is_ok() && !bin.is_file() {
         let _ = std::fs::rename(&part, &dir);
     }
@@ -70,13 +121,19 @@ pub fn uv() -> Result<PathBuf, String> {
     if bin.is_file() { Ok(bin) } else { Err(format!("couldn't put uv in {}", dir.display())) }
 }
 
-/// uv's release archive `name` downloaded into `part` with curl, checked against `sum` and unpacked there by tar
-/// (Windows' own curl.exe and tar.exe, which reads a zip: the .tar.gz holds uv-<target>/uv, the zip uv.exe at its top)
-fn fetch_uv(part: &Path, name: &str, sum: &str, strip: bool) -> Result<(), String> {
+/// A release archive `name` from `url` downloaded into `part` with curl (resumed across its tries: a dropped connection
+/// costs only what wasn't fetched), checked against `sum` and unpacked there by tar: `members` alone when given, its top
+/// folder stripped when `strip`. Windows' own curl.exe and tar.exe do it there (bsdtar reads a zip).
+fn fetch_archive(part: &Path, url: &str, name: &str, sum: &str, strip: bool, members: &[&str]) -> Result<(), String> {
+    use std::io::IsTerminal;
     std::fs::create_dir_all(part).map_err(|e| format!("{}: {e}", part.display()))?;
     let archive = part.join(name);
-    let url = format!("https://github.com/astral-sh/uv/releases/download/{UV}/{name}");
-    let got = std::process::Command::new(exe("curl")).args(["-fsSL", "--retry", "3", "-o"]).arg(&archive).arg(&url).status();
+    let quiet = if std::io::stderr().is_terminal() { "--progress-bar" } else { "-sS" };
+    let got = std::process::Command::new(exe("curl"))
+        .args(["-fL", quiet, "-C", "-", "--retry", "5", "--retry-all-errors", "--connect-timeout", "30", "-o"])
+        .arg(&archive)
+        .arg(url)
+        .status();
     if !got.is_ok_and(|s| s.success()) {
         return Err(format!("couldn't download {url} with curl"));
     }
@@ -89,6 +146,7 @@ fn fetch_uv(part: &Path, name: &str, sum: &str, strip: bool) -> Result<(), Strin
     if strip {
         tar.arg("--strip-components=1");
     }
+    tar.args(members);
     if !tar.status().is_ok_and(|s| s.success()) {
         return Err(format!("couldn't unpack {name}"));
     }

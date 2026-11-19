@@ -31,7 +31,7 @@ pub fn video_span(path: &Path, info: &Info) -> f64 {
 
 /// How much the picture changes: the mean absolute luma difference between samples `fps` apart (signalstats YDIF).
 pub fn motion(path: &Path, from: Option<f64>, to: Option<f64>, fps: f64) -> R<(Value, Vec<(f64, f64)>)> {
-    let mut d = backend()?.open_video(path)?;
+    let mut d = open_video(path)?;
     let ts = times(video_span(path, d.info()), from, to, fps);
     let mut prev: Option<Vec<u8>> = None;
     let mut out = Vec::new();
@@ -48,7 +48,7 @@ pub fn motion(path: &Path, from: Option<f64>, to: Option<f64>, fps: f64) -> R<(V
 /// Shot changes: ffmpeg's scene score (select's get_scene_score: the mean absolute luma difference from the frame before,
 /// against the change in it since the frame before that, over 100) above `threshold`, frame by frame.
 pub fn cuts(path: &Path, threshold: f64, from: Option<f64>, to: Option<f64>) -> R<(Value, Vec<(usize, f64, f64)>)> {
-    let mut d = backend()?.open_video(path)?;
+    let mut d = open_video(path)?;
     let info = d.info().clone();
     // every frame the file holds, at its own time (a variable-rate take has no fixed step)
     let ts = frames_of(path, &info, from, to);
@@ -86,7 +86,7 @@ pub fn frames_of(path: &Path, info: &Info, from: Option<f64>, to: Option<f64>) -
 /// over every plane, as a fraction of full scale); a stretch at or under `noise` lasting `min` seconds or more is a
 /// freeze, reported as (start, Some((duration, end))) when it ends, or (start, None) when the file ends frozen.
 pub fn freezes(path: &Path, noise: f64, min: f64) -> R<Vec<(f64, Option<(f64, f64)>)>> {
-    let mut d = backend()?.open_video(path)?;
+    let mut d = open_video(path)?;
     let info = d.info().clone();
     let mut reference: Option<(f64, Vec<u8>, Vec<u8>, Vec<u8>)> = None;
     let mut frozen_now = false;
