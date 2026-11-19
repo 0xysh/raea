@@ -38,7 +38,7 @@ pub fn rendered(args: &[String]) -> i32 {
     if args.first().map(String::as_str) != Some("render") {
         return 0;
     }
-    let found = finding::taken();
+    let mut found = finding::taken();
     let through = despite(args, std::env::var("RAEA_DESPITE").ok());
     let excused: Vec<Despite> = through.iter().map(|(c, w)| Despite { check: c.clone(), why: w.clone() }).collect();
     let out = raea_runtime_bundle::flag(args, "-o").or_else(|| raea_runtime_bundle::flag(args, "--review")).map(PathBuf::from);
@@ -46,6 +46,13 @@ pub fn rendered(args: &[String]) -> i32 {
     let manifest = raea_runtime_bundle::flag(args, "--manifest").map(PathBuf::from).or_else(|| Some(raea_runtime_world::manifest_for(out.as_deref()?, std::path::Path::new(args.get(1)?))));
     if let Some(m) = manifest {
         if let Some(mut v) = std::fs::read(&m).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) {
+            // a video's text, held to the check's text rules as it finishes, a check's round sooner
+            if out.as_deref().and_then(|o| o.extension()).is_some_and(|x| x == "mp4" || x == "mov") {
+                for f in text_found(&v) {
+                    println!("{}", f.line());
+                    found.push(f);
+                }
+            }
             v["findings"] = json!(found);
             if !excused.is_empty() {
                 v["despite"] = json!(excused);
@@ -63,12 +70,49 @@ pub fn rendered(args: &[String]) -> i32 {
     code
 }
 
+/// What a video render's text breaks, from its manifest (raea-app-check-text, the rules `raea check` holds it to): text
+/// off the frame is an error, as the check has it; text in a UI zone a warn, by the default zones, since the platform's
+/// are the check's to decide (`--platform`); reading time waits for the check, which has the transcript to tell a
+/// caption the voice reads out from one that has to be read.
+fn text_found(manifest: &Value) -> Vec<Finding> {
+    let runs = raea_app_check_text::text_runs(manifest);
+    let (w, h, fps) = (manifest["width"].as_f64().unwrap_or(1080.0), manifest["height"].as_f64().unwrap_or(1920.0), manifest["fps"].as_f64().unwrap_or(30.0));
+    let (mut issues, mut passed) = (Vec::new(), Vec::new());
+    raea_app_check_text::text_rules(&runs, None, w, h, None, None, &mut issues, &mut passed);
+    let mut found = Vec::new();
+    for mut i in issues.into_iter().filter(|i| i.rule != "reading") {
+        if i.rule == "safe-area" {
+            i.p = 2;
+            i.says.push_str(" (by the default zones: `raea check --platform P` holds it to the platform's)");
+        }
+        found.push(i.finding("raea render", fps));
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|a| a.to_string()).collect()
+    }
+
+    /// A video's text off the frame fails its render, as the check fails it; text in a UI zone is a warn by the
+    /// default zones; a word on screen too briefly is left to the check, which has the transcript
+    #[test]
+    fn a_video_render_holds_its_text_to_the_check_s_rules() {
+        let text = |t: &str, b: [f64; 4]| json!({"text": t, "box": b, "opacity": 1.0, "size": 60.0, "color": "rgb(255, 255, 255)"});
+        let frames: Vec<Value> = (0..48).map(|f| json!({"frame": f, "videos": [], "text": [
+            text("OFF THE EDGE", [900.0, 800.0, 400.0, 80.0]),
+            text("Per month", [700.0, 1233.0, 318.0, 44.0]),
+            if f < 3 { text("Two words", [200.0, 900.0, 300.0, 80.0]) } else { json!({"text": "", "box": [0, 0, 0, 0]}) },
+        ]})).collect();
+        let found = text_found(&json!({"width": 1080, "height": 1920, "fps": 24, "frames": frames}));
+        let got: Vec<(&str, Level)> = found.iter().map(|f| (f.check.as_str(), f.level)).collect();
+        assert_eq!(got, vec![("clipped", Level::Error), ("safe-area", Level::Warn)], "{found:?}");
+        assert!(found[1].says.contains("--platform"));
+        assert_eq!(found[0].frames, Some([0, 1]));
     }
 
     #[test]

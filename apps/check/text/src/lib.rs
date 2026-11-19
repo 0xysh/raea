@@ -5,6 +5,8 @@ use serde_json::Value;
 
 pub type R<T> = Result<T, String>;
 
+use raea_core_facts::{Finding, Level};
+
 /// One thing a rule found: its rule, its rank (P0 breaks the piece to P3 polish), when (seconds) and what to do.
 #[derive(Clone, Debug)]
 pub struct Issue {
@@ -12,6 +14,21 @@ pub struct Issue {
     pub p: u8,
     pub at: Option<f64>,
     pub says: String,
+}
+
+impl Issue {
+    /// As a Finding `by` a command (docs/direction.feature DR3: P0 and P1 errors, P2 a warn, P3 a note), about the
+    /// frame its second falls on at `fps`
+    pub fn finding(&self, by: &str, fps: f64) -> Finding {
+        let f = Finding::new(self.rule, Level::of_rank(self.p), &self.says, by);
+        match self.at {
+            Some(t) => {
+                let n = (t * fps).round() as i64;
+                f.frames(n, n + 1)
+            }
+            None => f,
+        }
+    }
 }
 
 /// A text as it stays on screen: from the frame it comes on to the frame it leaves. Typing (a text growing into the

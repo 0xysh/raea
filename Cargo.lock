@@ -13724,6 +13724,7 @@ version = "0.1.0"
 dependencies = [
  "dunce",
  "raea-app-check",
+ "raea-app-check-text",
  "raea-app-notes",
  "raea-app-registry",
  "raea-core-brief",

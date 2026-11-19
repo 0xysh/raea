@@ -203,13 +203,7 @@ fn things(p: &str, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
 /// `fps`), with `more` (a render's own), worst first then by time.
 fn findings_of(mut issues: Vec<Issue>, more: Vec<Finding>, fps: f64) -> Vec<Finding> {
     issues.sort_by(|a, b| a.p.cmp(&b.p).then(a.at.unwrap_or(0.0).total_cmp(&b.at.unwrap_or(0.0))));
-    let mut found = Vec::new();
-    for i in &issues {
-        // an issue at a second is about the frame it falls on
-        let (f, fr) = (Finding::new(i.rule, Level::of_rank(i.p), &i.says, "raea check"), (i.at.unwrap_or(0.0) * fps).round() as i64);
-        found.push(if i.at.is_some() { f.frames(fr, fr + 1) } else { f });
-    }
-    finding::ranked(found.into_iter().chain(more).collect())
+    finding::ranked(issues.iter().map(|i| i.finding("raea check", fps)).chain(more).collect())
 }
 
 /// The findings (`findings_of`), written to -o as JSON when asked, and the report's text with the count last. True
