@@ -353,3 +353,14 @@ Feature: raea/wear, weathering that has a cause
         rendered by raea once into tiling layers, instead of noise evaluated per pixel per frame
       And texture arrays get mips (SH9 arrays have none, so a tiling layer shimmers far off) and maps can be BC
         compressed into KTX2, with the memory and frame time each saves measured
+      And measured first (11-19, M5 Pro, the corner house at 4K, 121-127 frames each, plain and worn interleaved): with
+        the machine quiet, 17.2 ms a frame plain and 17.2 worn, 17.6 and 17.7; under other sessions' load both rise
+        together (18-75 ms). The recipes' per-pixel noise costs no frame time a render can see, so detail layers
+        would save nothing yet; a live scene at 60 fps with many baked buildings is where to measure again
+      And the maps' memory: four RGBA8 maps of 2048 x 1108 for the house, 36 MB on the GPU; BC7 would take that to
+        about 9 MB, but causes2's alpha is the class code read exactly by textureLoad (it needs a map of its own
+        before the rest compress), and an iPhone has no BC (ASTC there). Worth it for a city of baked buildings, not
+        one house
+      And still open, so not done: the detail layers, mips on arrays (they come with the detail layers: adding them
+        now would grow the city's 40-layer room atlas by a third for no wear user), and BC/KTX2 maps with the class
+        split out and a fallback where BC isn't
