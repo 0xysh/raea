@@ -203,6 +203,9 @@ export interface MotionBlurProps {
   shutterAngle?: number;
   /** samples each way per pixel (4 by default) */
   samples?: number;
+  /** "shutter" (the default: raea's, two taps a pixel for each sample each way) or "bevy" (Bevy's MotionBlur, to
+   * compare against) */
+  kind?: "shutter" | "bevy";
   /** declared animation of its numbers */
   animate?: Animate3d;
 }
@@ -216,6 +219,7 @@ export function MotionBlur(props: MotionBlurProps) {
   useSequenceFrames("MotionBlur", undefined, [["animate's first key", firstKey(props.animate)]]);
   const anim = useAnimation3d(props.animate);
   const p = apply3d({ ...props, animate: undefined } as Record<string, unknown>, anim.values);
+  if (p.kind !== undefined && p.kind !== "shutter" && p.kind !== "bevy") throw new RangeError(`${owner}: kind must be "shutter" or "bevy", got ${JSON.stringify(p.kind)}`);
   for (const [k, lo, hi] of [["shutterAngle", 0, 4], ["samples", 1, 32]] as const) {
     const v = p[k];
     if (v !== undefined && !(typeof v === "number" && v >= lo && v <= hi)) throw new RangeError(`${owner}: ${k} must be in [${lo}, ${hi}], got ${v}`);

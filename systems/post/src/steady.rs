@@ -36,11 +36,32 @@ use bevy::{
     },
 };
 
-/// A camera whose frames are steadied over time (RAEA_STEADY). Brings the jitter and the prepasses it reads.
-#[derive(Component, Clone, Copy, Default, ExtractComponent)]
+/// A camera whose frames are steadied over time (<AntiAliasing mode="steady">, or RAEA_STEADY on every camera). Brings
+/// the jitter and the prepasses it reads. Its rates (<AntiAliasing steady>, docs/nobuild.feature NB1a): the frames a
+/// still pixel's history averages, a moving one's, and the motion in pixels at which a pixel counts as moving.
+#[derive(Component, Clone, Copy, PartialEq, Debug, ExtractComponent)]
 #[extract_app(bevy::render::RenderApp)]
 #[require(TemporalJitter, DepthPrepass, MotionVectorPrepass)]
-pub struct Steady;
+pub struct Steady {
+    pub still: f32,
+    pub moving: f32,
+    pub px: f32,
+}
+
+impl Default for Steady {
+    fn default() -> Self {
+        Self { still: 32.0, moving: 8.0, px: 4.0 }
+    }
+}
+
+impl Steady {
+    /// the camera row's rates (`aa_steady_*`), each RAEA_STEADY_* variable over its prop
+    pub fn of(vals: &std::collections::BTreeMap<String, raea_core_program::ir::V>) -> Self {
+        let d = Self::default();
+        let at = |col: &str, var: &str, d: f32| env(var).unwrap_or_else(|| raea_sys_frame::num(vals, col, d)).max(f32::MIN_POSITIVE);
+        Self { still: at("aa_steady_still", "RAEA_STEADY_STILL", d.still), moving: at("aa_steady_moving", "RAEA_STEADY_MOVING", d.moving), px: at("aa_steady_px", "RAEA_STEADY_PX", d.px) }
+    }
+}
 
 /// the history's format: this frame blended with those before (rgb, linear), and how many frames the pixel
 /// has been in view (a)
@@ -82,8 +103,8 @@ struct SteadyFrame {
     params: Buffer,
 }
 
-fn env(name: &str, default: f32) -> f32 {
-    std::env::var(name).ok().and_then(|v| v.parse().ok()).filter(|v: &f32| *v > 0.0).unwrap_or(default)
+fn env(name: &str) -> Option<f32> {
+    std::env::var(name).ok().and_then(|v| v.parse().ok()).filter(|v: &f32| *v > 0.0)
 }
 
 /// Each steadied view's histories, swapped each frame, and its parameters: the slowest and fastest rates a frame, the
@@ -94,11 +115,11 @@ fn textures(
     mut cache: ResMut<TextureCache>,
     device: Res<RenderDevice>,
     frame: Res<FrameCount>,
-    views: Query<(Entity, &ExtractedCamera, Option<&crate::cut::CameraCut>), With<Steady>>,
+    views: Query<(Entity, &ExtractedCamera, Option<&crate::cut::CameraCut>, &Steady)>,
     mut seen: Local<HashMap<Entity, UVec2>>,
 ) {
-    let (still, moving, px) = (1.0 / env("RAEA_STEADY_STILL", 32.0), 1.0 / env("RAEA_STEADY_MOVING", 8.0), env("RAEA_STEADY_PX", 4.0));
-    for (e, camera, cut) in &views {
+    for (e, camera, cut, st) in &views {
+        let (still, moving, px) = (1.0 / st.still, 1.0 / st.moving, st.px);
         let Some(size) = camera.physical_target_size else { continue };
         let desc = |label: &'static str| TextureDescriptor {
             label: Some(label),

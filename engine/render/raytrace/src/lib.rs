@@ -71,6 +71,9 @@ pub struct SolariSettings {
     /// the jitter's cycle at the full size, in frames: a view drawn at s of its size a side cycles through
     /// `jitter_frames / s²` offsets (DLSS's 8), and emit_taa lets a twig glimpsed through it stay away that long
     pub jitter_frames: f32,
+    /// the traced scene follows what moves: a skinned mesh's traced twin posed each frame, a hidden part taken out
+    /// (RT5, a trial; RAEA_SOLARI_DYNAMIC)
+    pub dynamic: bool,
 }
 
 impl Default for SolariSettings {
@@ -86,14 +89,16 @@ impl Default for SolariSettings {
             jitter: String::new(),
             emissive_sharpness: 6.0,
             jitter_frames: 8.0,
+            dynamic: false,
         }
     }
 }
 
 /// Solari's plugins, and RAEA_LIGHT's camera override when it names a path.
 pub fn add(app: &mut App) {
-    app.register_type::<RenderScale>().register_type::<SolariSettings>();
+    app.register_type::<RenderScale>().register_type::<SolariSettings>().register_type::<raea_sys_frame::pathtracer::PathtracerSettings>();
     app.add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<SolariSettings>::default());
+    app.add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<raea_sys_frame::pathtracer::PathtracerSettings>::default());
     // the denoiser's own shaders, read from a project's engine-shaders/ or the checkout as its pipelines are made
     #[cfg(target_os = "macos")]
     raea_sys_frame::engine_shaders::declare(&[("raea_render_raytrace/metalfx_guides.wgsl", metalfx::DECODE_WGSL), ("raea_render_raytrace/emit_taa.wgsl", emit_taa::WGSL)]);

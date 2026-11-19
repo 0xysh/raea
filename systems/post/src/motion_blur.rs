@@ -35,9 +35,17 @@ fn blur_of(v: &BTreeMap<String, V>) -> Option<MotionBlur> {
     (num(v, "mb_on", 0.0) > 0.5 && b.shutter_angle > 0.0).then_some(b)
 }
 
-/// Whether the camera's blur is Bevy's MotionBlur (RAEA_MOTION_BLUR=bevy) rather than raea's Shutter.
-fn bevy_blur() -> bool {
-    std::env::var("RAEA_MOTION_BLUR").is_ok_and(|v| v == "bevy")
+/// Whether the camera's blur is Bevy's MotionBlur (<MotionBlur kind="bevy">) rather than raea's Shutter; RAEA_MOTION_BLUR
+/// (bevy or shutter) overrides it on every camera, said once (docs/nobuild.feature NB1a).
+fn bevy_blur(v: &BTreeMap<String, V>) -> bool {
+    match std::env::var("RAEA_MOTION_BLUR").as_deref() {
+        Ok(k @ ("bevy" | "shutter")) => {
+            static SAID: std::sync::Once = std::sync::Once::new();
+            SAID.call_once(|| eprintln!("raea: <MotionBlur> on every camera: RAEA_MOTION_BLUR={k} over kind (docs/nobuild.feature NB1a)"));
+            k == "bevy"
+        }
+        _ => num(v, "mb_bevy", 0.0) > 0.5,
+    }
 }
 
 /// raea's shutter for a frame's blur: as long open, two taps a pixel for each of Bevy's samples each way.
@@ -47,13 +55,12 @@ fn shutter_of(b: &MotionBlur) -> Shutter {
 
 /// The frame's blur onto the camera: inserted, changed or removed as the frame's columns say.
 pub fn sync_motion_blur(frame: Res<FrameRows>, mut commands: Commands, cams: Query<(Entity, Option<&MotionBlur>, Option<&Shutter>), With<Camera3d>>) {
-    let bevy = bevy_blur();
     for (e, mb, shutter) in &cams {
         let Some(v) = frame.vals(e) else { continue };
         if !has_blur(&v) {
             continue;
         }
-        if !bevy {
+        if !bevy_blur(&v) {
             match (blur_of(&v).map(|b| shutter_of(&b)), shutter) {
                 (Some(want), Some(s)) if *s == want => {}
                 (Some(want), _) => {

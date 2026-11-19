@@ -392,6 +392,9 @@ export interface AntiAliasingProps {
    * The others draw a frame from that frame alone, so a render equals its play; "steady" needs the frames before, so a
    * render that starts partway through differs from its play for its first few frames */
   mode: "msaa" | "smaa" | "fxaa" | "none" | "steady";
+  /** "steady"'s rates: the frames a still pixel's history averages (32), a moving one's (8), and the motion in pixels
+   * at which a pixel counts as moving (4). Fewer frames follow change sooner and settle less */
+  steady?: { still?: number; moving?: number; px?: number };
 }
 
 /** How the 3D's edges are smoothed. Put it inside the Canvas3D, once; each frame's is its own.
@@ -399,6 +402,7 @@ export interface AntiAliasingProps {
  * @bevy bevy_anti_alias::fxaa::Fxaa */
 export function AntiAliasing(props: AntiAliasingProps) {
   if (!["msaa", "smaa", "fxaa", "none", "steady"].includes(props.mode)) throw new RangeError(`AntiAliasing: mode must be "msaa", "smaa", "fxaa", "none" or "steady", got ${JSON.stringify(props.mode)}`);
+  for (const [k, v] of Object.entries(props.steady ?? {})) if (!(typeof v === "number" && v > 0)) throw new RangeError(`AntiAliasing: steady.${k} must be a number over 0, got ${v}`);
   return node3d("AntiAliasing", props as unknown as Record<string, unknown>);
 }
 

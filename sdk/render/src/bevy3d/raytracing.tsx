@@ -72,6 +72,10 @@ export interface SolariLightingProps {
   /** the jitter's cycle at the full size, in frames: a view drawn at s of its size a side cycles through
    * jitterFrames / s² offsets, and an emissive twig glimpsed through it may stay away that long. Default 8 (DLSS's) */
   jitterFrames?: number;
+  /** the traced scene follows what moves (a trial, false by default): a skinned character's traced twin is posed each
+   * frame, so it casts traced shadows and bounces light, and a hidden part leaves the traced scene. Decided as each
+   * mesh is first traced, so set it from the first frame */
+  dynamic?: boolean;
   /** constants in Solari's and the denoiser's shaders, compiled in when the scene loads (a value changed later in the
    * composition isn't drawn); each left out keeps the shader's own, given in brackets. <ShaderConstants> reaches the
    * rest */
@@ -188,6 +192,7 @@ export function solariSettings(p: SolariLightingProps): Record<string, unknown> 
   if (p.jitter !== undefined) v.jitter = p.jitter === "denoiser" ? "" : p.jitter === "none" ? "0" : p.jitter;
   if (p.emissiveSharpness !== undefined) v.emissive_sharpness = p.emissiveSharpness;
   if (p.jitterFrames !== undefined) v.jitter_frames = p.jitterFrames;
+  if (p.dynamic !== undefined) v.dynamic = p.dynamic;
   return Object.keys(v).length ? v : undefined;
 }
 
@@ -195,7 +200,7 @@ export function solariSettings(p: SolariLightingProps): Record<string, unknown> 
  * light and reflections traced against the scene, in place of shadow maps. Needs a GPU with ray queries (Apple
  * silicon on Metal, RTX on Vulkan); elsewhere the scene draws raster-lit and raea says so. On the Mac MetalFX's
  * temporal denoiser cleans it up (RT4; denoise={false} shows the raw noise). A <Character> (skinned, morphed) stays
- * raster-lit: Bevy 0.20's Solari can't trace it (RT5). */
+ * raster-lit: Bevy 0.20's Solari can't trace it (RT5), unless `dynamic` gives a skinned one a traced twin. */
 export function SolariLighting(p: SolariLightingProps = {}) {
   if (p.bounces !== undefined && !(Number.isInteger(p.bounces) && p.bounces >= 0)) throw new RangeError(`SolariLighting: bounces is a whole number, got ${p.bounces}`);
   if (p.scale !== undefined && !(p.scale >= 1 / 3 && p.scale <= 1)) throw new RangeError(`SolariLighting: scale is a third to 1 (of the view's size a side), got ${p.scale}`);
@@ -238,10 +243,23 @@ export function SolariLighting(p: SolariLightingProps = {}) {
 export interface PathtracerProps {
   /** start the accumulation again */
   reset?: boolean;
+  /** how many times a render draws each frame, each draw one more sample a pixel, the last kept (1 by default): 256 or
+   * more converges a reference still. Its accumulation starts afresh each frame, so a moved part isn't smeared */
+  samples?: number;
+  /** whether its rays walk the fog volumes, scattering in the air (true by default); false for a frame without the
+   * air */
+  media?: boolean;
 }
 
 /** Bevy's reference path tracer for the <Camera3d> it's inside: slow and exact, accumulating over frames while the
  * view holds still. For stills to check a look against, not for motion. Same GPU needs as <SolariLighting>. */
 export function Pathtracer(p: PathtracerProps = {}) {
-  return <BevyComponent type="bevy_solari::pathtracer::Pathtracer" value={{ reset: p.reset ?? false }} />;
+  if (p.samples !== undefined && !(Number.isInteger(p.samples) && p.samples >= 1)) throw new RangeError(`Pathtracer: samples must be a whole number from 1, got ${p.samples}`);
+  const settings = p.samples !== undefined || p.media !== undefined;
+  return (
+    <>
+      <BevyComponent type="bevy_solari::pathtracer::Pathtracer" value={{ reset: p.reset ?? false }} />
+      {settings && <BevyComponent type="raea_sys_frame::pathtracer::PathtracerSettings" value={{ samples: p.samples ?? 1, media: p.media ?? true }} />}
+    </>
+  );
 }

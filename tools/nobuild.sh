@@ -151,7 +151,9 @@ diff_levels() {
 }
 
 # one render of a props.tsv scene: its composition on its light path with the variables given, into OUT; beside it
-# OUT.settings, the run's settings records (fog_settings, solari_settings) without what names the run
+# OUT.settings, the run's settings records (fog_settings, solari_settings) without what names the run. The light path:
+# raster (as the scene asks), solari (RAEA_LIGHT=solari on every camera), traced (the scene asks for Solari or the
+# path tracer itself)
 props_render() {
   local scene=$1 comp=$2 light=$3 out=$4; shift 4
   local tdir=$out.trace l=()
@@ -167,34 +169,35 @@ props() {
   local rows=$RAEA/tools/nobuild/props.tsv out=$DOCS/props.tsv
   [ -x "$bin" ] || { echo "nobuild: no raea at $bin (RAEA_BIN)" >&2; exit 1; }
   local dir; dir=$(mktemp -d "${TMPDIR:-/tmp}/nobuild-props.XXXXXX") || exit 1
-  printf '# scene\tcomposition\tvariables\tlight\tframe\tprop vs variable (mean, max levels)\tnoise (base twice, mean)\tprop vs base (mean)\tsettings in the trace\tverdict\n' > "$out"
+  printf '# scene\tcomposition\tagainst\tvariables\tlight\tframe\tprop vs variable (mean, max levels)\tnoise (against twice, mean)\tprop vs against (mean)\tsettings in the trace\tverdict\n' > "$out"
   local fails=0
-  while IFS=$'\t' read -r scene comp vars light frame; do
+  while IFS=$'\t' read -r scene comp against vars light frame; do
     case $scene in '#'* | '') continue ;; esac
     local f; f=$(printf 'frame-%05d.png' "$frame")
-    local b="$dir/${scene%.tsx}-$light-base"
-    # the scene's base twice, once a scene and light path: their difference is the run-to-run noise
+    local b="$dir/${scene%.tsx}-$against-$light"
+    # the composition the variables go on, twice, once a scene and light path: their difference is the run-to-run noise
     if [ ! -d "$b" ]; then
-      props_render "$scene" base "$light" "$b"
-      props_render "$scene" base "$light" "$b.2"
+      props_render "$scene" "$against" "$light" "$b"
+      props_render "$scene" "$against" "$light" "$b.2"
     fi
-    local p="$dir/$comp-prop" v="$dir/$comp-var"
+    local p="$dir/${scene%.tsx}-$comp-prop" v="$dir/${scene%.tsx}-$comp-var"
     props_render "$scene" "$comp" "$light" "$p"
     # shellcheck disable=SC2086 # the variables are words
-    props_render "$scene" base "$light" "$v" $vars
+    props_render "$scene" "$against" "$light" "$v" $vars
     local mae pae noise moved trace verdict
     mae=$(diff_levels MAE "$p/$f" "$v/$f"); pae=$(diff_levels PAE "$p/$f" "$v/$f")
     noise=$(diff_levels MAE "$b/$f" "$b.2/$f"); moved=$(diff_levels MAE "$p/$f" "$b/$f")
-    if [ -s "$p.settings" ] && cmp -s "$p.settings" "$v.settings"; then trace=same; else trace=differ; fi
-    # raster draws the same pixels twice: the prop and the variable must too; Solari's frames differ run to run, so
-    # theirs must be as near as two base runs and the prop must move the frame well past that
+    # (a setting with no record of its own, as steady's or the blur's, is checked by its pixels alone)
+    if ! cmp -s "$p.settings" "$v.settings"; then trace=differ; elif [ -s "$p.settings" ]; then trace=same; else trace=none; fi
+    # raster draws the same pixels twice: the prop and the variable must too; a traced frame differs run to run, so
+    # theirs must be as near as two runs of the same and the prop must move the frame well past that
     verdict=$(awk -v l="$light" -v mae="$mae" -v pae="$pae" -v n="$noise" -v m="$moved" -v t="$trace" -v img="$p/$f" 'BEGIN {
       if (mae == "" || m == "") { print "no frame (" img ")"; exit }
       same = l == "raster" ? pae == 0 : mae <= 2 * n + 0.002
       moves = l == "raster" ? m > 0 : m > 4 * n + 0.01
-      print (same && moves && t == "same") ? "pass" : "FAIL" (same ? "" : ": prop and variable differ") (moves ? "" : ": the prop changes nothing") (t == "same" ? "" : ": settings differ") }')
+      print (same && moves && t != "differ") ? "pass" : "FAIL" (same ? "" : ": prop and variable differ") (moves ? "" : ": the prop changes nothing") (t != "differ" ? "" : ": settings differ") }')
     [ "$verdict" = pass ] || fails=$((fails + 1))
-    printf '%s\t%s\t%s\t%s\t%s\t%s, %s\t%s\t%s\t%s\t%s\n' "$scene" "$comp" "$vars" "$light" "$frame" "$mae" "$pae" "$noise" "$moved" "$trace" "$verdict" | tee -a "$out"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s, %s\t%s\t%s\t%s\t%s\n' "$scene" "$comp" "$against" "$vars" "$light" "$frame" "$mae" "$pae" "$noise" "$moved" "$trace" "$verdict" | tee -a "$out"
   done < "$rows"
   echo "nobuild: $(grep -vc '^#' "$out") props against their variables in ${out#"$RAEA"/}, $fails failing, by $bin"
   if [ "$fails" = 0 ]; then rm -rf -- "${dir:?}"; else echo "nobuild: renders kept in $dir"; exit 1; fi

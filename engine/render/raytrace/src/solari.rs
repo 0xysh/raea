@@ -16,26 +16,35 @@ use bevy::solari::pathtracer::{Pathtracer, PathtracingPlugin};
 use bevy::solari::prelude::{RaytracingMesh3d, SolariLighting, SolariPlugins};
 
 pub fn add(app: &mut App) {
-    app.add_plugins((SolariPlugins, PathtracingPlugin)).add_systems(PostUpdate, (cameras, meshes, deferred, shadow_maps).before(bevy::camera::CameraUpdateSystems));
-    if dynamic() {
-        // a twin posed after its joints are placed and before this frame's asset events go out, so the traced scene
-        // gets the pose with the frame that draws it; a part's visibility read once it is propagated
-        app.add_systems(
-            PostUpdate,
-            (
-                skin_twins.after(bevy::transform::TransformSystems::Propagate).before(bevy::asset::AssetEventSystems),
-                hidden.after(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
-            ),
-        );
-    }
+    app.add_plugins((SolariPlugins, PathtracingPlugin))
+        .init_resource::<Dynamic>()
+        .add_systems(PostUpdate, (cameras, meshes, deferred, shadow_maps).before(bevy::camera::CameraUpdateSystems))
+        .add_systems(PostUpdate, dynamic.before(meshes));
+    // a twin posed after its joints are placed and before this frame's asset events go out, so the traced scene gets
+    // the pose with the frame that draws it; a part's visibility read once it is propagated
+    app.add_systems(
+        PostUpdate,
+        (
+            skin_twins.after(bevy::transform::TransformSystems::Propagate).before(bevy::asset::AssetEventSystems),
+            hidden.after(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+        )
+            .run_if(|d: Res<Dynamic>| d.0),
+    );
 }
 
-/// RAEA_SOLARI_DYNAMIC=1 (RT5, a trial; unset, everything is as before): the traced scene follows what moves. A skinned
-/// mesh gets a traced twin, posed on the CPU each frame as the GPU skins the drawn one (it casts traced shadows, stops
-/// and bounces light), and a hidden part leaves the traced scene until it is shown again (hidden, it still shadowed).
-fn dynamic() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| raea_io_home::env_on("RAEA_SOLARI_DYNAMIC"))
+/// Whether the traced scene follows what moves (RT5, a trial: <SolariLighting dynamic>, or RAEA_SOLARI_DYNAMIC on every
+/// camera; off, everything is as before): a skinned mesh gets a traced twin, posed on the CPU each frame as the GPU
+/// skins the drawn one (it casts traced shadows, stops and bounces light), and a hidden part leaves the traced scene
+/// until it is shown again (hidden, it still shadowed). On while any traced camera asks for it; a mesh is decided the
+/// first frame it is traced, so ask from the first frame.
+#[derive(Resource, Default)]
+struct Dynamic(bool);
+
+fn dynamic(mut d: ResMut<Dynamic>, cams: Query<Option<&super::SolariSettings>, Or<(With<SolariLighting>, With<Pathtracer>)>>) {
+    let on = cams.iter().any(|s| super::settings::of(s).dynamic);
+    if d.0 != on {
+        d.0 = on;
+    }
 }
 
 /// A skinned mesh's traced twin: the mesh's bind pose in Solari's layout and its skin, and the joints last posed from.
@@ -180,6 +189,7 @@ fn meshes(
     mut assets: ResMut<Assets<Mesh>>,
     mut copies: Local<HashMap<(AssetId<Mesh>, bool), Option<Handle<Mesh>>>>,
     mut said: Local<bool>,
+    dynamic: Res<Dynamic>,
 ) {
     if on.is_empty() {
         return;
@@ -196,7 +206,7 @@ fn meshes(
             None => continue,
             Some(true) => {}
         }
-        if skinned && !morphed && dynamic() {
+        if skinned && !morphed && dynamic.0 {
             let mapped = mats.get(&mat.0).is_some_and(|m| m.normal_map_texture.is_some());
             let Some(twin) = assets.get(&m.0).map(|src| skin_twin(src, mapped)) else { continue };
             match twin {

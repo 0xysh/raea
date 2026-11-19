@@ -274,6 +274,9 @@ pub fn motion_blur(all: &[Vec<Item>], p: &mut Program, row: &mut BTreeMap<String
     if let Some(s) = num(&its[0].props, "samples") {
         row.insert("mb_samples".into(), V::N(s));
     }
+    if its[0].props.get("kind").and_then(Value::as_str) == Some("bevy") {
+        row.insert("mb_bevy".into(), V::N(1.0));
+    }
 }
 
 /// a part's `rotation` as glam's Quat [x, y, z, w] (Bevy's identity when it has none)

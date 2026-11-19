@@ -127,6 +127,8 @@ view holds still. For stills to check a look against, not for motion. Same GPU n
 | Prop | Type | What it does |
 | --- | --- | --- |
 | `reset` | `boolean` | start the accumulation again |
+| `samples` | `number` | how many times a render draws each frame, each draw one more sample a pixel, the last kept (1 by default): 256 or more converges a reference still. Its accumulation starts afresh each frame, so a moved part isn't smeared |
+| `media` | `boolean` | whether its rays walk the fog volumes, scattering in the air (true by default); false for a frame without the air |
 
 ### `PointLight`
 
@@ -194,7 +196,7 @@ Ray-traced direct and indirect light for the <Camera3d> it's inside (Bevy's Sola
 light and reflections traced against the scene, in place of shadow maps. Needs a GPU with ray queries (Apple
 silicon on Metal, RTX on Vulkan); elsewhere the scene draws raster-lit and raea says so. On the Mac MetalFX's
 temporal denoiser cleans it up (RT4; denoise={false} shows the raw noise). A <Character> (skinned, morphed) stays
-raster-lit: Bevy 0.20's Solari can't trace it.
+raster-lit: Bevy 0.20's Solari can't trace it, unless `dynamic` gives a skinned one a traced twin.
 
 | Prop | Type | What it does |
 | --- | --- | --- |
@@ -217,6 +219,7 @@ raster-lit: Bevy 0.20's Solari can't trace it.
 | `jitter` | `"denoiser" \| "scaler" \| "both" \| "flip" \| "none"` | which of MetalFX's passes is told the camera's jitter: "denoiser", "scaler", "both", "flip" (the denoiser, negated), "none" (and the view isn't jittered). For A/Bs of RT9; default "denoiser"; RAEA_SOLARI_JITTER ("" the denoiser, "0" none) overrides it |
 | `emissiveSharpness` | `number` | how fast a sample's weight falls with its distance from a pixel's centre in the emission's history, exp(-k d²) in output pixels: lower is softer. Default 6; RAEA_EMIT_TAA_SHARP overrides it |
 | `jitterFrames` | `number` | the jitter's cycle at the full size, in frames: a view drawn at s of its size a side cycles through jitterFrames / s² offsets, and an emissive twig glimpsed through it may stay away that long. Default 8 (DLSS's) |
+| `dynamic` | `boolean` | the traced scene follows what moves (a trial, false by default): a skinned character's traced twin is posed each frame, so it casts traced shadows and bounces light, and a hidden part leaves the traced scene. Decided as each mesh is first traced, so set it from the first frame |
 | `constants` | `{ /** how far ReSTIR looks for a neighbour's light samples, pixels (30): smaller keeps …` | constants in Solari's and the denoiser's shaders, compiled in when the scene loads (a value changed later in the composition isn't drawn); each left out keeps the shader's own, given in brackets. <ShaderConstants> reaches the rest |
 
 ### `SpotLight`

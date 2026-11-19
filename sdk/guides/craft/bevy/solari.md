@@ -21,7 +21,7 @@
     the denoiser, 4 and 2 look the same in most rooms and save time.
 - Every other choice the engine makes for the traced light is a prop too, so an A/B is two compositions, never a
   build: `denoise`, `guides`, `reflectionDepth`, `emissive` ("taa", "split", "mask"), `upscale` ("one", "two"),
-  `preexposure`, `aa`, `jitter`, `jitterFrames`, `emissiveSharpness`, `firstBounce`, `confidenceCap` and `cache` (the world cache's
+  `preexposure`, `aa`, `jitter`, `jitterFrames`, `emissiveSharpness`, `dynamic`, `firstBounce`, `confidenceCap` and `cache` (the world cache's
   `frames`, `lightSamples`, `reach`, `updates`, `cellSize`, `lodScale`). Each prop's TSDoc says what it changes. The
   defaults are the measured best, so leave them unless a test scene shows otherwise. A developer's environment
   variable of the same setting (`RAEA_SOLARI_DENOISE=0`, `RAEA_METALFX_PREEXPOSURE=4`) overrides the prop on every
@@ -33,7 +33,8 @@
 - Keep a look's settings as a TypeScript object and spread it: `const LIVE = { primarySamples: 4, scale: 0.67 }`,
   then `<SolariLighting {...LIVE} />` or `<SolariLighting {...LIVE} preexposure={32} />`.
 - For a still to judge the look against, use `<Pathtracer />` in its place: exact and slow, accumulating while the
-  view holds still. It isn't for motion.
+  view holds still. It isn't for motion. `<Pathtracer samples={256} />` has a render draw each frame that many times,
+  so a reference still converges; `media={false}` leaves the fog volumes' air out.
 - Light the scene with what Solari sees:
   - a `DirectionalLight` (the sun);
   - emissive surfaces: a `StandardMaterial` with `emissive`. A fluorescent tube is a thin glowing box, a bulb a small

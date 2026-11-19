@@ -155,7 +155,7 @@ of Bloom and Grade that skips something. A scene with no pass pays nothing.
 
 - `<MotionBlur shutterAngle={0.5} samples={4} />`: fast moves smear (0.5 is a film camera's 180-degree shutter; 1 a
   whole frame). It animates per frame, and a frame without the element has none, so `{fast ? <MotionBlur /> : null}`
-  blurs only the whip.
+  blurs only the whip. `kind="bevy"` swaps raea's shutter for Bevy's own blur, to compare the two.
 - It blurs inside moving parts and whole-frame camera moves; a part's silhouette over a still background, and toon ink
   lines, stay sharp (Bevy's method).
 - With it, each frame is drawn after the one before it, so a frame's blur is the same in a render, a seek and play.

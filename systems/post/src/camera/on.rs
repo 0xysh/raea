@@ -165,7 +165,7 @@ pub fn aa(world: &mut World, e: Entity, vals: &Vals) {
     // scenes measured with it). Its depth and motion prepasses are read single-sampled (PrepassRead keeps MSAA off).
     let steady = matches!(vals.get("aa"), Some(V::S(m)) if m == "steady") || std::env::var_os("RAEA_STEADY").is_some();
     if steady && !preview() && world.get::<Camera3d>(e).is_some() {
-        world.entity_mut(e).insert((crate::steady::Steady, raea_sys_compose::passes::PrepassRead, Msaa::Off));
+        world.entity_mut(e).insert((crate::steady::Steady::of(vals), raea_sys_compose::passes::PrepassRead, Msaa::Off));
     }
     match vals.get("aa") {
         Some(V::S(m)) if m == "smaa" && !preview() => {

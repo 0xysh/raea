@@ -86,12 +86,13 @@ pub(crate) fn bevy_over_3d(world: &mut World, page: &mut raea_runtime_page::Bevy
     e.set_view_box(view);
     let mats = page.set_ui_materials(e.world_mut())?;
     // one draw a frame, as the fed render draws it (drawn again, a frame's auto exposure and temporal passes move on);
-    // RAEA_LIGHT_SPP=N draws it N times, the last kept, so a path-traced reference converges (docs/realism.feature LT1),
+    // <Pathtracer samples={N}> (or RAEA_LIGHT_SPP=N) draws it N times, the last kept, so a path-traced reference converges (docs/realism.feature LT1),
     // its accumulation started afresh so the frame before isn't in it
-    if spp() > 1 {
+    let spp = raea_sys_frame::pathtracer::samples(e.world_mut());
+    if spp > 1 {
         raea_render::restart_pathtracer(e.world_mut());
     }
-    for _ in 1..spp() {
+    for _ in 1..spp {
         e.draw(cx.now);
     }
     e.draw(cx.now);
@@ -332,10 +333,4 @@ pub(crate) fn page_dump(frame: i64, px: &[u8], w: u32, h: u32, boxes: Option<Vec
         std::fs::write(dir.join(format!("{frame}.json")), Value::Object(m).to_string()).map_err(|e| e.to_string())?;
     }
     Ok(())
-}
-
-/// RAEA_LIGHT_SPP: how many times each frame's 3D is drawn (1 unset): a path tracer's samples a pixel, one a draw
-fn spp() -> u32 {
-    static N: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
-    *N.get_or_init(|| std::env::var("RAEA_LIGHT_SPP").ok().and_then(|v| v.parse().ok()).filter(|n| *n >= 1).unwrap_or(1))
 }

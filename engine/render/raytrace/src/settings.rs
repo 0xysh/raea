@@ -16,6 +16,7 @@ struct Overrides {
     aa: Option<bool>,
     jitter: Option<String>,
     emissive_sharpness: Option<f32>,
+    dynamic: Option<bool>,
 }
 
 fn overrides() -> &'static Overrides {
@@ -35,6 +36,7 @@ fn overrides() -> &'static Overrides {
             aa: switch("RAEA_SOLARI_AA"),
             jitter: var("RAEA_SOLARI_JITTER"),
             emissive_sharpness: num("RAEA_EMIT_TAA_SHARP"),
+            dynamic: switch("RAEA_SOLARI_DYNAMIC"),
         }
     })
 }
@@ -52,6 +54,7 @@ pub(crate) fn of(s: Option<&SolariSettings>) -> SolariSettings {
     if let Some(v) = o.aa { s.aa = v; }
     if let Some(v) = &o.jitter { s.jitter = v.clone(); }
     if let Some(v) = o.emissive_sharpness { s.emissive_sharpness = v; }
+    if let Some(v) = o.dynamic { s.dynamic = v; }
     s
 }
 
@@ -66,6 +69,7 @@ fn set() -> Vec<(&'static str, String, &'static str)> {
         ("RAEA_METALFX_PREEXPOSURE", "preexposure"),
         ("RAEA_SOLARI_AA", "aa"),
         ("RAEA_SOLARI_JITTER", "jitter"),
+        ("RAEA_SOLARI_DYNAMIC", "dynamic"),
         ("RAEA_EMIT_TAA_SHARP", "emissiveSharpness"),
         ("RAEA_SOLARI_SCALE", "scale"),
     ]
@@ -97,7 +101,7 @@ pub(crate) fn record(view: Entity, s: &SolariSettings, scale: f32, seen: &mut Ha
             "view": view.to_bits(),
             "denoise": s.denoise, "guides": s.guides, "reflection_depth": s.reflection_depth, "emissive": s.emissive,
             "upscale": s.upscale, "preexposure": s.preexposure, "aa": s.aa, "jitter": s.jitter,
-            "emissive_sharpness": s.emissive_sharpness, "jitter_frames": s.jitter_frames, "scale": (f64::from(scale) * 1000.0).round() / 1000.0,
+            "emissive_sharpness": s.emissive_sharpness, "jitter_frames": s.jitter_frames, "dynamic": s.dynamic, "scale": (f64::from(scale) * 1000.0).round() / 1000.0,
             "env": env.iter().map(|(n, v, _)| format!("{n}={v}")).collect::<Vec<_>>(),
         }),
     );

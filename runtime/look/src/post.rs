@@ -157,6 +157,14 @@ pub fn frame_post(its: &[Item]) -> BTreeMap<String, V> {
         }
     }
     let aa = first("aa").and_then(|a| a.get("mode")).and_then(Value::as_str);
+    // steady's rates (systems/post steady.rs)
+    if let Some(s) = first("aa").and_then(|a| a.get("steady")).and_then(Value::as_object) {
+        for (prop, col) in [("still", "aa_steady_still"), ("moving", "aa_steady_moving"), ("px", "aa_steady_px")] {
+            if let Some(x) = num(s, prop) {
+                row.insert(col.into(), V::N(x));
+            }
+        }
+    }
     match (aa, ssao.is_some()) {
         (Some("msaa") | None, true) => {
             row.insert("aa".into(), V::S("smaa".into()));
