@@ -131,7 +131,8 @@ fn cut(out: &Path, [a, b]: [i64; 2], fps: f64, to: &Path) -> R<()> {
     }
     let (from, len) = (format!("{:.4}", a as f64 / fps), format!("{:.4}", (b - a) as f64 / fps));
     let args = ["-hide_banner", "-loglevel", "error", "-y", "-ss", &from, "-i"];
-    let o = std::process::Command::new("ffmpeg").args(args).arg(out).args(["-t", &len, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"]).arg(to).output().map_err(|e| format!("ffmpeg: {e}"))?;
+    let h264 = raea_io_ffmpeg::h264().ok_or("ffmpeg here has no H.264 encoder (libx264, Windows' h264_mf or VideoToolbox's) to cut the clip with")?;
+    let o = std::process::Command::new("ffmpeg").args(args).arg(out).args(["-t", &len]).args(h264).args(["-c:a", "aac"]).arg(to).output().map_err(|e| format!("ffmpeg: {e}"))?;
     if !o.status.success() {
         return Err(format!("ffmpeg: {}", String::from_utf8_lossy(&o.stderr).trim()));
     }

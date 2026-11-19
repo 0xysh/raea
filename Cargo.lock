@@ -13954,6 +13954,7 @@ name = "raea-app-notes"
 version = "0.1.0"
 dependencies = [
  "raea-core-facts",
+ "raea-io-ffmpeg",
  "raea-io-home",
  "raea-io-trace",
  "serde",
@@ -15867,6 +15868,7 @@ dependencies = [
  "dunce",
  "fastrand",
  "image",
+ "raea-io-ffmpeg",
  "raea-sys-columns",
  "raea-sys-fingerprint",
  "serde",

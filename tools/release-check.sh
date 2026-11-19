@@ -150,15 +150,27 @@ api=$(cat "$check"/raea/bin/* | grep -aoE '(api|sign)\.raea\.io|RAEA_(SIGN|GEN)_
 [ -z "$api" ] || fail "the binaries name raea's API ($api): build raea-cli with --no-default-features"
 keys=$(grep -rlE 'sk-or-v1-[0-9a-f]{20}|sk-ant-[A-Za-z0-9_-]{20}|(^|[^A-Za-z0-9+/])AKIA[0-9A-Z]{16}([^A-Za-z0-9+/=]|$)|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' "$check/raea" 2>/dev/null | head -5 || true)
 [ -z "$keys" ] || fail "key-shaped text in: $keys"
-# Windows: our binaries only. Any other DLL, or a file named like the CRT, the SDK or DirectX's redistributables, is
-# Microsoft's and isn't ours to ship. The one exception is ONNX Runtime's onnxruntime.dll, which Microsoft publishes
-# under MIT, shipped with its licence (#110: tools/release/onnxruntime.sh)
-ms=$(cd "$check/raea" && find . -type f \( -iname '*.dll' ! -path './bin/raea_bundle.dll' ! -path './bin/onnxruntime.dll' -o -iname 'vcruntime*' -o -iname 'msvcp*' -o -iname 'ucrtbase*' -o -iname 'api-ms-win*' -o -iname 'concrt*' -o -iname 'vccorlib*' -o -iname '*.lib' -o -iname '*.pdb' -o -iname 'd3dcompiler*' -o -iname 'dxcompiler*' -o -iname 'dxil*' \) | head -5)
+# Windows: our binaries, and Microsoft's only where raea ships them on purpose, with their licences: ONNX Runtime's
+# onnxruntime.dll (MIT, #110) and the VC++ runtime's four DLLs (tools/release/win-bundle.sh). Any other DLL, or a file
+# named like the CRT, the SDK or DirectX's redistributables, isn't ours to ship.
+bundle=$(cat "$(dirname "$0")/release/win-bundle.files")
+allowed=$(printf './bin/%s\n' raea_bundle.dll onnxruntime.dll $bundle)
+ms=$(cd "$check/raea" && find . -type f \( -iname '*.dll' -o -iname 'vcruntime*' -o -iname 'msvcp*' -o -iname 'ucrtbase*' -o -iname 'api-ms-win*' -o -iname 'concrt*' -o -iname 'vccorlib*' -o -iname '*.lib' -o -iname '*.pdb' -o -iname 'd3dcompiler*' -o -iname 'dxcompiler*' -o -iname 'dxil*' \) | grep -ivxF "$allowed" | head -5 || true)
 [ -z "$ms" ] || fail "files that aren't ours: $ms"
 if [ -f "$check/raea/bin/raea.exe" ]; then
   for f in onnxruntime.dll onnxruntime-LICENSE.txt onnxruntime-ThirdPartyNotices.txt; do
     [ -f "$check/raea/bin/$f" ] || fail "bin/$f is missing: raea.exe loads ONNX Runtime from it, and its licence goes with it (#110)"
   done
+  # what a PC with nothing installed and no downloads needs, each with its licence
+  for f in $bundle; do
+    [ -f "$check/raea/bin/$f" ] || fail "bin/$f is missing (tools/release/win-bundle.sh): a PC without it can't start raea, read a phone's video or set up a model"
+  done
+  "$check/raea/bin/ffmpeg.exe" -hide_banner -L 2>&1 | grep -q "Lesser General Public" || fail "bin/ffmpeg.exe isn't raea's LGPL build"
+  # alpha WebM decodes with libvpx (#113), and a clip a person plays is cut to H.264 with Windows' own encoder
+  for c in libvpx-vp9 h264_mf; do
+    "$check/raea/bin/ffmpeg.exe" -hide_banner -codecs 2>&1 | grep -q "$c" || fail "bin/ffmpeg.exe has no $c"
+  done
+  "$check/raea/bin/uv.exe" --version 2>&1 | grep -q '^uv ' || fail "bin/uv.exe doesn't run"
 fi
 echo "release: $archive checked: an unpacked copy rendered a frame and checked an app on both targets with RAEA_NO_TREE=1"
 rm -rf "$check"

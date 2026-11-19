@@ -20,8 +20,16 @@ animato (MIT OR Apache-2.0), usvg and resvg (Apache-2.0 OR MIT), mediabunny (MPL
 
 The Windows build (docs/ports.feature PT20) adds: junction 1.4.2 (MIT, node_modules' links in io/npm) and windows-sys
 0.61.2 (Microsoft, MIT OR Apache-2.0, in io/trace); every build has dunce 1.0.5 (CC0-1.0 OR MIT-0 OR Apache-2.0, plain
-paths for Windows in runtime/bundle). It ships none of Microsoft's C runtime or SDK files: the runtime comes from the
-Microsoft Visual C++ Redistributable, installed on the machine.
+paths for Windows in runtime/bundle). Its bin\ also carries, each with its licence beside it (tools/release/win-bundle.sh):
+  Microsoft's Visual C++ runtime (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll), redistributed
+  under Microsoft's Visual Studio licence terms; ONNX Runtime's onnxruntime.dll (Microsoft, MIT);
+  FFmpeg 9.0.2 (ffmpeg.exe, ffprobe.exe; LGPL-2.1-or-later), built from FFmpeg's release with FFmpeg's own code, zlib
+  and libvpx 1.17.0's decoders (BSD-3-Clause with the WebM project's patent grant: libvpx-LICENSE.txt,
+  libvpx-PATENTS.txt) by tools/release/ffmpeg-win.sh, its H.264 encoder Windows' own (Media Foundation), its source
+  published as the release tools-ffmpeg-9.0.2-lgpl;
+  uv (uv.exe; Astral, MIT OR Apache-2.0).
+The Windows app adds Git for Windows with Git LFS (dugite-native; GPLv2 and its parts' licences, in git\), which raea
+runs as a separate program; its complete corresponding source is published as the release tools-git-<tag>-sources.
 The native target (engine/rune, docs/targets.feature) builds on Rune (https://github.com/anomalyco/rune, Copyright
 2026 Anomaly, MIT; LICENSES/rune-0.0.1/repository-LICENSE): rune, rune-kit and their crates, by a pinned rev.
 

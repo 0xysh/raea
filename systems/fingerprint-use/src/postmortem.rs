@@ -70,10 +70,12 @@ pub fn picks(scored: &[Scored], trained: &Trained, fp: &Fingerprint, l: &Ledger,
 /// The moment cut to a clip to play beside its question (ffmpeg), else None and the whole piece plays
 pub fn clip(x: &Ask, out: &Path) -> Option<PathBuf> {
     std::fs::create_dir_all(out.parent()?).ok()?;
+    let h264 = raea_io_ffmpeg::h264()?;
     let ok = std::process::Command::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-ss", &format!("{:.2}", (x.a - 0.5).max(0.0)), "-t", &format!("{:.2}", x.b - x.a + 1.0), "-i"])
         .arg(&x.file)
-        .args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"])
+        .args(h264)
+        .args(["-c:a", "aac"])
         .arg(out)
         .status()
         .is_ok_and(|s| s.success());

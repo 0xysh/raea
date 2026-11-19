@@ -217,9 +217,10 @@ jobs:
           retention-days: 3
           compression-level: 0
 
-  # Windows in Git's bash on GitHub's runner, with the Visual Studio Build Tools in its image (their image terms; we
-  # accept no licence and download no Microsoft files). The C runtime is the DLL one (the VC++ redistributable): ort's
-  # prebuilt ONNX Runtime is built against it, so crt-static doesn't link (LNK2019 on __imp_ symbols, 10-29).
+  # Windows in Git's bash on GitHub's runner, with Visual Studio in its image. The C runtime is the DLL one: ONNX
+  # Runtime is built against it (crt-static didn't link: LNK2019 on __imp_ symbols, 10-29), and Microsoft's
+  # onnxruntime.dll imports it too, so the VC++ runtime's DLLs ship beside raea.exe from this image's Visual Studio
+  # (tools/release/win-bundle.sh), as Microsoft documents for app-local deployment.
   windows:
     runs-on: ${{ (vars.RELEASE_WINDOWS_RUNNER && fromJSON(vars.RELEASE_WINDOWS_RUNNER)) || 'windows-latest' }}
     timeout-minutes: 350
@@ -333,12 +334,16 @@ jobs:
       # static runtime ort links by default is built for AVX2 and stopped raea.exe at start on CPUs without it
       - name: ONNX Runtime (tools/release/onnxruntime.sh)
         run: bash tools/release/onnxruntime.sh target/dist
-      # which DLLs raea needs from the machine (the CRT's come from the VC++ redistributable)
+      # and what a PC with nothing installed and no downloads needs beside raea.exe: the VC++ runtime (from this
+      # runner's Visual Studio), FFmpeg (raea's LGPL build) and uv, each with its licence
+      - name: The Windows bundle (tools/release/win-bundle.sh)
+        run: bash tools/release/win-bundle.sh target/dist
+      # which DLLs raea needs from the machine (the CRT's now ship beside it: win-bundle.sh)
       - name: What raea.exe imports
         run: |
           { echo '### what raea.exe, raea_bundle.dll, raea-perceive.exe and onnxruntime.dll import'; echo '```'
             dumpbin=$(ls "/c/Program Files/Microsoft Visual Studio"/*/*/VC/Tools/MSVC/*/bin/HostX64/x64/dumpbin.exe | head -1)
-            "$dumpbin" -nologo -dependents target/dist/raea.exe target/dist/raea_bundle.dll target/dist/raea-perceive.exe target/dist/onnxruntime.dll | grep -iE '\.dll$|Dump of' | sed 's/^ *//'
+            "$dumpbin" -nologo -dependents target/dist/raea.exe target/dist/raea_bundle.dll target/dist/raea-perceive.exe target/dist/onnxruntime.dll target/dist/ffmpeg.exe | grep -iE '\.dll$|Dump of' | sed 's/^ *//'
             echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY" || true
       # release.sh's checks render on Mesa's lavapipe (software Vulkan, MIT; on the runner only, never in the zip): the
       # runner has no GPU, and WARP, Windows' own software DX12, crashes compiling one of Bevy's compute shaders there
