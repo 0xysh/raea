@@ -41,6 +41,8 @@ pub struct Probe {
     /// past the picture, and the container's duration counts that
     pub picture: f64,
     pub audio: bool,
+    /// the picture's frames a second (0 when it doesn't say)
+    pub fps: f64,
 }
 
 /// The picture's size, the file's duration, where the picture ends and whether there's sound: ffprobe's stream and
@@ -50,7 +52,7 @@ pub fn probe(video: &str) -> R<Probe> {
         let p = raea_app_media::probe_of(Path::new(video))?;
         let v = p.video.as_ref().ok_or("no video stream")?;
         let picture = p.track.as_ref().map_or(v.duration, |t| t.duration);
-        return Ok(Probe { w: v.width as f64, h: v.height as f64, duration: p.duration.max(picture), picture, audio: p.audio.is_some() });
+        return Ok(Probe { w: v.width as f64, h: v.height as f64, duration: p.duration.max(picture), picture, audio: p.audio.is_some(), fps: v.fps });
     }
     let entries = "stream=codec_type,width,height,r_frame_rate,duration,start_time:format=duration,start_time";
     let out = Command::new("ffprobe").args(["-v", "error", "-show_entries", entries, "-of", "json", video]).output().map_err(|e| format!("ffprobe: {e}"))?;
@@ -65,7 +67,11 @@ pub fn probe(video: &str) -> R<Probe> {
         None => last_packet_end(video).map_or(duration, |end| end - origin),
     };
     let audio = streams.iter().any(|s| s["codec_type"] == "audio");
-    Ok(Probe { w: vid["width"].as_f64().unwrap_or(1920.0), h: vid["height"].as_f64().unwrap_or(1080.0), duration, picture, audio })
+    let fps = vid["r_frame_rate"].as_str().and_then(|r| {
+        let (n, d) = r.split_once('/').unwrap_or((r, "1"));
+        Some(n.parse::<f64>().ok()? / d.parse::<f64>().ok().filter(|d| *d > 0.0)?)
+    });
+    Ok(Probe { w: vid["width"].as_f64().unwrap_or(1920.0), h: vid["height"].as_f64().unwrap_or(1080.0), duration, picture, audio, fps: fps.unwrap_or(0.0) })
 }
 
 /// Where the picture's last packet ends, for a container that doesn't state the video stream's own length (Matroska)

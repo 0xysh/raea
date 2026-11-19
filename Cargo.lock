@@ -13654,16 +13654,26 @@ dependencies = [
 name = "raea-app-check"
 version = "0.1.0"
 dependencies = [
- "dunce",
+ "raea-app-check-cause",
  "raea-app-check-flash",
  "raea-app-check-inbox",
  "raea-app-check-read",
+ "raea-app-check-text",
  "raea-core-brief",
  "raea-core-facts",
  "raea-io-ffmpeg",
  "raea-io-home",
  "raea-io-trace",
  "raea-sys-measure",
+ "serde_json",
+]
+
+[[package]]
+name = "raea-app-check-cause"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "raea-core-facts",
  "serde_json",
 ]
 
@@ -13687,6 +13697,15 @@ dependencies = [
  "raea-io-home",
  "raea-io-media",
  "raea-sys-measure",
+ "serde_json",
+]
+
+[[package]]
+name = "raea-app-check-text"
+version = "0.1.0"
+dependencies = [
+ "dunce",
+ "raea-core-facts",
  "serde_json",
 ]
 

@@ -54,8 +54,11 @@ By default the bitrate follows the size and frame rate: about 20 Mbit/s at 1080p
 `--quality` asks for constant quality: each frame gets the bits it needs, so a flat motion graphic stays small and a
 busy one stays clean.
 
-Blotchy dark areas come from the encoder, not the composition. Export dark material as PNG frames and encode them
-with more bits for the darks:
+Blotchy dark areas come from the encoder, or from the footage itself: a phone's own compression shows in its darks.
+When `raea check` finds them on a render made in a raea project, it draws the composition again at the frames it
+sampled, without encoding, and tells the two apart. The picture's own is a note, since no render setting removes it.
+What the encode added is the error, and `--quality master` gives the darks the bits they need. To hand dark material on
+as frames instead, export PNG frames:
 
 ```sh
 RAEA_READBACK=rgba raea render piece.tsx -o frames/

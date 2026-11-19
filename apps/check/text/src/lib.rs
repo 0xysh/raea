@@ -1,25 +1,39 @@
-use super::*;
+//! What a render's text breaks, from its manifest alone: clipped, in the platform's UI zones, too brief to read, over
+//! the face, off its cue, and the brand kit it was styled from. raea check's text rules, split out of raea-app-check so
+//! `raea render --manifest` holds its own text to them as it finishes, a check's round sooner.
+use serde_json::Value;
+
+pub type R<T> = Result<T, String>;
+
+/// One thing a rule found: its rule, its rank (P0 breaks the piece to P3 polish), when (seconds) and what to do.
+#[derive(Clone, Debug)]
+pub struct Issue {
+    pub rule: &'static str,
+    pub p: u8,
+    pub at: Option<f64>,
+    pub says: String,
+}
 
 /// A text as it stays on screen: from the frame it comes on to the frame it leaves. Typing (a text growing into the
 /// next) and counting (only its digits changing) are one run, judged by its last text.
 #[derive(Clone)]
-pub(crate) struct Run {
-    pub(crate) text: String,
-    pub(crate) from: f64,
-    pub(crate) to: f64,
-    pub(crate) box_: [f64; 4],
+pub struct Run {
+    pub text: String,
+    pub from: f64,
+    pub to: f64,
+    pub box_: [f64; 4],
     /// where its letters are on every frame it shows its whole text (the manifest's `ink`, else its box: a centred line in
     /// a full-width box is nowhere near x = 0, #89): a text the camera carries (a sign on a panning street) moves
     /// through the frame's edges and zones, which only counts against it when no frame shows it clear
-    pub(crate) boxes: Vec<[f64; 4]>,
-    pub(crate) color: String,
-    pub(crate) size: f64,
+    pub boxes: Vec<[f64; 4]>,
+    pub color: String,
+    pub size: f64,
 }
 
 /// The brand kit the cut was styled from (brand/ at or above the manifest's or the video's folder, as render finds
 /// brand.css): a kit `raea brand` read from a thin fetch that nobody corrected by hand is a placeholder, P1; a brand.css
 /// with no brand.json beside it wasn't read from the brand at all, P2
-pub(crate) fn brand_kit(near: &[&str], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+pub fn brand_kit(near: &[&str], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
     let mut seen = std::collections::HashSet::new();
     for start in near.iter().filter(|p| !p.is_empty()) {
         let abs = dunce::canonicalize(&std::path::Path::new(start)).unwrap_or_else(|_| std::path::PathBuf::from(start));
@@ -50,7 +64,7 @@ pub(crate) fn brand_kit(near: &[&str], issues: &mut Vec<Issue>, passed: &mut Vec
     }
 }
 
-pub(crate) fn text_runs(manifest: &Value) -> Vec<Run> {
+pub fn text_runs(manifest: &Value) -> Vec<Run> {
     let fps = manifest["fps"].as_f64().unwrap_or(30.0);
     let frames = manifest["frames"].as_array().cloned().unwrap_or_default();
     let mut open: Vec<Run> = Vec::new();
@@ -95,11 +109,11 @@ pub(crate) fn text_runs(manifest: &Value) -> Vec<Run> {
 }
 
 /// The share of the face's area a text may cover before it's a fault (@raea/video's proofBoxes keeps the same 8%)
-pub(crate) const FACE_COVER: f64 = 0.08;
+pub const FACE_COVER: f64 = 0.08;
 
 /// The face over time from a perception.json (`raea cut`: each clip's first frame, the face at its middle in the
 /// edit's px): [from, to) in seconds and the face's box, for the stretches that have one
-pub(crate) fn faces_of(perception: &Value, fps: f64) -> Vec<(f64, f64, [f64; 4])> {
+pub fn faces_of(perception: &Value, fps: f64) -> Vec<(f64, f64, [f64; 4])> {
     let mut keys: Vec<(f64, Option<[f64; 4]>)> = perception.as_object().into_iter().flatten().filter_map(|(k, v)| {
         let face = v["face"].as_object().map(|f| ["x", "y", "w", "h"].map(|n| f.get(n).and_then(Value::as_f64).unwrap_or(0.0)));
         Some((k.parse::<f64>().ok()? / fps, face))
@@ -110,7 +124,7 @@ pub(crate) fn faces_of(perception: &Value, fps: f64) -> Vec<(f64, f64, [f64; 4])
 
 /// Text over the face: a run that covers more than FACE_COVER of the face's area while that face is up, on every frame
 /// that shows it whole (a text the camera carries counts only when no frame shows it clear)
-pub(crate) fn face_cover(runs: &[Run], faces: &[(f64, f64, [f64; 4])], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+pub fn face_cover(runs: &[Run], faces: &[(f64, f64, [f64; 4])], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
     let share = |b: &[f64; 4], f: &[f64; 4]| {
         let ox = (b[0] + b[2]).min(f[0] + f[2]) - b[0].max(f[0]);
         let oy = (b[1] + b[3]).min(f[1] + f[3]) - b[1].max(f[1]);
@@ -134,7 +148,7 @@ pub(crate) fn face_cover(runs: &[Run], faces: &[(f64, f64, [f64; 4])], issues: &
 }
 
 /// the zones where text can't go, as [top, right, bottom, left] at 1080 wide (sdk/guides/craft/floor.md)
-pub(crate) fn zones(w: f64, h: f64, shape: Option<&str>, platform: Option<&str>) -> [f64; 4] {
+pub fn zones(w: f64, h: f64, shape: Option<&str>, platform: Option<&str>) -> [f64; 4] {
     let r = w / h;
     let shape = shape.unwrap_or(if r < 0.7 { "9:16" } else if r < 0.9 { "4:5" } else if r < 1.2 { "1:1" } else { "16:9" });
     let z = match (shape, platform) {
@@ -153,12 +167,12 @@ pub(crate) fn zones(w: f64, h: f64, shape: Option<&str>, platform: Option<&str>)
 /// A caption the voice reads out: every word of the text is said while it's on screen (from a little before it comes
 /// on). The viewer hears it as it shows, so it needs no reading time of its own (karaoke groups are up for as long as
 /// they take to say).
-pub(crate) fn spoken(r: &Run, words: &[Word]) -> bool {
+pub fn spoken(r: &Run, words: &[Word]) -> bool {
     let tokens: Vec<String> = r.text.split_whitespace().map(norm).filter(|t| !t.is_empty()).collect();
     !tokens.is_empty() && tokens.iter().all(|t| words.iter().any(|w| norm(&w.text) == *t && w.start >= r.from - 0.3 && w.start <= r.to + 0.1))
 }
 
-pub(crate) fn text_rules(runs: &[Run], heard: Option<&[Word]>, w: f64, h: f64, shape: Option<&str>, platform: Option<&str>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+pub fn text_rules(runs: &[Run], heard: Option<&[Word]>, w: f64, h: f64, shape: Option<&str>, platform: Option<&str>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
     let [zt, zr, zb, zl] = zones(w, h, shape, platform);
     let (mut clipped, mut unsafe_, mut brief) = (0, 0, 0);
     for r in runs {
@@ -194,57 +208,30 @@ pub(crate) fn text_rules(runs: &[Run], heard: Option<&[Word]>, w: f64, h: f64, s
     }
 }
 
-pub(crate) fn quote(s: &str) -> String {
+pub fn quote(s: &str) -> String {
     let s: String = s.chars().take(40).collect();
     format!("\u{201c}{s}\u{201d}")
 }
 
-/// Caption contrast: at each text's middle frame, the pixels behind it against its colour, at least 3:1. The pixels
-/// behind are the half of the box least like the text.
-pub(crate) fn contrast(video: &str, runs: &[Run], w: f64, h: f64, probe: &Probe, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
-    let (sx, sy) = (probe.w / w, probe.h / h);
-    let mut low = 0;
-    let mut measured = 0;
-    for r in runs.iter().filter(|r| r.size >= 20.0).take(80) {
-        let [x, y, bw, bh] = r.box_;
-        let crop = [(x * sx).max(0.0) as u32, (y * sy).max(0.0) as u32, (bw * sx) as u32, (bh * sy) as u32];
-        if crop[0] + crop[2] > probe.w as u32 || crop[1] + crop[3] > probe.h as u32 {
-            continue;
-        }
-        let t = (r.from + r.to) / 2.0;
-        // the same measure `raea world` joins to a text from its render (raea-sys-measure, DR2)
-        let ratio = if crate::read::native() { crate::read::contrast(video, t, crop, &r.color) } else { raea_sys_measure::contrast(std::path::Path::new(video), t, crop, &r.color) };
-        let Some(ratio) = ratio else { continue };
-        measured += 1;
-        if ratio < 3.0 {
-            low += 1;
-            issues.push(Issue { rule: "contrast", p: 1, at: Some(t), says: format!("{} is {ratio:.1}:1 against what's behind it; make it at least 3:1 (a band, a shadow for separation, or another colour)", quote(&r.text)) });
-        }
-    }
-    if measured > 0 && low == 0 {
-        passed.push(format!("contrast: {measured} texts at 3:1 or better against their pixels"));
-    }
-}
-
 /// A transcript's word: its text, start and end in seconds (its end is its start when the transcript doesn't say).
-pub(crate) use raea_core_facts::Word;
+pub use raea_core_facts::Word;
 
 /// A transcript's words (raea_core_facts::transcript_words: {text, start} in seconds, or t, start_ms, or {text, from}
 /// in frames at `fps`), as the app's words.json and `raea render --words` have them.
-pub(crate) fn transcript(path: &str, fps: f64) -> R<Vec<Word>> {
+pub fn transcript(path: &str, fps: f64) -> R<Vec<Word>> {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?).map_err(|e| format!("{path}: {e}"))?;
     v.as_array().ok_or_else(|| format!("{path}: expected an array of words ({{text, start}} in seconds or {{text, from}} in frames)"))?;
     Ok(raea_core_facts::transcript_words(&v, fps))
 }
 
-pub(crate) use raea_core_facts::word_key as norm;
+pub use raea_core_facts::word_key as norm;
 
-pub(crate) const SMALL: [&str; 24] = ["the", "and", "you", "your", "for", "with", "that", "this", "its", "it's", "are", "was", "our", "out", "from", "into", "then", "than", "but", "not", "all", "can", "has", "have"];
+pub const SMALL: [&str; 24] = ["the", "and", "you", "your", "for", "with", "that", "this", "its", "it's", "are", "was", "our", "out", "from", "into", "then", "than", "but", "not", "all", "can", "has", "have"];
 
 /// Cues land on their words: a text whose words the voice says nearby comes on with the first of them, not after it.
 /// The text is found by its first word of weight, and then measured from the first word it shows: a caption "of the
 /// spend" comes on with "of", when the voice says "of the" just before "spend".
-pub(crate) fn cues(runs: &[Run], words: &[Word], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+pub fn cues(runs: &[Run], words: &[Word], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
     let (mut checked, mut off) = (0, 0);
     for r in runs {
         let shown: Vec<String> = r.text.split_whitespace().map(norm).filter(|t| !t.is_empty()).collect();

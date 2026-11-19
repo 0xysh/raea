@@ -22,8 +22,10 @@ mod flash;
 use flash::*;
 mod defects;
 use defects::*;
-mod text;
-use text::*;
+/// what a render's text breaks, from its manifest (split out: a render holds its own text to it)
+use raea_app_check_text::*;
+/// who can fix what it finds: the encode's or the picture's own, carried from an earlier export, a source
+use raea_app_check_cause as cause;
 /// a video read through FFmpeg, or raea's own decoders where it isn't installed
 use raea_app_check_read::{self as read, Probe};
 pub mod quick;
@@ -32,15 +34,6 @@ pub use raea_app_check_inbox as inbox;
 #[cfg(test)]
 mod tests;
 
-type R<T> = Result<T, String>;
-
-#[derive(Clone)]
-struct Issue {
-    rule: &'static str,
-    p: u8,
-    at: Option<f64>,
-    says: String,
-}
 
 /// `raea check …` with the person's taste, none or more (taste.ts and the kinds beside it, which the raea CLI evaluates: it owns the engine):
 /// its rules' checks hold the export to the person's own lines.
@@ -167,6 +160,12 @@ fn measured(args: &[String], taste: Vec<Taste>) -> R<(String, Vec<Issue>, Vec<St
     if let Some(p) = flag(args, "--things") {
         things(p, &mut issues, &mut passed)?;
     }
+    // a take or a download isn't a delivery: the mix sets the delivery's level, so its own is said, not held to the target
+    if cause::is_source(std::path::Path::new(&video)) {
+        for i in issues.iter_mut().filter(|i| i.rule == "loudness") {
+            (i.p, i.says) = (3, format!("a source, not a delivery: {} (the mix sets the delivery's level)", i.says));
+        }
+    }
     if let Some(manifest) = &manifest {
         let runs = text_runs(manifest);
         let (w, h) = (manifest["width"].as_f64().unwrap_or(probe.w), manifest["height"].as_f64().unwrap_or(probe.h));
@@ -216,7 +215,11 @@ fn findings_of(mut issues: Vec<Issue>, more: Vec<Finding>, fps: f64) -> Vec<Find
 /// The findings (`findings_of`), written to -o as JSON when asked, and the report's text with the count last. True
 /// when an error is among them.
 fn report(video: &str, issues: Vec<Issue>, more: Vec<Finding>, passed: Vec<String>, out: Option<&str>, fps: f64) -> R<(String, bool)> {
-    let found = findings_of(issues, more, fps);
+    let mut found = findings_of(issues, more, fps);
+    // what an earlier export of the same composition already had says so: the change between them didn't move it
+    if let Some(e) = cause::earlier(std::path::Path::new(video)) {
+        cause::carried(&mut found, &e, fps);
+    }
     let bad = found.iter().any(|f| f.level == Level::Error);
     if let Some(out) = out {
         let j = json!({"file": video, "fps": fps, "findings": found, "passed": passed});
