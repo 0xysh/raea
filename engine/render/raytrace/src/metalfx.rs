@@ -322,7 +322,9 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     let color_view = color.create_view(&Default::default());
     let back = ext.world_from_view.back();
     let reset = solari.reset || kit.views.get(&entity).is_none_or(|v| v.fresh);
-    let words: [f32; 16] = [cam.exposure, if split() { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, super::emit_taa::sharp(), jitter.x, jitter.y, 0.0, 0.0];
+    // the jitter's cycle at this render scale, how long a twig glimpsed through it can stay away (emit_taa.wgsl)
+    let cycle = super::upscale::cycle(size.x as f32 / full.x as f32) as f32;
+    let words: [f32; 16] = [cam.exposure, if split() { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, super::emit_taa::sharp(), jitter.x, jitter.y, cycle, 0.0];
     let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
     let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx params"), contents: &bytes, usage: wgpu::BufferUsages::UNIFORM });
     let v = kit.views.get_mut(&entity).unwrap();

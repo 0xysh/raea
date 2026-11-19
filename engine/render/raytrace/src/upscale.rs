@@ -105,13 +105,18 @@ fn aa() -> bool {
     *ON.get_or_init(|| std::env::var("RAEA_SOLARI_AA").as_deref() != Ok("0"))
 }
 
+/// How many frames the jitter takes to come round at render scale `s`: 8 / s², as DLSS asks.
+pub(crate) fn cycle(s: f32) -> u32 {
+    (8.0 / (s * s)).ceil() as u32
+}
+
 /// Each drawn-small camera's sub-pixel offset this frame (a Halton (2, 3) cycle, longer the smaller it draws, as
 /// DLSS asks: 8 / s² frames), its mip bias, and the prepasses the scaler reads (depth, motion).
 fn jitter(mut cmd: Commands, frame: Res<FrameCount>, mut cams: Query<(Entity, Option<&RenderScale>, Has<SolariLighting>, Option<&mut TemporalJitter>, Has<Jittered>), With<Camera3d>>) {
     for (e, rs, solari, j, mine) in &mut cams {
         let s = scale(rs, solari);
         if s < 1.0 || (solari && aa() && DENOISING.load(Ordering::Relaxed)) {
-            let n = (8.0 / (s * s)).ceil() as u32;
+            let n = cycle(s);
             let i = frame.0 % n + 1;
             let offset = if jitter_mode() == "0" { Vec2::ZERO } else { Vec2::new(halton(i, 2), halton(i, 3)) - 0.5 };
             match j {

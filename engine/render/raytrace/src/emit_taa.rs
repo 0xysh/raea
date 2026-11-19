@@ -14,6 +14,15 @@
 //! room and photo 1's lamp unchanged (0.87, 0.79-0.82); photo 2's window edges 2 pixels a frame jumping 80 levels
 //! (MetalFX alone 0, each frame's alone 1088); a screen's fine detail 0.44 of the tracer's (MetalFX 0.52); about 1 ms
 //! at 1080 x 1920. Through MetalFX's own temporal scaler instead, its clamp dropped the canopy again (0.50).
+//!
+//! Without a clamp, what a pixel showed stayed once it had gone (RT32): a 30000-nit orb crossing the desk left a white
+//! tube along its path, and one taken or switched off stayed white for seconds. Each history now keeps the depths it
+//! was gathered over and, for the nearest, how often it is about, how long it hasn't been, and whether it was moving.
+//! A still pixel's history is dropped where none of those depths is about it. It's held to the emission about it
+//! (3 x 3 samples) where its nearest surface has gone: away longer than a surface about nearly every frame can be, away
+//! the jitter's whole cycle, or moving when last seen. It's also held where every surface it saw is about. Where the view
+//! moves, it's held only above four times the brightest within the history read's reach (5 x 5). A twig glimpsed in some
+//! jittered frames is none of these, so the canopy keeps its light (1.09 of the tracer's before, 1.11 after).
 
 use bevy::prelude::*;
 
@@ -25,7 +34,8 @@ pub(crate) fn on() -> bool {
     *ON.get_or_init(|| !matches!(std::env::var("RAEA_SOLARI_EMISSIVE").as_deref(), Ok("mask") | Ok("split")))
 }
 
-/// RAEA_EMIT_TAA_DEBUG=1: the pass paints its weights instead; 2 never takes the history, 3 always does (emit_taa.wgsl)
+/// RAEA_EMIT_TAA_DEBUG=1: the pass paints its weights instead; 2 never takes the history, 3 always does; 4 paints which
+/// of RT32's rules held it (emit_taa.wgsl)
 pub(crate) fn debug() -> f32 {
     static ON: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var("RAEA_EMIT_TAA_DEBUG").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0))
@@ -39,8 +49,8 @@ pub(crate) fn sharp() -> f32 {
     *ON.get_or_init(|| std::env::var("RAEA_EMIT_TAA_SHARP").ok().and_then(|v| v.parse().ok()).unwrap_or(6.0))
 }
 
-/// A view's emission history at the output's size: the gathered emission and its weight, and the depth it was gathered
-/// at, two of each, one read as the other is written.
+/// A view's emission history at the output's size: the gathered emission and its weight, and the depths it was gathered
+/// over with the evidence for its nearest surface, two of each, one read as the other is written.
 pub(crate) struct History {
     color: [wgpu::Texture; 2],
     depth: [wgpu::Texture; 2],
@@ -54,7 +64,9 @@ impl History {
         let make = |format, label| super::metalfx::texture(dev, out_size, format, U::STORAGE_BINDING | U::TEXTURE_BINDING, label);
         History {
             color: [make(wgpu::TextureFormat::Rgba16Float, "emission history"), make(wgpu::TextureFormat::Rgba16Float, "emission history")],
-            depth: [make(wgpu::TextureFormat::R32Float, "emission history depth"), make(wgpu::TextureFormat::R32Float, "emission history depth")],
+            // each pixel's depth, the nearest moving surface's about it, and the depths its history was gathered over
+            // (emit_taa.wgsl)
+            depth: [make(wgpu::TextureFormat::Rgba32Float, "emission history depth"), make(wgpu::TextureFormat::Rgba32Float, "emission history depth")],
             next: 0,
         }
     }
