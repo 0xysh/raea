@@ -249,14 +249,15 @@ struct MapsOff;
 /// RT10: Solari and the path tracer trace their shadows and never read a light's shadow maps, yet Bevy still draws
 /// them each frame (photo 2's sun's cascades: 1.5 ms of a 22 ms live frame). So while every active 3D camera traces its
 /// light and nothing is drawn raster-lit by them (a skinned or morphed mesh, a <Character>: RT5), the lights draw none;
-/// each one this turned off gets its maps back when that stops.
+/// each one this turned off gets its maps back when that stops. A light marked `volumetric` keeps its maps: the fog's
+/// shafts are cut by them (photo 5's skylight through steam).
 fn shadow_maps(
     mut cmd: Commands,
     cams: Query<(&Camera, Has<SolariLighting>, Has<Pathtracer>), With<Camera3d>>,
     raster: Query<(), Or<(With<bevy::mesh::skinning::SkinnedMesh>, With<bevy::mesh::morph::MeshMorphWeights>)>>,
-    mut dir: Query<(Entity, &mut DirectionalLight, Has<MapsOff>)>,
-    mut point: Query<(Entity, &mut PointLight, Has<MapsOff>)>,
-    mut spot: Query<(Entity, &mut SpotLight, Has<MapsOff>)>,
+    mut dir: Query<(Entity, &mut DirectionalLight, Has<MapsOff>, Has<bevy::light::VolumetricLight>)>,
+    mut point: Query<(Entity, &mut PointLight, Has<MapsOff>, Has<bevy::light::VolumetricLight>)>,
+    mut spot: Query<(Entity, &mut SpotLight, Has<MapsOff>, Has<bevy::light::VolumetricLight>)>,
 ) {
     let (mut any, mut all) = (false, true);
     for (c, solari, path) in &cams {
@@ -268,11 +269,11 @@ fn shadow_maps(
     let off = any && all && raster.is_empty();
     macro_rules! each {
         ($q:expr) => {
-            for (e, mut l, mine) in &mut $q {
-                if off && l.shadow_maps_enabled {
+            for (e, mut l, mine, fog) in &mut $q {
+                if off && !fog && l.shadow_maps_enabled {
                     l.shadow_maps_enabled = false;
                     cmd.entity(e).insert(MapsOff);
-                } else if !off && mine {
+                } else if (!off || fog) && mine {
                     l.shadow_maps_enabled = true;
                     cmd.entity(e).remove::<MapsOff>();
                 }
