@@ -7,7 +7,7 @@ import package::realtime::presample_light_tiles::unpack_resolved_light_sample;
 import package::realtime::bindings::{empty_reservoir, light_tile_resolved_samples, light_tile_samples, Reservoir, constants, view};
 import package::scene::sampling::{calculate_resolved_light_contribution, isinf, LightSample, NULL_LIGHT_ID, power_heuristic, trace_visibility, sample_environment_map_light_and_sun};
 import package::scene::bindings::{light_sources, MIRROR_ROUGHNESS_THRESHOLD, RAY_T_MAX, RAY_T_MIN, resolve_ray_hit_full, ResolvedMaterial, ResolvedRayHitFull, trace_ray};
-import package::realtime::world_cache_query::{get_cell_size, query_world_cache, WORLD_CACHE_CELL_LIFETIME};
+import package::realtime::world_cache_query::{get_cell_size, query_world_cache, query_world_cache_found, WORLD_CACHE_CELL_LIFETIME};
 
 @if(DLSS_RR_GUIDE_BUFFERS)
 import package::realtime::resolve_dlss_rr_textures::{is_delta_mirror, primary_surface_glossy, psr_bounce_reflectance, psr_chain_mirror, psr_environment_miss, psr_init, replace_primary_surface};
@@ -174,7 +174,7 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         }
 
         // Try terminating into the world cache
-        if terminate_into_cache(&path, ray_hit, ray.t, p_brdf, bounce, rng) {
+        if terminate_into_cache(&path, ray_hit, next_bounce.wi, ray.t, p_brdf, bounce, workgroup_id, rng) {
             break;
         }
 
@@ -406,9 +406,11 @@ fn generate_environment_map_light_candidate(
 fn terminate_into_cache(
     path: ptr<function, PathState>,
     ray_hit: ResolvedRayHitFull,
+    wi: vec3<f32>,
     ray_t: f32,
     p_brdf: f32,
     bounce: u32,
+    workgroup_id: vec2<u32>,
     rng: ptr<function, u32>,
 ) -> bool {
     // Only terminate into the world cache when the bounce was from a wide-enough BRDF sample
@@ -425,9 +427,22 @@ fn terminate_into_cache(
     let world_cache_cell_size = get_cell_size(ray_hit.world_position, view.world_position, ray_t, &rng_copy);
     if ray_t <= sqrt(3.0) * world_cache_cell_size { return false; }
 
-    let cached_radiance = query_world_cache(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray_t, WORLD_CACHE_CELL_LIFETIME, rng);
+    // raea: a miss continues the path rather than end it on a zero
+    let cached = query_world_cache_found(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray_t, WORLD_CACHE_CELL_LIFETIME, rng);
+    if cached.w == 0.0 { return false; }
+    let cached_radiance = cached.rgb;
 
-    let cache_outgoing = (ray_hit.material.base_color / PI) * cached_radiance;
+    // raea: the cache holds only light that has bounced (and the sky's, which no light sample finds); the lights' own
+    // light on the hit is sampled at the hit with its full BRDF, alone since the path ends here (world_cache_update.wesl).
+    // With as many candidates as the cache took for it (world_cache_direct_light_sample_count): with secondary_di_samples
+    // (2) the sun on a sunlit desk, picked among photo 2's lights, came in spikes the denoiser dropped (0.79 of the path
+    // tracer's light, from 0.86)
+    let hit_wo = -wi;
+    let hit_F_ab = F_AB(ray_hit.material.perceptual_roughness, max(dot(ray_hit.world_normal, hit_wo), 0.0001));
+    let hit_origin = ray_hit.world_position + (ray_hit.geometric_world_normal * RAY_T_MIN);
+    let di = sample_light_ris(hit_origin, ray_hit.world_normal, hit_wo, ray_hit.material, hit_F_ab, max(constants.world_cache_direct_light_sample_count, 1u), workgroup_id, bounce + 1u, rng);
+
+    let cache_outgoing = di.brdf_radiance * di.unbiased_contribution_weight + (ray_hit.material.base_color / PI) * cached_radiance;
     let cache_L_at_reconnection = (*path).throughput_past_first_hit * cache_outgoing;
 
     @if(RESTIR) {

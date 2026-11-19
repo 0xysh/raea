@@ -4,7 +4,7 @@ import bevy_render::maths::PI;
 import package::realtime::presample_light_tiles::unpack_resolved_light_sample;
 import package::scene::sampling::{calculate_resolved_light_contribution, trace_visibility, sample_environment_map_light};
 import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN};
-import package::realtime::world_cache_query::query_world_cache;
+import package::realtime::world_cache_query::query_world_cache_found;
 import package::realtime::bindings::{
     light_tile_resolved_samples,
     view,
@@ -24,9 +24,11 @@ fn sample_di(@builtin(workgroup_id) workgroup_id: vec3<u32>, @builtin(global_inv
 
     if rand_f(&rng) >= f32(constants.world_cache_cell_updates_soft_target) / f32(world_cache.active_cells_count) { return; }
 
-    let new_radiance = sample_random_light_ris(geometry_data.world_position, geometry_data.world_normal, workgroup_id.xy, &rng);
-
-    world_cache.active_cells_new_radiance[active_cell_id.x] = new_radiance;
+    // raea: a cell holds only the light that has bounced (and the sky's), so it starts from nothing here. What the lights
+    // put on a surface is sampled where a path ends (initial_path.wesl terminate_into_cache) and where sample_gi's ray
+    // lands, at the very point: taken at one point for a whole cell, it lost half the light a shade's liner throws
+    // from the bulb a few cm off (LightBench's emitter.tsx bounce test: 0.48 of the path tracer's at a 4 cm gap)
+    world_cache.active_cells_new_radiance[active_cell_id.x] = vec3(0.0);
 }
 
 @compute @workgroup_size(64, 1, 1)
@@ -44,8 +46,17 @@ fn sample_gi(@builtin(workgroup_id) workgroup_id: vec3<u32>, @builtin(global_inv
     if ray.kind != RAY_QUERY_INTERSECTION_NONE {
         let ray_hit = resolve_ray_hit_full(ray);
         let cell_life = atomicLoad(&world_cache.life[cell_index]);
-        let radiance = query_world_cache(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray.t, cell_life, &rng);
-        world_cache.active_cells_new_radiance[active_cell_id.x] += ray_hit.material.base_color * radiance;
+        let cached = query_world_cache_found(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray.t, cell_life, &rng);
+        // raea: a hit whose cell holds no light yet is no sample for a cell that has light: this update is skipped
+        // (blend_new_samples), not blended in as a zero, which cut the chain of bounces inside a cavity. A cell with
+        // none yet takes it (the lights' light at the hit alone), or a room with no sky would never fill
+        if cached.w == 0.0 && world_cache.radiance[cell_index].a > 0.0 {
+            world_cache.active_cells_new_radiance[active_cell_id.x] = vec3(-1.0);
+            return;
+        }
+        // raea: the lights' own light on the surface the ray found, sampled there, with what has bounced onto it
+        let direct = sample_random_light_ris(ray_hit.world_position, ray_hit.geometric_world_normal, workgroup_id.xy, &rng);
+        world_cache.active_cells_new_radiance[active_cell_id.x] += ray_hit.material.base_color * (direct + cached.rgb);
     } else {
         // The ray is cut short at world_cache_max_gi_ray_distance to save on traversal costs. 
         // A miss here may actually have been a surface further away if we kept tracing, and not actually have been a miss.
@@ -65,6 +76,7 @@ fn blend_new_samples(@builtin(global_invocation_id) active_cell_id: vec3<u32>) {
 
     let old_radiance = world_cache.radiance[cell_index];
     let new_radiance = world_cache.active_cells_new_radiance[active_cell_id.x];
+    if new_radiance.x < 0.0 { return; } // raea: sample_gi's ray found no light in the cache; no sample this frame
     let luminance_delta = world_cache.luminance_deltas[cell_index];
 
     // https://bsky.app/profile/gboisse.bsky.social/post/3m5blga3ftk2a
