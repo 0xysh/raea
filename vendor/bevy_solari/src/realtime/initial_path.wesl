@@ -423,14 +423,19 @@ fn terminate_into_cache(
 
     // Only use the cache when the ray cleared the cache cell (diagonal = sqrt(3) * cell_size). Short
     // rays land in a cell that may straddle occluders and leak light through corners.
+    // raea: a miss continues the path rather than end it on a zero. On the last bounce there is nothing to continue to,
+    // so the path ends here anyway, with the lights' light on the hit and no cache: before, it ended with nothing, and
+    // with max_bounces 1 every short first bounce (under a sofa, a trunk's foot, between moss pillows) lost its light
     var rng_copy = *rng;
     let world_cache_cell_size = get_cell_size(ray_hit.world_position, view.world_position, ray_t, &rng_copy);
-    if ray_t <= sqrt(3.0) * world_cache_cell_size { return false; }
-
-    // raea: a miss continues the path rather than end it on a zero
-    let cached = query_world_cache_found(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray_t, WORLD_CACHE_CELL_LIFETIME, rng);
-    if cached.w == 0.0 { return false; }
-    let cached_radiance = cached.rgb;
+    var cached_radiance = vec3(0.0);
+    if ray_t > sqrt(3.0) * world_cache_cell_size {
+        let cached = query_world_cache_found(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray_t, WORLD_CACHE_CELL_LIFETIME, rng);
+        if cached.w == 0.0 && !forced_terminate { return false; }
+        cached_radiance = cached.rgb * f32(cached.w != 0.0);
+    } else if !forced_terminate {
+        return false;
+    }
 
     // raea: the cache holds only light that has bounced (and the sky's, which no light sample finds); the lights' own
     // light on the hit is sampled at the hit with its full BRDF, alone since the path ends here (world_cache_update.wesl).
