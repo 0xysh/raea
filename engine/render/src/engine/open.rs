@@ -198,6 +198,8 @@ impl Engine {
     fn finish_build(mut app: App, prog: &Program, inserted: &[Tup], dir: &Path, timeline: Option<std::sync::Arc<raea_core_program::timeline::Timeline>>, live: bool) -> Result<Engine, String> {
         let ss = supersampling(live);
         let (w, h) = (prog.width * ss, prog.height * ss);
+        // every plugin has embedded its shaders by now: a project's engine-shaders/ and RAEA_ENGINE_SHADERS replace them
+        raea_sys_frame::engine_shaders::shadow(&mut app, dir);
         app.finish();
         mem_mark("engine: plugins finished");
         // RT4: MetalFX's denoiser goes in after Solari's lighting, which Solari's plugin adds as it finishes

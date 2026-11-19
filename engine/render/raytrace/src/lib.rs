@@ -90,6 +90,9 @@ impl Default for SolariSettings {
 pub fn add(app: &mut App) {
     app.register_type::<RenderScale>().register_type::<SolariSettings>();
     app.add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<SolariSettings>::default());
+    // the denoiser's own shaders, read from a project's engine-shaders/ or the checkout as its pipelines are made
+    #[cfg(target_os = "macos")]
+    raea_sys_frame::engine_shaders::declare(&[("raea_render_raytrace/metalfx_guides.wgsl", metalfx::DECODE_WGSL), ("raea_render_raytrace/emit_taa.wgsl", emit_taa::WGSL)]);
     solari::add(app);
     force::add(app);
 }

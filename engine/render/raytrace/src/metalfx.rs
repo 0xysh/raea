@@ -66,7 +66,7 @@ pub(crate) fn add(app: &mut App) {
 }
 
 // the guides' shader: what it writes and why (the emission's split) is in its file
-const DECODE_WGSL: &str = include_str!("metalfx_guides.wgsl");
+pub(crate) const DECODE_WGSL: &str = include_str!("metalfx_guides.wgsl");
 
 
 /// A view's denoiser and its textures, made again when its input's or output's size changes, or its depth's kind.
@@ -307,7 +307,10 @@ fn run(entity: Entity, item: Item, st: &super::SolariSettings, device: &RenderDe
     let (pipeline, restore, restore_taa, hist_sampler, pipeline_psr) = kit
         .pipeline
         .get_or_insert_with(|| {
-            let source = format!("{DECODE_WGSL}{}", super::emit_taa::WGSL);
+            // read from a project's engine-shaders/ or the checkout when one has them (docs/nobuild.feature NB5b)
+            let guides = raea_sys_frame::engine_shaders::text("raea_render_raytrace/metalfx_guides.wgsl", DECODE_WGSL);
+            let taa = raea_sys_frame::engine_shaders::text("raea_render_raytrace/emit_taa.wgsl", super::emit_taa::WGSL);
+            let source = format!("{guides}{taa}");
             let module = dev.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("metalfx guides"), source: wgpu::ShaderSource::Wgsl(source.into()) });
             let make = |entry: &str| dev.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("metalfx guides"), layout: None, module: &module, entry_point: Some(entry), compilation_options: Default::default(), cache: None });
             (make("main"), make("restore"), make("restore_taa"), super::emit_taa::sampler(&dev), make("main_psr"))
