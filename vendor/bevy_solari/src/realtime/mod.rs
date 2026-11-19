@@ -187,8 +187,10 @@ pub struct SolariLighting {
     /// GI at the cost of longer (more expensive) ray traversal and increased noise.
     /// Lower values are faster and less noisy but may miss distant lighting or leak sky lighting.
     ///
-    /// Rays that miss within this distance are treated as reaching the environment
-    /// map light, and leak sky lighting into the cache.
+    /// raea: a ray that misses within this distance counts the environment map light only if the rest of it
+    /// reaches the sky too (an any-hit query past the cut), so a cut shorter than the scene no longer leaks sky light
+    /// into the cache; one blocked past the cut adds nothing. Defaults to 1000 m (upstream 50 m, which flooded photo
+    /// 5's hall with sky light).
     pub world_cache_max_gi_ray_distance: f32,
 
     /// Soft upper limit on the number of world cache cells to update each frame.
@@ -241,7 +243,7 @@ impl Default for SolariLighting {
             first_bounce_probability: 1.0,
             world_cache_max_temporal_samples: 32.0,
             world_cache_direct_light_sample_count: 32,
-            world_cache_max_gi_ray_distance: 50.0,
+            world_cache_max_gi_ray_distance: 1000.0,
             world_cache_cell_updates_soft_target: 40000,
             world_cache_position_base_cell_size: 0.15,
             world_cache_position_lod_scale: 15.0,

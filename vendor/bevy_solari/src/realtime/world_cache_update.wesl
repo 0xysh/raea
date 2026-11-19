@@ -3,7 +3,7 @@ import bevy_pbr::render::utils::{rand_f, rand_range_u, sample_cosine_hemisphere}
 import bevy_render::maths::PI;
 import package::realtime::presample_light_tiles::unpack_resolved_light_sample;
 import package::scene::sampling::{calculate_resolved_light_contribution, trace_visibility, sample_environment_map_light};
-import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN};
+import package::scene::bindings::{trace_ray, resolve_ray_hit_full, RAY_T_MIN, RAY_T_MAX};
 import package::realtime::world_cache_query::query_world_cache_found;
 import package::realtime::bindings::{
     light_tile_resolved_samples,
@@ -58,10 +58,21 @@ fn sample_gi(@builtin(workgroup_id) workgroup_id: vec3<u32>, @builtin(global_inv
         let direct = sample_random_light_ris(ray_hit.world_position, ray_hit.geometric_world_normal, workgroup_id.xy, &rng);
         world_cache.active_cells_new_radiance[active_cell_id.x] += ray_hit.material.base_color * (direct + cached.rgb);
     } else {
-        // The ray is cut short at world_cache_max_gi_ray_distance to save on traversal costs. 
-        // A miss here may actually have been a surface further away if we kept tracing, and not actually have been a miss.
-        // We could be leaking sky light due to this if world_cache_max_gi_ray_distance is too small.
-        world_cache.active_cells_new_radiance[active_cell_id.x] += PI * sample_environment_map_light(ray_direction);
+        // The ray is cut short at world_cache_max_gi_ray_distance to save on traversal costs, so a miss may be a surface
+        // further on. raea: it counts the sky only if the rest of the ray reaches it too (one any-hit query, cheap).
+        // Upstream counted every miss as sky: in a hall larger than the cut (photo 5's, 41 x 88 x 38 m, under a sky
+        // at its physical share of the sun) the cache filled with sky light, and the hall's dark surfaces came out
+        // 2-80 times the path tracer's. A ray blocked past the cut adds nothing (the far surface's light is lost, a
+        // darker bias where upstream's was a leak); the default cut is 1000 m, so that's rare.
+        var escapes = true;
+        let cut = constants.world_cache_max_gi_ray_distance;
+        if cut < RAY_T_MAX {
+            let origin = geometry_data.world_position + (geometry_data.world_normal * RAY_T_MIN) + ray_direction * cut;
+            escapes = trace_ray(origin, ray_direction, 0.0, RAY_T_MAX, RAY_FLAG_TERMINATE_ON_FIRST_HIT).kind == RAY_QUERY_INTERSECTION_NONE;
+        }
+        if escapes {
+            world_cache.active_cells_new_radiance[active_cell_id.x] += PI * sample_environment_map_light(ray_direction);
+        }
     }
 }
 
