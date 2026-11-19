@@ -83,6 +83,8 @@ pub struct Declared {
     pub source: &'static str,
     /// the type-path prefixes its generated TypeScript keeps
     pub prefixes: &'static [&'static str],
+    /// the other declared plugins it needs added with it (a backend's engine: tnua's avian)
+    pub needs: &'static [&'static str],
     /// what a plain headless App needs for it: "assets" (AssetPlugin), "mesh" (Assets<Mesh>), "states", "input"
     pub headless: &'static [&'static str],
     /// only an App that names it gets it
@@ -93,6 +95,8 @@ pub struct Declared {
 /// first Engine.
 pub fn install_all() {
     install();
+    // the catalog: an Engine adds those its project chooses (raea_runtime_plugins::choose, docs/nobuild.feature NB4a)
+    raea_runtime_plugins::catalog(declared().iter().filter(|d| compiled().contains(&d.name)).map(|d| raea_runtime_plugins::Entry { name: d.name, needs: d.needs, prefixes: d.prefixes }).collect());
     bridge::register_natives();
 }
 

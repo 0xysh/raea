@@ -15442,6 +15442,7 @@ dependencies = [
  "raea-bevy-world",
  "raea-core-program",
  "raea-core-shape",
+ "raea-io-trace",
  "raea-sys-frame",
  "raea-sys-material",
  "raea-sys-shader",

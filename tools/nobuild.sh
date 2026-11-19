@@ -16,6 +16,12 @@
 #                                    composition that sets it, and the scene's base with the variable, rendered by
 #                                    RAEA_BIN and compared (the frame, and the settings the trace records); written to
 #                                    docs/nobuild/props.tsv, exits 1 if one fails
+#   tools/nobuild.sh catalog         NB4a's check: RAEA_CATALOG_BIN (a raea with --features catalog, or raea-bevy-sdk built
+#                                    so, run as `raea-bevy-sdk motion`) renders and plays tools/nobuild/catalog, a project
+#                                    choosing avian and hanabi: the ball falls, the fountain rises, and the trace says
+#                                    package.json chose both. Then each props.tsv scene that draws the same pixels twice
+#                                    (raster, the path tracer) and tools/nobuild/card.tsx draw the same by it as by RAEA_BIN:
+#                                    a plugin compiled in and not chosen changes nothing. Exits 1 if one fails
 #
 # A decision row (tab-separated): kind:name, then its class, the TypeScript form it becomes, its check, its status
 # (open, doing, done, stays). Classes: frame (changes what a frame shows or costs: a prop), view (a debug view: NB2),
@@ -203,10 +209,51 @@ props() {
   if [ "$fails" = 0 ]; then rm -rf -- "${dir:?}"; else echo "nobuild: renders kept in $dir"; exit 1; fi
 }
 
+# a frame's pixels of one colour, by a rule on r, g, b: how many, and their mean x and y
+pixels() {
+  magick "$1" -depth 8 txt:- | awk -F'[,:() ]+' -v rule="$2" 'NR > 1 { x = $1; y = $2; r = $4; g = $5; b = $6
+    hit = rule == "ball" ? (r > 90 && g < 60 && b > 15 && b < r * 0.6) : (r > 170 && g > 70 && b < 90 && g < r * 0.85)
+    if (hit) { n++; sx += x; sy += y } } END { printf "%d %.0f %.0f", n, n ? sx / n : -1, n ? sy / n : -1 }'
+}
+
+catalog() {
+  bin=${RAEA_BIN:-$RAEA/target/release/raea}
+  local cbin=${RAEA_CATALOG_BIN:-$RAEA/target/release/raea-bevy-sdk} here=$RAEA/tools/nobuild/catalog dir fails=0
+  [ -x "$bin" ] && [ -x "$cbin" ] || { echo "nobuild: needs raea at $bin (RAEA_BIN) and one with the catalog at $cbin (RAEA_CATALOG_BIN)" >&2; exit 1; }
+  dir=$(mktemp -d "${TMPDIR:-/tmp}/nobuild-catalog.XXXXXX") || exit 1
+  case $(basename "$cbin") in raea-bevy-sdk*) printf '#!/bin/bash\nexec "%s" motion "$@"\n' "$cbin" > "$dir/craea" ;; *) printf '#!/bin/bash\nexec "%s" "$@"\n' "$cbin" > "$dir/craea" ;; esac
+  chmod +x "$dir/craea"
+  check() { if [ "$2" = pass ]; then echo "  $1: pass ($3)"; else echo "  $1: FAIL ($3)"; fails=$((fails + 1)); fi; }
+  # every frame, as physics steps by the frame drawn (a render --at skips the steps between)
+  (cd "$here" && RAEA_TRACE_DIR="$dir/trace" "$dir/craea" render drop.tsx -o "$dir/r" > "$dir/r.log" 2>&1)
+  local b0 b40 o40 chosen
+  b0=$(pixels "$dir/r/frame-00000.png" ball); b40=$(pixels "$dir/r/frame-00040.png" ball); o40=$(pixels "$dir/r/frame-00040.png" fountain)
+  echo "nobuild catalog: tools/nobuild/catalog/drop.tsx by $cbin"
+  check "the ball falls (avian)" "$(awk -v a="$b0" -v b="$b40" 'BEGIN { split(a, p, " "); split(b, q, " "); print (p[1] > 100 && q[1] > 100 && q[3] > p[3] + 40) ? "pass" : "x" }')" "frame 0: $b0, frame 40: $b40 (pixels, x, y)"
+  check "the fountain rises (hanabi)" "$(awk -v o="$o40" 'BEGIN { split(o, p, " "); print (p[1] > 100 && p[2] > 240) ? "pass" : "x" }')" "frame 40: $o40"
+  chosen=$(find "$dir/trace" -name events.jsonl -exec cat {} + 2>/dev/null | jq -r 'select(.kind == "plugins_chosen") | [.chosen[] | "\(.plugin) by \(.because)"] | join(", ")' | sort -u | head -1)
+  check "package.json chose them" "$(grep -q 'avian by package.json' <<<"$chosen" && grep -q 'hanabi by package.json' <<<"$chosen" && echo pass)" "${chosen:-no plugins_chosen in the trace}"
+  (cd "$here" && "$dir/craea" play drop.tsx --offscreen --no-vsync --size 480x270 --seconds 1.6 --snapshot 1.3 "$dir/play.png" > "$dir/play.log" 2>&1)
+  local pb po; pb=$(pixels "$dir/play.png" ball); po=$(pixels "$dir/play.png" fountain)
+  check "it plays" "$(awk -v a="$b0" -v b="$pb" -v o="$po" 'BEGIN { split(a, p, " "); split(b, q, " "); split(o, f, " "); print (q[1] > 100 && q[3] > p[3] + 40 && f[1] > 100) ? "pass" : "x" }')" "at 1.3 s: ball $pb, fountain $po"
+  # the same pixels with the catalog compiled in and nothing chosen
+  local scene comp light frame f
+  while IFS=$'\t' read -r scene comp light frame; do
+    f=$(printf 'frame-%05d.png' "$frame")
+    props_render "$scene" "$comp" "$light" "$dir/plain-${scene%.tsx}-$comp"
+    bin=$dir/craea props_render "$scene" "$comp" "$light" "$dir/cat-${scene%.tsx}-$comp"
+    local pae; pae=$(diff_levels PAE "$dir/plain-${scene%.tsx}-$comp/$f" "$dir/cat-${scene%.tsx}-$comp/$f")
+    check "$scene $comp, frame $frame: the same pixels" "$([ "$pae" = 0.000 ] && echo pass)" "max ${pae:-no frame} levels"
+  done < <({ awk -F'\t' '$1 !~ /^#/ && NF >= 6 && ($5 == "raster" || ($5 == "traced" && $3 == "trace")) { print $1 "\t" $3 "\t" $5 "\t" $6 }' "$RAEA/tools/nobuild/props.tsv"; printf 'card.tsx\tcard\traster\t20\n'; } | sort -u)
+  echo "nobuild catalog: $fails failing"
+  if [ "$fails" = 0 ]; then rm -rf -- "${dir:?}"; else echo "nobuild: renders and logs kept in $dir"; exit 1; fi
+}
+
 case ${1:-} in
   builds) shift; builds "$@" ;;
   scan) scan ;;
   consts) consts ;;
   props) props ;;
-  *) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  catalog) catalog ;;
+  *) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

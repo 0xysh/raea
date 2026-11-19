@@ -89,6 +89,9 @@ raea-core-animate = { path = "../../core/animate" }
 [features]
 # Bevy plugins compiled in (raea-bevy-plugins), as tools/bevy-plugins.sh names them: bevy-plugins,raea-bevy-plugins/avian,...
 bevy-plugins = ["dep:raea-bevy-plugins", "raea-runtime-react/bevy-plugins"]
+# every plugin engine/bevy-plugins declares but those it leaves out of its catalog, each added to an App only when its
+# project chooses it (raea_runtime_plugins::choose, docs/nobuild.feature NB4a)
+catalog = ["bevy-plugins", "raea-bevy-plugins/catalog"]
 
 [package.metadata.cargo-shear]
 # depended on only to turn their features on (raea-runtime-bake's modules, raea-runtime-sound's seedling and ml)

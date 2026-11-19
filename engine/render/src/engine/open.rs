@@ -60,8 +60,9 @@ impl Engine {
         // no render thread: a frame is drawn by the update that asks for it (wasm32 has no pipelined rendering to turn off)
         #[cfg(not(target_arch = "wasm32"))]
         let group = group.disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>();
-        // the registered Bevy plugins' changes, and no WinitPlugin: an Engine makes no event loop (raea_runtime_plugins::group, #182)
-        app.add_plugins(plugins::group(group));
+        // the registered plugins' changes (of the catalog's, those the project chose: nobuild NB4a), no WinitPlugin (no event loop, #182)
+        let chosen = plugins::choose(prog, dir);
+        app.add_plugins(plugins::group_chosen(group, &chosen)).insert_resource(chosen);
         #[cfg(feature = "raytracing")]
         if raea_render_raytrace::wanted(prog) {
             raea_render_raytrace::add(&mut app);
