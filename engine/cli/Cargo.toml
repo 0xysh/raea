@@ -86,6 +86,12 @@ bevy = { version = "=0.20.0", default-features = false }
 raea-core-program = { path = "../../core/program" }
 raea-core-animate = { path = "../../core/animate" }
 
+# the plugin catalog in the macOS build (docs/nobuild.feature NB4a): every plugin compiled in, added to an App only when
+# its project chooses it. Windows and Linux follow once their builders have built and checked it (tools/nobuild.sh catalog)
+[target.'cfg(target_os = "macos")'.dependencies]
+raea-bevy-plugins = { path = "../../engine/bevy-plugins", features = ["catalog"] }
+raea-runtime-react = { path = "../../runtime/react", default-features = false, features = ["bevy-plugins"] }
+
 [features]
 # Bevy plugins compiled in (raea-bevy-plugins), as tools/bevy-plugins.sh names them: bevy-plugins,raea-bevy-plugins/avian,...
 bevy-plugins = ["dep:raea-bevy-plugins", "raea-runtime-react/bevy-plugins"]

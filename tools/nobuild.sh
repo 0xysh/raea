@@ -211,7 +211,7 @@ props() {
 
 # a frame's pixels of one colour, by a rule on r, g, b: how many, and their mean x and y
 pixels() {
-  magick "$1" -depth 8 txt:- | awk -F'[,:() ]+' -v rule="$2" 'NR > 1 { x = $1; y = $2; r = $4; g = $5; b = $6
+  magick "$1" -depth 8 txt:- | awk -F'[,:() ]+' -v rule="$2" 'NR > 1 { x = $1; y = $2; r = $3; g = $4; b = $5
     hit = rule == "ball" ? (r > 90 && g < 60 && b > 15 && b < r * 0.6) : (r > 170 && g > 70 && b < 90 && g < r * 0.85)
     if (hit) { n++; sx += x; sy += y } } END { printf "%d %.0f %.0f", n, n ? sx / n : -1, n ? sy / n : -1 }'
 }
