@@ -6,7 +6,9 @@ use std::path::Path;
 
 use super::R;
 
-pub(crate) fn dilate(m: &mut [[u8; 4]], covered: &mut [bool], w: u32, h: u32, passes: u32) {
+/// The channels in `exact` aren't averaged: an empty texel takes its first covered neighbour's (causes2's element and
+/// class are numbers, and a mean of two is a third).
+pub(crate) fn dilate(m: &mut [[u8; 4]], covered: &mut [bool], w: u32, h: u32, passes: u32, exact: &[usize]) {
     let (w, h) = (w as i64, h as i64);
     for _ in 0..passes {
         let mut fill: Vec<(usize, [u8; 4])> = Vec::new();
@@ -16,7 +18,7 @@ pub(crate) fn dilate(m: &mut [[u8; 4]], covered: &mut [bool], w: u32, h: u32, pa
                 if covered[i] {
                     continue;
                 }
-                let (mut s, mut k) = ([0u32; 4], 0u32);
+                let (mut s, mut k, mut first) = ([0u32; 4], 0u32, [0u8; 4]);
                 for dy in -1..=1 {
                     for dx in -1..=1 {
                         let (xx, yy) = (x + dx, y + dy);
@@ -25,6 +27,9 @@ pub(crate) fn dilate(m: &mut [[u8; 4]], covered: &mut [bool], w: u32, h: u32, pa
                         }
                         let j = (yy * w + xx) as usize;
                         if covered[j] {
+                            if k == 0 {
+                                first = m[j];
+                            }
                             for c in 0..4 {
                                 s[c] += m[j][c] as u32;
                             }
@@ -33,7 +38,11 @@ pub(crate) fn dilate(m: &mut [[u8; 4]], covered: &mut [bool], w: u32, h: u32, pa
                     }
                 }
                 if k > 0 {
-                    fill.push((i, s.map(|v| ((v + k / 2) / k) as u8)));
+                    let mut v = s.map(|v| ((v + k / 2) / k) as u8);
+                    for &c in exact {
+                        v[c] = first[c];
+                    }
+                    fill.push((i, v));
                 }
             }
         }

@@ -304,6 +304,8 @@ export interface NativeCalls {
   "venc.finish": { args: { id: number }; answer: { packets: { data: string; key: boolean; pts: number; dur: number }[]; description: string | null } };
   /** a VideoToolbox H.264 encoder */
   "venc.new": { args: { width: number; height: number; fps: number; kbps: number }; answer: { id: number } };
+  /** a .glb's weathering causes baked once and kept (raea/wear): the model with a second UV set, and four maps over it (sky, sun, cavity, edge; run-off, deposit, touch; height over the ground, element, open sky; December's sun, driven snow, litter) */
+  "wear.bake": { args: { src: string; env?: { up?: [number, number, number]; north?: [number, number, number]; rain?: { dir?: [number, number, number]; spread?: number }; sun?: { lat?: number }; snow?: { dir?: [number, number, number]; spread?: number }; walk?: string[] | { y: number }; density?: number | Record<string, number>; max_side?: number; rays?: { sky?: number; cavity?: number } }; classes?: Record<string, string | { alpha: Record<string, string>; default?: string }> }; answer: { key: string; file: string; maps: { causes0: string; causes1: string; causes2: string; causes3: string }; spots: string; size: [number, number]; density: number; charts: number; tris: number; ms: Record<string, number> } };
   /** SHA-1, SHA-256, SHA-384 or SHA-512 of base64 bytes, base64 */
   "web.digest": { args: { algo: string; data: string }; answer: string };
   /** n random bytes (the OS's), base64 */

@@ -1,7 +1,8 @@
 //! glTF to triangles with a class each, and back with TEXCOORD_1. Read: every primitive of every node's mesh (a mesh
 //! two nodes use is baked twice, as two meshes, since its two places weather apart), its positions put in the world
 //! by the node's transform. Written: each primitive's vertices split where its charts meet (charts.rs), every
-//! attribute copied element by element in the new order (whatever its type), TEXCOORD_1 added, and the binary
+//! attribute copied element by element in the new order (whatever its type), TEXCOORD_1 added (and as TEXCOORD_0 where
+//! there's none, since Bevy's standard surface reads the first UV set wherever the second is), and the binary
 //! rebuilt with only what is still used. Refused: skins, morph targets, .gltf with outside files, sparse accessors,
 //! modes other than triangles, and a material that already reads TEXCOORD_1 (a lightmapped model).
 
@@ -54,6 +55,11 @@ impl Class {
     }
     pub fn name(self) -> &'static str {
         NAMES.iter().find(|(_, c)| *c == self).map(|(n, _)| *n).unwrap_or("plaster")
+    }
+    /// causes2's alpha (raea/wear reads it with textureLoad): 16 x (its place in NAMES + 1), so 0 is a texel no class
+    /// covered and a byte off by a few still names the class.
+    pub fn code(self) -> u8 {
+        16 * (NAMES.iter().position(|(_, c)| *c == self).unwrap_or(0) as u8 + 1)
     }
 }
 
@@ -290,7 +296,13 @@ pub(crate) fn write(sc: &Scene, at: &Atlas) -> R<Vec<u8>> {
             attrs.insert(name.clone(), json!(push(&nb, Some(34962), acc)));
         }
         let uvb: Vec<u8> = uv.iter().flat_map(|q| q.iter().flat_map(|f| f.to_le_bytes())).collect();
-        attrs.insert("TEXCOORD_1".into(), json!(push(&uvb, Some(34962), json!({"componentType": 5126, "type": "VEC2", "count": uv.len()}))));
+        let tc1 = push(&uvb, Some(34962), json!({"componentType": 5126, "type": "VEC2", "count": uv.len()}));
+        attrs.insert("TEXCOORD_1".into(), json!(tc1));
+        // Bevy's standard surface reads the first UV set wherever there's a second, so a primitive with none gets the
+        // atlas's as its first too (no texture of its own reads it)
+        if !attrs.contains_key("TEXCOORD_0") {
+            attrs.insert("TEXCOORD_0".into(), json!(tc1));
+        }
         let ib: Vec<u8> = idx.iter().flat_map(|i| i.to_le_bytes()).collect();
         let ia = push(&ib, Some(34963), json!({"componentType": 5125, "type": "SCALAR", "count": idx.len()}));
         let mut np = p.clone();

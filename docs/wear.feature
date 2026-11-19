@@ -46,7 +46,7 @@ Feature: raea/wear, weathering that has a cause
         | map     | r                                          | g                                     | b                                   | a                              |
         | causes0 | sky: rain's reach, n.d over the rain's cone | sun: share of the year's sun path in sight | cavity: occlusion within 0.5 m | edge: nearness to a convex arris |
         | causes1 | flow: run-off passing (WR2)                | deposit: what it left (WR2)           | deposit kind (WR2)                  | touch (WR3)                    |
-        | causes2 | ground: height over the walk below, 0-4 m  | element: the chart's own number       | open: share of the whole sky seen   | spare                          |
+        | causes2 | ground: height over the walk below, 0-4 m  | element: the chart's own number       | open: share of the whole sky seen   | class: 16 x (its place + 1) (WR5) |
         | causes3 | winter sun: share of the December path in sight (where snow lingers) | drift: driven snow's reach, n.d over its cone | litter: where blown leaves and snow settle (concave, at the walk, in the lee) | spare |
       And the year's sun is what fades and dries (it acts all year); the winter sun only decides where snow and ice
         outlast a thaw, so it has its own channel rather than a season in the request
@@ -195,7 +195,7 @@ Feature: raea/wear, weathering that has a cause
 
   Rule: 2. The materials
 
-    @needs:WR4
+    @needs:WR4 @done
     Scenario: WR5. raea/wear: a recipe per material
       Given `wearShader({ classes, weather, age })` from raea/wear
       Then it gives `{ wesl, uniforms, textures }` for a <Model>'s <Recover>, a <MeshStandardMaterial shader> or a
@@ -221,6 +221,30 @@ Feature: raea/wear, weathering that has a cause
         | raea/wear | sdk/wear/src/recipes.ts       | 420   | one WESL function per class                   |
         | raea/wear | sdk/wear/src/debug.ts         | 60    | a cause in false colour                       |
         | raea/wear | sdk/wear/test/wear.test.ts    | 120   | the table, the shader's text, the uniforms    |
+      And as built (11-19)
+        | crate               | file                              | lines | job                                                                 |
+        | raea/wear           | sdk/wear/src/index.ts             | 199   | wearBake, wearShader, WEAR_CLASSES, seasonOf, the surface hook       |
+        | raea/wear           | sdk/wear/src/causes.ts            | 125   | the maps read (element and class by textureLoad), noise, the face's frame, the marks every class shares |
+        | raea/wear           | sdk/wear/src/recipes.ts           | 251   | a function per class (14), the shared stains, damp and splash, WR9's weather over them |
+        | raea/wear           | sdk/wear/src/debug.ts             | 73    | a cause in false colour from a `lit` hook (14 causes, class too)     |
+        | raea/wear           | sdk/wear/test/wear.test.ts        | 116   | the table against the bake's, the shader's text, the uniforms, debug |
+        | raea-sys-weathering | src/rays.rs, maps.rs, scene.rs    | +30   | causes2's alpha is the class (16 x (place + 1)); gutters copy class and element; TEXCOORD_0 where a primitive had none; version 6 |
+        | raea                | sdk/raea/src/native-calls.ts      | +2    | wear.bake typed (tools/native-types.sh --write)                     |
+      And its shape: `wearShader({ baked, classes?, age: { years, soot, upkeep }, weather: { day, wet, snow, storm, ice,
+        damp?, dust?, leaves?, melt? }, up?, debug? })`; `baked` is wearBake's answer (its maps and density), `classes`
+        limits the recipes compiled, and the season's damp, dust and leaves follow from `day` unless given. Authors put
+        it on <ExtendedMaterial base={<StandardMaterial/>} extension={<ShaderExtension {...wear}/>}> (one glTF
+        material by the base's `material`) or <SurfaceShader {...wear}>; a mesh without the bake's TEXCOORD_1 is left
+        as it was (`@if(VERTEX_UVS_B)`)
+      And the class comes from the bake (causes2's alpha, read by textureLoad), so one shader serves every material and
+        COLOR_0 alpha codes alike; Bevy's standard surface reads the first UV set wherever there's a second, so the bake
+        gives a primitive with none the atlas's as both
+      And proof: `bun test` in sdk/wear (12 tests); `cargo test -p raea-sys-weathering` (11, one new: each texel's class
+        and the gutters' a real one); a street front of all 14 classes made in code, baked at 16 texels a metre and
+        rendered on the Mac (11-19): the class view names every part right; after 80 sooty years the cornice is
+        streaked, the sills drip, the plinth and the brick's foot carry splash and a damp tide, the south door is
+        faded, the railing rusted; rain, snow with a storm and autumn render; an unbaked sphere under the same shader is
+        unchanged. The corner house with stills of every cause and condition is WR7's
 
     @needs:WR5,WR3
     Scenario: WR6. Crumbling
