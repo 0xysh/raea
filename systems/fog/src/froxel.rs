@@ -113,6 +113,41 @@ struct GpuVolume {
     /// x: falloff per metre up from the box's floor; y: the box's height in metres; z: the feathered share of the
     /// half-size at each face (`soft`); w: how much narrower the floor is than the top (`taper`); froxel_volume.wesl
     shape: Vec4,
+    /// x: the extinction per metre that dims light on its way through the volume to a point of the fog
+    /// (froxel_volume.wesl volume_depth), by [`ShadowRule`]
+    shadow: Vec4,
+}
+
+/// How the fog dims light on its way to a point of it (RAEA_FOG_SHADOW). The froxel passes scatter light once, so
+/// dimming it by the whole extinction loses the light the medium scatters on toward the point (white fog under a
+/// uniform sky: 0.75 of the truth's); not dimming it keeps light that a grey or thick medium absorbs (grey fog: 0.60
+/// against 0.40). The path tracer is the truth they're measured against (bevy_solari pathtracer/media.wesl):
+/// absorption alone matched it (grey 0.411 against 0.398, white 1.000; the hall's air 0.955 of the truth's, Bevy's
+/// 0.939), so it's the default.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum ShadowRule {
+    /// Bevy's: a constant exp(-extinction x the box's half-diagonal) on every point of it, nothing else
+    Bevy,
+    /// not dimmed
+    Off,
+    /// by what the medium absorbs (density x absorption): the default
+    Absorb,
+    /// by absorption and the share of scattering that turns light aside (density x (absorption + scattering x (1 - g)))
+    Delta,
+    /// by the whole extinction (single scattering)
+    Full,
+}
+
+fn shadow_rule() -> ShadowRule {
+    static RULE: std::sync::OnceLock<ShadowRule> = std::sync::OnceLock::new();
+    *RULE.get_or_init(|| match std::env::var("RAEA_FOG_SHADOW").as_deref() {
+        Ok("off") => ShadowRule::Off,
+        Ok("absorb") => ShadowRule::Absorb,
+        Ok("delta") => ShadowRule::Delta,
+        Ok("full") => ShadowRule::Full,
+        Ok("bevy") => ShadowRule::Bevy,
+        _ => ShadowRule::Absorb,
+    })
 }
 
 /// The frame's fog volumes, in rank order (their row ids), so the medium sums them in one order every frame.
@@ -138,7 +173,16 @@ fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &
         let extinction = fv.density_factor * (fv.absorption + fv.scattering);
         let colour = fv.fog_color.to_linear().to_vec3();
         let tint = fv.light_tint.to_linear().to_vec3();
-        let light = colour * tint * fv.light_intensity * fv.scattering * fv.density_factor * (-extinction * radius).exp();
+        let rule = shadow_rule();
+        let bevy = if rule == ShadowRule::Bevy { (-extinction * radius).exp() } else { 1.0 };
+        let light = colour * tint * fv.light_intensity * fv.scattering * fv.density_factor * bevy;
+        let shadow = fv.density_factor
+            * match rule {
+                ShadowRule::Bevy | ShadowRule::Off => 0.0,
+                ShadowRule::Absorb => fv.absorption,
+                ShadowRule::Delta => fv.absorption + fv.scattering * (1.0 - fv.scattering_asymmetry.clamp(0.0, 1.0)),
+                ShadowRule::Full => fv.absorption + fv.scattering,
+            };
         let height = affine.transform_vector3a(Vec3A::Y).length();
         let corners = std::array::from_fn(|k| {
             let c = Vec3A::new(if k & 1 == 0 { -0.5 } else { 0.5 }, if k & 2 == 0 { -0.5 } else { 0.5 }, if k & 4 == 0 { -0.5 } else { 0.5 });
@@ -151,6 +195,7 @@ fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &
                 scatter: light.extend(extinction),
                 ambient: (colour * fv.scattering * fv.density_factor).extend(fv.scattering_asymmetry),
                 shape: shape.map_or(Vec4::new(0.0, height, 0.0, 0.0), |s| Vec4::new(s.falloff, height, s.soft, s.taper)),
+                shadow: Vec4::new(shadow, 0.0, 0.0, 0.0),
             },
             corners,
         ));

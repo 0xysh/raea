@@ -21,7 +21,7 @@ import bevy_render::maths::{PI_2, orthonormalize};
 import bevy_pbr::render::utils::{rand_f, rand_vec2f};
 import bevy_solari::scene::bindings::{trace_ray, light_sources, RAY_T_MIN, RAY_T_MAX};
 import bevy_solari::scene::sampling::{generate_random_light_sample, trace_visibility, sample_environment_map_light, ResolvedLightSample};
-import raea_sys_fog::froxel_volume::{Volume, volume_weight, henyey_greenstein, sample_phase};
+import raea_sys_fog::froxel_volume::{Volume, volume_weight, volume_depth, henyey_greenstein, sample_phase};
 
 enable wgpu_ray_query;
 
@@ -67,6 +67,15 @@ const GUIDE_KEEP: f32 = 0.9;
 // the guide's cone: no wider than 60 degrees, no narrower than 2
 const COS_WIDEST: f32 = 0.5;
 const COS_NARROWEST: f32 = 0.99939;
+
+// what of a light's light gets through the fog from p along dir (unit) for up to t_max metres (froxel_volume.wesl)
+fn light_through(p: vec3<f32>, dir: vec3<f32>, t_max: f32) -> f32 {
+    var depth = 0.0;
+    for (var v = 0u; v < params.counts.x; v += 1u) {
+        depth += volume_depth(volumes[v], p, dir, t_max);
+    }
+    return exp(-depth);
+}
 
 // what a light sample sends to point P toward the eye, before its pdf: emitted radiance x its cosine / distance^2 x
 // the phase
@@ -214,7 +223,7 @@ fn sky_guided(P: vec3<f32>, C: vec3<f32>, V: vec3<f32>, g: f32, rays: u32, t: ve
         let pdf = (1.0 - share) * phase + share * select(0.0, cone_pdf, dot(L, axis) >= cos_max);
         let hit = trace_ray(P, L, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_TERMINATE_ON_FIRST_HIT);
         if (hit.kind == RAY_QUERY_INTERSECTION_NONE && pdf > 0.0) {
-            let arrives = sample_environment_map_light(L) * (phase / pdf);
+            let arrives = sample_environment_map_light(L) * (phase / pdf) * light_through(P, L, RAY_T_MAX);
             sky += arrives;
             // weighted by what it brought: a cone's own rays, crowded in it, would otherwise narrow it frame by frame
             found += vec4(L, 1.0) * dot(arrives, LUMA);
@@ -272,7 +281,9 @@ fn solari(@builtin(global_invocation_id) id: vec3<u32>) {
             }
         }
         if (kept_weight > 0.0) {
-            light += toward_eye(kept, P, V, g) * (w_sum / (f32(count) * kept_weight)) * trace_visibility(P, kept.world_position);
+            let to = kept.world_position.xyz - P;
+            let d = length(to);
+            light += toward_eye(kept, P, V, g) * (w_sum / (f32(count) * kept_weight)) * trace_visibility(P, kept.world_position) * light_through(P, to / max(d, 1e-6), d);
         }
         // the sky, through what opens onto it: guided, or directions drawn from the phase (so the phase cancels)
         let rays = select(0u, fog.more.y, (fog.more.x & 2u) != 0u);
@@ -284,7 +295,7 @@ fn solari(@builtin(global_invocation_id) id: vec3<u32>) {
                 let L = sample_phase(g, V, rand_vec2f(&rng));
                 let hit = trace_ray(P, L, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_TERMINATE_ON_FIRST_HIT);
                 if (hit.kind == RAY_QUERY_INTERSECTION_NONE) {
-                    sky += sample_environment_map_light(L);
+                    sky += sample_environment_map_light(L) * light_through(P, L, RAY_T_MAX);
                 }
             }
             light += sky / f32(max(rays, 1u));

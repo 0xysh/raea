@@ -39,7 +39,7 @@ import bevy_pbr::render::mesh_view_types::POINT_LIGHT_FLAGS_SPOT_LIGHT_Y_NEGATIV
 import bevy_pbr::render::view_transformations::frag_coord_to_ndc;
 import bevy_pbr::render::view_transformations::position_ndc_to_view;
 import bevy_render::maths::orthonormalize;
-import raea_sys_fog::froxel_volume::{Volume, volume_weight, henyey_greenstein};
+import raea_sys_fog::froxel_volume::{Volume, volume_weight, henyey_greenstein, volume_depth};
 
 struct Params {
     view_from_clip: mat4x4<f32>,
@@ -201,9 +201,16 @@ fn transmittance(ray: Ray, depth: f32) -> f32 {
 // ---- the integrand ----
 
 // the light scattered toward the eye per metre at a point (per unit of the light's colour, before the light's own
-// falloff), summed over the volumes holding it
+// falloff), summed over the volumes holding it, and dimmed by the fog on the light's way there (volume_depth)
 fn medium(hero: Hero, p: vec3<f32>) -> vec3<f32> {
     var k = vec3(0.0);
+    var depth = 0.0;
+    var dir = hero.axis;
+    var reach = 3.4e38;
+    if (hero.kind == 0u) {
+        reach = length(hero.position - p);
+        dir = (hero.position - p) / max(reach, 1e-6);
+    }
     for (var v = 0u; v < params.counts.x; v += 1u) {
         let vol = &volumes[v];
         let local = ((*vol).local_from_world * vec4(p, 1.0)).xyz;
@@ -217,7 +224,12 @@ fn medium(hero: Hero, p: vec3<f32>) -> vec3<f32> {
         }
         k += (*vol).scatter.rgb * w * phase;
     }
-    return k;
+    if (any(k > vec3(0.0))) {
+        for (var v = 0u; v < params.counts.x; v += 1u) {
+            depth += volume_depth(volumes[v], p, dir, reach);
+        }
+    }
+    return k * exp(-depth);
 }
 
 // a spot's cone at a point (Bevy's: the cosine off its axis, scaled and offset, squared)

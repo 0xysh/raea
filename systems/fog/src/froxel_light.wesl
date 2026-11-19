@@ -23,7 +23,7 @@ import bevy_pbr::render::view_transformations::position_ndc_to_view;
 import bevy_render::maths::orthonormalize;
 import bevy_pbr::render::clustered_forward as clustering;
 import bevy_pbr::render::pbr_lighting::getDistanceAttenuation;
-import raea_sys_fog::froxel_volume::{Volume, volume_weight, henyey_greenstein};
+import raea_sys_fog::froxel_volume::{Volume, volume_weight, volume_depth, henyey_greenstein};
 
 struct Params {
     view_from_clip: mat4x4<f32>,
@@ -55,6 +55,15 @@ struct GridFire {
 // the volumes a point can be in at once that directional lights are phased for
 const HELD: u32 = 8u;
 const DIRECTIONAL: u32 = 4u;
+
+// what of a light's light gets through the fog from p along dir (unit) for up to t_max metres (froxel_volume.wesl)
+fn light_through(p: vec3<f32>, dir: vec3<f32>, t_max: f32) -> f32 {
+    var depth = 0.0;
+    for (var v = 0u; v < params.counts.x; v += 1u) {
+        depth += volume_depth(volumes[v], p, dir, t_max);
+    }
+    return exp(-depth);
+}
 
 
 // the medium at a point of the view (every volume holding it, summed) and the light it scatters toward the eye per
@@ -115,6 +124,7 @@ fn medium_light(P_view: vec3<f32>, pixel: vec2<f32>) -> vec4<f32> {
             let array_index = i32((*light).depth_texture_base_index + cascade_index);
             lit = sample_shadow_map_hardware(light_local.xy, light_local.z, array_index);
         }
+        lit *= light_through(P_world, normalize(L), 3.4e38);
         if (lit == 0.0) {
             continue;
         }
@@ -154,6 +164,10 @@ fn medium_light(P_view: vec3<f32>, pixel: vec2<f32>) -> vec4<f32> {
             if (atten > 0.0 && ((*light).flags & POINT_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u) {
                 atten *= fetch_spot_shadow_without_normal(light_id, vec4(P_world, 1.0), pixel);
             }
+        }
+        if (atten > 0.0) {
+            let d = sqrt(distance_square);
+            atten *= light_through(P_world, light_to_frag / max(d, 1e-6), d);
         }
         ps += (*light).color_inverse_square_range.rgb * atten;
     }

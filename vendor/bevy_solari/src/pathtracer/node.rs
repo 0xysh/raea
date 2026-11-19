@@ -21,7 +21,7 @@ use bevy_utils::default;
 pub struct PathtracerPipelines {
     bind_group_layout: BindGroupLayoutDescriptor,
     pipeline: CachedComputePipelineId,
-    // raea: the media when the scene has none: one volume of no extinction (froxel_volume.wesl's Volume, 112 bytes)
+    // raea: the media when the scene has none: one volume of no extinction (froxel_volume.wesl's Volume, 128 bytes)
     no_media: Buffer,
 }
 
@@ -58,7 +58,7 @@ pub fn init_pathtracer_pipelines(
 
     let no_media = render_device.create_buffer_with_data(&BufferInitDescriptor {
         label: Some("pathtracer_no_media"),
-        contents: &[0u8; 112],
+        contents: &[0u8; 128],
         usage: BufferUsages::STORAGE,
     });
     commands.insert_resource(PathtracerPipelines {

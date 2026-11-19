@@ -13,6 +13,44 @@ struct Volume {
     // rgb: the scattering coefficient per metre (fog colour x scattering x density); a: anisotropy
     ambient: vec4<f32>,
     shape: vec4<f32>,
+    // x: the extinction per metre that dims light on its way to a point (froxel.rs, RAEA_FOG_SHADOW's rule)
+    shadow: vec4<f32>,
+}
+
+// the optical depth light crosses in one volume on its way from p along dir (unit, world) for up to t_max metres: its
+// `shadow` extinction x its shaped density along the part inside its box: closed for a plain box, else by 4
+// Gauss-Legendre nodes (smooth, so the grid's cells and the hero pass's quadrature see no noise from it)
+fn volume_depth(vol: Volume, p: vec3<f32>, dir: vec3<f32>, t_max: f32) -> f32 {
+    if (vol.shadow.x <= 0.0) {
+        return 0.0;
+    }
+    let o = (vol.local_from_world * vec4(p, 1.0)).xyz;
+    let d = (vol.local_from_world * vec4(dir, 0.0)).xyz;
+    // the box -0.5..0.5, by slabs (an axis the ray runs along gives +-inf, which min and max handle)
+    let inv = 1.0 / d;
+    let a = (vec3(-0.5) - o) * inv;
+    let b = (vec3(0.5) - o) * inv;
+    let near = max(max(min(a.x, b.x), min(a.y, b.y)), max(min(a.z, b.z), 0.0));
+    let far = min(min(max(a.x, b.x), max(a.y, b.y)), min(max(a.z, b.z), t_max));
+    if (near >= far) {
+        return 0.0;
+    }
+    // a plain box (no soft faces, no taper: a hall's haze) thins as exp(-falloff x metres up), whose integral along
+    // the ray is closed: exp(-k (up at near)) (1 - exp(-k dy (far - near))) / (k dy), k = falloff x height
+    if (vol.shape.z <= 0.0 && vol.shape.w <= 0.0) {
+        let k = vol.shape.x * vol.shape.y;
+        let at_near = exp(-k * (o.y + 0.5 + d.y * near));
+        let x = k * d.y * (far - near);
+        var span = far - near;
+        if (abs(x) > 1e-4) {
+            span *= (1.0 - exp(-x)) / x;
+        }
+        return vol.shadow.x * at_near * span;
+    }
+    // unrolled, the nodes as literals
+    let sum = 0.17392742256872692 * (volume_weight(vol.shape, o + d * mix(near, far, 0.06943184420297371)) + volume_weight(vol.shape, o + d * mix(near, far, 0.9305681557970263)))
+        + 0.32607257743127307 * (volume_weight(vol.shape, o + d * mix(near, far, 0.33000947820757187)) + volume_weight(vol.shape, o + d * mix(near, far, 0.6699905217924281)));
+    return vol.shadow.x * (far - near) * sum;
 }
 
 const FRAC_4_PI: f32 = 0.07957747154594767;
