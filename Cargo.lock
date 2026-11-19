@@ -15349,6 +15349,8 @@ dependencies = [
 name = "raea-runtime-jsengine"
 version = "0.1.0"
 dependencies = [
+ "iana-time-zone",
+ "miniz_oxide 0.8.9",
  "objc2 0.6.5",
  "raea-io-home",
  "rquickjs",
