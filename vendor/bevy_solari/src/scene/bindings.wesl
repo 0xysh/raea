@@ -126,6 +126,8 @@ struct EnvironmentMapLight {
     sun_direction: vec3<f32>,
     sun_cos: f32,
     sky: vec3<f32>,
+    // raea: 1 when some material is see-through (bind_group.rs), else trace_ray skips its second query
+    any_alpha: u32,
 }
 
 const LIGHT_NOT_PRESENT_THIS_FRAME = 0xFFFFFFFFu;
@@ -165,6 +167,7 @@ fn trace_ray(ray_origin: vec3<f32>, ray_direction: vec3<f32>, ray_t_min: f32, ra
     rayQueryInitialize(&rq, tlas, RayDesc(ray_flag, RAY_MASK_OPAQUE, ray_t_min, ray_t_max, ray_origin, ray_direction));
     rayQueryProceed(&rq);
     let opaque = rayQueryGetCommittedIntersection(&rq);
+    if environment_map_light.any_alpha == 0u { return opaque; }
     var t_max = ray_t_max;
     if opaque.kind != RAY_QUERY_INTERSECTION_NONE { t_max = opaque.t; }
 
@@ -185,6 +188,7 @@ fn trace_ray_previous_frame(ray_origin: vec3<f32>, ray_direction: vec3<f32>, ray
     rayQueryInitialize(&rq, previous_frame_tlas, RayDesc(ray_flag, RAY_MASK_OPAQUE, ray_t_min, ray_t_max, ray_origin, ray_direction));
     rayQueryProceed(&rq);
     let opaque = rayQueryGetCommittedIntersection(&rq);
+    if environment_map_light.any_alpha == 0u { return opaque; }
     var t_max = ray_t_max;
     if opaque.kind != RAY_QUERY_INTERSECTION_NONE { t_max = opaque.t; }
 

@@ -326,8 +326,10 @@ pub fn prepare_raytracing_scene_bind_group(
             &fallback_texture.d2.sampler,
         ));
 
+    let any_alpha = !bindings.assets.alpha_materials.is_empty() || alpha_pass_always();
     let environment_map_light = prepare_environment_map_light(
         &extracted_environment_map_light,
+        any_alpha,
         &texture_assets,
         &fallback_texture,
         &mut bindings.environment_map_light_buffer,
@@ -360,10 +362,21 @@ pub struct GpuEnvironmentMapLight {
     pub sun_direction: Vec3,
     pub sun_cos: f32,
     pub sky: Vec3,
+    // raea: 1 when some material in the scene is see-through, so trace_ray runs its second query for them; with none
+    // (a forest of opaque needles), that query only walked the TLAS again for nothing
+    pub any_alpha: u32,
+}
+
+/// raea: RAEA_SOLARI_ALPHA_PASS=always runs trace_ray's see-through query even in a scene with no see-through material,
+/// as before, to time what skipping it saves
+fn alpha_pass_always() -> bool {
+    static ALWAYS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ALWAYS.get_or_init(|| std::env::var("RAEA_SOLARI_ALPHA_PASS").as_deref() == Ok("always"))
 }
 
 fn prepare_environment_map_light<'a>(
     extracted_environment_map_light: &ExtractedEnvironmentMapLight,
+    any_alpha: bool,
     texture_assets: &'a RenderAssets<GpuImage>,
     fallback_texture: &'a FallbackImage,
     buffer: &mut StorageBuffer<GpuEnvironmentMapLight>,
@@ -375,7 +388,7 @@ fn prepare_environment_map_light<'a>(
         .as_ref()
         .and_then(|cubemap| texture_assets.get(cubemap));
 
-    let (texture, uniform) = match cubemap {
+    let (texture, mut uniform) = match cubemap {
         Some(cubemap) => (
             &cubemap.texture_view,
             GpuEnvironmentMapLight {
@@ -386,6 +399,7 @@ fn prepare_environment_map_light<'a>(
                 sun_direction: extracted_environment_map_light.sun.map_or(Vec3::Y, |s| s.direction.normalize()),
                 sun_cos: extracted_environment_map_light.sun.map_or(2.0, |s| bevy_math::ops::cos(s.angular_size / 2.0)),
                 sky: extracted_environment_map_light.sun.map_or(Vec3::ZERO, |s| s.sky),
+                any_alpha: 0,
             },
         ),
         None => (
@@ -394,6 +408,7 @@ fn prepare_environment_map_light<'a>(
         ),
     };
 
+    uniform.any_alpha = any_alpha as u32;
     buffer.set(uniform);
     buffer.write_buffer(render_device, render_queue);
     texture
