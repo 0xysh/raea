@@ -221,7 +221,7 @@ pub(crate) fn causes(sc: &Scene, at: &Atlas, env: &Env, mesh: &TriMesh, c0: &mut
             let ground = ground(sc, mesh, env, t.tri, p, n);
             let element = (crate::rays::hash(at.chart_of[t.tri as usize].wrapping_add(17)) & 0xff) as u8;
             let c3 = [byte(x.december), byte(x.drift), byte(x.litter), 255];
-            ([byte(sky), byte(x.sun), byte(occl), byte(edge)], [byte(ground / GROUND_RANGE), element, byte(open), 255], c3)
+            ([byte(sky), byte(x.sun), byte(occl), byte(edge)], [byte(ground / GROUND_RANGE), element, byte(open), sc.class[t.tri as usize].code()], c3)
         })
         .collect();
     for (t, (a, b, c)) in at.texels.iter().zip(vals) {

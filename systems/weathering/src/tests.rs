@@ -218,10 +218,40 @@ fn a_bake_is_the_same_bytes_twice_and_adds_texcoord_1() {
     for m in sc.glb.json["meshes"].as_array().unwrap() {
         for p in m["primitives"].as_array().unwrap() {
             assert!(p["attributes"].get("TEXCOORD_1").is_some(), "a primitive without TEXCOORD_1");
+            assert_eq!(p["attributes"]["TEXCOORD_0"], p["attributes"]["TEXCOORD_1"], "a primitive with no UV set of its own gets the atlas's as its first");
             assert!(p["attributes"].get("NORMAL").is_some(), "NORMAL was dropped");
         }
     }
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn each_texel_carries_its_class_and_the_gutters_a_real_one() {
+    let cl = Classes::of(&json!({"ground": "ground", "slab": "iron", "*": "plaster"})).unwrap();
+    let e = env(json!({"density": 4, "rays": {"sky": 8, "cavity": 4}}));
+    let sc = scene::read(&glb(front()), &cl).unwrap();
+    let mesh = rays::mesh_of(&sc);
+    let at = charts::build(&sc, &e, &mesh).unwrap();
+    let n = (at.w * at.h) as usize;
+    let (mut c0, mut c2, mut c3) = (vec![[0u8; 4]; n], vec![[0u8; 4]; n], vec![[0u8; 4]; n]);
+    rays::causes(&sc, &at, &e, &mesh, &mut c0, &mut c2, &mut c3);
+    let codes = [scene::Class::Ground.code(), scene::Class::Iron.code(), scene::Class::Plaster.code()];
+    assert_eq!(codes, [224, 96, 16], "the codes the shader decodes");
+    for t in &at.texels {
+        assert_eq!(c2[t.y as usize * at.w as usize + t.x as usize][3], sc.class[t.tri as usize].code(), "texel {},{}", t.x, t.y);
+    }
+    // the gutters copy a neighbour's class and element rather than averaging two into a third
+    let mut covered = at.covered();
+    let before = covered.iter().filter(|c| **c).count();
+    maps::dilate(&mut c2, &mut covered, at.w, at.h, charts::GUTTER, &[1, 3]);
+    assert!(covered.iter().filter(|c| **c).count() > before, "dilation filled no gutter");
+    let elements: std::collections::HashSet<u8> = at.texels.iter().map(|t| c2[t.y as usize * at.w as usize + t.x as usize][1]).collect();
+    for (i, px) in c2.iter().enumerate() {
+        if covered[i] {
+            assert!(codes.contains(&px[3]), "texel {i} has class code {}", px[3]);
+            assert!(elements.contains(&px[1]), "texel {i} has element {}, no chart's", px[1]);
+        }
+    }
 }
 
 /// A bake of a real file, run by hand: RAEA_WEAR_SRC (a .glb), RAEA_WEAR_REQ (a request .json), RAEA_WEAR_STORE.

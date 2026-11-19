@@ -5,12 +5,13 @@
 //! raea/wear's recipes read the maps, one WESL function per material class.
 //!
 //!   in:  a .glb (static meshes), the environment (`Env::of`), the material classes (`scene::Classes::of`)
-//!   out: in the store under the request's content key: model.glb (TEXCOORD_1 added, charts.rs), causes0-2.png,
+//!   out: in the store under the request's content key: model.glb (TEXCOORD_1 added, charts.rs), causes0-3.png,
 //!        meta.json; the same request gives the same bytes
 //!
 //! causes0 = (sky: rain reach, sun: share of the sun's path seen, cavity: occlusion within CAVITY_REACH, edge:
 //! nearness to a convex arris); causes1 = (flow, deposit, deposit kind, touch); causes2 = (ground: height over the
-//! walking surface, 0-4 m; element: the chart's own number; open: the share of the whole sky seen; spare).
+//! walking surface, 0-4 m; element: the chart's own number; open: the share of the whole sky seen; class: the
+//! triangle's material class as `Class::code`); causes3 = (winter sun, drift, litter, spare).
 
 mod charts;
 mod flow;
@@ -34,7 +35,7 @@ pub use scene::{Class, Classes};
 type R<T> = Result<T, String>;
 
 /// Bumped when a bake's bytes would change for the same request.
-const VERSION: &str = "raea-sys-weathering 4";
+const VERSION: &str = "raea-sys-weathering 6";
 
 /// The world the bake's causes come from.
 #[derive(Clone, Debug)]
@@ -175,7 +176,8 @@ pub fn bake(store: &Path, src: &Path, req: &Value) -> R<Value> {
     let covered = at.covered();
     let mut files = Map::new();
     for (name, mut m) in [("causes0", c0), ("causes1", c1), ("causes2", c2), ("causes3", c3)] {
-        maps::dilate(&mut m, &mut covered.clone(), at.w, at.h, charts::GUTTER);
+        let exact: &[usize] = if name == "causes2" { &[1, 3] } else { &[] };
+        maps::dilate(&mut m, &mut covered.clone(), at.w, at.h, charts::GUTTER, exact);
         let p = dir.join(format!("{name}.png"));
         maps::png(&p, &m, at.w, at.h)?;
         files.insert(name.into(), json!(p.display().to_string()));

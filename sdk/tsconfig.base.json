@@ -71,6 +71,7 @@
       "raea/tone": ["./audio/src/tone.tsx"],
       "raea/words": ["./video/src/words.tsx"],
       "raea/world": ["./app/src/world.ts"],
+      "raea/wear": ["./wear/src/index.ts"],
       "raea/views": ["./dev_tools/src/views.tsx"],
       "raea/window": ["./app/src/window.ts"],
       "raea/plugins/*": ["./plugins/src/*.gen"],
@@ -111,6 +112,8 @@
       "@raea/web/*": ["./web/src/*"],
       "@raea/room": ["./room/src/index.ts"],
       "@raea/room/*": ["./room/src/*"],
+      "@raea/wear": ["./wear/src/index.ts"],
+      "@raea/wear/*": ["./wear/src/*"],
       "@raea/rune": ["./rune/src/index.ts"],
       "@raea/plugins": ["./plugins/src/index.ts"],
       "@raea/plugins/*": ["./plugins/src/*"]
