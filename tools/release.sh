@@ -131,6 +131,12 @@ Wayland; Xvfb on a server, as raea app check does there too), libxkbcommon-x11, 
 loader (Debian and Ubuntu: apt install libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 libx11-xcb1 libvulkan1)." > "$stage/README" ;;
   windows-x86_64)
     cp "$bin/raea.exe" "$bin/raea_bundle.dll" "$bin/raea-perceive.exe" "$bin/raea-rune-host.exe" "$bin/raea-page-host.exe" "$stage/bin/"
+    # ONNX Runtime as Microsoft builds it (MIT), which raea.exe and raea-perceive.exe load when a model first runs (#110),
+    # with its licence and notices; tools/release/onnxruntime.sh put them beside the build
+    for f in onnxruntime.dll onnxruntime-LICENSE.txt onnxruntime-ThirdPartyNotices.txt; do
+      [ -f "$bin/$f" ] || { echo "release.sh: $bin has no $f (tools/release/onnxruntime.sh $bin)" >&2; exit 1; }
+      cp "$bin/$f" "$stage/bin/"
+    done
     # the C runtime isn't in the zip (ort's ONNX Runtime needs its DLLs, and they're Microsoft's to ship): the VC++
     # redistributable, which most Windows machines already have, provides it
     printf '%s\r\n' "raea $version for Windows x86_64 (Windows 10 or 11, a DirectX 12 or Vulkan GPU driver; with no GPU, Mesa's lavapipe and WGPU_BACKEND=vulkan)." \
