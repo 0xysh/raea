@@ -10,7 +10,7 @@ use base64::Engine as _;
 use serde_json::{json, Value};
 
 mod os;
-use os::{mode_ctime, signal};
+use os::{mode_ctime, node_arch, parent_pid, signal};
 
 
 /// The builtins node.js defines, by the names an import or require gives them (with or without `node:`)
@@ -181,7 +181,8 @@ fn js_string(s: &str) -> String {
 /// looked for packages from "."
 pub fn load(path: &Path, entry: bool) -> Result<String, String> {
     let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
-    let url = js_string(&format!("file://{}", abs.display()));
+    // file:///C:/... on Windows (until 0.1.8 file://C:\..., a URL with no path a fileURLToPath could read)
+    let url = js_string(&url::Url::from_file_path(&abs).map(String::from).unwrap_or_else(|_| format!("file://{}", abs.display())));
     load_module(path).map(|s| s.replace("import.meta.main", if entry { "true" } else { "false" }).replace("import.meta.url", &url))
 }
 
@@ -358,7 +359,11 @@ pub fn call(op: &str, a: &[Value]) -> Value {
             json!(b64(&v))
         }
         "spawn" => spawn(&s(0), a.get(1), a.get(2).unwrap_or(&Value::Null)),
-        "tmpdir" => json!(std::env::temp_dir().display().to_string().trim_end_matches('/')),
+        // without its last separator, as Node's (Windows' TEMP ends in \\)
+        "tmpdir" => json!(std::env::temp_dir().display().to_string().trim_end_matches(['/', '\\'])),
+        // process.arch and process.pid, in Node's words (x64, arm64)
+        "process" => json!({"arch": node_arch(), "pid": std::process::id()}),
+        "ppid" => parent_pid().map(Value::from).unwrap_or(Value::Null),
         "homedir" => json!(raea_io_home::user_home().unwrap_or_default().display().to_string()),
         "cwd" => json!(std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()),
         "resolve" => resolve_file(&s(0), Path::new(&s(1)), false).map(|p| json!(p.display().to_string())).unwrap_or_else(|e| err("MODULE_NOT_FOUND", e)),
