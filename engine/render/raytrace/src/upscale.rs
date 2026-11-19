@@ -63,15 +63,10 @@ pub(crate) static BROUGHT_UP: AtomicBool = AtomicBool::new(false);
 /// then, as the raw frame would shimmer half a pixel.
 pub(crate) static DENOISING: AtomicBool = AtomicBool::new(false);
 
-fn jitter_mode() -> &'static str {
-    static MODE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    MODE.get_or_init(|| std::env::var("RAEA_SOLARI_JITTER").unwrap_or_default())
-}
-
 /// What MetalFX's denoiser (`denoiser`) or scaler is told of the jitter, times Bevy's offset negated (as its DLSS gives
-/// it): 1, 0 or -1, by RAEA_SOLARI_JITTER. With no denoiser before it, the scaler is told it.
-pub(crate) fn jitter_gain(denoiser: bool, denoised: bool) -> f32 {
-    match (jitter_mode(), denoiser) {
+/// it): 1, 0 or -1, by the view's SolariSettings.jitter (`mode`). With no denoiser before it, the scaler is told it.
+pub(crate) fn jitter_gain(mode: &str, denoiser: bool, denoised: bool) -> f32 {
+    match (mode, denoiser) {
         ("0", _) => 0.0,
         ("both", _) => 1.0,
         ("scaler", true) => 0.0,
@@ -97,28 +92,25 @@ fn halton(mut i: u32, base: u32) -> f32 {
 #[derive(Component)]
 struct Jittered;
 
-/// A Solari camera at its full size is jittered too, so MetalFX's denoiser anti-aliases its edges as it gathers frames:
-/// photo 2's frame 95 had stepped edges held still, and jittered it came 15.9 -> 15.6 off the path tracer.
-/// RAEA_SOLARI_AA=0 holds it still.
-fn aa() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_AA").as_deref() != Ok("0"))
-}
-
 /// How many frames the jitter takes to come round at render scale `s`: 8 / s², as DLSS asks.
 pub(crate) fn cycle(s: f32) -> u32 {
     (8.0 / (s * s)).ceil() as u32
 }
 
 /// Each drawn-small camera's sub-pixel offset this frame (a Halton (2, 3) cycle, longer the smaller it draws, as
-/// DLSS asks: 8 / s² frames), its mip bias, and the prepasses the scaler reads (depth, motion).
-fn jitter(mut cmd: Commands, frame: Res<FrameCount>, mut cams: Query<(Entity, Option<&RenderScale>, Has<SolariLighting>, Option<&mut TemporalJitter>, Has<Jittered>), With<Camera3d>>) {
-    for (e, rs, solari, j, mine) in &mut cams {
+/// DLSS asks: 8 / s² frames), its mip bias, and the prepasses the scaler reads (depth, motion). A Solari camera at its
+/// full size is jittered too unless its settings' `aa` is off, so MetalFX's denoiser anti-aliases its edges as it
+/// gathers frames: photo 2's frame 95 had stepped edges held still, and jittered it came 15.9 -> 15.6 off the path
+/// tracer.
+#[allow(clippy::type_complexity)]
+fn jitter(mut cmd: Commands, frame: Res<FrameCount>, mut cams: Query<(Entity, Option<&RenderScale>, Has<SolariLighting>, Option<&mut TemporalJitter>, Has<Jittered>, Option<&super::SolariSettings>), With<Camera3d>>) {
+    for (e, rs, solari, j, mine, st) in &mut cams {
         let s = scale(rs, solari);
-        if s < 1.0 || (solari && aa() && DENOISING.load(Ordering::Relaxed)) {
+        let st = super::settings::of(st);
+        if s < 1.0 || (solari && st.aa && st.denoise && DENOISING.load(Ordering::Relaxed)) {
             let n = cycle(s);
             let i = frame.0 % n + 1;
-            let offset = if jitter_mode() == "0" { Vec2::ZERO } else { Vec2::new(halton(i, 2), halton(i, 3)) - 0.5 };
+            let offset = if st.jitter == "0" { Vec2::ZERO } else { Vec2::new(halton(i, 2), halton(i, 3)) - 0.5 };
             match j {
                 Some(mut j) if mine => j.offset = offset,
                 Some(_) => {}
@@ -242,7 +234,7 @@ impl View {
     }
 }
 
-pub(crate) type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static MainPassResolutionOverride, Option<&'static TemporalJitter>, Option<&'static SolariLighting>);
+pub(crate) type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static MainPassResolutionOverride, Option<&'static TemporalJitter>, Option<&'static SolariLighting>, Option<&'static super::SolariSettings>);
 
 pub(crate) fn upscale(view: ViewQuery<Viewed, With<Upscaled>>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
     // the denoiser brought it up already, in the same pass (metalfx.rs)
@@ -250,7 +242,7 @@ pub(crate) fn upscale(view: ViewQuery<Viewed, With<Upscaled>>, device: Res<Rende
         return;
     }
     let entity = view.entity();
-    let (target, pre, part, jitter, solari) = view.into_inner();
+    let (target, pre, part, jitter, solari, st) = view.into_inner();
     let (Some(depth), Some(motion)) = (pre.depth.as_ref(), pre.motion_vectors.as_ref()) else { return };
     let color: &wgpu::Texture = target.main_texture();
     if target.main_texture_format() != bevy::render::render_resource::TextureFormat::Rgba16Float {
@@ -272,7 +264,7 @@ pub(crate) fn upscale(view: ViewQuery<Viewed, With<Upscaled>>, device: Res<Rende
     }
     let v = kit.views.get_mut(&entity).unwrap();
     let denoised = DENOISED.swap(false, Ordering::Relaxed);
-    let jitter = jitter.map_or(Vec2::ZERO, |j| -j.offset * jitter_gain(false, denoised));
+    let jitter = jitter.map_or(Vec2::ZERO, |j| -j.offset * jitter_gain(&super::settings::of(st).jitter, false, denoised));
     let mut raw = dev.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("metalfx upscale") });
     let done = unsafe {
         raw.as_hal_mut::<Metal, _, _>(|e| match e.and_then(|e| e.raw_command_buffer()) {

@@ -9,6 +9,9 @@ description = "raea-render's ray tracing: Bevy's Solari for a scene whose camera
 [dependencies]
 # RAEA_SOLARI_DYNAMIC=1 read as raea's other switches are
 raea-io-home = { path = "../../../io/home" }
+# each view's effective SolariSettings, once, into the run's trace (settings.rs)
+raea-io-trace = { path = "../../../io/trace" }
+serde_json = "1"
 bevy = { version = "=0.20.0", default-features = false, features = ["std", "3d_bevy_render", "bevy_solari"] }
 # the same wgpu Bevy uses (the guide pass records on its device; MetalFX runs on its Metal objects)
 wgpu = "=30.0.1"

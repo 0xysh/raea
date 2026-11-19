@@ -28,25 +28,11 @@ use bevy::prelude::*;
 
 pub(crate) const WGSL: &str = include_str!("emit_taa.wgsl");
 
-/// On unless RAEA_SOLARI_EMISSIVE is mask or split.
-pub(crate) fn on() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| !matches!(std::env::var("RAEA_SOLARI_EMISSIVE").as_deref(), Ok("mask") | Ok("split")))
-}
-
 /// RAEA_EMIT_TAA_DEBUG=1: the pass paints its weights instead; 2 never takes the history, 3 always does; 4 paints which
 /// of RT32's rules held it (emit_taa.wgsl)
 pub(crate) fn debug() -> f32 {
     static ON: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var("RAEA_EMIT_TAA_DEBUG").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0))
-}
-
-/// RAEA_EMIT_TAA_SHARP: how fast a sample's weight falls with its distance from a pixel's centre, exp(-k d^2) in output
-/// pixels, 6 by default: at Blackman-Harris's 2.29 the forest's canopy came out 1.28 times the tracer's as seen (tone
-/// mapped), its sky through the twigs spread wider than a pixel, and a screen's detail 0.38 of the tracer's
-pub(crate) fn sharp() -> f32 {
-    static ON: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_EMIT_TAA_SHARP").ok().and_then(|v| v.parse().ok()).unwrap_or(6.0))
 }
 
 /// A view's emission history at the output's size: the gathered emission and its weight, and the depths it was gathered

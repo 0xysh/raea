@@ -14964,6 +14964,8 @@ dependencies = [
  "objc2-metal 0.3.2",
  "objc2-metal-fx",
  "raea-io-home",
+ "raea-io-trace",
+ "serde_json",
  "wgpu",
 ]
 

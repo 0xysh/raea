@@ -15,6 +15,8 @@ mod emit_taa;
 mod upscale;
 // RAEA_LIGHT: one light path for every camera (docs/realism.feature LT1)
 pub mod force;
+// SolariSettings' environment overrides (docs/nobuild.feature NB1a)
+mod settings;
 
 /// RT9: the fraction of the view's size a side this camera's main pass draws at (a third to 1), which MetalFX's
 /// temporal scaler brings up to the whole view after it (upscale.rs); 1 draws at the full size. <SolariLighting scale>
@@ -31,9 +33,63 @@ impl Default for RenderScale {
     }
 }
 
+/// A Solari camera's settings for the denoiser, its guides, the emission's history and the jitter (docs/nobuild.feature
+/// NB1a): what <SolariLighting>'s props set in TypeScript, through <BevyComponent> by this type's path, so a value is
+/// tried in a composition, never a build. Each field's environment variable overrides it for every camera, as a
+/// developer's A/B (settings.rs); a camera without it has the defaults. Read on the view, each frame.
+#[derive(Component, Reflect, Clone, Debug, PartialEq, bevy::render::extract_component::ExtractComponent)]
+#[extract_app(bevy::render::RenderApp)]
+#[reflect(Component, Default)]
+pub struct SolariSettings {
+    /// MetalFX's denoiser on the lighting (RT4); off shows Solari's noise (RAEA_SOLARI_DENOISE=0)
+    pub denoise: bool,
+    /// the denoiser guided by Solari's own guides, a mirror's pixel taking what it reflects (RT17); off, by the G-buffer
+    /// (RAEA_SOLARI_PSR=0)
+    pub guides: bool,
+    /// a glossy pixel as far off as what it reflects in the denoiser's depth, so its reflection doesn't trail (RT34;
+    /// RAEA_SOLARI_PSR_DEPTH=0)
+    pub reflection_depth: bool,
+    /// an emissive surface's own light: "taa", taken out before the denoiser and gathered over frames (RT11, RT32);
+    /// "split", each frame's alone; "mask", left in for the denoiser (RAEA_SOLARI_EMISSIVE)
+    pub emissive: String,
+    /// a view drawn small: denoised and brought up in "one" pass, or denoised small and scaled in a second, "two"
+    /// (RAEA_SOLARI_UPSCALE)
+    pub upscale: String,
+    /// what MetalFX divides the colour by before it denoises and multiplies it by after: bright light kept, at the cost
+    /// of fireflies past 16 (metalfx.rs pre_exposure; RAEA_METALFX_PREEXPOSURE)
+    pub preexposure: f32,
+    /// a full-size view jittered too, so the denoiser anti-aliases its edges as it gathers frames (RAEA_SOLARI_AA=0)
+    pub aa: bool,
+    /// which of MetalFX's passes is told the jitter: "" the denoiser, "scaler", "both", "flip", "0" none (and none is
+    /// made) (RAEA_SOLARI_JITTER)
+    pub jitter: String,
+    /// how fast a sample's weight falls with its distance from a pixel's centre in the emission's history, exp(-k d^2)
+    /// in output pixels (RAEA_EMIT_TAA_SHARP): at Blackman-Harris's 2.29 the forest's canopy came out 1.28 times the
+    /// tracer's as seen (tone mapped), its sky through the twigs spread wider than a pixel, and a screen's detail 0.38
+    /// of the tracer's
+    pub emissive_sharpness: f32,
+}
+
+impl Default for SolariSettings {
+    fn default() -> Self {
+        SolariSettings {
+            denoise: true,
+            guides: true,
+            reflection_depth: true,
+            emissive: "taa".into(),
+            upscale: "one".into(),
+            preexposure: 16.0,
+            aa: true,
+            jitter: String::new(),
+            emissive_sharpness: 6.0,
+        }
+    }
+}
+
 /// Solari's plugins, and RAEA_LIGHT's camera override when it names a path.
 pub fn add(app: &mut App) {
-    app.register_type::<RenderScale>();
+    app.register_type::<RenderScale>().register_type::<SolariSettings>();
+    app.add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<SolariSettings>::default());
     solari::add(app);
     force::add(app);
 }

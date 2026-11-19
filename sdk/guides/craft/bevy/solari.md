@@ -5,8 +5,8 @@
 - Put `<SolariLighting />` (`raea/light`) inside the `<Camera3d>` it lights. raea sets up what Bevy asks for around it
   (HDR, no MSAA, the deferred and depth prepasses). It needs a GPU with ray queries: Apple silicon on Metal, an RTX
   card on Vulkan. Elsewhere the scene draws raster-lit and raea says so. On the Mac, MetalFX's denoiser cleans the
-  result (`RAEA_SOLARI_DENOISE=0` shows the raw noise).
-- Its three props:
+  result (`denoise={false}` shows the raw noise).
+- Its main props:
   - `bounces`: how many times light bounces. Bevy's default is 3 when it's left out; 2 is enough for most rooms and
     costs less.
   - `restir`: reuse light samples between pixels and frames. It's off by default, as Bevy has it. Turn it on when
@@ -15,6 +15,19 @@
     the old shot's light smears into the new one for a few frames. A cut between cameras (`<Camera3d is_active>`,
     the first active one draws) needs none: the engine resets Solari's and the path tracer's history on the frame
     the shot changes.
+  - `scale`: draw the view at this fraction of its size a side and let MetalFX bring it up. A game at 0.67 traces 45%
+    of the pixels.
+  - `primarySamples` and `secondarySamples`: light samples at the first hit and at each bounce (Bevy's 8 and 4). After
+    the denoiser, 4 and 2 look the same in most rooms and save time.
+- Every other choice the engine makes for the traced light is a prop too, so an A/B is two compositions, never a
+  build: `denoise`, `guides`, `reflectionDepth`, `emissive` ("taa", "split", "mask"), `upscale` ("one", "two"),
+  `preexposure`, `aa`, `jitter`, `emissiveSharpness`, `firstBounce`, `confidenceCap` and `cache` (the world cache's
+  `frames`, `lightSamples`, `reach`, `updates`, `cellSize`, `lodScale`). Each prop's TSDoc says what it changes. The
+  defaults are the measured best, so leave them unless a test scene shows otherwise. A developer's environment
+  variable of the same setting (`RAEA_SOLARI_DENOISE=0`, `RAEA_METALFX_PREEXPOSURE=4`) overrides the prop on every
+  camera, for an A/B across many scenes at once.
+- Keep a look's settings as a TypeScript object and spread it: `const LIVE = { primarySamples: 4, scale: 0.67 }`,
+  then `<SolariLighting {...LIVE} />` or `<SolariLighting {...LIVE} preexposure={32} />`.
 - For a still to judge the look against, use `<Pathtracer />` in its place: exact and slow, accumulating while the
   view holds still. It isn't for motion.
 - Light the scene with what Solari sees:
@@ -66,8 +79,8 @@ from a world-space cache that rays keep updating (the world cache), read whereve
 against acceleration structures built from the meshes. That's why it needs its own mesh layout (raea makes a copy per
 mesh, once), why only the `StandardMaterial` fields it knows are traced (base colour, emissive, metallic and roughness,
 normal maps, alpha masks, `uv_transform`), and why it's noisy until a denoiser runs. Reflections went in with 0.18
-(specular) and 0.19 (a mirror BRDF). Their motion vectors aren't there yet, so a polished floor's reflections smear
-when the camera moves.
+(specular) and 0.19 (a mirror BRDF). raea's patches give a mirror's and a glossy surface's pixels the motion and depth
+of what they reflect, so the denoiser follows a reflection instead of smearing it.
 
 Bevy changes Solari every release. It arrived in 0.17, gained specular in 0.18 and mirrors in 0.19, and 0.20 turned
 ReSTIR off by default, added the atmosphere and environment lighting, and ran on Metal (with no denoiser of its own:

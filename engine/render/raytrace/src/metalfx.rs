@@ -16,7 +16,8 @@
 //! frame on the small grid, so the scaler gained nothing from the jitter (0.7 of the full size's fine detail at 0.67).
 //!
 //! Where there's no MetalFX denoiser (not macOS 26, not Metal, a device it doesn't support) the lighting draws as it
-//! is and raea says so once. RAEA_SOLARI_DENOISE=0 turns it off, to see the noise.
+//! is and raea says so once. A view's SolariSettings choose how it runs (lib.rs; docs/nobuild.feature NB1a): `denoise`
+//! false (RAEA_SOLARI_DENOISE=0) leaves its lighting un-denoised, to see the noise.
 
 use super::*;
 use bevy::camera::MainPassResolutionOverride;
@@ -42,9 +43,6 @@ use wgpu::hal::api::Metal;
 /// nothing in the G-buffer, and denoising them would smear them. Bevy doesn't export Solari's system, so it's found by
 /// name and ordered against by its system type set.
 pub(crate) fn add(app: &mut App) {
-    if std::env::var("RAEA_SOLARI_DENOISE").is_ok_and(|v| v == "0") {
-        return;
-    }
     let Some(r) = app.get_sub_app_mut(bevy::render::RenderApp) else { return };
     let mut schedules = r.world_mut().resource_mut::<Schedules>();
     let Some(core) = schedules.get_mut(Core3d) else { return };
@@ -61,37 +59,10 @@ pub(crate) fn add(app: &mut App) {
     };
     core.add_systems(denoise.after(solari).before(main_opaque_pass_3d).in_set(Core3dSystems::MainPass));
     core.add_systems(denoise_up.before(super::upscale::upscale).in_set(Core3dSystems::EarlyPostProcess));
-    // Solari's own guides (primary surface replacement: a mirror's pixel takes what it reflects), unless
-    // RAEA_SOLARI_PSR=0, which guides from the G-buffer as before
-    if std::env::var("RAEA_SOLARI_PSR").as_deref() != Ok("0") {
-        r.world_mut().insert_resource(bevy::solari::realtime::SolariGuideBuffers { reflection_depth: psr_depth() });
-    }
-}
-
-/// The emission taken out before the denoiser and put back after (see DECODE_WGSL): gathered over frames by default
-/// (emit_taa.rs), each frame's alone with RAEA_SOLARI_EMISSIVE=split; =mask leaves it in, for the denoiser.
-fn split() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_EMISSIVE").as_deref() == Ok("split") || super::emit_taa::on())
-}
-
-/// A view drawn small is denoised and brought up in one pass (unless RAEA_SOLARI_UPSCALE=two).
-fn one_pass() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_UPSCALE").as_deref() != Ok("two"))
-}
-
-/// What MetalFX divides the colour by before it denoises, and multiplies its output by after (RAEA_METALFX_PREEXPOSURE,
-/// 16 by default). It denoises bright light compressed, so a rare bright sample (the sky in a glossy reflection, a
-/// lamp's light found by one path in many) counts for less than its share, and Solari's one path a pixel is made of
-/// rare bright samples: at 1, the desk kept 0.74 of the path tracer's light, the forest's haze 0.72 and its far trunks
-/// 0.87, and Russian roulette's doubled samples lost more (photo 5's windows: q 0.5 kept 0.60 of q 1's light; 3.4
-/// stops darker, 0.97). At 16: the desk 0.86, the haze 1.03, the trunks 1.01, the hall's whole frame 0.935 -> 0.971
-/// and q 0.5 keeping 0.98 of q 1's; flicker 0.85 -> 0.88% of pixels. Higher keeps more and lets fireflies through:
-/// at 64 the desk 0.91 and the hall's dark corners 1.2; at 256 the desk's wall 1.59
-fn pre_exposure() -> f32 {
-    static ON: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_METALFX_PREEXPOSURE").ok().and_then(|v| v.parse().ok()).filter(|v: &f32| *v > 0.0).unwrap_or(16.0))
+    // Solari's own guides (primary surface replacement: a mirror's pixel takes what it reflects, and a glossy one is as
+    // far off as what it reflects, RT34), written for every view; a view's `guides` and `reflection_depth` choose whether
+    // its denoiser reads them
+    r.world_mut().insert_resource(bevy::solari::realtime::SolariGuideBuffers { reflection_depth: true });
 }
 
 // the guides' shader: what it writes and why (the emission's split) is in its file
@@ -150,7 +121,7 @@ fn mtl(t: &wgpu::Texture) -> Option<Retained<ProtocolObject<dyn MTLTexture>>> {
 }
 
 impl View {
-    fn new(dev: &wgpu::Device, size: UVec2, out_size: UVec2, guide_depth: bool) -> Result<View, String> {
+    fn new(dev: &wgpu::Device, size: UVec2, out_size: UVec2, guide_depth: bool, taa: bool) -> Result<View, String> {
         let hal = unsafe { dev.as_hal::<Metal>() }.ok_or("the GPU isn't on Metal")?;
         let device = hal.raw_device();
         unsafe {
@@ -189,7 +160,7 @@ impl View {
                 emit: texture(dev, size, wgpu::TextureFormat::Rgba16Float, guide, "metalfx split emission"),
                 mask: texture(dev, size, wgpu::TextureFormat::R32Float, guide, "metalfx denoise strength"),
                 out: texture(dev, out_size, wgpu::TextureFormat::Rgba16Float, guide | U::RENDER_ATTACHMENT | U::COPY_SRC, "metalfx output"),
-                taa: super::emit_taa::on().then(|| super::emit_taa::History::new(dev, out_size)),
+                taa: taa.then(|| super::emit_taa::History::new(dev, out_size)),
                 fresh: true,
             })
         }
@@ -197,8 +168,16 @@ impl View {
 
     /// The denoiser on `cb`, then its output copied over the colour's corner of its size. `jitter` is the
     /// camera's this frame, in the main pass's pixels, as MetalFX takes it (Bevy's TemporalJitter negated, as its DLSS
-    /// gives it).
-    fn encode(&mut self, cb: &ProtocolObject<dyn MTLCommandBuffer>, color: &wgpu::Texture, depth: &wgpu::Texture, motion: &wgpu::Texture, view: &ExtractedView, jitter: Vec2, reset: bool) -> Result<(), &'static str> {
+    /// gives it). `pre_exposure`: what MetalFX divides the colour by before it denoises, and multiplies its output by
+    /// after (SolariSettings.preexposure, 16 by default). It denoises bright light compressed, so a rare bright sample (the
+    /// sky in a glossy reflection, a lamp's light found by one path in many) counts for less than its share, and Solari's
+    /// one path a pixel is made of rare bright samples: at 1, the desk kept 0.74 of the path tracer's light, the forest's
+    /// haze 0.72 and its far trunks 0.87, and Russian roulette's doubled samples lost more (photo 5's windows: q 0.5 kept
+    /// 0.60 of q 1's light; 3.4 stops darker, 0.97). At 16: the desk 0.86, the haze 1.03, the trunks 1.01, the hall's
+    /// whole frame 0.935 -> 0.971 and q 0.5 keeping 0.98 of q 1's; flicker 0.85 -> 0.88% of pixels. Higher keeps more
+    /// and lets fireflies through: at 64 the desk 0.91 and the hall's dark corners 1.2; at 256 the desk's wall 1.59
+    #[allow(clippy::too_many_arguments)]
+    fn encode(&mut self, cb: &ProtocolObject<dyn MTLCommandBuffer>, color: &wgpu::Texture, depth: &wgpu::Texture, motion: &wgpu::Texture, view: &ExtractedView, jitter: Vec2, reset: bool, pre_exposure: f32) -> Result<(), &'static str> {
         let get = |t: &wgpu::Texture| mtl(t).ok_or("a texture isn't a Metal one");
         let (color, depth, motion) = (get(color)?, get(depth)?, get(motion)?);
         let (diffuse, specular, normal, rough, out) = (get(&self.diffuse)?, get(&self.specular)?, get(&self.normal)?, get(&self.rough)?, get(&self.out)?);
@@ -221,7 +200,7 @@ impl View {
             s.setJitterOffsetX(jitter.x);
             s.setJitterOffsetY(jitter.y);
             s.setDepthReversed(true);
-            s.setPreExposure(pre_exposure());
+            s.setPreExposure(pre_exposure);
             s.setShouldResetHistory(reset || self.fresh);
             matrices(s, view.world_from_view.to_matrix().inverse(), view.clip_from_view);
             s.encodeToCommandBuffer(cb);
@@ -261,46 +240,44 @@ fn matrices(s: &ProtocolObject<dyn MTLFXTemporalDenoisedScaler>, world_to_view: 
     }
 }
 
-type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static ExtractedView, &'static ExtractedCamera, &'static SolariLighting, Option<&'static MainPassResolutionOverride>, Option<&'static TemporalJitter>, Has<super::upscale::Upscaled>, Option<&'static SolariGuideTextures>);
+type Viewed = (&'static ViewTarget, &'static ViewPrepassTextures, &'static ExtractedView, &'static ExtractedCamera, &'static SolariLighting, Option<&'static MainPassResolutionOverride>, Option<&'static TemporalJitter>, Has<super::upscale::Upscaled>, Option<&'static SolariGuideTextures>, Option<&'static super::SolariSettings>);
 
-/// Before the forward meshes: a view at its full size, or one drawn small when RAEA_SOLARI_UPSCALE=two (its corner).
-fn denoise(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
+/// Before the forward meshes: a view at its full size, or one drawn small whose settings upscale in "two" (its corner).
+/// Each view's settings go into the run's trace here, once and on a change.
+fn denoise(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext, mut seen: Local<HashMap<Entity, super::SolariSettings>>) {
     let entity = view.entity();
     let item = view.into_inner();
-    if item.7 && one_pass() {
+    let st = super::settings::of(item.9);
+    let scale = item.5.map_or(1.0, |p| p.0.x as f32 / item.0.main_texture().width() as f32);
+    super::settings::record(entity, &st, scale, &mut seen);
+    if !st.denoise || (item.7 && st.one_pass()) {
         return;
     }
-    run(entity, item, &device, &mut kit, &mut ctx, false);
+    run(entity, item, &st, &device, &mut kit, &mut ctx, false);
 }
 
 /// After the main pass: a view drawn small, denoised from its corner out to its whole size.
 fn denoise_up(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Kit>, mut ctx: RenderContext) {
     let entity = view.entity();
     let item = view.into_inner();
-    if !item.7 || !one_pass() {
+    let st = super::settings::of(item.9);
+    if !st.denoise || !item.7 || !st.one_pass() {
         return;
     }
-    run(entity, item, &device, &mut kit, &mut ctx, true);
+    run(entity, item, &st, &device, &mut kit, &mut ctx, true);
 }
 
-/// The denoiser's depth is Solari's guide depth, where a glossy pixel is as far off as what it reflects (docs/raytracing.feature
-/// RT34): an orb's reflection in a monitor's glass no longer trails it (+0.71 -> +0.08 stops). RAEA_SOLARI_PSR_DEPTH=0
-/// gives it the prepass's depth, as before. A glossy pixel whose reflection leaves the scene must have its depth too: left
-/// unwritten (0, the sky's) MetalFX darkened window.tsx's shelves, far from those pixels, by 8%
-fn psr_depth() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("RAEA_SOLARI_PSR_DEPTH").as_deref() != Ok("0"))
-}
-
-type Item<'a> = (&'a ViewTarget, &'a ViewPrepassTextures, &'a ExtractedView, &'a ExtractedCamera, &'a SolariLighting, Option<&'a MainPassResolutionOverride>, Option<&'a TemporalJitter>, bool, Option<&'a SolariGuideTextures>);
+type Item<'a> = (&'a ViewTarget, &'a ViewPrepassTextures, &'a ExtractedView, &'a ExtractedCamera, &'a SolariLighting, Option<&'a MainPassResolutionOverride>, Option<&'a TemporalJitter>, bool, Option<&'a SolariGuideTextures>, Option<&'a super::SolariSettings>);
 
 /// The guides from the G-buffer and the emissive out, at the main pass's size; MetalFX's denoiser, out to the whole
 /// view when `up`; its output over the colour and the emissive back in.
-fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &mut RenderContext, up: bool) {
+fn run(entity: Entity, item: Item, st: &super::SolariSettings, device: &RenderDevice, kit: &mut Kit, ctx: &mut RenderContext, up: bool) {
     if kit.off {
         return;
     }
-    let (target, pre, ext, cam, solari, part, jitter, _, guides) = item;
+    let (target, pre, ext, cam, solari, part, jitter, _, guides, _) = item;
+    // Solari wrote its guides for every view; this one reads them unless its settings say the G-buffer's
+    let guides = guides.filter(|_| st.guides);
     let (Some(depth), Some(motion), Some(gbuf)) = (pre.depth.as_ref(), pre.motion_vectors.as_ref(), pre.deferred.as_ref()) else { return };
     if target.main_texture_format() != TextureFormat::Rgba16Float {
         return;
@@ -309,13 +286,14 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     let full = UVec2::new(color.width(), color.height());
     let size = part.map_or(full, |p| p.0);
     let out_size = if up { full } else { size };
-    let jitter = jitter.map_or(Vec2::ZERO, |j| -j.offset * super::upscale::jitter_gain(true, true));
+    let jitter = jitter.map_or(Vec2::ZERO, |j| -j.offset * super::upscale::jitter_gain(&st.jitter, true, true));
     let dev = device.wgpu_device().clone();
     // with Solari's guides, the denoiser's depth is theirs: a mirror's pixel as far off as what it reflects, so when what
     // it reflects moves off (an orb in a monitor's glass) the wall now there is a disocclusion and its history goes
-    let guide_depth = guides.is_some() && psr_depth();
-    if kit.views.get(&entity).map(|v| (v.size, v.out_size, v.guide_depth)) != Some((size, out_size, guide_depth)) {
-        match View::new(&dev, size, out_size, guide_depth) {
+    let guide_depth = guides.is_some() && st.reflection_depth;
+    let taa = st.taa();
+    if kit.views.get(&entity).map(|v| (v.size, v.out_size, v.guide_depth, v.taa.is_some())) != Some((size, out_size, guide_depth, taa)) {
+        match View::new(&dev, size, out_size, guide_depth, taa) {
             Ok(v) => {
                 kit.views.insert(entity, v);
             }
@@ -340,7 +318,7 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     let reset = solari.reset || kit.views.get(&entity).is_none_or(|v| v.fresh);
     // the jitter's cycle at this render scale, how long a twig glimpsed through it can stay away (emit_taa.wgsl)
     let cycle = super::upscale::cycle(size.x as f32 / full.x as f32) as f32;
-    let words: [f32; 16] = [cam.exposure, if split() { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, super::emit_taa::sharp(), jitter.x, jitter.y, cycle, 0.0];
+    let words: [f32; 16] = [cam.exposure, if st.split() { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, st.emissive_sharpness, jitter.x, jitter.y, cycle, 0.0];
     let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
     let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx params"), contents: &bytes, usage: wgpu::BufferUsages::UNIFORM });
     let v = kit.views.get_mut(&entity).unwrap();
@@ -379,13 +357,13 @@ fn run(entity: Entity, item: Item, device: &RenderDevice, kit: &mut Kit, ctx: &m
     let mut raw = dev.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("metalfx denoise") });
     let done = unsafe {
         raw.as_hal_mut::<Metal, _, _>(|e| match e.and_then(|e| e.raw_command_buffer()) {
-            Some(cb) => v.encode(cb, color, match guides { Some(g) if v.guide_depth => &g.depth.texture, _ => &depth.texture.texture }, guide_motion, ext, jitter, solari.reset),
+            Some(cb) => v.encode(cb, color, match guides { Some(g) if v.guide_depth => &g.depth.texture, _ => &depth.texture.texture }, guide_motion, ext, jitter, solari.reset, st.preexposure),
             None => Err("wgpu gave no Metal command buffer"),
         })
     };
     ctx.add_command_buffer(raw.finish());
     // the emissive back in, after the denoiser's command buffer (add_command_buffer flushed the encoder before it)
-    if split() {
+    if st.split() {
     let mut entries = vec![
         wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) },
         wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() },

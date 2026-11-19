@@ -9,17 +9,101 @@ export interface SolariLightingProps {
   bounces?: number;
   /** start the lighting's history again (a cut) */
   reset?: boolean;
+  /** with ReSTIR, the most frames a pixel's reused samples may count for: higher is steadier and slower to follow a
+   * change in the light (Bevy's 8) */
+  confidenceCap?: number;
+  /** direct light samples at the camera's first hit, a pixel a frame (Bevy's 8). After MetalFX's denoiser 4 bought
+   * the window scene nothing over 8 and saved 1.5 ms at 1080p's pixels */
+  primarySamples?: number;
+  /** direct light samples at each bounce (Bevy's 4) */
+  secondarySamples?: number;
+  /** the chance a pixel traces its first bounce this frame, its light divided by it (Russian roulette): 0.5 halves the
+   * bounce's tracing, most of a dense forest's (1, every pixel every frame) */
+  firstBounce?: number;
+  /** Solari's world cache, the bounce light it keeps in cells across the scene */
+  cache?: {
+    /** frames a cell's light is gathered over: steadier and slower to follow a change (Bevy's 32) */
+    frames?: number;
+    /** direct light samples a cell takes a frame (32) */
+    lightSamples?: number;
+    /** the farthest a ray between cells is traced, metres; past it the sky counts only if the ray reaches it (1000) */
+    reach?: number;
+    /** about how many cells are updated a frame (40000) */
+    updates?: number;
+    /** a nearest cell's size, metres (0.15) */
+    cellSize?: number;
+    /** how fast cells grow with distance from the camera (15) */
+    lodScale?: number;
+  };
   /** draw the view at this fraction of its size a side (a third to 1) and let MetalFX's temporal scaler bring it up to
    * the full size, so a game traces fewer pixels: 0.67 traces 45% of them (RT9). On the Mac; elsewhere it draws at the
-   * full size and raea says so. 1 (or left out): the full size */
+   * full size and raea says so. 1 (or left out): the full size; RAEA_SOLARI_SCALE overrides it */
   scale?: number;
+  /** MetalFX's temporal denoiser on the lighting (RT4). false shows Solari's raw noise. Default true;
+   * RAEA_SOLARI_DENOISE=0 overrides it */
+  denoise?: boolean;
+  /** the denoiser guided by Solari's own guides, where a mirror's pixel takes what it reflects (RT17); false guides it
+   * by the G-buffer. Default true; RAEA_SOLARI_PSR=0 overrides it */
+  guides?: boolean;
+  /** a glossy surface's pixel as far off as what it reflects in the denoiser's depth, so a reflection doesn't trail
+   * what it shows (RT34). Default true; RAEA_SOLARI_PSR_DEPTH=0 overrides it */
+  reflectionDepth?: boolean;
+  /** an emissive surface's own light: "taa" taken out before the denoiser and gathered over frames (RT11, RT32),
+   * "split" each frame's alone, "mask" left in for the denoiser. Default "taa"; RAEA_SOLARI_EMISSIVE overrides it */
+  emissive?: "taa" | "split" | "mask";
+  /** a view drawn small (scale below 1): denoised and brought up in "one" pass, or denoised small and scaled in "two".
+   * Default "one"; RAEA_SOLARI_UPSCALE overrides it */
+  upscale?: "one" | "two";
+  /** what MetalFX divides the light by before it denoises and multiplies it by after. Higher keeps more of a rare
+   * bright sample (a lamp found by one path in many) and lets more fireflies through: 1 kept 0.74 of the desk's
+   * light, 16 0.86, 64 0.91. Default 16; RAEA_METALFX_PREEXPOSURE overrides it */
+  preexposure?: number;
+  /** jitter a full-size view too, so the denoiser anti-aliases its edges as it gathers frames. Default true;
+   * RAEA_SOLARI_AA=0 overrides it */
+  aa?: boolean;
+  /** which of MetalFX's passes is told the camera's jitter: "denoiser", "scaler", "both", "flip" (the denoiser,
+   * negated), "none" (and the view isn't jittered). For A/Bs of RT9; default "denoiser"; RAEA_SOLARI_JITTER ("" the
+   * denoiser, "0" none) overrides it */
+  jitter?: "denoiser" | "scaler" | "both" | "flip" | "none";
+  /** how fast a sample's weight falls with its distance from a pixel's centre in the emission's history, exp(-k d²) in
+   * output pixels: lower is softer. Default 6; RAEA_EMIT_TAA_SHARP overrides it */
+  emissiveSharpness?: number;
+}
+
+/** <SolariLighting>'s denoiser, guide, emission and jitter props as raea_render_raytrace::SolariSettings' fields (only
+ * those given; the rest keep the engine's defaults). An environment variable of the same setting overrides it, for an
+ * A/B across scenes (RAEA_SOLARI_DENOISE, RAEA_METALFX_PREEXPOSURE, ...; docs/nobuild.feature NB1a). */
+export function solariSettings(p: SolariLightingProps): Record<string, unknown> | undefined {
+  const pos = (n: string, v: number | undefined) => {
+    if (v !== undefined && !(Number.isFinite(v) && v > 0)) throw new RangeError(`SolariLighting: ${n} is a number above 0, got ${v}`);
+  };
+  pos("preexposure", p.preexposure);
+  pos("emissiveSharpness", p.emissiveSharpness);
+  const one = <T extends string>(n: string, v: T | undefined, of: readonly T[]) => {
+    if (v !== undefined && !of.includes(v)) throw new RangeError(`SolariLighting: ${n} is one of ${of.join(", ")}, got ${v}`);
+  };
+  one("emissive", p.emissive, ["taa", "split", "mask"] as const);
+  one("upscale", p.upscale, ["one", "two"] as const);
+  one("jitter", p.jitter, ["denoiser", "scaler", "both", "flip", "none"] as const);
+  const v: Record<string, unknown> = {};
+  if (p.denoise !== undefined) v.denoise = p.denoise;
+  if (p.guides !== undefined) v.guides = p.guides;
+  if (p.reflectionDepth !== undefined) v.reflection_depth = p.reflectionDepth;
+  if (p.emissive !== undefined) v.emissive = p.emissive;
+  if (p.upscale !== undefined) v.upscale = p.upscale;
+  if (p.preexposure !== undefined) v.preexposure = p.preexposure;
+  if (p.aa !== undefined) v.aa = p.aa;
+  // the engine's names for the passes (upscale.rs jitter_gain): "" the denoiser, "0" none
+  if (p.jitter !== undefined) v.jitter = p.jitter === "denoiser" ? "" : p.jitter === "none" ? "0" : p.jitter;
+  if (p.emissiveSharpness !== undefined) v.emissive_sharpness = p.emissiveSharpness;
+  return Object.keys(v).length ? v : undefined;
 }
 
 /** Ray-traced direct and indirect light for the <Camera3d> it's inside (Bevy's SolariLighting): shadows, bounce
  * light and reflections traced against the scene, in place of shadow maps. Needs a GPU with ray queries (Apple
  * silicon on Metal, RTX on Vulkan); elsewhere the scene draws raster-lit and raea says so. On the Mac MetalFX's
- * temporal denoiser cleans it up (RT4; RAEA_SOLARI_DENOISE=0 shows the raw noise). A <Character> (skinned, morphed) stays raster-lit: Bevy 0.20's
- * Solari can't trace it (RT5). */
+ * temporal denoiser cleans it up (RT4; denoise={false} shows the raw noise). A <Character> (skinned, morphed) stays
+ * raster-lit: Bevy 0.20's Solari can't trace it (RT5). */
 export function SolariLighting(p: SolariLightingProps = {}) {
   if (p.bounces !== undefined && !(Number.isInteger(p.bounces) && p.bounces >= 0)) throw new RangeError(`SolariLighting: bounces is a whole number, got ${p.bounces}`);
   if (p.scale !== undefined && !(p.scale >= 1 / 3 && p.scale <= 1)) throw new RangeError(`SolariLighting: scale is a third to 1 (of the view's size a side), got ${p.scale}`);
@@ -27,12 +111,32 @@ export function SolariLighting(p: SolariLightingProps = {}) {
   if (p.restir !== undefined) value.restir = p.restir;
   if (p.bounces !== undefined) value.max_bounces = p.bounces;
   if (p.reset !== undefined) value.reset = p.reset;
+  const field = (prop: string, name: string, v: number | undefined, whole = false) => {
+    if (v === undefined) return;
+    if (!(Number.isFinite(v) && v >= 0) || (whole && !Number.isInteger(v))) throw new RangeError(`SolariLighting: ${prop} is ${whole ? "a whole number" : "a number"} of 0 or more, got ${v}`);
+    value[name] = v;
+  };
+  field("confidenceCap", "confidence_weight_cap", p.confidenceCap);
+  field("primarySamples", "primary_di_samples", p.primarySamples, true);
+  field("secondarySamples", "secondary_di_samples", p.secondarySamples, true);
+  if (p.firstBounce !== undefined && !(p.firstBounce > 0 && p.firstBounce <= 1)) throw new RangeError(`SolariLighting: firstBounce is a chance above 0, up to 1, got ${p.firstBounce}`);
+  field("firstBounce", "first_bounce_probability", p.firstBounce);
+  const c = p.cache ?? {};
+  field("cache.frames", "world_cache_max_temporal_samples", c.frames);
+  field("cache.lightSamples", "world_cache_direct_light_sample_count", c.lightSamples, true);
+  field("cache.reach", "world_cache_max_gi_ray_distance", c.reach);
+  field("cache.updates", "world_cache_cell_updates_soft_target", c.updates, true);
+  field("cache.cellSize", "world_cache_position_base_cell_size", c.cellSize);
+  field("cache.lodScale", "world_cache_position_lod_scale", c.lodScale);
+  const settings = solariSettings(p);
   const lighting = <BevyComponent type="bevy_solari::realtime::SolariLighting" value={value} />;
-  if (p.scale === undefined || p.scale === 1) return lighting;
+  const scaled = p.scale !== undefined && p.scale !== 1;
+  if (!scaled && !settings) return lighting;
   return (
     <>
       {lighting}
-      <BevyComponent type="raea_render_raytrace::RenderScale" value={{ scale: p.scale }} />
+      {scaled && <BevyComponent type="raea_render_raytrace::RenderScale" value={{ scale: p.scale }} />}
+      {settings && <BevyComponent type="raea_render_raytrace::SolariSettings" value={settings} />}
     </>
   );
 }
