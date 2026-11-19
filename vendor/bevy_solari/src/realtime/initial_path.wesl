@@ -19,6 +19,8 @@ const RECONNECTION_ROUGHNESS_MIN = 0.6;
 const RECONNECTION_RELAX_DISTANCE = 1.0;
 
 const CACHE_TERMINATION_MIN_SOLID_ANGLE = PI;
+// raea: the least chance a glossy surface's path samples a light directly (NEE), so a small bright light shows in it
+const GLOSSY_NEE_FLOOR = 0.25;
 
 /// What tracing one path produced.
 ///
@@ -99,7 +101,7 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
         // panorama's sun, EnvironmentSun) is sampled often enough to show; NEE's weights divide by p_nee, so this stays
         // unbiased. A perfect mirror still never samples lights and sees the sun in the environment map.
         let p_nee_upstream = mix(1.0, path.material.perceptual_roughness, path.material.metallic);
-        let p_nee = select(max(p_nee_upstream, 0.25), p_nee_upstream, path.material.roughness <= MIRROR_ROUGHNESS_THRESHOLD);
+        let p_nee = select(max(p_nee_upstream, GLOSSY_NEE_FLOOR), p_nee_upstream, path.material.roughness <= MIRROR_ROUGHNESS_THRESHOLD);
         let di_samples = select(constants.secondary_di_samples, constants.primary_di_samples, bounce == 0u);
         generate_nee_candidate(&path, F_ab, p_nee, di_samples, workgroup_id, bounce, rng);
 

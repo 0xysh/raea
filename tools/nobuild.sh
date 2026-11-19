@@ -8,6 +8,10 @@
 #                                    of the binaries tools build, declared Bevy plugins), each joined with its decision
 #                                    in docs/nobuild/decisions.tsv, written to docs/nobuild/inventory.tsv; prints what
 #                                    has no decision yet and the counts by kind and status
+#   tools/nobuild.sh consts          each shader constant in the inventory set through <ShaderConstants> in one scene that
+#                                    RAEA_BIN (target/release/raea) renders with every pass on: settable (raea set it), refused
+#                                    (an array, a vector, not found) or absent (that Engine doesn't load the shader);
+#                                    written to docs/nobuild/consts.tsv, NB1a's check for each row
 #
 # A decision row (tab-separated): kind:name, then its class, the TypeScript form it becomes, its check, its status
 # (open, doing, done, stays). Classes: frame (changes what a frame shows or costs: a prop), view (a debug view: NB2),
@@ -85,8 +89,61 @@ scan() {
   [ "$undecided" = 0 ] || echo "nobuild: $undecided causes have no decision (class ?) in docs/nobuild/decisions.tsv"
 }
 
+# a shader file's path as Bevy embeds it: its crate's name (dashes as underscores), then its path under src
+embedded() {
+  local f=$1 d n
+  d=$(dirname "$f")
+  while [ "$d" != . ] && [ ! -f "$d/Cargo.toml" ]; do d=$(dirname "$d"); done
+  n=$(awk '/^\[package\]/{p=1; next} /^\[/{p=0} p && /^name *=/{gsub(/[" ]/, "", $0); sub(/^name=/, ""); print; exit}' "$d/Cargo.toml" 2>/dev/null)
+  [ -n "$n" ] && [ "${f#"$d"/src/}" != "$f" ] && printf '%s/%s\n' "${n//-/_}" "${f#"$d"/src/}"
+}
+
+consts() {
+  local bin=${RAEA_BIN:-$RAEA/target/release/raea} inv=$DOCS/inventory.tsv out=$DOCS/consts.tsv
+  [ -x "$bin" ] || { echo "nobuild: no raea at $bin (RAEA_BIN)" >&2; exit 1; }
+  [ -f "$inv" ] || scan > /dev/null
+  local dir; dir=$(mktemp -d "${TMPDIR:-/tmp}/nobuild-consts.XXXXXX") || exit 1
+  cd "$RAEA" || exit 1
+  # each constant: its shader as embedded, its name, and its own value where it's a literal (else 1: only its type is
+  # checked, and the scene draws nothing that reads it)
+  awk -F'\t' 'NR > 1 && $1 == "shader" { print $2 "\t" $3 }' "$inv" | while IFS=$'\t' read -r name where; do
+    local file=${where%:*} line=${where##*:} rel expr v
+    rel=$(embedded "$file") || { printf '%s\t%s\t-\tnot under a crate src\n' "$name" "$file"; continue; }
+    expr=$(sed -n "${line}p" "$file" | sed -E 's/^[^=]*=[[:space:]]*//; s/;.*$//')
+    if [[ $expr =~ ^-?[0-9]+(\.[0-9]*)?(e-?[0-9]+)?[uifh]?$ ]]; then v=${expr%[uifh]}
+    elif [ "$expr" = true ] || [ "$expr" = false ]; then v=$expr
+    # an array or a vector: its own values, or as many 1s when they aren't plain numbers
+    elif [[ $expr =~ ^(array|vec)[^\(]*\((.*)\)$ ]]; then
+      v=$(printf '%s' "${BASH_REMATCH[2]}" | awk -F, '{ s = ""; for (i = 1; i <= NF; i++) { x = $i; gsub(/[[:space:]uifh]/, "", x); if (x !~ /^-?[0-9.]+(e-?[0-9]+)?$/) x = 1; s = s (i > 1 ? ", " : "") x } print "[" s "]" }')
+    else v=1; fi
+    printf '%s\t%s\t%s\n' "$name" "$rel" "$v"
+  done > "$dir/rows.tsv"
+  { printf 'import { Composition, registerRoot } from "raea";\nimport { Camera3d } from "raea/camera";\nimport { ShaderConstants } from "raea/pbr";\n'
+    printf 'function Scene() {\n  return (\n    <>\n      <Camera3d />\n'
+    awk -F'\t' '$3 != "-" { v[$2] = v[$2] (v[$2] ? ", " : "") $1 ": " $3 } END { for (s in v) printf "      <ShaderConstants shader=\"%s\" values={{ %s }} />\n", s, v[s] }' "$dir/rows.tsv" | sort
+    printf '    </>\n  );\n}\nregisterRoot(() => <Composition id="consts" component={Scene} width={64} height={64} fps={30} durationInFrames={1} />);\n'
+  } > "$dir/scene.tsx"
+  # every pass that embeds shaders switched on: Solari, raea's traced passes (AO, GI's probes, the far sun) and the sun pass
+  (cd "$dir" && RAEA_LIGHT=solari RAEA_TRACED_AO=1 RAEA_GI=1 RAEA_SUN_FAR=1 RAEA_PASS=sun "$bin" render scene.tsx --frame 0 -o "$dir/f.png" > /dev/null 2> "$dir/err.log")
+  local set; set=$(grep -h "compiled in at load:" "$dir/err.log")
+  while IFS=$'\t' read -r name rel v; do
+    local got
+    if [ "$v" = - ]; then got=$rel; rel=-
+    elif grep -qF "no engine shader at $rel " "$dir/err.log"; then got="absent: this Engine doesn't load it"
+    elif grep -qF "$rel: no \`const $name\`" "$dir/err.log"; then got="refused: not found"
+    elif grep -qF "$rel: $name " "$dir/err.log"; then got="refused: $(grep -F "$rel: $name " "$dir/err.log" | head -1 | sed -E "s|.*$rel: ||; s/; left as.*//" | cut -c1-60)"
+    elif printf '%s' "$set" | grep -qF "$rel $name "; then got=settable
+    else got="unknown (see $dir/err.log)"; fi
+    printf '%s\t%s\t%s\n' "$name" "$rel" "$got"
+  done < "$dir/rows.tsv" | sort -u > "$out"
+  echo "nobuild: $(wc -l < "$out" | tr -d ' ') shader constants in ${out#"$RAEA"/}, set through <ShaderConstants> by $bin"
+  cut -f3 "$out" | sed 's/:.*//' | sort | uniq -c
+  grep -q "unknown" "$out" || rm -rf -- "${dir:?}"
+}
+
 case ${1:-} in
   builds) shift; builds "$@" ;;
   scan) scan ;;
-  *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  consts) consts ;;
+  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

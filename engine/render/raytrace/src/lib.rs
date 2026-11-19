@@ -68,6 +68,9 @@ pub struct SolariSettings {
     /// tracer's as seen (tone mapped), its sky through the twigs spread wider than a pixel, and a screen's detail 0.38
     /// of the tracer's
     pub emissive_sharpness: f32,
+    /// the jitter's cycle at the full size, in frames: a view drawn at s of its size a side cycles through
+    /// `jitter_frames / s²` offsets (DLSS's 8), and emit_taa lets a twig glimpsed through it stay away that long
+    pub jitter_frames: f32,
 }
 
 impl Default for SolariSettings {
@@ -82,6 +85,7 @@ impl Default for SolariSettings {
             aa: true,
             jitter: String::new(),
             emissive_sharpness: 6.0,
+            jitter_frames: 8.0,
         }
     }
 }

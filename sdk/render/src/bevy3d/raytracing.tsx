@@ -69,6 +69,9 @@ export interface SolariLightingProps {
   /** how fast a sample's weight falls with its distance from a pixel's centre in the emission's history, exp(-k d²) in
    * output pixels: lower is softer. Default 6; RAEA_EMIT_TAA_SHARP overrides it */
   emissiveSharpness?: number;
+  /** the jitter's cycle at the full size, in frames: a view drawn at s of its size a side cycles through
+   * jitterFrames / s² offsets, and an emissive twig glimpsed through it may stay away that long. Default 8 (DLSS's) */
+  jitterFrames?: number;
   /** constants in Solari's and the denoiser's shaders, compiled in when the scene loads (a value changed later in the
    * composition isn't drawn); each left out keeps the shader's own, given in brackets. <ShaderConstants> reaches the
    * rest */
@@ -91,8 +94,14 @@ export interface SolariLightingProps {
     reconnectRelax?: number;
     /** only when the bounce's footprint is at least this percent of the pixel's (0.02) */
     reconnectFootprint?: number;
+    /** the least chance a glossy surface's path samples a light directly, so a small bright light shows in it (0.25) */
+    glossyLightFloor?: number;
     /** the mirror guides' rules (RT17): when a surface is drawn as what it reflects */
     mirror?: {
+      /** under this roughness a reflection's own motion is traced, so the denoiser follows what it reflects (0.0625) */
+      motionRoughness?: number;
+      /** the specular share over which such a pixel takes its reflection's depth (RT34, 0.5) */
+      depthShare?: number;
       /** the share of its reflectance that must leave through the mirror lobe (0.9) */
       replaceFraction?: number;
       /** how far its reflection's depth may shift between neighbouring pixels, as a share of that depth, before it
@@ -106,6 +115,10 @@ export interface SolariLightingProps {
     /** the most frames an emissive surface's own light is gathered over (emissive "taa", 16): higher is smoother and
      * slower to follow a change */
     emissiveHistory?: number;
+    /** how an emissive surface's history is held to the light about it now: a still pixel within the darkest times
+     * stillLow (0.95) and the brightest times stillHigh (1.05); a moving one under the brightest times movingGain (4)
+     * plus movingFloor (0.02) */
+    emissiveClamp?: { stillLow?: number; stillHigh?: number; movingGain?: number; movingFloor?: number };
   };
 }
 
@@ -121,6 +134,8 @@ export function solariConstants(c: SolariLightingProps["constants"]) {
   const cache = "bevy_solari/realtime/world_cache_query.wesl";
   const mirror = "bevy_solari/realtime/resolve_dlss_rr_textures.wesl";
   const m = c.mirror ?? {};
+  const e = c.emissiveClamp ?? {};
+  const taa = "raea_render_raytrace/emit_taa.wgsl";
   return shaderConstants([
     [restir, "SPATIAL_REUSE_RADIUS_PIXELS", at(c.spatialReuse, "spatialReuse")],
     ["bevy_solari/scene/bindings.wesl", "MIRROR_ROUGHNESS_THRESHOLD", at(c.mirrorRoughness, "mirrorRoughness")],
@@ -130,11 +145,18 @@ export function solariConstants(c: SolariLightingProps["constants"]) {
     [path, "RECONNECTION_ROUGHNESS_MIN", at(c.reconnectRoughness, "reconnectRoughness")],
     [path, "RECONNECTION_RELAX_DISTANCE", at(c.reconnectRelax, "reconnectRelax")],
     [path, "RECONNECTION_FOOTPRINT_KAPPA", at(c.reconnectFootprint, "reconnectFootprint")],
+    [path, "GLOSSY_NEE_FLOOR", at(c.glossyLightFloor, "glossyLightFloor")],
+    [mirror, "SPECULAR_MOTION_ROUGHNESS", at(m.motionRoughness, "mirror.motionRoughness")],
+    [mirror, "REFLECTION_DEPTH_SHARE", at(m.depthShare, "mirror.depthShare")],
     [mirror, "FULL_REPLACEMENT_FRACTION", at(m.replaceFraction, "mirror.replaceFraction")],
     [mirror, "MAX_VIRTUAL_DEPTH_JITTER", at(m.depthJitter, "mirror.depthJitter")],
     [mirror, "NORMAL_QUANTIZATION_FLOOR", at(m.normalFloor, "mirror.normalFloor")],
     [mirror, "ENVIRONMENT_VIRTUAL_DISTANCE", at(m.skyDistance, "mirror.skyDistance")],
-    ["raea_render_raytrace/emit_taa.wgsl", "HISTORY_CAP", at(c.emissiveHistory, "emissiveHistory")],
+    [taa, "HISTORY_CAP", at(c.emissiveHistory, "emissiveHistory")],
+    [taa, "STILL_LOW", at(e.stillLow, "emissiveClamp.stillLow")],
+    [taa, "STILL_HIGH", at(e.stillHigh, "emissiveClamp.stillHigh")],
+    [taa, "MOVING_GAIN", at(e.movingGain, "emissiveClamp.movingGain")],
+    [taa, "MOVING_FLOOR", at(e.movingFloor, "emissiveClamp.movingFloor")],
   ]);
 }
 
@@ -147,6 +169,7 @@ export function solariSettings(p: SolariLightingProps): Record<string, unknown> 
   };
   pos("preexposure", p.preexposure);
   pos("emissiveSharpness", p.emissiveSharpness);
+  pos("jitterFrames", p.jitterFrames);
   const one = <T extends string>(n: string, v: T | undefined, of: readonly T[]) => {
     if (v !== undefined && !of.includes(v)) throw new RangeError(`SolariLighting: ${n} is one of ${of.join(", ")}, got ${v}`);
   };
@@ -164,6 +187,7 @@ export function solariSettings(p: SolariLightingProps): Record<string, unknown> 
   // the engine's names for the passes (upscale.rs jitter_gain): "" the denoiser, "0" none
   if (p.jitter !== undefined) v.jitter = p.jitter === "denoiser" ? "" : p.jitter === "none" ? "0" : p.jitter;
   if (p.emissiveSharpness !== undefined) v.emissive_sharpness = p.emissiveSharpness;
+  if (p.jitterFrames !== undefined) v.jitter_frames = p.jitterFrames;
   return Object.keys(v).length ? v : undefined;
 }
 

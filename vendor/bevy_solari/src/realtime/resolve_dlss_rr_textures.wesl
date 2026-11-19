@@ -24,6 +24,12 @@ const NORMAL_QUANTIZATION_FLOOR = 0.002;
 /// Distance, in meters, standing in for "infinitely far" when a mirror ray finds nothing.
 const ENVIRONMENT_VIRTUAL_DISTANCE = 10000.0;
 
+/// raea: under this roughness a reflection's own motion is traced, so the denoiser follows what it reflects (RT17).
+const SPECULAR_MOTION_ROUGHNESS = 0.0625;
+
+/// raea: the specular share over which such a pixel takes its reflection's depth (RT34).
+const REFLECTION_DEPTH_SHARE = 0.5;
+
 @compute @workgroup_size(8, 8, 1)
 fn resolve_dlss_rr_textures(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let pixel_id = global_id.xy;
@@ -69,14 +75,14 @@ fn resolve_dlss_rr_textures(@builtin(global_invocation_id) global_id: vec3<u32>)
 }
 
 fn needs_specular_motion_vector(roughness: f32) -> bool {
-    return roughness <= 0.0625;
+    return roughness <= SPECULAR_MOTION_ROUGHNESS;
 }
 
 // raea: a pixel whose depth is its reflection's under PSR_DEPTH_FOLLOWS_MOTION: one whose motion is (a near-mirror) and
 // that mostly reflects (a dark monitor's glass, 0.88 of its light specular): when what it reflects moves off (an orb), the
 // denoiser sees the wall behind as a disocclusion and drops the orb's history, where at the glass's depth it smeared it
 fn depth_follows_reflection(material: ResolvedMaterial, NdotV: f32) -> bool {
-    return needs_specular_motion_vector(material.roughness) && specular_fraction(material, F_AB(material.perceptual_roughness, NdotV)) >= 0.5;
+    return needs_specular_motion_vector(material.roughness) && specular_fraction(material, F_AB(material.perceptual_roughness, NdotV)) >= REFLECTION_DEPTH_SHARE;
 }
 
 /// Carried across every bounce of the path walk, so anything derivable from a value the walk already

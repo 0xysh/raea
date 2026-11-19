@@ -140,9 +140,10 @@ fn with_constants(app: &mut App, set: &[consts::ShaderConstant], swaps: &mut Vec
         };
         let before = s.clone();
         for c in set.iter().filter(|c| c.shader == shader) {
-            match consts::rewrite(&s, &c.name, c.value) {
+            match consts::rewrite(&s, &c.name, c.value, &c.list) {
                 Ok((t, old)) => {
-                    said.push(format!("{shader} {} {old} -> {}", c.name, c.value));
+                    let v = if c.list.is_empty() { c.value.to_string() } else { format!("{:?}", c.list) };
+                    said.push(format!("{shader} {} {old} -> {v}", c.name));
                     s = t;
                 }
                 Err(e) => eprintln!("raea: <ShaderConstants> {shader}: {e}; left as the shader has it"),
@@ -194,7 +195,7 @@ fn original(app: &App, rel: &str) -> Option<Vec<u8>> {
 pub fn text(rel: &str, builtin: &'static str) -> std::borrow::Cow<'static, str> {
     let mut s = source(rel, builtin);
     for c in CONSTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).iter().filter(|c| c.shader == rel) {
-        if let Ok((t, _)) = consts::rewrite(&s, &c.name, c.value) {
+        if let Ok((t, _)) = consts::rewrite(&s, &c.name, c.value, &c.list) {
             s = t.into();
         }
     }

@@ -190,7 +190,7 @@ typed props (<SolariLighting constants>); this reaches the rest.
 | Prop | Type | What it does |
 | --- | --- | --- |
 | `shader` (required) | `string` | the shader as the engine embeds it, `<crate>/<path under its src>`: "bevy_solari/realtime/restir.wesl", "raea_render_raytrace/emit_taa.wgsl". To read its constants, put an empty file of that name in the project's engine-shaders/ folder and render once: raea fills it with the shader |
-| `values` (required) | `Record<string, ShaderConstantValue>` | each `const NAME` to set, and its value; the const keeps its type |
+| `values` (required) | `Record<string, ShaderConstantValue>` | each `const NAME` to set, and its value; the const keeps its type (an array's or a vector's values as a list) |
 
 ### `ShaderExtension`
 
@@ -461,10 +461,11 @@ The props of [`ShaderConstants`](#shaderconstants), tabled there.
 
 ### `ShaderConstantValue`
 
-A shader constant's value: a number (a float or a whole number, as the const is) or a boolean
+A shader constant's value: a number (a float or a whole number, as the const is), a boolean, or for an array or a
+vector its values in order (as many as it holds)
 
 ```ts
-type ShaderConstantValue = number | boolean
+type ShaderConstantValue = number | boolean | readonly number[]
 ```
 
 ### `ShaderExtensionProps`

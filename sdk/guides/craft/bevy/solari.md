@@ -21,14 +21,14 @@
     the denoiser, 4 and 2 look the same in most rooms and save time.
 - Every other choice the engine makes for the traced light is a prop too, so an A/B is two compositions, never a
   build: `denoise`, `guides`, `reflectionDepth`, `emissive` ("taa", "split", "mask"), `upscale` ("one", "two"),
-  `preexposure`, `aa`, `jitter`, `emissiveSharpness`, `firstBounce`, `confidenceCap` and `cache` (the world cache's
+  `preexposure`, `aa`, `jitter`, `jitterFrames`, `emissiveSharpness`, `firstBounce`, `confidenceCap` and `cache` (the world cache's
   `frames`, `lightSamples`, `reach`, `updates`, `cellSize`, `lodScale`). Each prop's TSDoc says what it changes. The
   defaults are the measured best, so leave them unless a test scene shows otherwise. A developer's environment
   variable of the same setting (`RAEA_SOLARI_DENOISE=0`, `RAEA_METALFX_PREEXPOSURE=4`) overrides the prop on every
   camera, for an A/B across many scenes at once.
 - The numbers inside Solari's and the denoiser's shaders are props too: `constants` (`spatialReuse`,
-  `mirrorRoughness`, `cacheEnd`, `cacheLifetime`, `cacheSearch`, the `reconnect...` three, `mirror`'s four rules,
-  `emissiveHistory`). They're compiled into the shaders when the scene loads, so set them from the first frame; a value
+  `mirrorRoughness`, `cacheEnd`, `cacheLifetime`, `cacheSearch`, the `reconnect...` three, `glossyLightFloor`,
+  `mirror`'s six rules, `emissiveHistory`, `emissiveClamp`). They're compiled into the shaders when the scene loads, so set them from the first frame; a value
   that changes later isn't drawn. `<ShaderConstants>` sets a constant in any other engine shader (`bevy/limits`).
 - Keep a look's settings as a TypeScript object and spread it: `const LIVE = { primarySamples: 4, scale: 0.67 }`,
   then `<SolariLighting {...LIVE} />` or `<SolariLighting {...LIVE} preexposure={32} />`.

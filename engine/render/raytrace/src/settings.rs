@@ -97,7 +97,7 @@ pub(crate) fn record(view: Entity, s: &SolariSettings, scale: f32, seen: &mut Ha
             "view": view.to_bits(),
             "denoise": s.denoise, "guides": s.guides, "reflection_depth": s.reflection_depth, "emissive": s.emissive,
             "upscale": s.upscale, "preexposure": s.preexposure, "aa": s.aa, "jitter": s.jitter,
-            "emissive_sharpness": s.emissive_sharpness, "scale": (f64::from(scale) * 1000.0).round() / 1000.0,
+            "emissive_sharpness": s.emissive_sharpness, "jitter_frames": s.jitter_frames, "scale": (f64::from(scale) * 1000.0).round() / 1000.0,
             "env": env.iter().map(|(n, v, _)| format!("{n}={v}")).collect::<Vec<_>>(),
         }),
     );

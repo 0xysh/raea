@@ -15,6 +15,12 @@
 @group(0) @binding(15) var hist_depth_out: texture_storage_2d<rgba32float, write>;
 // the most frames' weight the history holds: past it, it fades as 1 / HISTORY_CAP a frame
 const HISTORY_CAP: f32 = 16.0;
+// a still pixel's history held within what's about it now, its darkest and brightest times these
+const STILL_LOW: f32 = 0.95;
+const STILL_HIGH: f32 = 1.05;
+// a moving pixel's history held under this many times the brightest about it, plus this
+const MOVING_GAIN: f32 = 4.0;
+const MOVING_FLOOR: f32 = 0.02;
 // the history at `uv` through a Catmull-Rom filter in five bilinear taps (Jimenez's), so a moving view isn't blurred a
 // little more each frame as a bilinear read would; never below zero (its lobes ring on a hard edge)
 fn history_at(uv: vec2<f32>, size: vec2<f32>) -> vec4<f32> {
@@ -152,7 +158,7 @@ fn restore_taa(@builtin(global_invocation_id) id: vec3<u32>) {
         // held to the samples about it: where the view is still, within them; where it moves, only a light that isn't
         // there any more (four times the brightest about it): an edge's history under a drifting view isn't spanned by
         // one frame's samples, and holding it to them flickered photo 2's window edges 80 levels from frame to frame
-        let clamped = select(min(hrgb, mhi * 4.0 + 0.02), clamp(hrgb, elo * 0.95, ehi * 1.05), still);
+        let clamped = select(min(hrgb, mhi * MOVING_GAIN + MOVING_FLOOR), clamp(hrgb, elo * STILL_LOW, ehi * STILL_HIGH), still);
         if (!kept && !still && params[0].w != 3.0) {
             // a history that failed its test at a moving pixel is kept as one frame's (below), held to what's about it
             // now: a moving silhouette's mix of its two sides is, and a light taken while the camera moves is gone at

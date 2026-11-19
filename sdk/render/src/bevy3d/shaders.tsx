@@ -1,15 +1,16 @@
 // Constants in the engine's own shaders, set from TypeScript when the scene loads (docs/nobuild.feature NB1a).
 import { BevyComponent, Entity } from "../3d";
 
-/** A shader constant's value: a number (a float or a whole number, as the const is) or a boolean */
-export type ShaderConstantValue = number | boolean;
+/** A shader constant's value: a number (a float or a whole number, as the const is), a boolean, or for an array or a
+ * vector its values in order (as many as it holds) */
+export type ShaderConstantValue = number | boolean | readonly number[];
 
 export interface ShaderConstantsProps {
   /** the shader as the engine embeds it, `<crate>/<path under its src>`: "bevy_solari/realtime/restir.wesl",
    * "raea_render_raytrace/emit_taa.wgsl". To read its constants, put an empty file of that name in the project's
    * engine-shaders/ folder and render once: raea fills it with the shader */
   shader: string;
-  /** each `const NAME` to set, and its value; the const keeps its type */
+  /** each `const NAME` to set, and its value; the const keeps its type (an array's or a vector's values as a list) */
   values: Record<string, ShaderConstantValue>;
 }
 
@@ -19,9 +20,13 @@ export function shaderConstants(list: ReadonlyArray<readonly [string, string, Sh
   const values = list
     .filter(([, , v]) => v !== undefined)
     .map(([shader, name, v]) => {
+      if (Array.isArray(v)) {
+        if (!v.length || !v.every(Number.isFinite)) throw new RangeError(`ShaderConstants: ${name} in ${shader} is a list of numbers, got ${v}`);
+        return { shader, name, value: 0, list: [...v] };
+      }
       const value = typeof v === "boolean" ? (v ? 1 : 0) : (v as number);
       if (!Number.isFinite(value)) throw new RangeError(`ShaderConstants: ${name} in ${shader} is a number or a boolean, got ${v}`);
-      return { shader, name, value };
+      return { shader, name, value, list: [] };
     });
   return values.length ? <BevyComponent type="raea_sys_frame::engine_shaders::consts::ShaderConstants" value={{ values }} /> : undefined;
 }

@@ -216,6 +216,7 @@ raster-lit: Bevy 0.20's Solari can't trace it.
 | `aa` | `boolean` | jitter a full-size view too, so the denoiser anti-aliases its edges as it gathers frames. Default true; RAEA_SOLARI_AA=0 overrides it |
 | `jitter` | `"denoiser" \| "scaler" \| "both" \| "flip" \| "none"` | which of MetalFX's passes is told the camera's jitter: "denoiser", "scaler", "both", "flip" (the denoiser, negated), "none" (and the view isn't jittered). For A/Bs of RT9; default "denoiser"; RAEA_SOLARI_JITTER ("" the denoiser, "0" none) overrides it |
 | `emissiveSharpness` | `number` | how fast a sample's weight falls with its distance from a pixel's centre in the emission's history, exp(-k d²) in output pixels: lower is softer. Default 6; RAEA_EMIT_TAA_SHARP overrides it |
+| `jitterFrames` | `number` | the jitter's cycle at the full size, in frames: a view drawn at s of its size a side cycles through jitterFrames / s² offsets, and an emissive twig glimpsed through it may stay away that long. Default 8 (DLSS's) |
 | `constants` | `{ /** how far ReSTIR looks for a neighbour's light samples, pixels (30): smaller keeps …` | constants in Solari's and the denoiser's shaders, compiled in when the scene loads (a value changed later in the composition isn't drawn); each left out keeps the shader's own, given in brackets. <ShaderConstants> reaches the rest |
 
 ### `SpotLight`

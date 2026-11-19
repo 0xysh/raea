@@ -93,12 +93,12 @@ fn halton(mut i: u32, base: u32) -> f32 {
 struct Jittered;
 
 /// How many frames the jitter takes to come round at render scale `s`: 8 / s², as DLSS asks.
-pub(crate) fn cycle(s: f32) -> u32 {
-    (8.0 / (s * s)).ceil() as u32
+pub(crate) fn cycle(s: f32, frames: f32) -> u32 {
+    (frames / (s * s)).ceil().max(1.0) as u32
 }
 
 /// Each drawn-small camera's sub-pixel offset this frame (a Halton (2, 3) cycle, longer the smaller it draws, as
-/// DLSS asks: 8 / s² frames), its mip bias, and the prepasses the scaler reads (depth, motion). A Solari camera at its
+/// DLSS asks: 8 / s² frames, its settings' `jitter_frames`), its mip bias, and the prepasses the scaler reads (depth, motion). A Solari camera at its
 /// full size is jittered too unless its settings' `aa` is off, so MetalFX's denoiser anti-aliases its edges as it
 /// gathers frames: photo 2's frame 95 had stepped edges held still, and jittered it came 15.9 -> 15.6 off the path
 /// tracer.
@@ -108,7 +108,7 @@ fn jitter(mut cmd: Commands, frame: Res<FrameCount>, mut cams: Query<(Entity, Op
         let s = scale(rs, solari);
         let st = super::settings::of(st);
         if s < 1.0 || (solari && st.aa && st.denoise && DENOISING.load(Ordering::Relaxed)) {
-            let n = cycle(s);
+            let n = cycle(s, st.jitter_frames);
             let i = frame.0 % n + 1;
             let offset = if st.jitter == "0" { Vec2::ZERO } else { Vec2::new(halton(i, 2), halton(i, 3)) - 0.5 };
             match j {

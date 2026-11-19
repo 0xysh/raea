@@ -320,7 +320,7 @@ fn run(entity: Entity, item: Item, st: &super::SolariSettings, device: &RenderDe
     let back = ext.world_from_view.back();
     let reset = solari.reset || kit.views.get(&entity).is_none_or(|v| v.fresh);
     // the jitter's cycle at this render scale, how long a twig glimpsed through it can stay away (emit_taa.wgsl)
-    let cycle = super::upscale::cycle(size.x as f32 / full.x as f32) as f32;
+    let cycle = super::upscale::cycle(size.x as f32 / full.x as f32, st.jitter_frames) as f32;
     let words: [f32; 16] = [cam.exposure, if st.split() { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, st.emissive_sharpness, jitter.x, jitter.y, cycle, 0.0];
     let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
     let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx params"), contents: &bytes, usage: wgpu::BufferUsages::UNIFORM });
