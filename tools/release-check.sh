@@ -151,8 +151,14 @@ api=$(cat "$check"/raea/bin/* | grep -aoE '(api|sign)\.raea\.io|RAEA_(SIGN|GEN)_
 keys=$(grep -rlE 'sk-or-v1-[0-9a-f]{20}|sk-ant-[A-Za-z0-9_-]{20}|(^|[^A-Za-z0-9+/])AKIA[0-9A-Z]{16}([^A-Za-z0-9+/=]|$)|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' "$check/raea" 2>/dev/null | head -5 || true)
 [ -z "$keys" ] || fail "key-shaped text in: $keys"
 # Windows: our binaries only. Any other DLL, or a file named like the CRT, the SDK or DirectX's redistributables, is
-# Microsoft's and isn't ours to ship
-ms=$(cd "$check/raea" && find . -type f \( -iname '*.dll' ! -path './bin/raea_bundle.dll' -o -iname 'vcruntime*' -o -iname 'msvcp*' -o -iname 'ucrtbase*' -o -iname 'api-ms-win*' -o -iname 'concrt*' -o -iname 'vccorlib*' -o -iname '*.lib' -o -iname '*.pdb' -o -iname 'd3dcompiler*' -o -iname 'dxcompiler*' -o -iname 'dxil*' \) | head -5)
+# Microsoft's and isn't ours to ship. The one exception is ONNX Runtime's onnxruntime.dll, which Microsoft publishes
+# under MIT, shipped with its licence (#110: tools/release/onnxruntime.sh)
+ms=$(cd "$check/raea" && find . -type f \( -iname '*.dll' ! -path './bin/raea_bundle.dll' ! -path './bin/onnxruntime.dll' -o -iname 'vcruntime*' -o -iname 'msvcp*' -o -iname 'ucrtbase*' -o -iname 'api-ms-win*' -o -iname 'concrt*' -o -iname 'vccorlib*' -o -iname '*.lib' -o -iname '*.pdb' -o -iname 'd3dcompiler*' -o -iname 'dxcompiler*' -o -iname 'dxil*' \) | head -5)
 [ -z "$ms" ] || fail "files that aren't ours: $ms"
+if [ -f "$check/raea/bin/raea.exe" ]; then
+  for f in onnxruntime.dll onnxruntime-LICENSE.txt onnxruntime-ThirdPartyNotices.txt; do
+    [ -f "$check/raea/bin/$f" ] || fail "bin/$f is missing: raea.exe loads ONNX Runtime from it, and its licence goes with it (#110)"
+  done
+fi
 echo "release: $archive checked: an unpacked copy rendered a frame and checked an app on both targets with RAEA_NO_TREE=1"
 rm -rf "$check"

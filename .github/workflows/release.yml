@@ -329,12 +329,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash tools/release/promoted-bins.sh "$RAEA_PROMOTED_FROM" target/dist
+      # ONNX Runtime as Microsoft builds it (MIT), beside raea.exe, which loads it when a model first runs (#110): the
+      # static runtime ort links by default is built for AVX2 and stopped raea.exe at start on CPUs without it
+      - name: ONNX Runtime (tools/release/onnxruntime.sh)
+        run: bash tools/release/onnxruntime.sh target/dist
       # which DLLs raea needs from the machine (the CRT's come from the VC++ redistributable)
       - name: What raea.exe imports
         run: |
-          { echo '### what raea.exe, raea_bundle.dll and raea-perceive.exe import'; echo '```'
+          { echo '### what raea.exe, raea_bundle.dll, raea-perceive.exe and onnxruntime.dll import'; echo '```'
             dumpbin=$(ls "/c/Program Files/Microsoft Visual Studio"/*/*/VC/Tools/MSVC/*/bin/HostX64/x64/dumpbin.exe | head -1)
-            "$dumpbin" -nologo -dependents target/dist/raea.exe target/dist/raea_bundle.dll target/dist/raea-perceive.exe | grep -iE '\.dll$|Dump of' | sed 's/^ *//'
+            "$dumpbin" -nologo -dependents target/dist/raea.exe target/dist/raea_bundle.dll target/dist/raea-perceive.exe target/dist/onnxruntime.dll | grep -iE '\.dll$|Dump of' | sed 's/^ *//'
             echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY" || true
       # release.sh's checks render on Mesa's lavapipe (software Vulkan, MIT; on the runner only, never in the zip): the
       # runner has no GPU, and WARP, Windows' own software DX12, crashes compiling one of Bevy's compute shaders there
