@@ -13,6 +13,8 @@ pub mod camera;
 pub mod lens;
 pub mod views;
 pub mod motion_blur;
+// raea's motion blur: the shutter's own (docs/raytracing.feature RT29)
+pub mod shutter;
 pub mod dof;
 pub mod effect_stack;
 pub mod outline;
