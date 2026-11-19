@@ -265,7 +265,14 @@ pub(crate) fn freezes(video: &str, probe: &Probe, taste: Option<&Taste>, issues:
     } else {
         ffmpeg_stderr(&["-hide_banner", "-nostats", "-i", video, "-an", "-vf", &format!("freezedetect=n=-60dB:d={most}"), "-f", "null", "-"])?
     };
-    let stretches = frozen_stretches(&err, probe.picture);
+    freezes_from(&err, probe, taste, issues, passed);
+    Ok(())
+}
+
+/// The freezes freezedetect's lines found (`taste`'s still-max when the person set one, else 3 s)
+pub(crate) fn freezes_from(err: &str, probe: &Probe, taste: Option<&Taste>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+    let most = taste.map_or(3.0, |t| t.value);
+    let stretches = frozen_stretches(err, probe.picture);
     for &(s, d) in &stretches {
         let says = format!("nothing changes for {d:.1} s; give it a reason to hold, or cut it shorter");
         issues.push(match taste {
@@ -276,5 +283,4 @@ pub(crate) fn freezes(video: &str, probe: &Probe, taste: Option<&Taste>, issues:
     if stretches.is_empty() {
         passed.push(format!("frozen: nothing holds still for {most} s"));
     }
-    Ok(())
 }

@@ -5,35 +5,46 @@ use raea_app_check_flash::FlashScreen;
 /// the area sample and the point sample side by side
 const FLASH_W: usize = 192;
 
-/// A frame's number and time from showinfo's log, exact: its `pts` in ticks of the time base. `pts_time` is rounded to six
-/// significant digits, which is enough to push a legal third flash across the one-second line.
-pub(crate) fn showinfo_frame(line: &str, base: Option<(i64, i64)>) -> Option<(usize, f64)> {
-    let rest = line.split(" n:").nth(1)?;
-    let n = rest.split_whitespace().next()?.parse().ok()?;
-    let pts: i64 = rest.split("pts:").nth(1)?.split_whitespace().next()?.parse().ok()?;
-    let (num, den) = base?;
-    Some((n, pts as f64 * num as f64 / den as f64))
+pub(crate) use crate::read::{log_level, showinfo_base, showinfo_frame};
+
+/// The flashing screen's frame height for the picture's shape
+fn flash_h(probe: &Probe) -> usize {
+    (((FLASH_W as f64 * probe.h / probe.w.max(1.0)) / 2.0).round() as usize * 2).max(6)
 }
 
-pub(crate) fn showinfo_base(line: &str) -> Option<(i64, i64)> {
-    let (num, den) = line.split("config in time_base:").nth(1)?.split(',').next()?.trim().split_once('/')?;
-    Some((num.parse().ok()?, den.parse().ok()?))
-}
-
-/// A line's severity under `-loglevel level+`: the first bracket after any `[context @ address]`. Searching the whole line
-/// would take a file's own metadata for an error when its title happens to say one.
-pub(crate) fn log_level(line: &str) -> Option<&str> {
-    let mut rest = line.trim_start();
-    if rest.starts_with('[') && rest[..rest.find(']')?].contains(" @ ") {
-        rest = rest[rest.find(']')? + 1..].trim_start();
+/// Freezes, flashing, flash frames and blotching, in that order, from one read of the picture (raea-app-check-read
+/// once.rs: one decode where there were four); each reads on its own where one read can't be had
+pub(crate) fn picture_rules(video: &str, probe: &Probe, taste: Option<&Taste>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
+    if !crate::read::once::can() {
+        freezes(video, probe, taste, issues, passed)?;
+        flashing(video, probe, issues, passed)?;
+        flash_frame_rule(video, issues, passed)?;
+        return blotching(video, probe, issues, passed);
     }
-    let rest = rest.strip_prefix('[')?;
-    Some(&rest[..rest.find(']')?])
+    let (w, h) = (FLASH_W, flash_h(probe));
+    let kept = x264_kept(video);
+    let (cw, ch) = (probe.w as usize / 8 * 8, probe.h as usize / 8 * 8);
+    let mut screen = FlashScreen::new(w, h);
+    let mut scores = Vec::new();
+    let once = crate::read::once::picture(video, (w, h), kept.is_none().then_some((cw, ch)), taste.map_or(3.0, |t| t.value), |t, buf| screen.push(buf, t), scorer(&mut scores, cw, ch))?;
+    freezes_from(&once.freezes, probe, taste, issues, passed);
+    if once.lost {
+        return Err(format!("{video}: flashing can't be screened, frame {} has no timestamp of its own", once.frames));
+    }
+    if !once.ok || once.frames == 0 {
+        return Err(format!("{video}: flashing can't be screened, FFmpeg decoded {} frames ({})", once.frames, once.first));
+    }
+    screened(screen, once.errors, &once.first, issues, passed);
+    flash_frame_from(&once.lumas, ffmpeg_rate(video)?, issues, passed);
+    match kept {
+        Some(crf) => passed.push(format!("blotching: encoded by x264 at crf {crf}, which keeps the darks")),
+        None => blotching_from(video, probe, &scores, issues, passed),
+    }
+    Ok(())
 }
 
 pub(crate) fn flashing(video: &str, probe: &Probe, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
-    let w = FLASH_W;
-    let h = (((w as f64 * probe.h / probe.w.max(1.0)) / 2.0).round() as usize * 2).max(6);
+    let (w, h) = (FLASH_W, flash_h(probe));
     if crate::read::native() {
         let mut screen = FlashScreen::new(w, h);
         if crate::read::flash_frames(video, w, h, |t, buf| screen.push(buf, t))? == 0 {

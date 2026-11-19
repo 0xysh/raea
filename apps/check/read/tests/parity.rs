@@ -124,3 +124,42 @@ fn the_native_reads_match_ffmpeg_s() {
     }
     assert!(off.0.iter().all(|(_, by, most)| by < most), "a native read is further from FFmpeg's than a rule allows");
 }
+
+/// The one read (once.rs) against the four reads it stands in for, each run alone as raea check ran it: each rule gets
+/// the same bytes, frames and log lines. Away from Unix the rules read alone (no named pipes), and this is skipped.
+#[test]
+fn one_read_gives_each_rule_what_its_own_read_gave() {
+    if !raea_app_check_read::once::can() {
+        eprintln!("skipped: the rules read alone here");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("raea-once-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("clip.mp4").to_string_lossy().into_owned();
+    ffmpeg(&["-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=5,tpad=stop_mode=clone:stop_duration=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", &file]);
+    let (w, h, cw, ch) = (192usize, 108usize, 320usize, 176usize);
+    let (mut frames, mut crops) = (Vec::new(), Vec::new());
+    let once = raea_app_check_read::once::picture(&file, (w, h), Some((cw, ch)), 3.0, |t, b| frames.push((t, b.to_vec())), |b| crops.extend_from_slice(b)).unwrap();
+    assert!(once.ok && !once.lost && once.errors == 0);
+    // the flashing screen's frames, as flash.rs read them alone
+    let sync = raea_io_ffmpeg::passthrough();
+    let graph = format!("showinfo,split=2[area][point];[area]scale={w}:{h}:flags=area[a];[point]scale={w}:{h}:flags=neighbor[b];[a][b]hstack=inputs=2,format=rgb24");
+    let (alone, log) = ffmpeg(&["-loglevel", "level+info", "-i", &file, "-map", "0:v:0", "-vf", &graph, sync[0], sync[1], "-f", "rawvideo", "-"]);
+    assert_eq!(frames.len(), alone.len() / (w * 2 * h * 3));
+    assert_eq!(frames.iter().flat_map(|f| f.1.iter().copied()).collect::<Vec<u8>>(), alone);
+    let base = log.lines().find_map(raea_app_check_read::showinfo_base);
+    let times: Vec<f64> = log.lines().filter(|l| l.trim_start().starts_with("[Parsed_showinfo")).filter_map(|l| raea_app_check_read::showinfo_frame(l, base)).map(|f| f.1).collect();
+    assert_eq!(frames.iter().map(|f| f.0).collect::<Vec<f64>>(), times);
+    // each frame's brightness, as defects.rs read it
+    let (grey, _) = ffmpeg(&["-v", "error", "-i", &file, "-map", "0:v:0", "-vf", "scale=32:18:flags=area,format=gray", "-f", "rawvideo", "-"]);
+    assert_eq!(once.lumas, raea_app_check_read::once::lumas_of(&grey));
+    // blotching's crops, as picture.rs read them
+    let (alone, _) = ffmpeg(&["-v", "error", "-i", &file, "-vf", &format!("fps=0.5,crop={cw}:{ch}:0:0,format=gray"), "-f", "rawvideo", "-"]);
+    assert_eq!(crops, alone);
+    // and freezedetect's freeze, as sound.rs read it
+    let (_, log) = ffmpeg(&["-i", &file, "-an", "-vf", "freezedetect=n=-60dB:d=3", "-f", "null", "-"]);
+    let starts = |s: &str| s.lines().filter_map(|l| l.split("freeze_start: ").nth(1).map(|x| x.trim().to_string())).collect::<Vec<_>>();
+    assert_eq!(starts(&once.freezes), starts(&log));
+    assert!(!starts(&log).is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -152,10 +152,7 @@ fn measured(args: &[String], taste: Vec<Taste>) -> R<(String, Vec<Issue>, Vec<St
         loudness(&video, taste_of(&taste, "loudness"), &mut issues, &mut passed)?;
         sound(&video, words.as_deref(), &mut issues, &mut passed)?;
     }
-    freezes(&video, &probe, taste_of(&taste, "still-max"), &mut issues, &mut passed)?;
-    flashing(&video, &probe, &mut issues, &mut passed)?;
-    flash_frame_rule(&video, &mut issues, &mut passed)?;
-    blotching(&video, &probe, &mut issues, &mut passed)?;
+    picture_rules(&video, &probe, taste_of(&taste, "still-max"), &mut issues, &mut passed)?;
     brand_kit(&[flag(args, "--manifest").unwrap_or(""), video.as_str()], &mut issues, &mut passed);
     if let Some(p) = flag(args, "--things") {
         things(p, &mut issues, &mut passed)?;

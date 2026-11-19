@@ -119,33 +119,23 @@ fn blotching_cause(video: &str, probe: &Probe, scores: &[Option<f64>], w: usize,
     })())
 }
 
-pub(crate) fn blotching(video: &str, probe: &Probe, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
+/// The crf an x264 encode that keeps the darks was made at: blotching isn't read for it
+pub(crate) fn x264_kept(video: &str) -> Option<f64> {
     let mut head = Vec::new();
     if let Ok(f) = std::fs::File::open(video) {
         let _ = std::io::Read::read_to_end(&mut std::io::Read::take(f, 8 << 20), &mut head);
     }
-    if let Some(crf) = x264_crf(&head).filter(|c| *c <= X264_KEEPS) {
+    x264_crf(&head).filter(|c| *c <= X264_KEEPS)
+}
+
+pub(crate) fn blotching(video: &str, probe: &Probe, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
+    if let Some(crf) = x264_kept(video) {
         passed.push(format!("blotching: encoded by x264 at crf {crf}, which keeps the darks"));
         return Ok(());
     }
     let (w, h) = (probe.w as usize / 8 * 8, probe.h as usize / 8 * 8);
-    let (mut bad, mut seen, mut worst, mut t) = (Vec::new(), 0, 0f64, 0.0);
     let mut scores: Vec<Option<f64>> = Vec::new();
-    let mut frame = |buf: &[u8]| {
-        let score = blotch_score(buf, w, h);
-        scores.push(score);
-        if let Some(s) = score {
-            seen += 1;
-            worst = worst.max(s);
-            if std::env::var_os("RAEA_CHECK_DEBUG").is_some() {
-                eprintln!("blotch {t:6.1}s {s:.3}");
-            }
-            if s > BLOTCHY {
-                bad.push((t, s));
-            }
-        }
-        t += 2.0;
-    };
+    let mut frame = scorer(&mut scores, w, h);
     if crate::read::native() {
         crate::read::crops(video, w, h, &mut frame)?;
     } else {
@@ -161,16 +151,42 @@ pub(crate) fn blotching(video: &str, probe: &Probe, issues: &mut Vec<Issue>, pas
         }
         let _ = child.wait();
     }
+    drop(frame);
+    blotching_from(video, probe, &scores, issues, passed);
+    Ok(())
+}
+
+/// Each grey crop's blotching, kept in `scores`
+pub(crate) fn scorer(scores: &mut Vec<Option<f64>>, w: usize, h: usize) -> impl FnMut(&[u8]) + Send + '_ {
+    move |buf| scores.push(blotch_score(buf, w, h))
+}
+
+/// What blotching's samples (one every 2 s) found
+pub(crate) fn blotching_from(video: &str, probe: &Probe, scores: &[Option<f64>], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+    let (w, h) = (probe.w as usize / 8 * 8, probe.h as usize / 8 * 8);
+    let (mut bad, mut seen, mut worst) = (Vec::new(), 0, 0f64);
+    for (k, s) in scores.iter().enumerate() {
+        let Some(s) = *s else { continue };
+        let t = k as f64 * 2.0;
+        seen += 1;
+        worst = worst.max(s);
+        if std::env::var_os("RAEA_CHECK_DEBUG").is_some() {
+            eprintln!("blotch {t:6.1}s {s:.3}");
+        }
+        if s > BLOTCHY {
+            bad.push((t, s));
+        }
+    }
     if !bad.is_empty() {
         let at = bad[0].0;
         let share = bad.len() as f64 / seen.max(1) as f64;
         let found = format!("blocky patches in dark areas in {} of {seen} sampled frames (worst {:.0}% of dark blocks stepping)", bad.len(), worst * 100.0);
-        let (p, at, says) = match blotching_cause(video, probe, &scores, w, h) {
+        let (p, at, says) = match blotching_cause(video, probe, scores, w, h) {
             // what the composition draws before any encoding is the picture's own (a phone's compression): no render
             // setting removes it, so it's said, not worked on
             Some(Ok(a)) if !a.0.by_encode(BLOTCH_NOISE) => (3, Some(at), format!("{found}: the picture's own, there as the composition draws them before any encoding (the footage's compression); the encode added none, so no render setting removes them")),
             Some(Ok(a)) => {
-                let first = cause::Against::first(&scores, &a.1, BLOTCHY, BLOTCH_NOISE).map(|i| i as f64 * 2.0);
+                let first = cause::Against::first(scores, &a.1, BLOTCHY, BLOTCH_NOISE).map(|i| i as f64 * 2.0);
                 let own = if a.0.before > 0 { format!("; {} of the samples show the footage's own too, which stays", a.0.before) } else { String::new() };
                 (if a.0.worse as f64 / a.0.of.max(1) as f64 > 0.2 { 1 } else { 2 }, first.or(Some(at)), format!("the encode added blocky patches in dark areas: {} of {} samples are blotchier than the composition draws them unencoded; render with --quality master, which gives the darks the bits they need{own}", a.0.worse, a.0.of))
             }
@@ -181,7 +197,6 @@ pub(crate) fn blotching(video: &str, probe: &Probe, issues: &mut Vec<Issue>, pas
     } else if seen > 0 {
         passed.push(format!("blotching: dark areas clean in {seen} sampled frames"));
     }
-    Ok(())
 }
 
 /// Caption contrast: at each text's middle frame, the pixels behind it against its colour, at least 3:1. The pixels

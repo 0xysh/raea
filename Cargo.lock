@@ -13693,7 +13693,9 @@ dependencies = [
 name = "raea-app-check-read"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "raea-app-media",
+ "raea-io-ffmpeg",
  "raea-io-home",
  "raea-io-media",
  "raea-sys-measure",

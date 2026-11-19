@@ -131,20 +131,28 @@ fn lumas(video: &str) -> R<(Vec<f32>, f64)> {
     if !out.status.success() {
         return Err(format!("ffmpeg couldn't read the picture of {video}: {}", String::from_utf8_lossy(&out.stderr).trim()));
     }
-    let l = out.stdout.as_chunks::<{ 32 * 18 }>().0.iter().map(|f| f.iter().map(|&p| p as f32).sum::<f32>() / (32.0 * 18.0 * 255.0)).collect();
+    Ok((crate::read::once::lumas_of(&out.stdout), ffmpeg_rate(video)?))
+}
+
+/// The frame rate `ffmpeg -i` says
+pub(crate) fn ffmpeg_rate(video: &str) -> R<f64> {
     let rate = ffmpeg_stderr(&["-hide_banner", "-i", video])?;
-    let fps = rate.split(" fps").next().and_then(|s| s.rsplit(", ").next()).and_then(|s| s.trim().parse().ok()).unwrap_or(30.0);
-    Ok((l, fps))
+    Ok(rate.split(" fps").next().and_then(|s| s.rsplit(", ").next()).and_then(|s| s.trim().parse().ok()).unwrap_or(30.0))
 }
 
 pub(crate) fn flash_frame_rule(video: &str, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
     let (l, fps) = lumas(video)?;
-    let found = flash_frames(&l, fps);
+    flash_frame_from(&l, fps, issues, passed);
+    Ok(())
+}
+
+/// The stray frames each frame's brightness shows
+pub(crate) fn flash_frame_from(l: &[f32], fps: f64, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+    let found = flash_frames(l, fps);
     if found.is_empty() {
         passed.push("flash-frame: no stray black or white frame".into());
     }
     issues.extend(moments("flash-frame", 1, found));
-    Ok(())
 }
 
 /// Each moment a rule found, as an issue of that priority

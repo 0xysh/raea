@@ -3,12 +3,14 @@
 //! loudness` do, with nothing to install. 0.1.7 refused any video without FFmpeg, which Windows never has (Shane 11-18:
 //! "can we make it so ffmpeg does work the way we need it?"). RAEA_CHECK_NATIVE=1 reads natively with FFmpeg there too;
 //! tests/parity.rs holds the two to the same answers. Each reader names the FFmpeg command it stands in for.
+pub mod once;
+pub use once::{log_level, showinfo_base, showinfo_frame};
 use raea_io_media::VideoDecoder;
 use serde_json::Value;
 use std::path::Path;
 use std::process::Command;
 
-type R<T> = Result<T, String>;
+pub type R<T> = Result<T, String>;
 
 /// Whether to read natively: FFmpeg's ffmpeg or ffprobe isn't on the PATH, or RAEA_CHECK_NATIVE is on
 pub fn native() -> bool {
