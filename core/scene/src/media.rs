@@ -60,7 +60,8 @@ pub fn project_dir(dir: &Path) -> PathBuf {
 }
 
 /// A media src as a file: a path from staticFile (/media/x: the project's media/, then its assets/, as Bevy's assets
-/// folder; the edit's own media/ first when the edit isn't the project's folder), absolute, or relative to the edit.
+/// folder; the edit's own media/ first when the edit isn't the project's folder; then public/, where a web project
+/// keeps its static files), absolute, or relative to the edit.
 pub fn media_path(dir: &Path, src: &str) -> PathBuf {
     if let Some(rest) = src.strip_prefix("/media/") {
         let project = project_dir(dir);
@@ -69,6 +70,10 @@ pub fn media_path(dir: &Path, src: &str) -> PathBuf {
             tried.push(project.join("media"));
         }
         tried.push(project.join("assets"));
+        tried.push(dir.join("public"));
+        if project != dir {
+            tried.push(project.join("public"));
+        }
         if let Some(p) = tried.iter().map(|d| d.join(rest)).find(|p| p.exists()) {
             return p;
         }
@@ -103,6 +108,16 @@ mod tests {
         assert_eq!(media_path(&src, "/media/c.png"), src.join("media/c.png"));
         // missing: where it was always looked for
         assert_eq!(media_path(&src, "/media/d.png"), src.join("media/d.png"));
+        // a web project's public/, after media/ and assets/: the edit's own, then the project's
+        for d in [&root.join("public"), &src.join("public")] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        for f in ["public/f.mp4", "src/public/g.mp4", "public/g.mp4", "public/a.png"] {
+            std::fs::write(root.join(f), "").unwrap();
+        }
+        assert_eq!(media_path(&src, "/media/f.mp4"), root.join("public/f.mp4"));
+        assert_eq!(media_path(&src, "/media/g.mp4"), src.join("public/g.mp4"));
+        assert_eq!(media_path(&src, "/media/a.png"), root.join("assets/a.png"), "assets/ still ahead of public/");
         // no space.json above: the edit's folder is the project, its assets/ after its media/
         let plain = root.join("plain");
         std::fs::create_dir_all(plain.join("assets")).unwrap();
