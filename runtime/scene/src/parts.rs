@@ -231,7 +231,6 @@ pub(crate) fn meshes_rows(tr: &Tracks, names: &[String], p: &mut Program) {
         }
         grid_columns(&mut row, m0);
         paint_columns(&mut row, m0);
-        raea_sys_wear::columns(&mut row, m0);
         raea_sys_procmat::columns(&mut row, m0);
         placement(p, &mut row, &id, &its);
         visible(p, &mut row, &id, &track);

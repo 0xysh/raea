@@ -56,7 +56,7 @@ raea Compute         a compute shader run once a frame before the cameras draw (
 raea ShaderExtension raea's MaterialExtension running a surface shader (ExtendedMaterial's extension)
 raea GridExtension   raea's MaterialExtension drawing a grid (ExtendedMaterial's extension)
 raea PaintExtension  raea's MaterialExtension for the paint look (ExtendedMaterial's extension)
-raea WearExtension  raea's MaterialExtension that chips, grimes and rusts a StandardMaterial in the part's own space (systems/wear); Bevy has none
+raea WearExtension  raea's surface shader that chips, grimes and rusts a StandardMaterial in the part's own space (sdk/render worn.ts, on the ShaderExtension hook); Bevy has none
 raea ProceduralExtension  raea's MaterialExtension that draws wood, stone, brick, tiles and the rest on a StandardMaterial with dust, dirt and worn edges (systems/procmat); Bevy has none
 raea ToonExtension   raea's MaterialExtension for toon bands (ExtendedMaterial's extension)
 raea ToonMaterial    StandardMaterial with ToonExtension (S2a's table: raea's)

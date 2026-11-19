@@ -14,16 +14,21 @@ export const RECIPES: Record<string, string> = {
   (*s).rough = mix((*s).rough, 0.95, m.wash * 0.4 * m.age);
   // sheltered: soot grey, darkest tucked under cornices
   (*s).col = mix((*s).col, (*s).col * vec3<f32>(0.3, 0.29, 0.27), m.crust);
-  // the foot: render blown where the damp and the frost work, the brick behind it showing (worst where let go)
-  let blowN = wear_fbm2(g.p * vec2<f32>(0.9, 1.4) + vec2<f32>(c.elem * 0.31, 5.0));
-  let blowAt = 0.74 - 0.2 * (1.0 - m.upkeep) - 0.12 * (1.0 - smoothstep(0.15, 0.9, g.h));
-  let foot = (1.0 - smoothstep(0.7, 1.3, g.h)) * g.wall * step(0.2, m.wear);
-  let blown = smoothstep(blowAt, blowAt + 0.015, blowN) * foot;
-  let lip = smoothstep(blowAt - 0.04, blowAt, blowN) * (1.0 - blown) * foot;
-  (*s).col = mix((*s).col, wear_bond(g.p) * mix(1.0, 0.55, m.crust), blown);
-  (*s).col = (*s).col * (1.0 - 0.45 * lip);
+  // WR6: the render lost where the causes loosen it (the damp foot, soaked faces, knocked arrises, along a crack) and
+  // neglect lets it go, to the brick 2 cm behind it; the broken edge's lip shades the hole under it
+  let lost = m.loss * m.neglect;
+  let lossAt = 0.8 - 0.34 * lost;
+  let q = g.p * vec2<f32>(0.9, 1.4) + vec2<f32>(c.elem * 0.31, 5.0);
+  let blowN = wear_fbm2(q);
+  let gone = smoothstep(lossAt, lossAt + 0.012, blowN) * step(0.03, lost);
+  let over = smoothstep(lossAt, lossAt + 0.012, wear_fbm2(q + vec2<f32>(0.0, 0.042)));
+  let lip = smoothstep(lossAt - 0.035, lossAt, blowN) * (1.0 - gone) * step(0.03, lost);
+  let behind = wear_bond(g.p + g.par * 0.02) * mix(1.0, 0.55, m.crust);
+  (*s).col = mix((*s).col, behind * (1.0 - 0.55 * (1.0 - over)), gone);
+  (*s).col = (*s).col * (1.0 - 0.4 * lip);
+  (*s).rough = mix((*s).rough, 0.95, gone);
   // chipped arrises low down: the lime coat knocked off to the brick
-  (*s).col = mix((*s).col, mix(vec3<f32>(0.78, 0.76, 0.7), wear_bond(g.p), 0.5), m.chip * (1.0 - blown));
+  (*s).col = mix((*s).col, mix(vec3<f32>(0.78, 0.76, 0.7), wear_bond(g.p), 0.5), m.chip * (1.0 - gone));
   // a grease band where shoulders and hubs rub
   (*s).col = mix((*s).col, (*s).col * vec3<f32>(0.5, 0.48, 0.45), c.touch * 0.6 * g.wall);
   (*s).rough = mix((*s).rough, 0.55, c.touch * 0.5);`,
@@ -66,9 +71,14 @@ export const RECIPES: Record<string, string> = {
   (*s).col = mix((*s).col, vec3<f32>(dot((*s).col, vec3<f32>(0.33))) * 1.25 + vec3<f32>(0.04), c.sun * 0.45 * m.wear);
   let cells = abs(wear_vn2(g.p * vec2<f32>(14.0, 9.0)) - 0.5);
   (*s).col = (*s).col * (1.0 - 0.45 * (1.0 - smoothstep(0.015, 0.05, cells)) * smoothstep(0.3, 0.8, c.sun) * m.wear);
-  // under a ledge and at the bottom rails: peeling where the run-off soaks the timber, the grey wood showing
+  // under a ledge and at the bottom rails: peeling where the run-off soaks the timber, and by neglect (WR6) wherever
+  // the coat's loosened: the top coat off to the red-lead primer, then to the grey wood
   let wetWood = clamp(c.flow + (1.0 - smoothstep(0.04, 0.5, g.h)) * g.wall, 0.0, 1.0);
-  let peel = smoothstep(0.5, 0.56, wear_fbm2(g.p * vec2<f32>(9.0, 4.0)) + 0.2 * wetWood * m.wear) * wetWood * step(0.1, m.wear);
+  let bare = wear_fbm2(g.p * vec2<f32>(9.0, 4.0)) + 0.2 * wetWood * m.wear + 0.25 * m.loss * m.neglect;
+  let reach = max(wetWood, m.loss * smoothstep(0.1, 0.5, m.neglect)) * step(0.1, m.wear);
+  let primer = smoothstep(0.46, 0.49, bare) * reach;
+  let peel = smoothstep(0.53, 0.56, bare) * reach;
+  (*s).col = mix((*s).col, vec3<f32>(0.58, 0.34, 0.25) * (0.9 + 0.2 * wear_vn2(g.p * 25.0)), primer * (1.0 - peel));
   (*s).col = mix((*s).col, vec3<f32>(0.3, 0.27, 0.22) * (0.8 + 0.3 * wear_vn2(vec2<f32>(g.p.x * 30.0, g.p.y * 2.0))), max(peel, m.chip));
   // rot at the foot
   let rot = (1.0 - smoothstep(0.02, 0.25, g.h)) * m.wear * g.wall;
@@ -114,7 +124,16 @@ export const RECIPES: Record<string, string> = {
   // lichen on the faces the sun misses, soot in the laps
   let lichen = (1.0 - c.sun) * smoothstep(0.55, 0.75, wear_fbm2(g.p * 2.5 + vec2<f32>(c.elem * 0.13, 1.0))) * m.age;
   (*s).col = mix((*s).col, vec3<f32>(0.2, 0.22, 0.13), lichen * 0.6);
-  (*s).col = mix((*s).col, vec3<f32>(0.03), m.crust * 0.5);`,
+  (*s).col = mix((*s).col, vec3<f32>(0.03), m.crust * 0.5);
+  // WR6: slates slipped and gone, the odd one by neglect and many once the house is empty, more along the ridge, the
+  // verges and the eaves, the battens and the
+  // felt under them showing (courses 11 cm up the slope's height, slates 25 cm across, broken bond)
+  let course = floor(g.p.y / 0.11);
+  let across = g.p.x / 0.25 + select(0.0, 0.5, i32(course) % 2 == 1);
+  let missing = step(wear_h21(vec2<f32>(floor(across) + c.elem * 17.0, course)), 0.1 * (0.15 * m.neglect + 0.85 * m.abandon) * (1.0 + 2.0 * c.edge));
+  let batten = 1.0 - smoothstep(0.0, 0.18, abs(fract(g.p.y / 0.11) - 0.5) * 2.0 - 0.6);
+  (*s).col = mix((*s).col, mix(vec3<f32>(0.04, 0.035, 0.03), vec3<f32>(0.3, 0.21, 0.12), batten), missing);
+  (*s).rough = mix((*s).rough, 0.95, missing);`,
 
   felt: /* wgsl */ `
   // roofing felt: greyed by the sun, its grit washed off where the rain runs
@@ -125,7 +144,23 @@ export const RECIPES: Record<string, string> = {
   // sheltered: a grime film, thickest in the corners and at the bottom where the frame holds the dirt
   let film = clamp(m.shelter * 0.5 + c.cav * 0.8 + (1.0 - m.wash) * 0.2, 0.0, 1.0) * m.age * (1.0 - 0.6 * m.upkeep);
   (*s).col = mix((*s).col, (*s).col * vec3<f32>(0.62, 0.6, 0.55), film * 0.7);
-  (*s).rough = mix((*s).rough, 0.55, film * 0.6);`,
+  (*s).rough = mix((*s).rough, 0.55, film * 0.6);
+  // WR6: a house left empty has its panes broken and boarded over, one fate per pane
+  let fate = wear_h21(vec2<f32>(c.elem, 11.0));
+  if (fate < 0.16 * m.abandon) {
+    // boarded: planks of grey, weathered deal across the opening
+    let row = fract(g.p.y / 0.15);
+    let tone = 0.75 + 0.4 * wear_h21(vec2<f32>(floor(g.p.y / 0.15), c.elem));
+    let gap = 1.0 - smoothstep(0.0, 0.06, min(row, 1.0 - row));
+    (*s).col = vec3<f32>(0.36, 0.32, 0.26) * tone * (0.85 + 0.3 * wear_vn2(vec2<f32>(g.p.x * 30.0, g.p.y * 3.0))) * (1.0 - 0.7 * gap);
+    (*s).rough = 0.9;
+    (*s).metal = 0.0;
+  } else if (fate < 0.38 * m.abandon) {
+    // broken: the dark room behind, shards left in the putty at the frame
+    let shard = smoothstep(0.52, 0.56, wear_fbm2(g.p * 7.0 + vec2<f32>(c.elem, 0.0)) * 0.6 + 0.7 * c.cav);
+    (*s).col = mix(vec3<f32>(0.012, 0.011, 0.01), (*s).col, shard);
+    (*s).rough = mix(1.0, (*s).rough, shard);
+  }`,
 
   enamel: /* wgsl */ `
   // rust bled from its screws, in short tails below them
@@ -133,10 +168,17 @@ export const RECIPES: Record<string, string> = {
   let screw = step(0.8, wear_h21(vec2<f32>(col, c.elem)));
   let tail = screw * (1.0 - smoothstep(0.0, 0.04, abs(fract(g.p.x * 6.0) - 0.5) / 6.0)) * smoothstep(0.3, 0.9, wear_vn2(vec2<f32>(col, g.p.y * 3.0)));
   (*s).col = mix((*s).col, vec3<f32>(0.3, 0.12, 0.04), tail * m.wear * 0.8);
-  // chipped to black iron at its holes and edges
+  // chipped to black iron at its holes and edges, and by neglect (WR6) flaking off in sheets from them to the iron,
+  // which rusts, and rust creeping under the enamel's broken edge
   let chipped = smoothstep(0.65, 0.9, c.edge) * step(0.62 - 0.3 * m.wear, wear_vn2(g.p * 30.0)) * step(0.05, m.wear);
-  (*s).col = mix((*s).col, vec3<f32>(0.03, 0.03, 0.035), chipped);
-  (*s).rough = mix((*s).rough, 0.7, chipped);`,
+  let flakeN = wear_fbm2(g.p * 14.0 + vec2<f32>(c.elem * 3.1, 0.0));
+  let flakeAt = 0.82 - 0.38 * m.neglect * max(smoothstep(0.5, 0.9, c.edge), 0.5 * m.loss + 0.3);
+  let flake = smoothstep(flakeAt, flakeAt + 0.01, flakeN) * step(0.05, m.neglect);
+  let creep = smoothstep(flakeAt - 0.03, flakeAt, flakeN) * (1.0 - flake) * step(0.05, m.neglect);
+  let iron = mix(vec3<f32>(0.03, 0.03, 0.035), vec3<f32>(0.2, 0.08, 0.03), smoothstep(0.3, 0.7, wear_vn2(g.p * 40.0)) * flake);
+  (*s).col = mix((*s).col, iron, max(chipped, flake));
+  (*s).col = mix((*s).col, vec3<f32>(0.25, 0.1, 0.04), creep * 0.7);
+  (*s).rough = mix((*s).rough, 0.75, max(chipped, flake));`,
 
   brass: /* wgsl */ `
   // tarnished dull brown, more where the rain reaches; bright where hands touch it
@@ -195,6 +237,16 @@ fn wear_shared(s: ptr<function, WearSurf>, c: WearCauses, g: WearGeo, m: WearMar
   (*s).col = mix((*s).col, vec3<f32>(0.8, 0.79, 0.74), m.salt * 0.3 * porous * smoothstep(0.4, 0.75, wear_vn2(vec2<f32>(g.p.x * 1.3, g.p.y * 3.0))));
   if (c.cls != 13 && c.cls != 10) { (*s).col = mix((*s).col, (*s).col * 0.62, m.splash * 0.7); }
   (*s).rough = mix((*s).rough, 0.97, m.crust * 0.5);
+  // WR6: cracks from the openings' corners, opening as neglect grows and gathering dirt along them; in brick a crack
+  // steps along the joints. Drawn no thinner than a pixel, fading as it gets thinner than one
+  let opened = smoothstep(0.1, 0.7, m.neglect) * porous;
+  let wide = 0.0035 * opened;
+  let dd = max(c.crack + (wear_vn2(g.p * 38.0) - 0.5) * 0.006, 0.0);
+  let line = (1.0 - smoothstep(0.5 * wide, 0.5 * wide + g.px, dd)) * min(1.0, wide / max(g.px, 0.0001) + 0.25) * step(0.0001, wide);
+  let stepped = (1.0 - smoothstep(0.02, 0.05, c.crack)) * wear_bond_joint(g.p) * opened;
+  let crack = select(line, stepped, c.cls == 1);
+  let halo = (1.0 - smoothstep(0.0, 0.03, dd)) * opened;
+  (*s).col = (*s).col * (1.0 - 0.8 * crack) * (1.0 - 0.15 * halo);
 }
 `;
 

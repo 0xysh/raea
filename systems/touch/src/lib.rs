@@ -21,10 +21,10 @@ use std::collections::HashMap;
 use parry3d::glamx::Vec3;
 use parry3d::shape::TriMesh;
 
-pub use spots::Spot;
+pub use spots::{Spot, thin_by};
 
 /// Bumped when the output would change for the same input (a bake that uses it keys on it).
-pub const VERSION: &str = "raea-sys-touch 4";
+pub const VERSION: &str = "raea-sys-touch 5";
 
 /// What a triangle is made of, as far as touch goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -120,8 +120,8 @@ impl Parts {
     }
 }
 
-/// A seed from a place, the same on every machine (the lock side of a single leaf).
-pub(crate) fn seed(p: Vec3) -> u64 {
+/// A seed from a place, the same on every machine (the lock side of a single leaf; raea-sys-damage's cracks).
+pub fn seed(p: Vec3) -> u64 {
     let q = |v: f32| (v * 100.0).round() as i64 as u64;
     let mut h = 0xcbf2_9ce4_8422_2325u64;
     for v in [q(p.x), q(p.y), q(p.z)] {

@@ -220,7 +220,8 @@ pub(crate) fn causes(sc: &Scene, at: &Atlas, env: &Env, mesh: &TriMesh, c0: &mut
             let edge = edges.near(p, reach_of(t.tri));
             let ground = ground(sc, mesh, env, t.tri, p, n);
             let element = (crate::rays::hash(at.chart_of[t.tri as usize].wrapping_add(17)) & 0xff) as u8;
-            let c3 = [byte(x.december), byte(x.drift), byte(x.litter), 255];
+            // a: the crack, raea-sys-damage's (touch.rs)
+            let c3 = [byte(x.december), byte(x.drift), byte(x.litter), 0];
             ([byte(sky), byte(x.sun), byte(occl), byte(edge)], [byte(ground / GROUND_RANGE), element, byte(open), sc.class[t.tri as usize].code()], c3)
         })
         .collect();

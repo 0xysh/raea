@@ -5,7 +5,7 @@ Feature: raea/wear, weathering that has a cause
   version, "realistic procedural and highly intelligent seeding ... for what makes sense on wear, wear by material,
   crumbling infrastructure, doors, walls, plates", and the same for how textures are built and made cheap.
 
-  raea's wear so far is shader-only (systems/wear: noise, screen-space curvature, grime on faces turned down;
+  raea's wear was shader-only (systems/wear: noise, screen-space curvature, grime on faces turned down;
   systems/procmat: a pattern with dust, dirt and edges). Nothing in it knows where water runs, what is sheltered, where
   hands touch or what a surface is made of, so the marks are scattered evenly rather than caused. The fix is the
   method of the literature: the agents of wear are traced through the geometry from their sources, and they leave
@@ -246,14 +246,28 @@ Feature: raea/wear, weathering that has a cause
         faded, the railing rusted; rain, snow with a storm and autumn render; an unbaked sphere under the same shader is
         unchanged. The corner house with stills of every cause and condition is WR7's
 
-    @needs:WR5,WR3
+    @needs:WR5,WR3 @done
     Scenario: WR6. Crumbling
       Then where damage is high (ground band, edges, sheltered damp, neglect), plaster is gone to the brick 2 cm behind
         it under a shadowed lip, paint to primer and wood, enamel to iron; cracks run from the corners of openings;
         panes are broken or boarded by neglect; slates are missing; and spots.json puts debris under the losses
       And the cracked-road fracture of the kit waits for a piece that needs it
+      And as built (11-19)
+        | crate               | file                              | lines | job                                                                 |
+        | raea-sys-damage     | systems/damage/src/lib.rs         | 241   | an opening's corners, a crack from about half of them (by a seed per corner), each point's loss potential (damp foot, soaked faces, knocked arrises, along a crack), debris under the losses where the rain falls, landed on the walk below; version 3 |
+        | raea-sys-damage     | systems/damage/src/tests.rs       | 190   | an opening's four corners and no others, cracks along the wall, what loosens a coat, debris under the foot (none indoors, none on a plinth), about half the corners cracking |
+        | raea-sys-weathering | src/lib.rs, rays.rs, touch.rs     | +33   | causes3 a's crack, the loss potential and the debris spots from raea-sys-damage |
+        | raea-sys-touch      | src/lib.rs, spots.rs              | +18   | a spot's loss, the seed shared with damage                           |
+        | raea/wear           | sdk/wear/src/causes.ts            | 159   | neglect = (1 - e^(-years / 25)) x (1.15 - upkeep); abandon, the share of a house past what a lived-in one lets go (smoothstep from 0.85 of neglect at its base upkeep) |
+        | raea/wear           | sdk/wear/src/recipes.ts           | 303   | plaster off to the brick under its lip, paint to primer and wood, enamel flaked to iron, cracks opening by neglect (stepped through brick's joints), panes broken (38%) and boarded (16%) by abandon, slates gone by neglect and abandon |
+        | raea/wear           | sdk/wear/src/index.ts             | 257   | wearDebris: the bake's debris spots where loss x abandon reaches 0.3 |
+      And proof: `cargo test -p raea-sys-damage` (5 tests) and `-p raea-sys-weathering`; `bun test` in sdk/wear (22
+        tests: neglect and upkeep, abandonment's threshold in the shader's text, debris none at upkeep 0.35, all at 90
+        years and 0.05, some at 80 and 0.2); the corner house (WR7) rendered after 80 years and as a ruin: plaster off
+        the rusticated foot and around the openings, cracks from the window corners, the ruin's panes broken and
+        boarded and slates gone, heaps on the walk under the losses and none inside or on the plinth
 
-    @needs:WR5
+    @needs:WR5 @done
     Scenario: WR9. Every season and weather, from uniforms over the causes
       Given the look's date and weather, the values the realism lane's sets carry: `day` (the day of the year, 1-366)
         and `hour`, from which the season's phase (day / 365.25) and the sun follow; snow, wet and ice as weather of
@@ -297,10 +311,18 @@ Feature: raea/wear, weathering that has a cause
         posted as i-acp-mwlb9fb4-110
       And still open: the mapping from the look's `day` and weather to these values is WR5's (the prototype takes
         storm, leaves, dust and melt as values of their own); frost and algae; the flash of thunder is the light's
+      And the shader's half as built (11-19): the eight conditions are WR5's recipes over these causes (spring's damp
+        and algae, summer's dust, autumn's leaves, frost where December's sun misses, snow lying and driven, rain
+        wetting, streaming and puddling), named once, and weather that changes during a shot eases toward the sky's
+        | crate     | file                     | lines | job                                                                       |
+        | raea/wear | sdk/wear/src/weather.ts  | 79    | WEAR_CONDITIONS (the eight as weather), weatherAt(base, spells, minutes): each value eased exactly toward the sky's per spell, so any frame draws alone; WEATHER_RATES (wetting in about 3 minutes, drying over an hour, snow settling over 20 and melting over 2 hours, driven snow in 10 and off in 30, frost over 30 and gone in 20; ASSUMED until measured) |
+        | raea/wear | sdk/wear/test/wear.test.ts | 216 | rain soaks and dries at its rates, frames stand alone with no jump at a spell, snow, storm and frost, spells out of order refused, each condition in its season |
+      And proof: `bun test` in sdk/wear; the corner house under all eight by day and at dusk, and a shower crossing it
+        (WR7's rain-passes: dry, soaked and drying at frames 0, 40 and 119)
 
   Rule: 3. Shown, then cheap
 
-    @needs:WR5
+    @needs:WR5 @done
     Scenario: WR7. The demo, and EX9
       Then examples/materials/wear/ is a corner house made in code (plinth, rusticated ground floor, plastered storeys,
         sills, string course, cornice on consoles, door, iron balcony, zinc gutter and downpipe, an enamel street
@@ -308,6 +330,22 @@ Feature: raea/wear, weathering that has a cause
         colour and the house under each of WR9's eight conditions, by day and at dusk
       And `wear` on MeshStandardMaterial and <WearExtension> are raea/wear's, and systems/wear, its spawn branch and
         its row columns are deleted in the same landing (docs/examples.feature EX9)
+      And as built (11-19)
+        | crate         | file                                    | lines | job                                                         |
+        | example       | examples/materials/wear/house.ts        | 260   | the corner house as solids (each 8 corners), a hip roof, openings cut through each band, one .glb material per class |
+        | example       | examples/materials/wear/make-house.ts   | 11    | writes media/house.glb                                       |
+        | example       | examples/materials/wear/wear.tsx        | 179   | before, new, after (80 sooty years), ruin, ruin-near, door; debug-CAUSE for all 16; the eight conditions and their -dusk; rain-passes (120 frames, half a minute each); paint (worn paint with no bake) |
+        | example       | examples/materials/wear/wear.test.ts    | 85    | every part WR7 names, the openings through the walls, the .glb, every cause and condition listed, the paint still |
+        | raea/render   | sdk/render/src/worn.ts                  | 119   | worn paint as a surface shader on the public hook (WORN_WESL, wornShader): systems/wear's shader ported, same noise, curvature edges, grime, rust and chips in the mesh's own space |
+        | raea/render   | sdk/render/src/3d/materials.tsx         | +12   | a material's `wear` becomes that shader (none at amount 0; refused beside `shader` or `grid`) |
+        | deleted       | systems/wear, spawn.rs, raea_plugins.rs, runtime/scene parts.rs | -480 | raea-sys-wear, its WearPlugin, spawn branch and row columns; its type out of the registry snapshot, bevy.gen.tsx and sdk-coverage |
+      And worn paint's shader lives in raea/render beside the material that takes it, not in raea/wear: raea/wear is
+        built on raea/render, so the other way would be a cycle. <WearExtension> and `wear` keep their props, and the
+        guides are unchanged
+      And proof: `bun test` in examples/materials/wear (7 tests) and conformance bevy3d.test.tsx (wear's shader, its
+        uniforms, none at amount 0, alone); a parity scene of worn paint (sharp, turned and round parts, every setting)
+        rendered through systems/wear and through worn.ts matches (RMSE 3.8e-5 of full scale); every still, and
+        rain-passes at frames 0, 40 and 119, render with 0 errors on the Mac. Clay now draws worn paint as it draws any custom surface shader
 
     @needs:WR7
     Scenario: WR8. Detail textures from mask stacks, and what they cost
@@ -315,3 +353,14 @@ Feature: raea/wear, weathering that has a cause
         rendered by raea once into tiling layers, instead of noise evaluated per pixel per frame
       And texture arrays get mips (SH9 arrays have none, so a tiling layer shimmers far off) and maps can be BC
         compressed into KTX2, with the memory and frame time each saves measured
+      And measured first (11-19, M5 Pro, the corner house at 4K, 121-127 frames each, plain and worn interleaved): with
+        the machine quiet, 17.2 ms a frame plain and 17.2 worn, 17.6 and 17.7; under other sessions' load both rise
+        together (18-75 ms). The recipes' per-pixel noise costs no frame time a render can see, so detail layers
+        would save nothing yet; a live scene at 60 fps with many baked buildings is where to measure again
+      And the maps' memory: four RGBA8 maps of 2048 x 1108 for the house, 36 MB on the GPU; BC7 would take that to
+        about 9 MB, but causes2's alpha is the class code read exactly by textureLoad (it needs a map of its own
+        before the rest compress), and an iPhone has no BC (ASTC there). Worth it for a city of baked buildings, not
+        one house
+      And still open, so not done: the detail layers, mips on arrays (they come with the detail layers: adding them
+        now would grow the city's 40-layer room atlas by a third for no wear user), and BC/KTX2 maps with the class
+        split out and a fallback where BC isn't

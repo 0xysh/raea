@@ -3,9 +3,24 @@
 //   causes0 = sky (rain's reach), sun (the year's sun), cavity, edge (convex arris)
 //   causes1 = flow (run-off passing), deposit (what it left), deposit kind (60 x: 1 grime, 2 rust, 3 copper, 4 zinc), touch
 //   causes2 = ground (height over the walk, 0-4 m), element (the chart's number), open (the whole sky seen), class
-//   causes3 = winter sun (December's), drift (driven snow), litter (where blown leaves and snow settle)
+//   causes3 = winter sun (December's), drift (driven snow), litter (where blown leaves and snow settle), crack (1 - the
+//             distance to the nearest crack from an opening's corner over CRACK_REACH; raea-sys-damage, WR6)
 // The maps load as colour (sRGB) textures, so a colour channel is re-encoded to read the byte the bake wrote; alpha is
 // stored linear. Element and class are numbers, read with textureLoad so a filtered read never blends two into a third.
+
+/** How far the bake keeps a texel's distance to a crack, metres (raea-sys-damage's REACH). */
+export const CRACK_REACH = 0.25;
+/** The loss potential's edges and weights, as raea-sys-damage's LOSS has them (its test compares the two): how readily
+ *  a coat comes off at the damp foot (ground 0.7-1.3 m), where run-off soaks what the rain doesn't wash (flow 0.5-0.9,
+ *  the rain's reach 0.35-0.85), at a knocked arris low down (edge 0.75-0.9, below 1.4-2.2 m) and along a crack
+ *  (within 0.12 m); then the soak's, the arris's and (CRACK_WEIGHT) the crack's weight against the foot's 1. */
+export const LOSS = [0.7, 1.3, 0.5, 0.9, 0.35, 0.85, 0.75, 0.9, 1.4, 2.2, 0.12, 0.8, 0.7] as const;
+export const CRACK_WEIGHT = 0.6;
+/** Neglect past this is a house left empty (its panes broken and boarded, its slates gone, fallen render left on the
+ *  walk), full at 1: a lived-in house mends and sweeps these however poorly it is kept. */
+export const ABANDON_FROM = 0.85;
+const f = (x: number) => (Number.isInteger(x) ? `${x}.0` : `${x}`);
+const L = LOSS.map(f);
 
 /** The uniforms the module reads: `up` (the bake's up), `age` (years since the last repair, soot, upkeep, the bake's
  *  texels a metre), `wx` (wet, snow, storm, ice) and `season` (damp, dust, leaves, melt). */
@@ -16,7 +31,7 @@ struct WearCauses {
   sky: f32, sun: f32, cav: f32, edge: f32,
   flow: f32, dep: f32, kind: i32, touch: f32,
   ground: f32, elem: f32, open: f32, cls: i32,
-  dec: f32, drift: f32, litter: f32
+  dec: f32, drift: f32, litter: f32, crack: f32
 }
 
 fn wear_causes(uv: vec2<f32>) -> WearCauses {
@@ -33,8 +48,17 @@ fn wear_causes(uv: vec2<f32>) -> WearCauses {
     wear_enc(a.r), wear_enc(a.g), wear_enc(a.b), a.a,
     wear_enc(f.r), wear_enc(f.g), kind, f.a,
     wear_enc(b.r) * 4.0, round(wear_enc(x.g) * 255.0), wear_enc(b.b), cls,
-    wear_enc(d.r), wear_enc(d.g), wear_enc(d.b)
+    wear_enc(d.r), wear_enc(d.g), wear_enc(d.b), (1.0 - d.a) * ${f(CRACK_REACH)}
   );
+}
+
+// how readily the coat here comes off (WR6): raea-sys-damage's loss, so the debris the bake put down lies under it
+fn wear_loss(c: WearCauses) -> f32 {
+  let foot = 1.0 - smoothstep(${L[0]}, ${L[1]}, c.ground);
+  let soak = smoothstep(${L[2]}, ${L[3]}, c.flow) * (1.0 - smoothstep(${L[4]}, ${L[5]}, c.sky));
+  let arris = smoothstep(${L[6]}, ${L[7]}, c.edge) * (1.0 - smoothstep(${L[8]}, ${L[9]}, c.ground));
+  let near = 1.0 - smoothstep(0.0, ${L[10]}, c.crack);
+  return max(max(foot, ${L[11]} * soak), max(${L[12]} * arris, ${f(CRACK_WEIGHT)} * near));
 }
 
 // value noise over the face, in metres
@@ -62,24 +86,28 @@ fn wear_fbm2(p: vec2<f32>) -> f32 {
 }
 
 // where the point is: how far its face looks up, its place on the face in metres (along a wall and up it; two
-// horizontal axes on a level face), its height over the walk, and how upright the face is
-struct WearGeo { up: f32, p: vec2<f32>, h: f32, wall: f32 }
+// horizontal axes on a level face), its height over the walk, how upright the face is, a pixel's size in metres
+// (from the caller, before any branch: derivatives need uniform control flow) and the parallax: how far a point a
+// metre behind the face shifts in its place as the eye sees it (what's behind lost render is drawn there)
+struct WearGeo { up: f32, p: vec2<f32>, h: f32, wall: f32, px: f32, par: vec2<f32> }
 
-fn wear_geo(wp: vec3<f32>, nrm: vec3<f32>, c: WearCauses) -> WearGeo {
+fn wear_geo(wp: vec3<f32>, nrm: vec3<f32>, c: WearCauses, eye: vec3<f32>, px: f32) -> WearGeo {
   let U = normalize(u_up());
   let n = normalize(nrm);
   let up = dot(n, U);
   let side = n - U * up;
-  var p: vec2<f32>;
+  var ax = U;
+  var ay = U;
   if (length(side) > 0.3) {
-    let t = normalize(cross(U, side));
-    p = vec2<f32>(dot(wp, t), dot(wp, U));
+    ax = normalize(cross(U, side));
   } else {
     let r = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 1.0), abs(U.x) > 0.9);
-    let e1 = normalize(cross(U, r));
-    p = vec2<f32>(dot(wp, e1), dot(wp, cross(U, e1)));
+    ax = normalize(cross(U, r));
+    ay = cross(U, ax);
   }
-  return WearGeo(up, p, c.ground, 1.0 - smoothstep(0.5, 0.8, abs(up)));
+  let v = normalize(eye);
+  let par = -vec2<f32>(dot(v, ax), dot(v, ay)) / max(dot(v, n), 0.25);
+  return WearGeo(up, vec2<f32>(dot(wp, ax), dot(wp, ay)), c.ground, 1.0 - smoothstep(0.5, 0.8, abs(up)), px, par);
 }
 
 // what years of weather left, by cause: the same in every season
@@ -87,7 +115,7 @@ struct WearMarks {
   age: f32, upkeep: f32, wear: f32,
   wash: f32, shelter: f32, tuck: f32, crust: f32,
   tear: f32, stain: f32, damp: f32, salt: f32, splash: f32,
-  low: f32, chip: f32
+  low: f32, chip: f32, loss: f32, neglect: f32, abandon: f32
 }
 
 fn wear_marks(c: WearCauses, g: WearGeo) -> WearMarks {
@@ -117,7 +145,13 @@ fn wear_marks(c: WearCauses, g: WearGeo) -> WearMarks {
   // chips need a real arris, so a bake of 12 texels a metre or finer (at 4 an edge spreads 25 cm); people and carts
   // reach below 2.2 m
   let chip = step(12.0, u_age().w) * smoothstep(0.75, 0.9, c.edge) * low * step(0.68 - 0.2 * (1.0 - upkeep), wear_vn2(g.p * 16.0 + vec2<f32>(c.elem * 9.0, 0.0))) * step(0.05, age);
-  return WearMarks(age, upkeep, wear, wash, shelter, tuck, crust, tear, stain, damp, salt, splash, low, chip);
+  // WR6: how readily the coat comes off here, and how far neglect has let things go (little while kept up)
+  let loss = wear_loss(c) * g.wall;
+  let neglect = clamp(age * (1.15 - upkeep), 0.0, 1.0);
+  // left empty: neglect past what a lived-in house lets go (broken panes, slates and fallen render are mended or
+  // swept while anyone lives there), the whole house's, so by its own upkeep and not each element's draw
+  let abandon = smoothstep(${f(ABANDON_FROM)}, 1.0, age * (1.15 - clamp(u_age().z, 0.0, 1.0)));
+  return WearMarks(age, upkeep, wear, wash, shelter, tuck, crust, tear, stain, damp, salt, splash, low, chip, loss, neglect, abandon);
 }
 
 // a surface's own colour, roughness and metalness as the recipes change them

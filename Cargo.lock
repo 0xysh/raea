@@ -14954,7 +14954,6 @@ dependencies = [
  "raea-sys-three-shader",
  "raea-sys-viewbox",
  "raea-sys-volume",
- "raea-sys-wear",
  "serde_json",
  "wgpu",
 ]
@@ -15496,7 +15495,6 @@ dependencies = [
  "raea-sys-frame",
  "raea-sys-layers",
  "raea-sys-procmat",
- "raea-sys-wear",
  "serde_json",
 ]
 
@@ -15807,6 +15805,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-sys-damage"
+version = "0.1.0"
+dependencies = [
+ "parry3d",
+ "raea-core-ease",
+ "raea-sys-touch",
+ "rayon",
+]
+
+[[package]]
 name = "raea-sys-environment"
 version = "0.1.0"
 dependencies = [
@@ -15904,6 +15912,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "parry3d",
+ "raea-core-ease",
  "raea-sys-glb",
  "serde_json",
 ]
@@ -16526,21 +16535,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "raea-sys-wear"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "raea-core-program",
- "serde_json",
-]
-
-[[package]]
 name = "raea-sys-weathering"
 version = "0.1.0"
 dependencies = [
  "image",
  "parry3d",
  "raea-core-meshcheck",
+ "raea-sys-damage",
  "raea-sys-exposure",
  "raea-sys-glb",
  "raea-sys-runoff",

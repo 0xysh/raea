@@ -271,9 +271,8 @@ Used in: [3d/fog_volumes](https://github.com/shinyobjectz/raea/blob/main/sdk/rae
 
 ### `WearExtension`
 
-raea's chips, grime and rust over a StandardMaterial, as an ExtendedMaterial's extension (systems/wear):
-
-Bevy: `bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::extended_material::ExtendedMaterial<bevy_pbr::pbr_material::StandardMaterial, raea_sys_wear::Wear>>`.
+raea's chips, grime and rust over a StandardMaterial, as an ExtendedMaterial's extension: a surface shader of
+raea's own (worn.ts) on the hook a ShaderExtension uses, so its Bevy type is ShaderExtension's.
 
 | Prop | Type | What it does |
 | --- | --- | --- |
@@ -792,7 +791,7 @@ where density and heat come in: a burner, or an engine moving `at` -> `to` (a co
 
 ### `WearExtensionProps`
 
-raea's extension of StandardMaterial that wears it (the engine's Wear MaterialExtension, systems/wear): its paint
+raea's extension of StandardMaterial that wears it (a surface shader of raea's own, worn.ts): its paint
 mottled, chipped back to `chip_color` on edges and a few spots, `grime` gathered low and underneath and `rust` run
 down in streaks, fixed in the part's own space as it moves. `amount` 0-1; `chips`, `grime` and `rust` each 0-1 of it
 (0.6, 0.5, 0.25); `scale` a blotch's size in metres (0.08); `seed` moves the pattern. It goes in an

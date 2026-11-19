@@ -281,9 +281,6 @@ pub(crate) fn spawn_3d(world: &mut World, e: Entity, t: &Tup, inserted: &[Tup], 
             } else if let Some(extension) = raea_sys_procmat::of(vals).filter(|_| !scene3d::clay::on()) {
                 // a procedural surface (systems/procmat): its pattern, bump and use made on the GPU; clay draws it plain
                 grid::put(world, e, mesh, raea_sys_procmat::ProcMaterial { base: mat, extension }, vals);
-            } else if let Some(extension) = raea_sys_wear::of(vals).filter(|_| !scene3d::clay::on()) {
-                // worn paint (systems/wear): chipped edges, grime and rust, fixed in the part's own space
-                grid::put(world, e, mesh, raea_sys_wear::WearMaterial { base: mat, extension }, vals);
             } else if vals.get("shader").is_none() {
                 // a plain surface, see-through too: one material per value, shared by the parts that have it (share.rs;
                 // froxel_glass's fog copy is per material, so equal panes share it; mesh_ray_cast's six walls are one)

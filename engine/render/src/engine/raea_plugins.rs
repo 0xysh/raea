@@ -55,7 +55,6 @@ raea_plugin! {
     Draws2dPlugin: raea_sys_sprite::install, "Plugins' 2D drawing brings up the scene's 2D camera (raea-sys-sprite's Draws2d).";
     ScreenPlugin: super::screen::install, "Live pictures on surfaces, drawn as CRTs (screen.rs).";
     GridPlugin: super::grid::install, "Greybox surfaces: graph paper and outlines (grid.rs).";
-    WearPlugin: raea_sys_wear::install, "Worn surfaces: chipped paint, grime and rust (systems/wear).";
     ProcMatPlugin: raea_sys_procmat::install, "Procedural surfaces: wood, stone, brick, tiles and the rest, with dust and dirt (systems/procmat).";
     PaintPlugin: super::paint::install, "The paint and cartoon looks' surfaces (paint.rs).";
     PassesPlugin: super::passes::install, "Render passes per view (passes.rs).";

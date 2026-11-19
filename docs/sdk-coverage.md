@@ -14,7 +14,7 @@ reaches it yet).
 | area | kind | tier 1 | tier 2 | tier 3 | not rendered | SVG attribute only | blocked upstream | excluded | unmapped | total |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | bevy | asset | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 |
-| bevy | component | 61 | 869 | 0 | 0 | 0 | 0 | 1 | 0 | 931 |
+| bevy | component | 60 | 869 | 0 | 0 | 0 | 0 | 1 | 0 | 930 |
 | bevy | event | 0 | 13 | 0 | 0 | 0 | 0 | 0 | 0 | 13 |
 | bevy | message | 0 | 40 | 0 | 0 | 0 | 0 | 0 | 0 | 40 |
 | bevy | resource | 4 | 86 | 0 | 0 | 0 | 0 | 1 | 0 | 91 |
@@ -23,9 +23,9 @@ reaches it yet).
 | css | shorthand | 60 | 0 | 0 | 11 | 0 | 0 | 0 | 0 | 71 |
 | element | html | 113 | 0 | 0 | 0 | 0 | 0 | 18 | 0 | 131 |
 | plugin | declared | 0 | 0 | 53 | 0 | 0 | 21 | 0 | 3 | 77 |
-| **all** | | **495** | **1009** | **53** | **55** | **14** | **21** | **21** | **3** | **1671** |
+| **all** | | **494** | **1009** | **53** | **55** | **14** | **21** | **21** | **3** | **1670** |
 
-Reached (tiers 1-3): **1557**. The ratchet (`tools/sdk-coverage --check`, in tools/agents/check) keeps it from dropping.
+Reached (tiers 1-3): **1556**. The ratchet (`tools/sdk-coverage --check`, in tools/agents/check) keeps it from dropping.
 
 ## Bevy types (the plugin build's TypeRegistry)
 
@@ -624,7 +624,6 @@ Reached (tiers 1-3): **1557**. The ratchet (`tools/sdk-coverage --check`, in too
 | `bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::extended_material::ExtendedMaterial<bevy_pbr::pbr_material::StandardMaterial, raea_sys_look::paint::Paint>>` | component | 2 | bevy.MeshMaterial3dExtendedMaterialStandardMaterialPaint (raea/plugins/bevy) |
 | `bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::extended_material::ExtendedMaterial<bevy_pbr::pbr_material::StandardMaterial, raea_sys_material::toon::ToonExt>>` | component | 2 | bevy.MeshMaterial3dExtendedMaterialStandardMaterialToonExt (raea/plugins/bevy) |
 | `bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::extended_material::ExtendedMaterial<bevy_pbr::pbr_material::StandardMaterial, raea_sys_shader::ShaderExt>>` | component | 1 | SurfaceShader (sdk/render/src/3d/materials.tsx) |
-| `bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::extended_material::ExtendedMaterial<bevy_pbr::pbr_material::StandardMaterial, raea_sys_wear::Wear>>` | component | 1 | WearExtension (sdk/render/src/bevy3d/extensions.tsx) |
 | `bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::pbr_material::StandardMaterial>` | component | 1 | Mesh3d (sdk/render/src/bevy3d/core.tsx) |
 | `bevy_pbr::mesh_material::MeshMaterial3d<bevy_trenchbroom::special_textures::QuakeSkyMaterial>` | component | 2 | bevy.MeshMaterial3dQuakeSkyMaterial (raea/plugins/bevy) |
 | `bevy_pbr::mesh_material::MeshMaterial3d<raea_sys_fog::fire::FireMaterial>` | component | 2 | bevy.MeshMaterial3dFireMaterial (raea/plugins/bevy) |

@@ -332,7 +332,8 @@ fn a_door_is_held_on_one_side_and_gets_its_nameplate() {
     let mut c3 = vec![[0u8; 4]; n];
     rays::causes(&sc, &at, &e, &mesh, &mut c0, &mut c2, &mut c3);
     flow::flow(&sc, &at, &e, &mesh, &c0, &mut c1);
-    touch::touch(&sc, &at, &e, &mesh, &c0, &mut c1, &c2);
+    let (_, crack) = touch::touch(&sc, &at, &e, &mesh, &c0, &mut c1, &c2);
+    assert_eq!(crack.len(), at.texels.len());
     let touched = |keep: &dyn Fn(Vec3, Vec3) -> bool| at.texels.iter().any(|t| keep(t.p, t.n) && c1[t.y as usize * at.w as usize + t.x as usize][3] > 128);
     let held = |side: f32| touched(&|p, n| n.z > 0.99 && (p.z + 0.25).abs() < 0.01 && (0.97..1.08).contains(&p.y) && p.x * side > 0.25);
     assert!(held(1.0) != held(-1.0), "the handle band on one side of the leaf only");
@@ -343,5 +344,7 @@ fn a_door_is_held_on_one_side_and_gets_its_nameplate() {
     let out = bake(&tmp.join("store"), &tmp.join("door.glb"), &req).unwrap();
     let spots: Value = serde_json::from_str(&std::fs::read_to_string(out["spots"].as_str().unwrap()).unwrap()).unwrap();
     assert_eq!(spots.as_array().unwrap().iter().filter(|s| s["what"] == "nameplate").count(), 1, "{spots}");
+    // the plaster's foot sheds: debris in front of it, each with its loss potential (raea-sys-damage)
+    assert!(spots.as_array().unwrap().iter().any(|s| s["what"] == "debris" && s["loss"].as_f64().is_some_and(|l| l >= 0.5)), "{spots}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
