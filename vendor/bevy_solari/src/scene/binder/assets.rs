@@ -51,8 +51,12 @@ pub struct GpuMaterial {
     uv_transform_t: Vec2,
     // raea: StandardMaterial's diffuse_transmission, for a ray's light through a leaf or a curtain (brdf.wesl)
     diffuse_transmission: f32,
-    padding: f32,
+    // raea: MATERIAL_* below
+    flags: u32,
 }
+
+// raea: GpuMaterial's flags (bindings.wesl MATERIAL_*): StandardMaterial's double_sided, so a ray shades a back face
+pub const MATERIAL_DOUBLE_SIDED: u32 = 1;
 
 // raea: how a traced ray treats a material's alpha (bindings.wesl's alpha_accepts)
 pub const ALPHA_OPAQUE: u32 = 0;
@@ -246,7 +250,7 @@ impl AssetState {
                 uv_transform_xy: Vec4::new(uv.matrix2.x_axis.x, uv.matrix2.x_axis.y, uv.matrix2.y_axis.x, uv.matrix2.y_axis.y),
                 uv_transform_t: uv.translation,
                 diffuse_transmission: material.diffuse_transmission.clamp(0.0, 1.0),
-                padding: 0.0,
+                flags: if material.double_sided { MATERIAL_DOUBLE_SIDED } else { 0 },
             },
         );
         // raea: a material that turns see-through (or back) moves its instances between the TLAS masks

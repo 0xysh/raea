@@ -192,6 +192,9 @@ fn generate_initial_path(world_position: vec3<f32>, world_normal: vec3<f32>, mat
             generate_emissive_candidate(&path, ray_hit, next_bounce.wi, p_brdf, ray.t, p_nee, di_samples, bounce, rng);
         }
 
+        // raea: a closed solid's inside (face_hit): dark, nothing more to find
+        if !hit_front && !ray_hit.back_lit { break; }
+
         // Try terminating into the world cache
         if terminate_into_cache(&path, ray_hit, next_bounce.wi, ray.t, p_brdf, bounce, workgroup_id, rng) {
             break;

@@ -102,6 +102,7 @@ fn pathtrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
             // raea: a hit seen from its back shaded as its front (bindings.wesl face_hit); its light only from its front,
             // as light sampling finds it
             let hit_front = dot(ray_hit.geometric_world_normal, wo) >= 0.0;
+            if !hit_front && !ray_hit.back_lit { break; }
             ray_hit = face_hit(ray_hit, wo);
             let NdotV = max(dot(ray_hit.world_normal, wo), 0.0001);
             let F_ab = F_AB(ray_hit.material.perceptual_roughness, NdotV);

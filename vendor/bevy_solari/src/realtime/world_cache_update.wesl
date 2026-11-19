@@ -44,8 +44,11 @@ fn sample_gi(@builtin(workgroup_id) workgroup_id: vec3<u32>, @builtin(global_inv
     let ray_direction = sample_cosine_hemisphere(geometry_data.world_normal, &rng);
     let ray = trace_ray(geometry_data.world_position + (geometry_data.world_normal * RAY_T_MIN), ray_direction, RAY_T_MIN, constants.world_cache_max_gi_ray_distance, RAY_FLAG_NONE);
     if ray.kind != RAY_QUERY_INTERSECTION_NONE {
-        // raea: a hit seen from its back as its front (bindings.wesl face_hit): its own cell, its light from its side
-        let ray_hit = face_hit(resolve_ray_hit_full(ray), -ray_direction);
+        // raea: a hit seen from its back as its front (bindings.wesl face_hit): its own cell, its light from its side; a
+        // closed solid's inside is dark, a sample of nothing
+        let unfaced = resolve_ray_hit_full(ray);
+        if dot(unfaced.geometric_world_normal, ray_direction) > 0.0 && !unfaced.back_lit { return; }
+        let ray_hit = face_hit(unfaced, -ray_direction);
         let cell_life = atomicLoad(&world_cache.life[cell_index]);
         let cached = query_world_cache_found(ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position, ray.t, cell_life, &rng);
         // raea: a hit whose cell holds no light yet is no sample for a cell that has light: this update is skipped

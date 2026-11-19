@@ -63,8 +63,12 @@ struct Material {
     uv_transform_t: vec2<f32>,
     // raea: StandardMaterial's diffuse_transmission: the share of the diffuse light let through to the far side
     diffuse_transmission: f32,
-    padding: f32,
+    // raea: MATERIAL_* (assets.rs)
+    flags: u32,
 }
+
+// raea: StandardMaterial's double_sided (assets.rs MATERIAL_DOUBLE_SIDED)
+const MATERIAL_DOUBLE_SIDED = 1u;
 
 const TEXTURE_MAP_NONE = 0xFFFFFFFFu;
 
@@ -103,7 +107,8 @@ fn facing_normal(world_normal: vec3<f32>, geometric_world_normal: vec3<f32>, wo:
 // normals turned toward the ray, as raster turns a double-sided material's. A ray found a back face black before (its
 // BRDF has nothing below the normal), in the path tracer and in Solari alike. Light passes a thin surface by its
 // material's diffuse_transmission (brdf.wesl), never by which side was hit. Emission stays one-sided, as light sampling
-// has it: a caller checks the side before the turn
+// has it: a caller checks the side before the turn. Only a two-sided hit (back_lit) is shaded from behind; a caller
+// ends a path at any other back face, the inside of a closed solid, as before
 fn face_hit(hit: ResolvedRayHitFull, wo: vec3<f32>) -> ResolvedRayHitFull {
     var faced = hit;
     if dot(faced.geometric_world_normal, wo) < 0.0 {
@@ -306,6 +311,11 @@ struct ResolvedRayHitFull {
     world_normal: vec3<f32>,
     geometric_world_normal: vec3<f32>,
     world_tangent: vec4<f32>,
+    // raea: whether its back is lit as its front: a double-sided material (a sheet, a leaf, a curtain) or one passing
+    // light through (diffuse transmission). Any other material is a closed solid's outside, whose inside (found only by a
+    // ray started within a hair of a contact) is dark: a path there ends, as raster's back-face culling has it, rather
+    // than bounce round a white sphere's inside a hundred times for nothing
+    back_lit: bool,
     uv: vec2<f32>,
     triangle_area: f32,
     triangle_count: u32,
@@ -423,6 +433,7 @@ fn resolve_triangle_data_full(instance_id: u32, triangle_id: u32, barycentrics: 
         world_normal,
         geometric_world_normal,
         world_tangent,
+        (material.flags & MATERIAL_DOUBLE_SIDED) != 0u || material.diffuse_transmission > 0.0,
         uv,
         triangle_area,
         instance_geometry_ids.triangle_count,
