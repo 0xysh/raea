@@ -70,12 +70,7 @@ pub fn ffmpeg_tool(name: &str, fetch: bool) -> Result<PathBuf, String> {
     let members = [format!("{top}/bin/ffmpeg.exe"), format!("{top}/bin/ffprobe.exe"), format!("{top}/LICENSE")];
     let part = dir.with_file_name(format!("ffmpeg.part{}", std::process::id()));
     let fetched = fetch_archive(&part, &url, &name_zip, FFMPEG_SUM, true, &members.each_ref().map(String::as_str));
-    if fetched.is_ok() && !bin.is_file() {
-        let _ = std::fs::rename(&part, &dir);
-    }
-    let _ = std::fs::remove_dir_all(&part);
-    fetched?;
-    if bin.is_file() { Ok(bin) } else { Err(format!("couldn't put FFmpeg in {}", dir.display())) }
+    settle(&part, &dir, &bin, fetched, "FFmpeg")
 }
 
 /// The Python of the venv in an install folder: .venv/bin/python, or .venv\Scripts\python.exe on Windows
@@ -113,12 +108,29 @@ pub fn uv() -> Result<PathBuf, String> {
     let part = dir.with_file_name(format!("uv.part{}", std::process::id()));
     let url = format!("https://github.com/astral-sh/uv/releases/download/{UV}/{name}");
     let fetched = fetch_archive(&part, &url, &name, sum, os != "windows", &[]);
+    settle(&part, &dir, &bin, fetched, "uv")
+}
+
+/// A fetch's end: its `part` folder moved in as `dir` when it's whole and nothing got there first, the part removed,
+/// and, once the tool is in place, the parts stopped fetches left beside it swept (`NAME.part<pid>`, from a Ctrl+C or
+/// a killed process: FFmpeg's held a 114 MB zip, and each run made a new one). A part another process is still
+/// writing stays on Windows, where its open file can't be removed; elsewhere that fetch fails and finds the tool in
+/// place, which counts as done.
+fn settle(part: &Path, dir: &Path, bin: &Path, fetched: Result<(), String>, what: &str) -> Result<PathBuf, String> {
     if fetched.is_ok() && !bin.is_file() {
-        let _ = std::fs::rename(&part, &dir);
+        let _ = std::fs::rename(part, dir);
     }
-    let _ = std::fs::remove_dir_all(&part);
+    let _ = std::fs::remove_dir_all(part);
+    if bin.is_file() {
+        let stale = dir.file_name().map(|n| format!("{}.part", n.to_string_lossy())).unwrap_or_default();
+        let beside = dir.parent().map(std::fs::read_dir).into_iter().flatten().flatten().flatten();
+        for e in beside.filter(|e| !stale.is_empty() && e.file_name().to_string_lossy().starts_with(&stale)) {
+            let _ = std::fs::remove_dir_all(e.path());
+        }
+        return Ok(bin.to_path_buf());
+    }
     fetched?;
-    if bin.is_file() { Ok(bin) } else { Err(format!("couldn't put uv in {}", dir.display())) }
+    Err(format!("couldn't put {what} in {}", dir.display()))
 }
 
 /// A release archive `name` from `url` downloaded into `part` with curl (resumed across its tries: a dropped connection
@@ -174,4 +186,43 @@ pub fn run_setup(script: &Path, var: &str, dir: &Path) -> Result<std::process::E
         c
     };
     cmd.env(var, dir).stdout(std::io::stderr()).status().map_err(|e| format!("{}: {e}", py.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // a fetch's end sweeps the parts stopped fetches left beside its tool, and only those
+    #[test]
+    fn settle_sweeps_stopped_fetches() {
+        let root = std::env::temp_dir().join(format!("raea-settle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (dir, bin) = (root.join("ffmpeg"), root.join("ffmpeg").join("bin").join("ffmpeg"));
+        let mk = |p: &Path, f: &str| {
+            std::fs::create_dir_all(p).unwrap();
+            std::fs::write(p.join(f), b"x").unwrap();
+        };
+        // two stopped fetches (one with its zip), another tool's part, and this run's finished part
+        mk(&root.join("ffmpeg.part111"), "ffmpeg-9.0.2-essentials_build.zip");
+        mk(&root.join("ffmpeg.part222"), "x");
+        mk(&root.join("uv.part333"), "x");
+        let part = root.join("ffmpeg.part444");
+        mk(&part.join("bin"), "ffmpeg");
+        assert_eq!(settle(&part, &dir, &bin, Ok(()), "FFmpeg").unwrap(), bin);
+        assert!(bin.is_file(), "the part moved in");
+        for gone in ["ffmpeg.part111", "ffmpeg.part222", "ffmpeg.part444"] {
+            assert!(!root.join(gone).exists(), "{gone} swept");
+        }
+        assert!(root.join("uv.part333").exists(), "another tool's part kept");
+        // a fetch that failed but finds the tool in place (another process put it there) is done, its part removed
+        let late = root.join("ffmpeg.part555");
+        mk(&late, "half.zip");
+        assert_eq!(settle(&late, &dir, &bin, Err("curl failed".into()), "FFmpeg").unwrap(), bin);
+        assert!(!late.exists());
+        // a failure with no tool says so
+        let none = root.join("none");
+        let err = settle(&root.join("none.part1"), &none, &none.join("bin").join("x"), Err("curl failed".into()), "x").unwrap_err();
+        assert_eq!(err, "curl failed");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
