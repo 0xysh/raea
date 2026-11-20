@@ -127,8 +127,8 @@ cargo build --release -p raea-cli     # the binary is target/release/raea
 | System | Status |
 |---|---|
 | macOS on Apple Silicon | Supported |
-| Linux on x86_64 | Supported. raea needs ALSA and fontconfig (Ubuntu 24.04 and Debian: `apt install libasound2t64 libfontconfig1`; `libasound2` before 24.04). An app's window needs a display (X11, Wayland, or Xvfb on a server) |
-| Windows 10 and 11 on x86_64 | Supported through `install.ps1` |
+| Linux on x86_64 | Supported, on a processor with AVX (most from 2011 on) and glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 and later). raea needs ALSA and fontconfig (Ubuntu 24.04 and Debian: `apt install libasound2t64 libfontconfig1`; `libasound2` before 24.04). An app's window needs a display (X11, Wayland, or Xvfb on a server) |
+| Windows 10 and 11 on x86_64 | Supported through `install.ps1`, on any x86_64 processor |
 | Intel Macs, Linux on ARM | Not yet |
 
 raea draws on the GPU through Metal on the Mac, Vulkan on Linux, and DirectX 12 or Vulkan on Windows. Intel graphics

@@ -176,6 +176,8 @@ the adopt-0.20 pass (2026-10-22); stills in that pass's report. Anything not lis
   its formats), so a base colour would be averaged in gamma, not linear light; panels need premultiplied averages; and
   CompressedImageSaver runs only in Bevy's asset processing (lossy BC7/ASTC through ctt), not on images loaded at run
   time. Goes for baked assets once lightspeed's bake (F5) runs CompressedImageSaver; mip_chain stays for run-time images.
+  Its feature (compressed_image_saver) is out of the build since 0.1.8: ctt's AVX2 encoders run C++ initializers before
+  main on any CPU, so the bake has to bring it back without them (sdk/raea/docs/bevy-plugins.md).
 - rt.rs (the traced-AO and passes' BLAS/TLAS) beside bevy_solari's scene layer. Solari's binder skips any mesh that
   isn't u32-indexed with exactly position, normal, UV0 and tangent and `enable_raytracing` (raea's own shapes are
   unindexed), and writes ray mask 0xFF on every instance (rt.rs's CASTS bit keeps NotShadowCaster stand-ins out of sun
