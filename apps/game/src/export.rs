@@ -32,6 +32,11 @@ pub const USAGE: &str = "raea export-game EDIT.tsx -o OUT [--target mac-app|mac-
 
 /// `raea export-game EDIT.tsx -o OUT ...`
 pub fn export(args: &[String]) -> R<String> {
+    // its targets are a Mac's, signed with codesign, and raea's Windows and Linux releases carry no game player: there
+    // it said "no player ... (build it: cargo build ...)", which a person can't act on
+    if !cfg!(target_os = "macos") {
+        return Err("raea export-game makes a Mac game (an .app or a command) and runs on a Mac; Windows and Linux games aren't there yet (sdk/react/docs/game-export.md)".into());
+    }
     let usage = USAGE;
     let tsx = PathBuf::from(args.get(1).filter(|a| !a.starts_with("--")).ok_or(usage)?);
     let tsx = dunce::canonicalize(&tsx).map_err(|e| format!("{}: {e}", tsx.display()))?;
