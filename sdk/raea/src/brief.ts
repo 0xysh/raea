@@ -7,13 +7,14 @@
 //
 // The types are generated from the Rust schemas (core/brief, raea-core-brief) into brief.gen.ts, so what tsc checks is
 // what raea reads: `raea context` evaluates the module and Rust validates its default export again.
-import type { Brief, Plan, Script, Taste } from "./brief.gen";
+import type { Brief, Parts, Script, Taste } from "./brief.gen";
 
 export type * from "./brief.gen";
 export { fingerprint } from "./fingerprint";
 export type { Applies, Axis, Fingerprint, Modality } from "./fingerprint";
 
-/** A project's brief (brief.ts): what to make, for whom, the one thing to believe, its deliverables and staged tasks. */
+/** A project's brief (brief.ts): what to make, for whom, the one thing to believe and its deliverables. Its tasks are
+ *  the project's plan.org (docs/plan.feature PL8a). */
 export const brief = (b: Brief): Brief => b;
 /** A storyboard or a screenplay (script.ts): scenes, beats, lines, camera and cut. */
 export const script = (s: Script): Script => s;
@@ -22,5 +23,5 @@ export const script = (s: Script): Script => s;
  *  (`"loudness"`), or the project's own by its path from this file (`"../checks/clear.ts"`), with its `values`.
  *  `raea check` runs every one that applies. */
 export const taste = (t: Taste): Taste => t;
-/** An object's plan (plan.ts): its parts by name, levels, counts, materials. */
-export const plan = (p: Plan): Plan => p;
+/** An object's parts (NAME.parts.ts), written before any geometry: each by name, its level, count and material. */
+export const parts = (p: Parts): Parts => p;

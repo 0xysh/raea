@@ -83,14 +83,17 @@ fn doctor_connects_a_projects_files() {
     std::fs::write(d.join("loose.tsx"), "export const Loose = () => null;\n").unwrap();
     std::fs::create_dir_all(d.join("controllers")).unwrap();
     std::fs::write(d.join("controllers/pace.ts"), "import { controller } from \"raea/brief\";\nexport default controller({ title: \"Pace\", fields: {} });\n").unwrap();
+    std::fs::write(d.join("brief.ts"), "import { brief } from \"raea/brief\";\nexport default brief({\n  title: \"Old\",\n  stages: [{ name: \"\", tasks: [{ text: \"Write the plan\" }] }],\n});\n").unwrap();
     let found = doctor::registry_findings(&d);
     let says: Vec<&String> = found.iter().map(|f| &f.says).collect();
     assert_eq!(found.len(), 1, "{says:?}");
     assert!(says[0].contains("loose.tsx:1: isn't a composition") && !found[0].fixable(), "{says:?}");
     // a controller from before 11-20 is told where its parts go, and kept
     let out = doctor::doctor(&["--fix".into(), d.display().to_string()], &[], "0.0.1", &|_| Ok(String::new())).unwrap();
-    assert!(out.starts_with("APPLIED  2 of 4 fixed") && out.contains("controllers/pace.ts: a controller, which raea no longer reads") && out.contains("taste.ts"), "{out}");
-    assert!(d.join("controllers/pace.ts").is_file(), "nothing of the person's is deleted");
+    assert!(out.starts_with("APPLIED  2 of 5 fixed") && out.contains("controllers/pace.ts: a controller, which raea no longer reads") && out.contains("taste.ts"), "{out}");
+    // a brief's old tasks are said to belong in plan.org (docs/plan.feature PL8a), and kept
+    assert!(out.contains("brief.ts: keeps tasks in `stages`") && out.contains("plan.org"), "{out}");
+    assert!(d.join("controllers/pace.ts").is_file() && std::fs::read_to_string(d.join("brief.ts")).unwrap().contains("stages"), "nothing of the person's is deleted");
     let _ = std::fs::remove_dir_all(&d);
 }
 

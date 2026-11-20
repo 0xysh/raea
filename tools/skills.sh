@@ -205,7 +205,7 @@ gen_files() {
     echo "## The spec files"
     echo
     echo "Each spec's fields, as raea/brief's types (sdk/raea/src/brief.gen.ts, generated from the schemas in core/brief that"
-    echo "\`raea spec\` checks against): brief.ts is a Brief, NAME.script.ts a Script, taste.ts a Taste and plan.ts a Plan."
+    echo "\`raea spec\` checks against): brief.ts is a Brief, NAME.script.ts a Script, taste.ts a Taste and NAME.parts.ts an object's Parts."
     echo "A field marked ? may be left out."
     echo
     echo '```ts'

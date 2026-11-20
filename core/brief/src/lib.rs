@@ -1,15 +1,15 @@
 //! What an agent writes for raea, as Rust types: a project's brief, a script (storyboard or screenplay), a person's
-//! taste and an object's plan. The agent writes them as TypeScript modules (docs/handoff/authoring.md); `raea run`
+//! taste and an object's parts. The agent writes them as TypeScript modules (docs/handoff/authoring.md); `raea run`
 //! evaluates one, and its default export arrives here as JSON. The TypeScript declarations are generated from these
 //! types (`declarations`), so what tsc checks is exactly what this crate reads.
 
 pub mod brief;
-pub mod plan;
+pub mod parts;
 pub mod script;
 pub mod taste;
 
 pub use brief::Brief;
-pub use plan::Plan;
+pub use parts::Parts;
 pub use script::Script;
 pub use taste::Taste;
 
@@ -32,10 +32,10 @@ pub fn declarations() -> String {
     let cfg = Config::new();
     let mut out = vec!["// Generated from raea-core-brief (core/brief) by its `declarations`; edit the Rust, not this.".to_string()];
     out.extend(decls!(cfg;
-        brief::Brief, brief::Section, brief::Deliverable, brief::Reference, brief::Stage, brief::Mark, brief::Task, brief::Agent,
+        brief::Brief, brief::Section, brief::Deliverable, brief::Reference, brief::Agent,
         script::Script, script::Scene, script::Beat, script::Line,
         taste::Taste, taste::TasteSection, taste::Rule, taste::RuleCheck, taste::RuleLevel, taste::Check,
-        plan::Plan, plan::Concept, plan::Level, plan::Count, plan::Part,
+        parts::Parts, parts::Concept, parts::Level, parts::Count, parts::Part,
     ));
     out.join("\n\n") + "\n"
 }
