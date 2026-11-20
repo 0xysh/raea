@@ -11,8 +11,12 @@ pub(crate) const FULL: f32 = 0.999;
 pub(crate) const FLAT_LEVEL: f32 = 0.05;
 pub(crate) const CLIP_RUNS: usize = 3;
 
-pub(crate) fn clipped(x: &[f32]) -> Vec<(f64, String)> {
-    let mut per: Vec<usize> = vec![0; x.len() / SR + 1];
+pub(crate) fn clipped(channels: &[Vec<f32>]) -> Vec<(f64, String)> {
+    let len = channels.iter().map(Vec::len).max().unwrap_or(0);
+    let mut per: Vec<usize> = vec![0; len / SR + 1];
+    // each channel's runs, a second's count the most any channel had: clipping is a channel's
+    for x in channels {
+    let mut own: Vec<usize> = vec![0; len / SR + 1];
     let mut i = 0;
     while i < x.len() {
         let v = x[i];
@@ -22,17 +26,21 @@ pub(crate) fn clipped(x: &[f32]) -> Vec<(f64, String)> {
                 j += 1;
             }
             if j - i >= 3 {
-                per[i / SR] += 1;
+                own[i / SR] += 1;
             }
         } else if v.abs() >= FLAT_LEVEL {
             while j < x.len() && x[j].to_bits() == v.to_bits() {
                 j += 1;
             }
             if j - i >= 4 {
-                per[i / SR] += 1;
+                own[i / SR] += 1;
             }
         }
         i = j;
+    }
+    for (p, o) in per.iter_mut().zip(own) {
+        *p = (*p).max(o);
+    }
     }
     let mut out = Vec::new();
     let mut s = 0;
@@ -123,20 +131,28 @@ fn lumas(video: &str) -> R<(Vec<f32>, f64)> {
     if !out.status.success() {
         return Err(format!("ffmpeg couldn't read the picture of {video}: {}", String::from_utf8_lossy(&out.stderr).trim()));
     }
-    let l = out.stdout.as_chunks::<{ 32 * 18 }>().0.iter().map(|f| f.iter().map(|&p| p as f32).sum::<f32>() / (32.0 * 18.0 * 255.0)).collect();
+    Ok((crate::read::once::lumas_of(&out.stdout), ffmpeg_rate(video)?))
+}
+
+/// The frame rate `ffmpeg -i` says
+pub(crate) fn ffmpeg_rate(video: &str) -> R<f64> {
     let rate = ffmpeg_stderr(&["-hide_banner", "-i", video])?;
-    let fps = rate.split(" fps").next().and_then(|s| s.rsplit(", ").next()).and_then(|s| s.trim().parse().ok()).unwrap_or(30.0);
-    Ok((l, fps))
+    Ok(rate.split(" fps").next().and_then(|s| s.rsplit(", ").next()).and_then(|s| s.trim().parse().ok()).unwrap_or(30.0))
 }
 
 pub(crate) fn flash_frame_rule(video: &str, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
     let (l, fps) = lumas(video)?;
-    let found = flash_frames(&l, fps);
+    flash_frame_from(&l, fps, issues, passed);
+    Ok(())
+}
+
+/// The stray frames each frame's brightness shows
+pub(crate) fn flash_frame_from(l: &[f32], fps: f64, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+    let found = flash_frames(l, fps);
     if found.is_empty() {
         passed.push("flash-frame: no stray black or white frame".into());
     }
     issues.extend(moments("flash-frame", 1, found));
-    Ok(())
 }
 
 /// Each moment a rule found, as an issue of that priority
@@ -145,8 +161,8 @@ pub(crate) fn moments(rule: &'static str, p: u8, found: Vec<(f64, String)>) -> i
 }
 
 /// The sound's defects on the decoded mix (sound.rs decodes it once)
-pub(crate) fn sound_defects(x: &[f32], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
-    for (rule, found, ok) in [("clipping", clipped(x), "clipping: no flat-topped runs"), ("dropout", dropouts(x), "dropout: the sound never drops to silence and back")] {
+pub(crate) fn sound_defects(x: &[f32], channels: &[Vec<f32>], issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+    for (rule, found, ok) in [("clipping", clipped(channels), "clipping: no flat-topped runs"), ("dropout", dropouts(x), "dropout: the sound never drops to silence and back")] {
         if found.is_empty() {
             passed.push(ok.into());
         }

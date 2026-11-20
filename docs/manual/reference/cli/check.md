@@ -27,6 +27,13 @@ the platform's buttons, captions held too briefly and caption contrast. The tran
 word and music fighting the voice; the perception adds text over a face. A taste file adds the person's own rules,
 each an error when broken, since their rule beats the floor's default.
 
+On a render made in a raea project, the check also uses the project's record. A finding an earlier export of the
+same composition had at the same moment ends `[also in …]`: the change between them didn't move it, so don't do that
+again; try something else, or say why it stands. A rule an encode can cause (blotching) is measured again on the
+composition drawn without encoding, so what the footage already holds is a note and only what the encode added is an
+error. A take or a download under the project's `assets/` or `media/` is a source, not a delivery: its loudness is
+reported as a note, since the mix sets the delivery's level.
+
 ## Every rule a project holds
 
 On a project, or a composition's file, with no `--quick`, `raea check` runs every rule that applies to each

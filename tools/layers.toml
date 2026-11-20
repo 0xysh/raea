@@ -50,6 +50,7 @@ raea-core-calls = "core"
 raea-core-brief = "core"
 raea-sys-k = "systems"
 raea-sys-mix = "systems"
+raea-sys-mix-level = "systems"
 raea-sys-tone = "systems"
 raea-seedling = "systems"
 raea-sys-ml = "systems"
@@ -178,9 +179,11 @@ raea-runtime-scene2d = "runtime"
 raea-runtime-shared = "runtime"
 raea-page = "runtime"
 raea-app-check = "apps"
+raea-app-check-cause = "apps"
 raea-app-check-flash = "apps"
 raea-app-check-inbox = "apps"
 raea-app-check-read = "apps"
+raea-app-check-text = "apps"
 raea-app-direction = "apps"
 raea-app-notes = "apps"
 # `raea fingerprint`: its verbs and the resident service that keeps the encoders loaded
@@ -261,6 +264,8 @@ raea-sys-volume = true
 # the scene's ray tracing (the traced-light pass reads its scene)
 raea-sys-rt = true
 raea-sys-mix = true
+# the mix before the master: dialogue at one level, room tone at the joins (the mix masters what it gives)
+raea-sys-mix-level = true
 raea-sys-tone = true
 raea-sys-ml = true
 raea-sys-mlx = true

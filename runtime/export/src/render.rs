@@ -150,15 +150,35 @@ fn with_exposure(said: String, out: &Path, manifest: Option<&Path>) -> String {
         return said;
     }
     match raea_sys_light_meter::exposure::of_pngs(&pngs) {
-        Ok((e, v)) => {
-            let fs = raea_sys_light_meter::exposure::said(&v); // counted with the render's other findings (DR3)
-            if let Some(m) = manifest {
-                if let Ok(mut doc) = std::fs::read_to_string(m).map_err(|e| e.to_string()).and_then(|t| serde_json::from_str::<serde_json::Value>(&t).map_err(|e| e.to_string())) {
-                    if let Some(o) = doc.as_object_mut() {
-                        o.insert("exposure".into(), v.clone());
-                        let _ = std::fs::write(m, doc.to_string());
+        Ok((e, mut v)) => {
+            // a frame of the page's own fill (no 3D, no footage: a brand card's ground) is lit by design, so the 3D lighting
+            // advice is measured, not said; a frame with footage keeps it (a clip that drew black). 11-19: a logo card's warn
+            let doc: Option<serde_json::Value> = manifest.and_then(|m| std::fs::read_to_string(m).ok()).and_then(|t| serde_json::from_str(&t).ok());
+            if let Some(d) = doc.as_ref().filter(|d| d["has3d"] == false) {
+                let frames = d["frames"].as_array().cloned().unwrap_or_default();
+                fn fill(f: &serde_json::Value) -> bool {
+                    f["videos"].as_array().is_none_or(Vec::is_empty)
+                }
+                let mut names: Vec<String> = Vec::new();
+                if pngs.len() == 1 && frames.len() == 1 && fill(&frames[0]) {
+                    names.push("the frame".into());
+                } else if pngs.len() == frames.len() {
+                    for (p, f) in pngs.iter().zip(&frames) {
+                        if let (true, Some(n)) = (fill(f), p.file_name()) {
+                            names.push(n.to_string_lossy().into_owned());
+                        }
                     }
                 }
+                if let Some(found) = v["found"].as_array_mut() {
+                    found.retain(|f| !names.iter().any(|n| f["says"].as_str().is_some_and(|s| s.starts_with(&format!("{n}:")))));
+                }
+            }
+            let fs = raea_sys_light_meter::exposure::said(&v); // counted with the render's other findings (DR3)
+            if let (Some(m), Some(mut doc)) = (manifest, doc)
+                && let Some(o) = doc.as_object_mut()
+            {
+                o.insert("exposure".into(), v.clone());
+                let _ = std::fs::write(m, doc.to_string());
             }
             let mut msg = format!("{said}\nEXPOSURE  {}", e.line());
             for f in &fs {

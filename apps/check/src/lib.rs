@@ -22,8 +22,10 @@ mod flash;
 use flash::*;
 mod defects;
 use defects::*;
-mod text;
-use text::*;
+/// what a render's text breaks, from its manifest (split out: a render holds its own text to it)
+use raea_app_check_text::*;
+/// who can fix what it finds: the encode's or the picture's own, carried from an earlier export, a source
+use raea_app_check_cause as cause;
 /// a video read through FFmpeg, or raea's own decoders where it isn't installed
 use raea_app_check_read::{self as read, Probe};
 pub mod quick;
@@ -32,15 +34,6 @@ pub use raea_app_check_inbox as inbox;
 #[cfg(test)]
 mod tests;
 
-type R<T> = Result<T, String>;
-
-#[derive(Clone)]
-struct Issue {
-    rule: &'static str,
-    p: u8,
-    at: Option<f64>,
-    says: String,
-}
 
 /// `raea check …` with the person's taste, none or more (taste.ts and the kinds beside it, which the raea CLI evaluates: it owns the engine):
 /// its rules' checks hold the export to the person's own lines.
@@ -159,13 +152,16 @@ fn measured(args: &[String], taste: Vec<Taste>) -> R<(String, Vec<Issue>, Vec<St
         loudness(&video, taste_of(&taste, "loudness"), &mut issues, &mut passed)?;
         sound(&video, words.as_deref(), &mut issues, &mut passed)?;
     }
-    freezes(&video, &probe, taste_of(&taste, "still-max"), &mut issues, &mut passed)?;
-    flashing(&video, &probe, &mut issues, &mut passed)?;
-    flash_frame_rule(&video, &mut issues, &mut passed)?;
-    blotching(&video, &probe, &mut issues, &mut passed)?;
+    picture_rules(&video, &probe, taste_of(&taste, "still-max"), &mut issues, &mut passed)?;
     brand_kit(&[flag(args, "--manifest").unwrap_or(""), video.as_str()], &mut issues, &mut passed);
     if let Some(p) = flag(args, "--things") {
         things(p, &mut issues, &mut passed)?;
+    }
+    // a take or a download isn't a delivery: the mix sets the delivery's level, so its own is said, not held to the target
+    if cause::is_source(std::path::Path::new(&video)) {
+        for i in issues.iter_mut().filter(|i| i.rule == "loudness") {
+            (i.p, i.says) = (3, format!("a source, not a delivery: {} (the mix sets the delivery's level)", i.says));
+        }
     }
     if let Some(manifest) = &manifest {
         let runs = text_runs(manifest);
@@ -204,19 +200,17 @@ fn things(p: &str, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
 /// `fps`), with `more` (a render's own), worst first then by time.
 fn findings_of(mut issues: Vec<Issue>, more: Vec<Finding>, fps: f64) -> Vec<Finding> {
     issues.sort_by(|a, b| a.p.cmp(&b.p).then(a.at.unwrap_or(0.0).total_cmp(&b.at.unwrap_or(0.0))));
-    let mut found = Vec::new();
-    for i in &issues {
-        // an issue at a second is about the frame it falls on
-        let (f, fr) = (Finding::new(i.rule, Level::of_rank(i.p), &i.says, "raea check"), (i.at.unwrap_or(0.0) * fps).round() as i64);
-        found.push(if i.at.is_some() { f.frames(fr, fr + 1) } else { f });
-    }
-    finding::ranked(found.into_iter().chain(more).collect())
+    finding::ranked(issues.iter().map(|i| i.finding("raea check", fps)).chain(more).collect())
 }
 
 /// The findings (`findings_of`), written to -o as JSON when asked, and the report's text with the count last. True
 /// when an error is among them.
 fn report(video: &str, issues: Vec<Issue>, more: Vec<Finding>, passed: Vec<String>, out: Option<&str>, fps: f64) -> R<(String, bool)> {
-    let found = findings_of(issues, more, fps);
+    let mut found = findings_of(issues, more, fps);
+    // what an earlier export of the same composition already had says so: the change between them didn't move it
+    if let Some(e) = cause::earlier(std::path::Path::new(video)) {
+        cause::carried(&mut found, &e, fps);
+    }
     let bad = found.iter().any(|f| f.level == Level::Error);
     if let Some(out) = out {
         let j = json!({"file": video, "fps": fps, "findings": found, "passed": passed});

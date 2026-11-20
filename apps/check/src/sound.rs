@@ -162,17 +162,9 @@ pub(crate) fn bed_up(rms: &[f64], speak: &[bool]) -> Vec<(f64, String)> {
 /// The sound's rules on an export: dead stops always; with the voice's words, a stretch with no voice over it and a bed
 /// too close under it
 pub(crate) fn sound(video: &str, words: Option<&[Word]>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) -> R<()> {
-    let x = if crate::read::native() {
-        crate::read::mono(video, SR as u32)?
-    } else {
-        let out = Command::new("ffmpeg").args(["-v", "error", "-i", video, "-vn", "-ac", "1", "-ar", &SR.to_string(), "-f", "f32le", "-"]).output().map_err(|e| format!("ffmpeg: {e}"))?;
-        if !out.status.success() {
-            return Err(format!("ffmpeg couldn't read the sound of {video}: {}", String::from_utf8_lossy(&out.stderr).trim()));
-        }
-        out.stdout.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
-    };
+    let x = crate::read::mono(video, SR as u32)?;
     let (rms, bands) = levels(&x);
-    sound_defects(&x, issues, passed);
+    sound_defects(&x, &crate::read::channels(video, SR as u32)?, issues, passed);
     let found = |list: Vec<(f64, String)>, p: u8| crate::defects::moments("sound", p, list);
     let stops = dead_stops(&rms, &bands);
     if stops.is_empty() {
@@ -273,7 +265,14 @@ pub(crate) fn freezes(video: &str, probe: &Probe, taste: Option<&Taste>, issues:
     } else {
         ffmpeg_stderr(&["-hide_banner", "-nostats", "-i", video, "-an", "-vf", &format!("freezedetect=n=-60dB:d={most}"), "-f", "null", "-"])?
     };
-    let stretches = frozen_stretches(&err, probe.picture);
+    freezes_from(&err, probe, taste, issues, passed);
+    Ok(())
+}
+
+/// The freezes freezedetect's lines found (`taste`'s still-max when the person set one, else 3 s)
+pub(crate) fn freezes_from(err: &str, probe: &Probe, taste: Option<&Taste>, issues: &mut Vec<Issue>, passed: &mut Vec<String>) {
+    let most = taste.map_or(3.0, |t| t.value);
+    let stretches = frozen_stretches(err, probe.picture);
     for &(s, d) in &stretches {
         let says = format!("nothing changes for {d:.1} s; give it a reason to hold, or cut it shorter");
         issues.push(match taste {
@@ -284,5 +283,4 @@ pub(crate) fn freezes(video: &str, probe: &Probe, taste: Option<&Taste>, issues:
     if stretches.is_empty() {
         passed.push(format!("frozen: nothing holds still for {most} s"));
     }
-    Ok(())
 }

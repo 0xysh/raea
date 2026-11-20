@@ -224,6 +224,9 @@ function useMediaAttrs(owner: string, props: MediaProps, src = props.src as stri
     "data-playback-rate": rate,
     "data-start-from": props.startFrom ?? props.trimBefore ?? 0,
     "data-end-at": props.endAt ?? props.trimAfter,
+    // the clip's span of its source in seconds, where raea's mix measures it to level dialogue (raea-sys-mix level.rs)
+    "data-clip-from": (props.startFrom ?? props.trimBefore ?? 0) / fps,
+    "data-clip-to": endAt === undefined ? undefined : endAt / fps,
     "data-loop": props.loop ? "true" : undefined,
     "data-muted": props.muted ? "true" : undefined,
     "data-ended": t.ended ? "true" : undefined,

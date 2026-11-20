@@ -54,8 +54,11 @@ By default the bitrate follows the size and frame rate: about 20 Mbit/s at 1080p
 `--quality` asks for constant quality: each frame gets the bits it needs, so a flat motion graphic stays small and a
 busy one stays clean.
 
-Blotchy dark areas come from the encoder, not the composition. Export dark material as PNG frames and encode them
-with more bits for the darks:
+Blotchy dark areas come from the encoder, or from the footage itself: a phone's own compression shows in its darks.
+When `raea check` finds them on a render made in a raea project, it draws the composition again at the frames it
+sampled, without encoding, and tells the two apart. The picture's own is a note, since no render setting removes it.
+What the encode added is the error, and `--quality master` gives the darks the bits they need. To hand dark material on
+as frames instead, export PNG frames:
 
 ```sh
 RAEA_READBACK=rgba raea render piece.tsx -o frames/
@@ -106,8 +109,14 @@ out of order, a phrase `word()` can't find, or a missing prop.
 
 ## Loudness
 
-When the composition has a `<Mix>`, the export comes out at -14 LUFS integrated (within 1) with true peak at or below
--1 dBTP, which is what the major platforms play back at.
+raea mixes and masters every render's sound. First the mix: each line of dialogue (a clip on the `voice` bus, or
+footage's own sound on no bus) is measured over the part of its take it plays and brought to the same level, so no line
+is louder or quieter than the next. Room tone and silent takes keep their level, and so do music, effects and anything
+on another bus, which sit under the dialogue as their buses set them. A clip's `gainDb` is an offset on top of the
+level. Then the master: a leveller rounds the loud passages, the whole piece comes up to its loudness, and a true-peak
+limiter holds it at the ceiling. A join that drops into dead silence gets the room's own tone. The export comes out at
+-14 LUFS integrated (within 1) with true peak at or below -1 dBTP, which is what the major platforms play back at;
+`<Mix lufs={…} ceiling={…}>` sets another target.
 
 ## Mistakes to avoid
 
