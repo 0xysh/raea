@@ -142,10 +142,15 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
     Scenario: AK4. The pool, through the app or an agent key
       Then raea-api's `/v1/clef/ask` takes sounds (up to 4 MP3s) beside stills and videos, says the pool left with
         each answer, and agent keys gain an `ask` scope that asks and can do nothing else
-      And the app's host answers `/host/ask` by adding its device token and passing the call on, or 409 when the
-        account has no pool, so the CLI goes on to the next route
+      And the app's host answers `/host/ask` by adding its device token and passing the call on, with the API's answer
+        back as it came: a plan with no pool (402 plan_required) or signed out (401) sends the CLI on to the next route
       And the app's critique and game check ask through `raea ask --json`, and their own clef code is gone
       And the app's agents get an `ask` tool (HOST) with `raea ask`'s inputs
+      Status 11-20: built, in review. raea-platform #16 (on #15): audio, the criteria clef takes, pool_left_usd and the
+        `ask` scope, with test/pool.sh reading what a fake clef was sent. raea-feed's feed-ask branch (on #98):
+        /host/ask, the `ask` tool, and the critique's judge on `raea ask --batch - --json` with `--brief none`, its
+        tests, typecheck and the protocol and hub tests passing. It's done when they merge and raea-api is deployed,
+        which waits on Shane's go.
 
   Rule: AK5. Standing questions in `raea check`
 

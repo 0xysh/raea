@@ -31,7 +31,7 @@ export interface AskEntry {
   window?: Window;
   /** files set beside it: to pick between, or a before and after */
   with?: string[];
-  /** the project's brief (else the nearest brief.ts above the file) */
+  /** the project's brief (else the nearest brief.ts above the file; "none": no brief, the state saying what the piece is) */
   brief?: string;
   /** a words file (a JSON list of the words heard), so ask knows what's said and whether anyone speaks */
   words?: string;

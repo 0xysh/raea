@@ -64,6 +64,9 @@ fn the_state_says_what_the_piece_is() {
         assert!(s.contains(want), "{want}: {s}");
     }
     assert_eq!(p.facts().modes, ["pitch"]);
+    // no brief and the caller's own state: the caller says what the piece is
+    let own = Piece { extra: Some("A game: \"Rover\".".into()), ..(*piece("a.mp4", None)).clone() };
+    assert_eq!(own.state(), "It runs 10 s. A game: \"Rover\".");
 }
 
 #[test]

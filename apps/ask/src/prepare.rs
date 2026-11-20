@@ -58,7 +58,12 @@ impl Piece {
     /// The piece as raea finds it: the file probed, its brief (given or the nearest), its words.
     pub fn read(file: &Path, brief: Option<&Path>, words: Option<&Path>, voice: Option<bool>, extra: Option<String>) -> Result<Piece, String> {
         let probe = media::probe(file)?;
-        let brief_file = brief.map(Path::to_path_buf).or_else(|| brief_near(file));
+        // "none": no brief, even with one near (a caller that writes the whole state itself, as the app's critique does)
+        let brief_file = match brief {
+            Some(p) if p.as_os_str() == "none" => None,
+            Some(p) => Some(p.to_path_buf()),
+            None => brief_near(file),
+        };
         let (words, heard) = match words {
             Some(w) => words_of(w).map(|(t, h)| (Some(t).filter(|t| !t.is_empty()), Some(h)))?,
             None => (None, None),
@@ -90,10 +95,13 @@ impl Piece {
         let b = &self.brief;
         let modes = self.modes();
         let what = if modes.is_empty() { "video".to_string() } else { modes.join(" and ") };
-        let mut s = vec![match b["title"].as_str() {
-            Some(t) => format!("A {what} piece: \"{t}\"."),
-            None => format!("A {what} piece."),
-        }];
+        // with no brief and the caller's own state, the caller says what the piece is
+        let briefless = b.as_object().is_none_or(|o| o.is_empty());
+        let mut s = match (b["title"].as_str(), briefless && self.extra.is_some()) {
+            (_, true) => vec![],
+            (Some(t), _) => vec![format!("A {what} piece: \"{t}\".")],
+            (None, _) => vec![format!("A {what} piece.")],
+        };
         for (k, say) in [("audience", "It's for"), ("believe", "It should leave them believing"), ("logline", "Its storyboard"), ("voice", "Its voice")] {
             if let Some(v) = b[k].as_str().filter(|v| !v.trim().is_empty()) {
                 s.push(format!("{say}: {}.", v.trim().trim_end_matches('.')));

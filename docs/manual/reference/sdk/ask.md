@@ -99,7 +99,7 @@ One file and what to ask of it: a line of `raea ask --batch`.
 | `std` | `string[]` | standard questions by id (`raea ask list` lists them) |
 | `window` | `Window` | the seconds to look at, for every question here (else each question's own, else the whole file) |
 | `with` | `string[]` | files set beside it: to pick between, or a before and after |
-| `brief` | `string` | the project's brief (else the nearest brief.ts above the file) |
+| `brief` | `string` | the project's brief (else the nearest brief.ts above the file; "none": no brief, the state saying what the piece is) |
 | `words` | `string` | a words file (a JSON list of the words heard), so ask knows what's said and whether anyone speaks |
 | `voice` | `boolean` | whether anyone speaks in it, when no words file says |
 | `state` | `string` | more for clef to read before the media: what raea measured, the platform |

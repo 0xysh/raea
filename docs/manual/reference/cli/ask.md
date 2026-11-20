@@ -45,7 +45,7 @@ calibrated later.
 ## Usage
 
 ```sh
-raea ask FILE [QUESTION...] [--choose A,B,C] [--grade] [--rate N] [--flag ANSWERS] [--set NAME] [--std ID] [--from S] [--to S] [--at S] [--with FILE2] [--brief brief.ts] [--words words.json] [--voice yes|no] [--state TEXT] [--dry] [--json] [--gate [any]] [--jobs N] | ask --batch FILE [--dry] [--json] [--gate [any]] [--jobs N] | ask list [SET] [--json]   (questions about a piece's picture and sound, answered by clef-omni and paid from your raea plan's pool when the app is signed in, else RAEA_AGENT_KEY's, else your own Cloudflare keys: your own words, or the standard sets (rubric, av, defects, platform, decide); every question about one clip goes in one call, --batch (a JSON list or JSON lines, - for stdin) asks many clips in parallel; --dry says what would be sent and spends nothing; answers are advice until a question is calibrated)
+raea ask FILE [QUESTION...] [--choose A,B,C] [--grade] [--rate N] [--flag ANSWERS] [--set NAME] [--std ID] [--from S] [--to S] [--at S] [--with FILE2] [--brief brief.ts|none] [--words words.json] [--voice yes|no] [--state TEXT] [--dry] [--json] [--gate [any]] [--jobs N] | ask --batch FILE [--dry] [--json] [--gate [any]] [--jobs N] | ask list [SET] [--json]   (questions about a piece's picture and sound, answered by clef-omni and paid from your raea plan's pool when the app is signed in, else RAEA_AGENT_KEY's, else your own Cloudflare keys: your own words, or the standard sets (rubric, av, defects, platform, decide); every question about one clip goes in one call, --batch (a JSON list or JSON lines, - for stdin) asks many clips in parallel; --dry says what would be sent and spends nothing; answers are advice until a question is calibrated)
 ```
 
 Headless: it needs nothing running and opens no window. Takes any number of arguments besides its flags.
@@ -56,13 +56,13 @@ Headless: it needs nothing running and opens no window. Takes any number of argu
 | --- | --- | --- |
 | `--at` | `S` | The three seconds around this moment: every question looks at that window. |
 | `--batch` | `FILE` | A file of entries to ask, a JSON list or JSON lines (`-` reads stdin); each is a file with its questions. |
-| `--brief` | `brief.ts` | The project's brief, so clef knows who it's for and what it should do (else the nearest brief.ts above the file). |
+| `--brief` | `brief.ts\|none` | The project's brief, so clef knows who it's for and what it should do (else the nearest brief.ts above the file; `none` for no brief, when `--state` says what the piece is). |
 | `--choose` | `A,B,C` | Your questions pick one of these options, rather than answering yes or no. |
 | `--dry` | – | Cut the media and print each call that would be made (its state, questions, media sizes) with an estimated cost, and send nothing. |
 | `--flag` | `ANSWERS` | The answers that mean a problem: `no` for a question where no is bad ("Is the logo readable?"), or a choice's options. |
 | `--from` | `S` | Where the window starts, in seconds. |
 | `--gate` | – | Exit 1 when a calibrated question flags, or questions wait for the pool; `--gate any` exits 1 when any question flags. |
-| `--grade` | – | Your questions answer on a graded scale (poor, weak, fair, good, excellent). |
+| `--grade` | – | Your questions answer on a graded scale (poor, weak, acceptable, strong, excellent). |
 | `--jobs` | `N` | How many calls go at once (4). |
 | `--json` | – | One JSON object a line: each answer, each call `--dry` would make, then the summary. |
 | `--rate` | `N` | Your questions answer with a score from 1 to N. |
