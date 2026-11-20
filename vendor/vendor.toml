@@ -105,7 +105,7 @@ exit = "anyrender's filter graph having both"
 path = "vendor/anyrender_svg"
 upstream = "crates.io:0.15.0"
 kind = "patch"
-reason = "SVG masks, filter effects (on raea-page's GPU passes) and patterns, drawn as error boxes upstream; drawings clipped to their viewport"
+reason = "SVG masks, filter effects (on raea-page's GPU passes) and patterns, drawn as error boxes upstream; drawings clipped to their viewport; a font-family whose first family isn't there kept (not_applied::fonts_missing) for the render to say as a warning, with the family drawn instead (raea #174)"
 exit = "anyrender_svg drawing these"
 
 [vello_encoding]

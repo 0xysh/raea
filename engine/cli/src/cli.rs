@@ -54,8 +54,8 @@ pub fn cli(args: &[String]) -> i32 {
                 let still = flag(args, "-o").map(PathBuf::from).filter(|o| o.is_file() && matches!(o.extension().and_then(|e| e.to_str()), Some("png" | "jpg" | "jpeg" | "webp")));
                 if let Some(o) = still { raea_io_media::sign::sign_file(&o, raea_io_media::sign::Made::Created); }
             }
-            // and once, what the page asked for and didn't get (#34: dropped CSS, loads that failed)
-            let said = raea_runtime_export::not_applied::said().filter(|_| args.first().is_some_and(|a| a == "render"));
+            // and once, what the page asked for and didn't get (#34: dropped CSS, loads that failed; #174: fonts)
+            let said = args.first().is_some_and(|a| a == "render").then(raea_runtime_export::render_said).flatten();
             for line in [msg].into_iter().chain(said).filter(|m| !m.is_empty()) {
                 println!("{line}");
             }

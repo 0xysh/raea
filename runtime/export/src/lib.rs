@@ -67,6 +67,19 @@ pub(crate) struct Sound {
 /// `render --manifest PATH` (the CLI's; render_bundle keeps its signature for the iPhone): where render.json goes.
 static MANIFEST: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
+/// What `raea render` says once its frames are out: the fonts the page asked for and didn't have (#174) as warnings,
+/// printed and counted with its findings (raea-app-direction's `rendered` keeps them in the manifest), and the note of
+/// what else it didn't apply (#34), returned for the render to print.
+pub fn render_said() -> Option<String> {
+    let fix = "load it with @font-face (a staticFile font), install it, or name a family that's there";
+    let fs: Vec<raea_core_facts::Finding> = not_applied::fonts_missing().into_iter().map(|says| raea_core_facts::Finding::new("font-missing", raea_core_facts::Level::Warn, says, "raea render").fix(fix)).collect();
+    for f in &fs {
+        eprintln!("raea: {}", f.line());
+    }
+    raea_core_facts::finding::said(&fs);
+    not_applied::said()
+}
+
 /// The manifest, its folder made first (2D stills write it before their frames): the composition's length in frames
 /// (whatever was rendered of it; raea check --quick samples by it, #86), boxes as drawn, findings, sounds, and whether
 /// it drew 3D (an export in layers draws the 3D in the layer under the page, docs/layers.feature LA2a).
