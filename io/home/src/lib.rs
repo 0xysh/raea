@@ -4,10 +4,33 @@
 pub mod sdk;
 pub mod shared;
 
-/// What a folder takes on disk, as `du -sh` says it (`links`: through a link to its files), or "?".
+/// What a folder takes on disk, as `du -sh` says it (`links`: through a link to its files). Windows has no du (raea
+/// setup-audio said "(?)" for every model there): its files' sizes are added up instead, in du's units.
 pub fn disk_use(dir: &std::path::Path, links: bool) -> String {
     let o = std::process::Command::new("du").arg(if links { "-shL" } else { "-sh" }).arg(dir).output();
-    o.ok().and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().next().map(str::to_string)).unwrap_or_else(|| "?".into())
+    o.ok().and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().next().map(str::to_string)).unwrap_or_else(|| du_units(bytes_in(dir, links, 0)))
+}
+
+/// The bytes of the files under `p` (through links when `links`, 64 folders deep at most, so a link's loop ends).
+fn bytes_in(p: &std::path::Path, links: bool, depth: u32) -> u64 {
+    let md = if links { std::fs::metadata(p) } else { std::fs::symlink_metadata(p) };
+    match md {
+        Ok(m) if m.is_dir() && depth < 64 => std::fs::read_dir(p).map(|d| d.flatten().map(|e| bytes_in(&e.path(), links, depth + 1)).sum()).unwrap_or(0),
+        Ok(m) if m.is_file() => m.len(),
+        _ => 0,
+    }
+}
+
+/// `n` bytes as `du -h` writes them: 1024s, one decimal under 10 ("1.9G", "512M", "0B").
+fn du_units(n: u64) -> String {
+    let mut v = n as f64;
+    let mut unit = 0;
+    while v >= 1024.0 && unit < 4 {
+        v /= 1024.0;
+        unit += 1;
+    }
+    let u = ["B", "K", "M", "G", "T"][unit];
+    if unit == 0 { format!("{n}B") } else if v < 10.0 { format!("{v:.1}{u}") } else { format!("{v:.0}{u}") }
 }
 
 /// Where raea's own files are (the SDK's TypeScript, the lite runtime and its packages, the shell's sources, the
@@ -173,6 +196,24 @@ pub fn from_url_path_on(s: &str, windows: bool) -> &str {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_folder_is_sized_without_du() {
+        assert_eq!(super::du_units(0), "0B");
+        assert_eq!(super::du_units(1023), "1023B");
+        assert_eq!(super::du_units(1536), "1.5K");
+        assert_eq!(super::du_units(512 << 20), "512M");
+        assert_eq!(super::du_units((19 << 30) / 10), "1.9G");
+        let d = std::env::temp_dir().join(format!("raea-du-{}", std::process::id()));
+        std::fs::create_dir_all(d.join("a/b")).unwrap();
+        std::fs::write(d.join("x"), vec![0u8; 1000]).unwrap();
+        std::fs::write(d.join("a/b/y"), vec![0u8; 2500]).unwrap();
+        assert_eq!(super::bytes_in(&d, false, 0), 3500);
+        assert_eq!(super::bytes_in(&d, true, 0), 3500);
+        assert_eq!(super::bytes_in(&d.join("none"), false, 0), 0);
+        assert_ne!(super::disk_use(&d, false), "?");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
     #[test]
     fn a_src_is_a_file_url_on_windows() {
         assert_eq!(super::src_on("/Users/a/assets/m.png", false), "/Users/a/assets/m.png");
