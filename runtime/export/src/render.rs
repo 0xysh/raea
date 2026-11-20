@@ -151,10 +151,8 @@ fn with_exposure(said: String, out: &Path, manifest: Option<&Path>) -> String {
     }
     match raea_sys_light_meter::exposure::of_pngs(&pngs) {
         Ok((e, mut v)) => {
-            // a frame of the page's own fill (no 3D in the render, no footage on it: a brand card's dark ground) is dark
-            // or bright by design, and the advice ("a fill, an ambient or the sky's light reaches them nowhere") is a 3D
-            // scene's: it's measured, not said. A frame with footage keeps it (a clip that drew black). 11-19: the
-            // walkaround's logo card warned on every stills render.
+            // a frame of the page's own fill (no 3D, no footage: a brand card's ground) is lit by design, so the 3D lighting
+            // advice is measured, not said; a frame with footage keeps it (a clip that drew black). 11-19: a logo card's warn
             let doc: Option<serde_json::Value> = manifest.and_then(|m| std::fs::read_to_string(m).ok()).and_then(|t| serde_json::from_str(&t).ok());
             if let Some(d) = doc.as_ref().filter(|d| d["has3d"] == false) {
                 let frames = d["frames"].as_array().cloned().unwrap_or_default();
@@ -176,11 +174,11 @@ fn with_exposure(said: String, out: &Path, manifest: Option<&Path>) -> String {
                 }
             }
             let fs = raea_sys_light_meter::exposure::said(&v); // counted with the render's other findings (DR3)
-            if let (Some(m), Some(mut doc)) = (manifest, doc) {
-                if let Some(o) = doc.as_object_mut() {
-                    o.insert("exposure".into(), v.clone());
-                    let _ = std::fs::write(m, doc.to_string());
-                }
+            if let (Some(m), Some(mut doc)) = (manifest, doc)
+                && let Some(o) = doc.as_object_mut()
+            {
+                o.insert("exposure".into(), v.clone());
+                let _ = std::fs::write(m, doc.to_string());
             }
             let mut msg = format!("{said}\nEXPOSURE  {}", e.line());
             for f in &fs {
