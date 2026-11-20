@@ -64,10 +64,7 @@ pub fn prune(cap: u64) {
     let Ok(rd) = std::fs::read_dir(dir().join("media")) else { return };
     let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = rd
         .flatten()
-        .filter_map(|e| {
-            let m = e.metadata().ok()?;
-            Some((m.modified().ok()?, m.len(), e.path()))
-        })
+        .filter_map(|e| e.metadata().ok().and_then(|m| Some((m.modified().ok()?, m.len(), e.path()))))
         .collect();
     let mut total: u64 = files.iter().map(|f| f.1).sum();
     files.sort();

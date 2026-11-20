@@ -37,7 +37,7 @@ pub const TOKENS_STILL: f64 = 1024.0;
 
 /// Why a question can't be sent, or None.
 pub fn check(q: &Question) -> Option<String> {
-    let id_ok = !q.id.is_empty() && q.id.len() <= ID_LEN && q.id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'));
+    let id_ok = !q.id.is_empty() && q.id.len() <= ID_LEN && q.id.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b));
     if !id_ok {
         return Some(format!("{:?}: an id is 1 to {ID_LEN} letters, digits, _ . or -", q.id));
     }

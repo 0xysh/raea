@@ -2,13 +2,15 @@
 //! questions as sent, the media), so the same questions on the same media cost nothing the second time. clef gives the
 //! same answer to the same request, so a kept answer is the answer. Under RAEA_ASK_DIR, else ~/.raea/ask, in cache/.
 
+use std::path::PathBuf;
+
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::client::Call;
 
 /// raea ask's own folder: answers, kept media and this cache.
-pub fn dir() -> std::path::PathBuf {
+pub fn dir() -> PathBuf {
     raea_io_home::env_path("RAEA_ASK_DIR", ".raea/ask")
 }
 

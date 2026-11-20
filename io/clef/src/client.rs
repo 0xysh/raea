@@ -4,6 +4,7 @@
 //! answers and never spend.
 
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as B64;
 use raea_core_ask::{Question, limits};
 use serde_json::{Map, Value, json};
 
@@ -72,10 +73,6 @@ impl Transport for Http {
     }
 }
 
-fn b64(v: &[u8]) -> String {
-    base64::engine::general_purpose::STANDARD.encode(v)
-}
-
 impl Call {
     /// Why it can't be sent as it stands, or None: clef's counts and sizes, every question's own limits.
     pub fn problem(&self) -> Option<String> {
@@ -109,7 +106,7 @@ impl Call {
 
     /// The body Workers AI takes: the media as data URLs.
     pub fn clef_body(&self) -> Value {
-        let urls = |v: &[Vec<u8>], mime: &str| v.iter().map(|b| format!("data:{mime};base64,{}", b64(b))).collect::<Vec<_>>();
+        let urls = |v: &[Vec<u8>], mime: &str| v.iter().map(|b| format!("data:{mime};base64,{}", B64.encode(b))).collect::<Vec<_>>();
         let mut body = json!({"state": self.state(), "questions": self.questions()});
         for (k, v, mime) in [("images", &self.media.stills, "image/jpeg"), ("videos", &self.media.videos, "video/mp4"), ("audio", &self.media.sounds, "audio/mpeg")] {
             if !v.is_empty() {
@@ -124,7 +121,7 @@ impl Call {
         let mut body = json!({"state": self.state(), "questions": self.questions()});
         for (k, v) in [("images", &self.media.stills), ("videos", &self.media.videos), ("audio", &self.media.sounds)] {
             if !v.is_empty() {
-                body[k] = json!(v.iter().map(|b| b64(b)).collect::<Vec<_>>());
+                body[k] = json!(v.iter().map(|b| B64.encode(b)).collect::<Vec<_>>());
             }
         }
         body

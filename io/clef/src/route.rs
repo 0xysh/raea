@@ -68,8 +68,9 @@ pub fn open() -> Vec<Route> {
 pub const NONE: &str = "sign in to raea on Pro or Studio (the app), set RAEA_AGENT_KEY and RAEA_API, or add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to ~/.raea/env (docs/settings.md)";
 
 fn replay(call: &Call, file: &PathBuf) -> Result<Answered, Fail> {
-    let text = std::fs::read_to_string(file).map_err(|e| Fail::Stop(format!("{}: {e}", file.display())))?;
-    let all: Map<String, Value> = serde_json::from_str(&text).map_err(|e| Fail::Stop(format!("{}: {e}", file.display())))?;
+    let read = || -> Result<Map<String, Value>, Box<dyn std::error::Error>> { Ok(serde_json::from_str(&std::fs::read_to_string(file)?)?) };
+    let name = file.display();
+    let all = read().map_err(|e| Fail::Stop(format!("{name} isn't a recorded answer: {e}")))?;
     let answers = call.questions.iter().filter_map(|q| all.get(&q.id).map(|a| (q.id.clone(), a.clone()))).collect();
     Ok(Answered { answers, cost: 0.0, cached: false, route: Route::Replay(file.clone()).name().into(), pool_left: None })
 }
