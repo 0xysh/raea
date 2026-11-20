@@ -4,8 +4,11 @@ use super::*;
 /// resolution on top (raea-bundle's script.rs: the SDK from its source, the test API, raea-runtime-react's node_modules as the
 /// fallback); its default export, if a function, is called and awaited, then the run ends.
 pub fn bundle_script(ts: &Path, out: &Path) -> R<()> {
-    bundle_module(ts, out, "Promise.resolve().then(() => (typeof (M as any).default === \"function\" ? (M as any).default() : undefined)).then(() => call(\"done\", JSON.stringify({ code: 0 })), (e: any) => { call(\"print\", JSON.stringify({ text: \"error: \" + (e && e.stack ? e.stack : String(e)) })); call(\"done\", JSON.stringify({ code: 1 })); });")
+    bundle_module(ts, out, SCRIPT_ENTRY)
 }
+
+/// bundle_script's entry: the answer printed, a throw on stderr with its message (#168)
+const SCRIPT_ENTRY: &str = include_str!("script_entry.ts");
 
 /// What a spec's run does (brief.ts, script.ts, taste.ts, a controller: docs/projects.feature PJ0), for bundle_module:
 /// it prints the module's default export as one line of JSON and ends, or prints the error and exits 1. The reader is

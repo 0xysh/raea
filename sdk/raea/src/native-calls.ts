@@ -220,8 +220,8 @@ export interface NativeCalls {
   "physics.part": { args: { src: string; nodes: string[]; material?: { missing?: boolean; color?: string; emissive?: string; opacity?: number; roughness?: number; unlit?: boolean } }; answer: { file: string; centre: [number, number, number]; lo: [number, number, number]; hi: [number, number, number]; tris: number } };
   /** boxes placed by relations (on, against, beside, near, apart, facing, align, clear), what can't hold found */
   "place.solve": { args: { objects: { id: string; size: [number, number, number]; at?: [number, number, number]; yaw?: number; fixed?: boolean }[]; rules: Record<string, string | number>[]; room?: { min: [number, number]; max: [number, number] } }; answer: { objects: { id: string; at: [number, number, number]; yaw: number; size: [number, number, number] }[]; found: { part: string; check: string; level: string; says: string }[]; errors: number } };
-  /** one line of a headless run's output */
-  "print": { args: { text: string }; answer: null };
+  /** one line of a headless run's output (err: for stderr, on a terminal) */
+  "print": { args: { text: string; err?: boolean }; answer: null };
   /** the window settings set so far */
   "raea.window.get": { args: {}; answer: Record<string, unknown> | null };
   /** the live game's window settings changed (merged over the ones set before); the window's host applies them */

@@ -122,6 +122,11 @@ pub static DONE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::ne
 /// Whether print also writes to stdout (the CLI; not an app).
 pub static ECHO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
+/// Whether a script's console goes to the terminal, while ECHO is on: a headless program's (`raea run`, `raea test`,
+/// `raea blender run`), whose App has no log to take it, so every console line was dropped (#168). raea-runtime-react's
+/// `__raea_log` reads it.
+pub static CONSOLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// What a headless run printed (an app shows it; the CLI also writes it to stdout as it comes).
 pub static PRINTED: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
@@ -162,10 +167,15 @@ pub fn call(name: &str, v: &Value) -> R<Value> {
                     p.push_str(text);
                     p.push('\n');
                 }
+                // `err`: a line for stderr (a script's throw, #168), where its console goes to the terminal
                 if ECHO.load(std::sync::atomic::Ordering::Relaxed) {
-                    let mut o = std::io::stdout().lock();
-                    let _ = writeln!(o, "{text}");
-                    let _ = o.flush();
+                    if v.get("err").and_then(Value::as_bool) == Some(true) && CONSOLE.load(std::sync::atomic::Ordering::Relaxed) {
+                        let _ = writeln!(std::io::stderr().lock(), "{text}");
+                    } else {
+                        let mut o = std::io::stdout().lock();
+                        let _ = writeln!(o, "{text}");
+                        let _ = o.flush();
+                    }
                 }
                 Ok(Value::Null)
             }
@@ -207,7 +217,7 @@ pub fn register() {
         const SECTION: &str = "{ polygons: [number, number][][]; area: number; contours: number; bounds: { min: [number, number]; max: [number, number] } }";
         let calls: &[(&str, &str, &str, &str)] = &[
             ("done", "{ code: number }", "null", "a headless run ends with this exit code"),
-            ("print", "{ text: string }", "null", "one line of a headless run's output"),
+            ("print", "{ text: string; err?: boolean }", "null", "one line of a headless run's output (err: for stderr, on a terminal)"),
             ("blender.post", "{ sid: string; ops: unknown[] }", "{ r: Record<string, unknown>; n: number; err?: { i: number; type: string; msg: string; trace: string } }", "a batch of raea/blender's operations run by the Blender `raea blender run SCRIPT.ts` started (sdk/blender)"),
             ("solid.make", "{ fn: \"box\" | \"rounded_box\" | \"sphere\" | \"cylinder\" | \"cone\" | \"torus\" | \"text3d\"; args: (number | string)[] }", SOLID, "a Manifold solid from a primitive"),
             ("solid.expr", "{ expr: string }", SOLID, "a Manifold solid from an expression (raea-render's mesh shape language)"),

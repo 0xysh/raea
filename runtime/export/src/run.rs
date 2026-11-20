@@ -26,6 +26,16 @@ pub fn run_bundle(bundle: &Path, secs: f64) -> R<(i32, String)> {
     }
 }
 
+/// `run_bundle` for a program whose output is the terminal (`raea run`, `raea test`, `raea blender run`): its console
+/// goes there too, log and info to stdout, warn and error to stderr (#168). raea check's asks and a spec's read keep
+/// theirs out of stdout, which is their answer.
+pub fn run_bundle_to_terminal(bundle: &Path, secs: f64) -> R<(i32, String)> {
+    let was = raea_runtime_react::native::CONSOLE.swap(true, std::sync::atomic::Ordering::SeqCst);
+    let ran = run_bundle(bundle, secs);
+    raea_runtime_react::native::CONSOLE.store(was, std::sync::atomic::Ordering::SeqCst);
+    ran
+}
+
 /// The composition's sound alone, mixed and mastered as a render's is (its <Mix>'s loudness and ceiling through raea-render's
 /// master row): React is stepped through every frame for its sounds, with no page painted and no video decoded. Live
 /// play hands this to the mixer, so a timeline sounds as its render does.

@@ -108,14 +108,14 @@ fn notes_run(project: &Path, rules: &[raea_app_notes::check::Rule], args: &[Stri
 }
 
 /// `raea run SCRIPT.ts`: a TypeScript program against the engine, headless (the native calls: solids, ECS
-/// worlds, print). The script's default export, if a function, is called; what it prints goes to stdout; a throw
-/// ends the run with exit 1.
+/// worlds, print). Its default export, if a function, is called and its answer printed (JSON unless a string); its
+/// console goes to the terminal (warn and error to stderr); a throw prints its message and stack, exit 1 (#168).
 pub fn run_script(args: &[String]) -> R<i32> {
     let ts = dunce::canonicalize(&PathBuf::from(&args[1])).map_err(|e| format!("{}: {e}", args[1]))?;
     let out = std::env::temp_dir().join(format!("raea-cli-{}.js", std::process::id()));
     bundle_script(&ts, &out)?;
     let secs: f64 = flag(args, "--timeout").and_then(|t| t.parse().ok()).unwrap_or(120.0);
-    let (code, _) = run_bundle(&out, secs)?;
+    let (code, _) = run_bundle_to_terminal(&out, secs)?;
     let _ = std::fs::remove_file(&out);
     Ok(code)
 }
@@ -351,7 +351,7 @@ pub fn run(args: &[String]) -> R<String> {
         let out = std::env::temp_dir().join(format!("raea-cli-t{}.js", std::process::id()));
         bundle_tests(&files, &out, flag(args, "--filter").as_deref(), &extra)?;
         let secs: f64 = flag(args, "--timeout").and_then(|t| t.parse().ok()).unwrap_or(300.0);
-        let (code, _) = run_bundle(&out, secs)?;
+        let (code, _) = run_bundle_to_terminal(&out, secs)?;
         let _ = std::fs::remove_file(&out);
         if code != 0 {
             return Err(format!("{} test file(s): some failed", files.len()));
