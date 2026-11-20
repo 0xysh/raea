@@ -11,7 +11,7 @@ pub use client::{Answered, Call, Fail, Http, Media, Transport};
 pub use route::Route;
 
 /// One call, by the routes open on this computer.
-pub fn ask(call: &Call) -> Result<Answered, String> {
+pub fn ask(call: &Call) -> Result<Answered, Fail> {
     route::ask(&Http, call, &route::open())
 }
 

@@ -67,18 +67,18 @@ pub fn open() -> Vec<Route> {
 
 pub const NONE: &str = "sign in to raea on Pro or Studio (the app), set RAEA_AGENT_KEY and RAEA_API, or add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to ~/.raea/env (docs/settings.md)";
 
-fn replay(call: &Call, file: &PathBuf) -> Result<Answered, String> {
-    let all: Map<String, Value> = serde_json::from_str(&std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?)
-        .map_err(|e| format!("{}: {e}", file.display()))?;
+fn replay(call: &Call, file: &PathBuf) -> Result<Answered, Fail> {
+    let text = std::fs::read_to_string(file).map_err(|e| Fail::Stop(format!("{}: {e}", file.display())))?;
+    let all: Map<String, Value> = serde_json::from_str(&text).map_err(|e| Fail::Stop(format!("{}: {e}", file.display())))?;
     let answers = call.questions.iter().filter_map(|q| all.get(&q.id).map(|a| (q.id.clone(), a.clone()))).collect();
     Ok(Answered { answers, cost: 0.0, cached: false, route: Route::Replay(file.clone()).name().into(), pool_left: None })
 }
 
 /// One call answered: from the cache, else by the first route that answers. Every route's reason is kept for the
 /// refusal when none does.
-pub fn ask(t: &dyn Transport, call: &Call, routes: &[Route]) -> Result<Answered, String> {
+pub fn ask(t: &dyn Transport, call: &Call, routes: &[Route]) -> Result<Answered, Fail> {
     if let Some(p) = call.problem() {
-        return Err(p);
+        return Err(Fail::Stop(p));
     }
     if let Some(Route::Replay(f)) = routes.first() {
         return replay(call, f);
@@ -88,7 +88,7 @@ pub fn ask(t: &dyn Transport, call: &Call, routes: &[Route]) -> Result<Answered,
         return Ok(Answered { answers, cost: 0.0, cached: true, route: "asked before (cache)".into(), pool_left: None });
     }
     if routes.is_empty() {
-        return Err(format!("nothing to ask with: {NONE}"));
+        return Err(Fail::Next(format!("nothing to ask with: {NONE}")));
     }
     let own = routes.iter().any(|r| matches!(r, Route::Own { .. }));
     let mut why = Vec::new();
@@ -97,16 +97,16 @@ pub fn ask(t: &dyn Transport, call: &Call, routes: &[Route]) -> Result<Answered,
             Route::App(url) => raea_api(t, call, &format!("{url}/host/ask"), None, r.name(), own),
             Route::Agent { api, key } => raea_api(t, call, &format!("{api}/v1/clef/ask"), Some(key), r.name(), own),
             Route::Own { account, token } => workers_ai(t, call, account, token),
-            Route::Replay(f) => replay(call, f).map_err(Fail::Stop),
+            Route::Replay(f) => replay(call, f),
         };
         match got {
             Ok(a) => {
                 cache::put(&key, &a.answers);
                 return Ok(a);
             }
-            Err(Fail::Stop(e)) => return Err(e),
             Err(Fail::Next(e)) => why.push(e),
+            Err(f) => return Err(f),
         }
     }
-    Err(format!("nothing answered ({}): {NONE}", why.join("; ")))
+    Err(Fail::Next(format!("nothing answered ({}): {NONE}", why.join("; "))))
 }

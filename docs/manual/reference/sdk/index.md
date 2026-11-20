@@ -99,5 +99,6 @@ Checks, lints and a headless App you can drive.
 | [`raea/fingerprint`](fingerprint.md) | A fingerprint (fingerprint.ts, docs/fingerprint.md): a person's or a team's sense of good work as axes, each with a small head over on-device encoders that `raea fingerprint` trains from their labels. `raea fingerprint new NAME` writes one with raea's base taxonomy; add an axis, reword one, or remove one, and raea retrains. Rust reads the default export (systems/fingerprint/src/taxonomy.rs), so these types follow its fields. | 1 function, 4 types |
 | [`raea/dev_tools`](dev_tools.md) | Checks and lints you can run from code: a motion performance's lint report. | 2 functions, 3 types |
 | [`raea/remote`](remote.md) | A headless Bevy App you open, step and query from TypeScript, through Bevy's remote protocol. | 1 class, 1 type |
+| [`raea/ask`](ask.md) | Ask about a piece's picture and sound from a script: the same questions, runner and record as raea ask, typed. | 2 functions, 1 value, 12 types |
 
 <!-- generated:end -->

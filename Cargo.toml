@@ -188,6 +188,7 @@ members = [
     "runtime/scene",
     "runtime/scene2d",
     "runtime/shared",
+    "apps/ask",
     "apps/check",
     "apps/check/flash",
     "apps/check/inbox",

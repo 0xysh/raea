@@ -48,6 +48,7 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
 
   Rule: AK1. One question format and one client
 
+    @done
     Scenario: AK1. Questions, and the standard library
       Given the plan
         | crate         | file                       | lines | job                                                                    |
@@ -67,8 +68,11 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
         flags, a choice's on its flagging options, one less a grade's level over its top), so one calibration fits all
       And the limits are raea-api's where they're stricter than clef's (ids of 64 characters, 16 options), so a call that
         passes them passes on every route
+      Status: done 11-20. raea-core-ask: four types, 49 standard questions in five sets (the rubric's read from
+        rubric.md), the platform packs' three calibrated questions keeping their thresholds; its tests read every
+        standard question, check the limits and the TypeScript declarations (sdk/raea/src/ask.gen.ts).
 
-    @needs:AK1
+    @needs:AK1 @done
     Scenario: AK1b. One clef client, routed to the person's plan
       Given the plan
         | crate        | file                    | lines | job                                                                    |
@@ -82,22 +86,30 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
       And with none it refuses: "sign in to raea on Pro or Studio, set RAEA_AGENT_KEY, or add your Cloudflare keys
         (docs/settings.md)"
       And `raea judge` asks through it, and apps/judge's own clef.rs is gone
+      Status: done 11-20. raea-io-clef's tests, on a fake transport: a route that can't answer hands on, a spent pool
+        stops unless the person has their own keys, the plan's answer carries what's left and a repeat comes from the
+        cache, none open refuses with how to get one, a call over the limits is never sent. A real call went the
+        own-keys route (AK3's status); the app route answers once AK4 adds /host/ask. raea judge's tests pass on it.
 
   Rule: AK2-AK3. `raea ask`
 
-    @needs:AK1b
+    @needs:AK1b @done
     Scenario: AK2. Ask understands the question before it spends
       Given the plan
         | crate        | file                    | lines | job                                                                    |
-        | raea-app-ask | apps/ask/src/prepare.rs | 260   | the file's facts (length, sound, words heard, words on screen, the render's manifest and record) and the project's brief (audience, believe, mode, voice); each question kept, swapped or dropped with why; the state paragraph |
+        | raea-app-ask | apps/ask/src/prepare.rs | 260   | the file's facts (length, picture, sound, the words heard from a words file, whether anyone speaks) and the project's brief (title, mode, audience, believe, logline, voice); each question kept, swapped or dropped with why (not knowing whether anyone speaks, both variants kept); the state paragraph, with what the caller measured (`--state`; raea check passes its own, AK5) |
       Then a question about sound on a file with none, or a stills-only render, isn't asked, and says it waits for one
       And a piece where no one speaks is asked `sound-silent` in place of `sound`, and told it has no voice
       And the state says what the piece is (its modes, the brief's audience and belief, its storyboard's logline, what
         raea measured), as critique.ts writes it today
       And `--dry` prints exactly what would be sent (the state, each call's questions, the media and its size) and an
         estimated cost, and spends nothing
+      Status: done 11-20. prepare.rs reads the file (ffprobe), the nearest brief.ts (`raea spec --as brief`) and a words
+        file; apps/ask tests: a silent piece asks sound-silent with why, a file with no sound isn't listened to, the
+        state names the modes, audience, belief and what the caller measured. `--dry` on an 8 s clip printed one call
+        of 11 questions, its state, 26 KB of video and 63 KB of sound, about $0.0009, and sent nothing.
 
-    @needs:AK2
+    @needs:AK2 @done
     Scenario: AK3. The runner, the record and the verb
       Given the plan
         | crate        | file                    | lines | job                                                                    |
@@ -116,6 +128,13 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
       And sdk/raea's `raea/ask` gives scripts `ask` and `askMany`, typed from the generated questions, over
         `raea ask --batch --json`, from a `.ts` check, a `raea run` script or plain Node
       And docs/manual/reference/cli/ask.md is its reference, written in the same change
+      Status: done 11-20. One call on the person's own Cloudflare keys asked 4 questions of a test pattern with a tone
+        for $0.0003 (test pattern 0.88 yes, anyone speaking 0.00, the sound fits 0.06), and the same again came from the
+        cache for $0; calls.jsonl, answers.jsonl and the two cut clips were kept. apps/ask tests: 65 questions make two
+        calls, windows and what a question looks at split calls, a pick or a before-and-after without `--with` isn't
+        asked, a clip used by two calls is cut once, the voice answer sets the variant that doesn't apply aside, and a
+        pool spent on the third call keeps two calls' answers and sends nothing more. `raea check`, the critique and
+        the fingerprint move onto the runner in AK5, AK4 and AK8. docs/manual/reference/sdk/ask.md is `raea/ask`'s.
 
   Rule: AK4. On the person's plan
 

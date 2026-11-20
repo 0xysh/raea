@@ -26,7 +26,8 @@ flags?: Array<string>, sees?: Sees,
  */
 hears?: boolean, 
 /**
- * what the state tells clef beside the media: brief, words (heard), screen-words, measures, brand, platform
+ * what the state tells clef beside the media: brief, words (heard), screen-words, measures, brand, platform; and
+ * with: it compares the file with the files set beside it, so it isn't asked without them
  */
 uses?: Array<string>, when?: When, 
 /**

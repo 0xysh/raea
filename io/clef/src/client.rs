@@ -34,12 +34,21 @@ pub struct Answered {
     pub pool_left: Option<f64>,
 }
 
-/// Why a route didn't answer: `Next` means try the next one (no plan, signed out, not running, no ask scope); `Stop`
-/// means asking again elsewhere won't help (the call itself is wrong, or the pool is spent and nothing else is set).
+/// Why a route didn't answer: `Next` means try the next one (no plan, signed out, not running, no ask scope; from
+/// `route::ask`, that none did); `Stop` means asking again won't help (the call itself is wrong); `Spent` means the
+/// month's pool is used up and nothing else is set, so a batch's remaining calls wait for the pool.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Fail {
     Next(String),
     Stop(String),
+    Spent(String),
+}
+
+impl std::fmt::Display for Fail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (Fail::Next(s) | Fail::Stop(s) | Fail::Spent(s)) = self;
+        f.write_str(s)
+    }
 }
 
 /// An HTTP POST of JSON: its status and body. `Http` is the real one; a test hands in its own.
@@ -153,7 +162,7 @@ pub fn raea_api(t: &dyn Transport, call: &Call, url: &str, bearer: Option<&str>,
             route: route.into(),
             pool_left: j["pool_left_usd"].as_f64(),
         }),
-        (402, Some("pool_spent")) if !own_keys => Err(Fail::Stop(said(&j, code))),
+        (402, Some("pool_spent")) if !own_keys => Err(Fail::Spent(said(&j, code))),
         (400 | 413, _) => Err(Fail::Stop(said(&j, code))),
         _ => Err(Fail::Next(format!("{route}: {}", said(&j, code)))),
     }

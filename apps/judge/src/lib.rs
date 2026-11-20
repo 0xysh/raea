@@ -30,7 +30,7 @@ fn ask(state: &str, questions: &Value, images: &[PathBuf]) -> Result<(Value, f64
     let questions = qs.iter().map(|(id, w)| raea_core_ask::Question::from_wire(id, w).ok_or(format!("judge: {id} isn't one of clef's question types"))).collect::<Result<_, _>>()?;
     let stills = images.iter().map(|p| raea_io_clef::media::still(p, None)).collect::<Result<_, _>>()?;
     let call = raea_io_clef::Call { state: state.into(), questions, media: raea_io_clef::Media { stills, ..Default::default() } };
-    let a = raea_io_clef::ask(&call)?;
+    let a = raea_io_clef::ask(&call).map_err(|f| f.to_string())?;
     Ok((Value::Object(a.answers), a.cost))
 }
 

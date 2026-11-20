@@ -131,5 +131,6 @@ What an agent reads and shows the person, and the tools raea installs.
 | [`raea skills`](skills.md) | Install raea's agent skill where Claude Code, Codex, Kimi or Gemini read skills, with its MCP server and hook. |
 | [`raea setup`](setup.md) | Find Blender, or download its current LTS, and install raea's add-on and the MCP add-on. |
 | [`raea bug`](bug.md) | Report a bug in raea itself to raea's server: a line saying what's wrong and what happened, with raea's version and the OS added, no account needed. |
+| [`raea ask`](ask.md) | Ask about a piece's picture and sound: clef-omni answers in words and a probability, paid from your raea plan, and every answer is kept so a question can be calibrated. |
 
 <!-- generated:end -->

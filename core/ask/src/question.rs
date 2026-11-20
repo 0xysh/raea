@@ -119,7 +119,8 @@ pub struct Question {
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     #[ts(as = "Option<bool>", optional)]
     pub hears: bool,
-    /// what the state tells clef beside the media: brief, words (heard), screen-words, measures, brand, platform
+    /// what the state tells clef beside the media: brief, words (heard), screen-words, measures, brand, platform; and
+    /// with: it compares the file with the files set beside it, so it isn't asked without them
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<String>>", optional)]
     pub uses: Vec<String>,

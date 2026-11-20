@@ -57,7 +57,7 @@ fn each_route_that_cant_answer_hands_on_to_the_next() {
 fn a_spent_pool_stops_unless_the_person_has_their_own_keys() {
     let spent = || Fake { replies: vec![("/host/ask", 402, json!({"error": "pool_spent", "message": "this month's checks are used up"}))], seen: RefCell::default() };
     let e = route::ask(&spent(), &call("spent"), &routes()[..1]).unwrap_err();
-    assert!(e.contains("used up"), "{e}");
+    assert!(matches!(&e, crate::Fail::Spent(m) if m.contains("used up")), "{e:?}");
     let mut f = spent();
     f.replies.push(("/clef-omni", 200, serde_json::from_str(ANSWER).unwrap()));
     let a = route::ask(&f, &call("spent-own"), &[routes()[0].clone(), routes()[2].clone()]).unwrap();
@@ -78,9 +78,9 @@ fn the_plan_answers_with_whats_left_and_a_second_ask_costs_nothing() {
 #[test]
 fn with_nothing_open_it_says_how_to_get_one() {
     let f = Fake { replies: vec![], seen: RefCell::default() };
-    let e = route::ask(&f, &call("none"), &[]).unwrap_err();
+    let e = route::ask(&f, &call("none"), &[]).unwrap_err().to_string();
     assert!(e.contains("RAEA_AGENT_KEY") && e.contains("CLOUDFLARE_API_TOKEN"), "{e}");
-    let e = route::ask(&f, &call("refused"), &routes()[..1]).unwrap_err();
+    let e = route::ask(&f, &call("refused"), &routes()[..1]).unwrap_err().to_string();
     assert!(e.contains("connection refused") && e.contains("Pro or Studio"), "{e}");
 }
 
@@ -89,10 +89,10 @@ fn a_call_that_breaks_the_limits_is_refused_before_anything_is_sent() {
     let f = Fake { replies: vec![], seen: RefCell::default() };
     let mut c = call("limits");
     c.media = Media::default();
-    assert!(route::ask(&f, &c, &routes()).unwrap_err().contains("look at or listen to"));
+    assert!(route::ask(&f, &c, &routes()).unwrap_err().to_string().contains("look at or listen to"));
     let mut c = call("too-many");
     c.questions = (0..65).map(|i| Question::plain(&format!("q{i}"), "Is it loud?")).collect();
-    assert!(route::ask(&f, &c, &routes()).unwrap_err().contains("1 to 64"));
+    assert!(route::ask(&f, &c, &routes()).unwrap_err().to_string().contains("1 to 64"));
     assert!(f.seen.borrow().is_empty());
 }
 
