@@ -47,10 +47,9 @@ The workspace, its projects and what a project holds.
 | Verb | What it does |
 | --- | --- |
 | [`raea init`](init.md) | Add a project's starting files where they're missing: edit.tsx, cuts.ts, components/ and AGENTS.md. |
-| [`raea workspace`](workspace.md) | Make, adopt or show a workspace: the git repository that holds a studio's projects and controllers. |
+| [`raea workspace`](workspace.md) | Make, adopt or show a workspace: the git repository that holds a studio's projects and house taste. |
 | [`raea project`](project.md) | Make a project in the workspace, list them, or move one between inline and a repository of its own. |
-| [`raea controller`](controller.md) | Read and change the workspace's controllers: its settings and workflows, each a TypeScript file. |
-| [`raea spec`](spec.md) | Print a spec file's default export as JSON, checked against its schema: briefs, scripts, taste, plans and controllers. |
+| [`raea spec`](spec.md) | Print a spec file's default export as JSON, checked against its schema: briefs, scripts, taste and plans. |
 | [`raea component`](component.md) | Copy a ready-made component or set into the project's components/, or the workspace's shared/components/, to use and change as your own. |
 | [`raea part`](part.md) | The old name of raea component: copy a ready-made component into the project's components/, to use and change as your own. |
 | [`raea add`](add.md) | Add, remove and install npm packages for a project, with no Node or npm: raea.lock and node_modules. |

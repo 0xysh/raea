@@ -7,29 +7,20 @@
 //
 // The types are generated from the Rust schemas (core/brief, raea-core-brief) into brief.gen.ts, so what tsc checks is
 // what raea reads: `raea context` evaluates the module and Rust validates its default export again.
-import type { Brief, Controller, Field, Group, Plan, Script, Taste } from "./brief.gen";
+import type { Brief, Plan, Script, Taste } from "./brief.gen";
 
 export type * from "./brief.gen";
 export { fingerprint } from "./fingerprint";
 export type { Applies, Axis, Fingerprint, Modality } from "./fingerprint";
 
-/** A field as written: its id is filled in from its label when left out. */
-export type FieldInput = Field extends infer F ? (F extends Field ? Omit<F, "id"> & { id?: string } : never) : never;
-/** A controller as written: ids are filled in from titles and labels when left out. */
-export type ControllerInput = Omit<Controller, "id" | "groups"> & {
-  id?: string;
-  groups: (Omit<Group, "id" | "fields"> & { id?: string; fields: FieldInput[] })[];
-};
-
 /** A project's brief (brief.ts): what to make, for whom, the one thing to believe, its deliverables and staged tasks. */
 export const brief = (b: Brief): Brief => b;
 /** A storyboard or a screenplay (script.ts): scenes, beats, lines, camera and cut. */
 export const script = (s: Script): Script => s;
-/** Taste (taste.ts): standing rules, some with a check `raea check --taste` holds every export to. */
+/** Taste (taste.ts): standing rules, the person's, a workspace's or a project's. A rule raea can hold the work to
+ *  carries a check: one of six measured forms (`{ form: "text-above", value: 75 }`), one of raea's checks by name
+ *  (`"loudness"`), or the project's own by its path from this file (`"../checks/clear.ts"`), with its `values`.
+ *  `raea check` runs every one that applies. */
 export const taste = (t: Taste): Taste => t;
 /** An object's plan (plan.ts): its parts by name, levels, counts, materials. */
 export const plan = (p: Plan): Plan => p;
-/** A workspace's controller (controllers/<id>.ts): settings in groups of typed fields that every agent works to.
- *  A standing decision ("every ad is 9:16"), not one piece of work: that's a feed item, and a note on it. The raea app
- *  shows a new controller in the project's feed, and an agent brings one to the person with `controller_post`. */
-export const controller = (c: ControllerInput): ControllerInput => c;

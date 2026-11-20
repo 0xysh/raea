@@ -1,13 +1,13 @@
 ---
 title: "raea/brief"
-summary: "The specs an agent writes as data: brief, script, taste, plan and controller, checked against raea's schemas."
+summary: "The specs an agent writes as data: brief, script, taste and plan, checked against raea's schemas."
 order: 4
 sources: ["sdk/raea/src/brief.ts", "core/brief/src"]
 ---
 
 A spec is a TypeScript module whose default export is data: what a project is for (`brief`), a storyboard
-(`script`), the person's or the house's taste (`taste`), a frozen plan for a build (`plan`) and a workspace's settings
-(`controller`). It renders nothing and imports nothing that renders. The types are generated from the Rust schemas
+(`script`), the person's, the house's or a project's taste and rules (`taste`), and a frozen plan for a build (`plan`).
+It renders nothing and imports nothing that renders. The types are generated from the Rust schemas
 raea reads them with, so what TypeScript accepts is what raea accepts; [`raea spec`](../cli/spec.md) prints one as
 checked JSON.
 
@@ -30,10 +30,10 @@ See [Workspaces and projects](../../concepts/workspaces.md) for where each spec 
 <!-- generated:begin by tools/manual-ref/sdk.ts from the SDK's exports and doc comments; edit outside this block -->
 
 ```ts
-import { brief, controller, fingerprint, plan } from "raea/brief"
+import { brief, fingerprint, plan, script } from "raea/brief"
 ```
 
-`raea/brief` exports 6 functions, 32 types. Source: [sdk/raea/src/brief.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/brief.ts).
+`raea/brief` exports 5 functions, 27 types. Source: [sdk/raea/src/brief.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/brief.ts).
 
 ## Functions
 
@@ -43,16 +43,6 @@ A project's brief (brief.ts): what to make, for whom, the one thing to believe, 
 
 ```ts
 function brief(b: Brief): Brief
-```
-
-### `controller`
-
-A workspace's controller (controllers/<id>.ts): settings in groups of typed fields that every agent works to.
-A standing decision ("every ad is 9:16"), not one piece of work: that's a feed item, and a note on it. The raea app
-shows a new controller in the project's feed, and an agent brings one to the person with `controller_post`.
-
-```ts
-function controller(c: ControllerInput): ControllerInput
 ```
 
 ### `fingerprint`
@@ -81,7 +71,10 @@ function script(s: Script): Script
 
 ### `taste`
 
-Taste (taste.ts): standing rules, some with a check `raea check --taste` holds every export to.
+Taste (taste.ts): standing rules, the person's, a workspace's or a project's. A rule raea can hold the work to
+carries a check: one of six measured forms (`{ form: "text-above", value: 75 }`), one of raea's checks by name
+(`"loudness"`), or the project's own by its path from this file (`"../checks/clear.ts"`), with its `values`.
+`raea check` runs every one that applies.
 
 ```ts
 function taste(t: Taste): Taste
@@ -141,20 +134,6 @@ type Check = { "form": "text-hold", "value": number } | { "form": "text-above", 
 type Concept = { /** * what it is ("flight feather", "toy rocking horse") */ what: string, style: string, /** * its largest extent, in metres */ size: number, /** * how close it's seen, in metres: sets how much detail up close must hold */ seenFrom: number, material?: string, use?: string, }
 ```
 
-### `Controller`
-
-```ts
-type Controller = { id: string, title: string, help?: string, groups: Array<Group>, }
-```
-
-### `ControllerInput`
-
-A controller as written: ids are filled in from titles and labels when left out.
-
-```ts
-type ControllerInput = Omit<Controller, "id" | "groups"> & { id?: string; groups: (Omit<Group, "id" | "fields"> & { id?: string; fields: FieldInput[] })[]; }
-```
-
 ### `Count`
 
 ```ts
@@ -165,20 +144,6 @@ type Count = number | { min: number, max: number, }
 
 ```ts
 type Deliverable = { name: string, /** * "90 s", "16:9", "with sound" */ specs?: Array<string>, /** * the feed item it lands as */ item?: string, /** * its own brief module, when it differs from the project in mode, look or audience */ brief?: string, /** * its script module (storyboard or screenplay) */ script?: s…
-```
-
-### `Field`
-
-```ts
-type Field = { id: string, label: string, help?: string, } & ({ "type": "toggle", value: boolean, } | { "type": "choice", options: Array<string>, value: string, } | { "type": "number", value: number, unit?: string, min?: number, max?: number, step?: number, } | { "type": "text", value: string, placeholder?: s…
-```
-
-### `FieldInput`
-
-A field as written: its id is filled in from its label when left out.
-
-```ts
-type FieldInput = Field extends infer F ? (F extends Field ? Omit<F, "id"> & { id?: string } : never) : never
 ```
 
 ### `Fingerprint`
@@ -192,18 +157,6 @@ type FieldInput = Field extends infer F ? (F extends Field ? Omit<F, "id"> & { i
 | `applies` | `Applies` | Which pieces it judges when its project or workspace holds more than one. |
 | `axes` (required) | `Axis[]` | What it notices, each axis with its words and the sense its head reads. |
 | `encoders` | `Record<string, string>` | Each encoder's id and its file's sha256: heads trained on other encoders' columns are refused. |
-
-### `Group`
-
-```ts
-type Group = { id: string, title: string, help?: string, fields: Array<Field>, }
-```
-
-### `Kind`
-
-```ts
-type Kind = { "type": "toggle", value: boolean, } | { "type": "choice", options: Array<string>, value: string, } | { "type": "number", value: number, unit?: string, min?: number, max?: number, step?: number, } | { "type": "text", value: string, placeholder?: string, multiline?: boolean, } | { "type": "list",…
-```
 
 ### `Level`
 
@@ -252,7 +205,19 @@ type Reference = { target: string, note?: string, }
 ### `Rule`
 
 ```ts
-type Rule = { text: string, check?: Check, }
+type Rule = { text: string, check?: RuleCheck, /** * what a named or a .ts check is held to (`{ band: 0.8 }`); a form carries its own value */ values?: Record<string, number | string | boolean>, /** * how bad what its check finds is: error, warn or note (unset: a form's findings are errors, another check's k…
+```
+
+### `RuleCheck`
+
+```ts
+type RuleCheck = Check | string
+```
+
+### `RuleLevel`
+
+```ts
+type RuleLevel = "error" | "warn" | "note"
 ```
 
 ### `Scene`
@@ -277,12 +242,6 @@ type Section = { heading: string, text: string, }
 
 ```ts
 type Stage = { name: string, tasks: Array<Task>, }
-```
-
-### `Step`
-
-```ts
-type Step = { name: string, by?: string, back?: string, }
 ```
 
 ### `Task`
