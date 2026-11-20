@@ -184,6 +184,34 @@ impl Question {
         serde_json::from_value(json!({"id": id, "ask": ask})).expect("a plain question")
     }
 
+    /// A question written in clef's own wire format (`{type: noul | choice | score, instructions, criteria}`), as raea
+    /// judge's rubric and the playtest packs write them; None when it isn't one.
+    pub fn from_wire(id: &str, w: &Value) -> Option<Question> {
+        let mut q = Question::plain(id, w["instructions"].as_str()?);
+        match w["type"].as_str()? {
+            "noul" => {
+                if let (Some(y), Some(n)) = (w["criteria"]["true"].as_str(), w["criteria"]["false"].as_str()) {
+                    q.means = BTreeMap::from([("yes".into(), y.into()), ("no".into(), n.into())]);
+                }
+            }
+            "choice" => {
+                q.kind = Kind::Choose;
+                for (k, v) in w["criteria"].as_object()? {
+                    q.options.push(k.clone());
+                    if let Some(m) = v.as_str() {
+                        q.means.insert(k.clone(), m.into());
+                    }
+                }
+            }
+            "score" => {
+                q.kind = Kind::Rate;
+                q.options = w["criteria"].as_array()?.iter().map(|l| l.as_str().map(str::to_string)).collect::<Option<_>>()?;
+            }
+            _ => return None,
+        }
+        Some(q)
+    }
+
     /// Its levels or options as clef is sent them.
     pub fn levels(&self) -> Vec<String> {
         match (self.kind, self.options.is_empty()) {

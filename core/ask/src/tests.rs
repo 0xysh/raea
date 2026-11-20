@@ -86,6 +86,19 @@ fn each_type_goes_out_as_clefs_own_and_reads_back_as_a_problem_score() {
 }
 
 #[test]
+fn a_question_in_clefs_own_format_comes_back_as_it_went() {
+    for w in [
+        json!({"type": "noul", "instructions": "Is it a photograph?"}),
+        json!({"type": "noul", "instructions": "Is it a photograph?", "criteria": {"true": "a real place", "false": "a render"}}),
+        json!({"type": "score", "instructions": "How is the light?", "criteria": ["none", "flat", "good"]}),
+        json!({"type": "choice", "instructions": "Which?", "criteria": {"a": null, "b": "the second"}}),
+    ] {
+        assert_eq!(Question::from_wire("q", &w).unwrap().wire(), w);
+    }
+    assert!(Question::from_wire("q", &json!({"type": "essay", "instructions": "Say"})).is_none());
+}
+
+#[test]
 fn a_calibrated_question_flags_at_its_own_threshold() {
     let q = library::find("face.text_over", None).unwrap();
     assert!(q.calibrated());

@@ -62,6 +62,7 @@ members = [
     "io/codec",
     "io/media",
     "io/assets",
+    "io/clef",
     "io/gen",
     "io/gen-comfy",
     "io/gen-core",
