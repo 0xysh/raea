@@ -4,6 +4,7 @@
 resolver = "2"
 members = [
     "core/animate",
+    "core/ask",
     "core/brief",
     "core/facts",
     "core/ease",

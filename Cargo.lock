@@ -14328,6 +14328,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-core-ask"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
 name = "raea-core-brief"
 version = "0.1.0"
 dependencies = [

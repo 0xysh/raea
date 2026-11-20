@@ -63,7 +63,10 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
         levels, poor to excellent unless given, read as the expected level) or `rate` (2 to 10 levels)
       And `when` says what a question needs to be asked (modes; a voice heard or none; a game), and `swap` names the
         question asked in its place when it doesn't apply, so `sound` to `sound-silent` is data, not code
-      And sdk/app's playtest DSL imports clef's limits from the generated TypeScript instead of keeping its own
+      And every answer reads as a problem score from 0 to 1 whatever its type (a yes's probability on the answer that
+        flags, a choice's on its flagging options, one less a grade's level over its top), so one calibration fits all
+      And the limits are raea-api's where they're stricter than clef's (ids of 64 characters, 16 options), so a call that
+        passes them passes on every route
 
     @needs:AK1
     Scenario: AK1b. One clef client, routed to the person's plan
