@@ -16200,6 +16200,7 @@ dependencies = [
  "blitz-traits",
  "color",
  "parley",
+ "raea-core-facts",
  "raea-core-wire",
  "raea-gpu-device",
  "raea-sys-filters",
