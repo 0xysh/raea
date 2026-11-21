@@ -48,8 +48,15 @@ exit = "a Bevy release on Taffy 0.15"
 path = "vendor/bevy_solari"
 upstream = "crates.io:0.20.0"
 kind = "patch"
-reason = "materials traced by their alpha (mask, blend, a premultiplied coat), uv_transform, and a panorama sun sampled as a directional light"
+reason = "materials traced by their alpha (mask, blend, a premultiplied coat), uv_transform, a panorama sun sampled as a directional light, and thin surfaces: a back face shaded as its front, light passed through by diffuse transmission, visibility rays leaving from the sample's side (restir.wesl)"
 exit = "a Bevy release whose Solari traces alpha and importance-samples the environment map"
+
+[bevy_pbr]
+path = "vendor/bevy_pbr"
+upstream = "crates.io:0.20.0"
+kind = "patch"
+reason = "what raea's light needs from Bevy's PBR passes: diffuse transmission kept in the G-buffer's flags for Solari, emission stored pre-exposed so a bright lamp keeps its light, a jittered prepass moving the dither with its main pass, the sun's far shadow map traced past the last cascade (RaeaFarSun, LT21) and raea GI's screen light bound to each view (RaeaGiScreen, LT3)"
+exit = "Bevy view bindings a plugin can extend (a far shadow map, an indirect light texture) and a G-buffer with room for transmission; then back to the crates.io bevy_pbr"
 
 # checked 2026-10-26: crates.io bevy_ui_widgets 0.20.0 (latest) is still on parley ^0.11; a Bevy git revision with 0.12 is Bevy main, not 0.20
 [bevy_ui_widgets]

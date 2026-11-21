@@ -247,6 +247,8 @@ fn merge_reservoirs(
 
     // Visibility for the cross-domain targets
     if other_sample_at_canonical.target_function > 0.0 && other_sample_at_canonical_jacobian > 0.0 {
+        // raea: a visibility ray leaves from the side of the surface its sample is on (ray_origin_toward_sample), so a thin
+        // raea: surface lit through from behind isn't shadowed by itself; ResolvedMaterial's last field is its transmission
         let origin = ray_origin_toward_sample(canonical_world_position, canonical_world_normal, other_sample_at_canonical.sample_world_position);
         let visibility = trace_visibility(origin, other_sample_at_canonical.sample_world_position);
         other_sample_at_canonical.target_function *= visibility;
