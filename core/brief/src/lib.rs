@@ -4,13 +4,11 @@
 //! types (`declarations`), so what tsc checks is exactly what this crate reads.
 
 pub mod brief;
-pub mod controller;
 pub mod plan;
 pub mod script;
 pub mod taste;
 
 pub use brief::Brief;
-pub use controller::Controller;
 pub use plan::Plan;
 pub use script::Script;
 pub use taste::Taste;
@@ -36,9 +34,8 @@ pub fn declarations() -> String {
     out.extend(decls!(cfg;
         brief::Brief, brief::Section, brief::Deliverable, brief::Reference, brief::Stage, brief::Mark, brief::Task, brief::Agent,
         script::Script, script::Scene, script::Beat, script::Line,
-        taste::Taste, taste::TasteSection, taste::Rule, taste::Check,
+        taste::Taste, taste::TasteSection, taste::Rule, taste::RuleCheck, taste::RuleLevel, taste::Check,
         plan::Plan, plan::Concept, plan::Level, plan::Count, plan::Part,
-        controller::Controller, controller::Group, controller::Field, controller::Kind, controller::Step,
     ));
     out.join("\n\n") + "\n"
 }

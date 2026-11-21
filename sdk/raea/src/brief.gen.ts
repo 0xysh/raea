@@ -144,7 +144,20 @@ export type TasteSection = {
  */
 heading: string, rules: Array<Rule>, };
 
-export type Rule = { text: string, check?: Check, };
+export type Rule = { text: string, check?: RuleCheck, 
+/**
+ * what a named or a .ts check is held to (`{ band: 0.8 }`); a form carries its own value
+ */
+values?: Record<string, number | string | boolean>, 
+/**
+ * how bad what its check finds is: error, warn or note (unset: a form's findings are errors, another check's keep
+ * its own level)
+ */
+level?: RuleLevel, };
+
+export type RuleCheck = Check | string;
+
+export type RuleLevel = "error" | "warn" | "note";
 
 export type Check = { "form": "text-hold", "value": number } | { "form": "text-above", "value": number } | { "form": "text-below", "value": number } | { "form": "text-margin", "value": number } | { "form": "loudness", "value": number } | { "form": "still-max", "value": number };
 
@@ -189,13 +202,3 @@ material?: string, style?: string,
  * what a near crop of it must show
  */
 near?: string, };
-
-export type Controller = { id: string, title: string, help?: string, groups: Array<Group>, };
-
-export type Group = { id: string, title: string, help?: string, fields: Array<Field>, };
-
-export type Field = { id: string, label: string, help?: string, } & ({ "type": "toggle", value: boolean, } | { "type": "choice", options: Array<string>, value: string, } | { "type": "number", value: number, unit?: string, min?: number, max?: number, step?: number, } | { "type": "text", value: string, placeholder?: string, multiline?: boolean, } | { "type": "list", value: Array<string>, placeholder?: string, } | { "type": "agents", value: Array<string>, } | { "type": "channels", value: Array<string>, } | { "type": "workflow", value: Array<Step>, channels?: Array<string>, } | { "type": "servers", value: Array<string>, } | { "type": "skills", value: Array<string>, } | { "type": "rule", check: string, values: Record<string, number | string | boolean>, level?: string, });
-
-export type Kind = { "type": "toggle", value: boolean, } | { "type": "choice", options: Array<string>, value: string, } | { "type": "number", value: number, unit?: string, min?: number, max?: number, step?: number, } | { "type": "text", value: string, placeholder?: string, multiline?: boolean, } | { "type": "list", value: Array<string>, placeholder?: string, } | { "type": "agents", value: Array<string>, } | { "type": "channels", value: Array<string>, } | { "type": "workflow", value: Array<Step>, channels?: Array<string>, } | { "type": "servers", value: Array<string>, } | { "type": "skills", value: Array<string>, } | { "type": "rule", check: string, values: Record<string, number | string | boolean>, level?: string, };
-
-export type Step = { name: string, by?: string, back?: string, };

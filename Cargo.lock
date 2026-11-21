@@ -13955,7 +13955,6 @@ dependencies = [
  "dunce",
  "raea-app-check",
  "raea-app-registry",
- "raea-core-brief",
  "raea-core-facts",
  "raea-io-assets",
  "raea-io-home",

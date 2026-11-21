@@ -45,9 +45,8 @@ fn help_json_is_every_listed_verb() {
     let verbs: Vec<&str> = j["verbs"].as_array().unwrap().iter().map(|v| v["verb"].as_str().unwrap()).collect();
     assert_eq!(verbs, verb_list(&help).iter().map(String::as_str).collect::<Vec<_>>());
     assert!(!verbs.contains(&"compositions"), "the help's opening line isn't a verb: {verbs:?}");
-    let controller = j["verbs"].as_array().unwrap().iter().find(|v| v["verb"] == "controller").unwrap();
-    assert_eq!(controller["args"], 3);
-    assert!(controller["flags"].as_array().unwrap().iter().any(|f| f["flag"] == "--by" && f["values"] == 1));
+    let project = j["verbs"].as_array().unwrap().iter().find(|v| v["verb"] == "project").unwrap();
+    assert!(project["flags"].as_array().unwrap().iter().any(|f| f["flag"] == "--storage" && f["values"] == 1));
     assert!(j["verbs"].as_array().unwrap().iter().any(|v| v["verb"] == "gen" && v["own_parser"] == true));
 }
 

@@ -52,6 +52,22 @@ fn taste_checks_are_typed_values() {
 }
 
 #[test]
+fn a_taste_line_holds_any_check_by_name_or_path_with_values_and_a_level() {
+    let t: Taste = read("taste.ts", r#"{"title": "Proof", "sections": [{"heading": "Rules", "rules": [
+        {"text": "Captions clear the button band", "check": "../checks/caption.ts", "values": {"band": 0.8}, "level": "warn"},
+        {"text": "Loud enough", "check": "loudness", "values": {"value": -14}}]}]}"#).unwrap();
+    let r = &t.sections[0].rules;
+    assert_eq!((r[0].check.as_ref(), r[0].values.as_ref().and_then(|v| v["band"].as_f64()), r[0].level), (Some(&taste::RuleCheck::Named("../checks/caption.ts".into())), Some(0.8), Some(taste::RuleLevel::Warn)));
+    assert_eq!(t.checks().count(), 0, "only the six forms are what a video's check measures");
+    // it reads back as written, and a wrong level or an empty name says what's wrong
+    assert_eq!(read::<Taste>("taste.ts", &serde_json::to_string(&t).unwrap()).unwrap(), t);
+    let bad = |rule: &str| read::<Taste>("taste.ts", &format!(r#"{{"title": "t", "sections": [{{"heading": "h", "rules": [{rule}]}}]}}"#)).unwrap_err();
+    assert!(bad(r#"{"text": "x", "check": "cut.ts", "level": "warning"}"#).contains("expected one of `error`, `warn`, `note`"));
+    assert!(bad(r#"{"text": "x", "check": ""}"#).contains("empty"));
+    assert!(bad(r#"{"text": "x", "check": {"form": "text-above", "value": "high"}}"#).contains("invalid type"));
+}
+
+#[test]
 fn a_plan_leaves_nothing_without_a_material() {
     let ok: Plan = read("plan.ts", r#"{"concept": {"what": "flight feather", "style": "realistic", "size": 0.25, "seenFrom": 0.3, "material": "keratin"},
         "parts": {
@@ -74,60 +90,4 @@ fn a_close_view_needs_tertiary_detail() {
     let p: Plan = read("plan.ts", r#"{"concept": {"what": "toy rocking horse", "style": "painted wood", "size": 0.9, "seenFrom": 0.5, "material": "beech"},
         "parts": {"body": {"role": "body", "level": "primary"}, "rocker": {"role": "rocker", "level": "secondary", "parent": "body", "count": 2}}}"#).unwrap();
     assert!(plan::check(&p).iter().any(|m| m.contains("tertiary")));
-}
-
-const DELIVERY: &str = r#"{"title": "Delivery", "help": "What every final keeps", "groups": [{"title": "Format", "fields": [
-    {"label": "Aspect ratio", "type": "choice", "options": ["9:16", "4:5", "1:1"], "value": "9:16"},
-    {"label": "Loudness", "type": "number", "value": -14, "unit": "LUFS", "min": -30, "max": 0},
-    {"label": "Burn in captions", "type": "toggle", "value": true},
-    {"label": "Steps", "type": "workflow", "value": [{"name": "Cut", "by": "@cutter"}, {"name": "Review", "by": "you", "back": "Cut"}]}]}]}"#;
-
-#[test]
-fn a_controller_fills_ids_from_titles_and_labels() {
-    let c = controller::normalize(&serde_json::from_str(DELIVERY).unwrap()).unwrap();
-    assert_eq!(c.id, "delivery");
-    assert_eq!(c.groups[0].id, "format");
-    let ids: Vec<_> = c.groups[0].fields.iter().map(|f| f.id.as_str()).collect();
-    assert_eq!(ids, ["aspect-ratio", "loudness", "burn-in-captions", "steps"]);
-    let controller::Kind::Workflow { value, .. } = &c.groups[0].fields[3].kind else { panic!("a workflow") };
-    assert_eq!(value[0].by.as_deref(), Some("cutter"));
-    // what it writes back reads as the same controller (the page's types are these)
-    let again = controller::normalize(&serde_json::to_value(&c).unwrap()).unwrap();
-    assert_eq!(again, c);
-}
-
-#[test]
-fn a_controller_says_what_is_wrong_in_a_sentence_the_agent_can_act_on() {
-    let bad = |j: &str| controller::normalize(&serde_json::from_str(j).unwrap()).unwrap_err();
-    assert!(bad(r#"{"title": "X", "groups": [{"title": "G", "fields": [{"label": "A", "type": "slider"}]}]}"#).contains("type must be one of"));
-    assert!(bad(r#"{"title": "X", "groups": [{"title": "G", "fields": [{"label": "A", "type": "choice", "options": ["one"]}]}]}"#).contains("at least two options"));
-    assert!(bad(r#"{"title": "X"}"#).contains("needs groups"));
-    assert!(bad(r#"{"groups": []}"#).contains("needs a title"));
-    assert!(bad(r#"{"title": "X", "groups": [{"title": "G", "fields": [{"label": "A", "type": "toggle"}, {"label": "a", "type": "toggle"}]}]}"#).contains("two fields are called a"));
-    assert!(bad(r#"{"title": "X", "groups": [{"title": "G", "fields": [{"label": "A", "type": "rule"}]}]}"#).contains("a rule needs a check"));
-    assert!(bad(r#"{"title": "X", "groups": [{"title": "G", "fields": [{"label": "A", "type": "rule", "check": "x", "level": "p0"}]}]}"#).contains("error, warn or note"));
-}
-
-#[test]
-fn a_rule_field_is_a_check_by_name_with_values_or_a_path() {
-    let j = r#"{"title": "Rules", "groups": [{"title": "Vertical", "fields": [
-        {"label": "Captions clear the button band", "type": "rule", "check": "./checks/clear.ts", "values": {"platform": "tiktok"}, "level": "warn"},
-        {"label": "Words stay up long enough to read", "type": "rule", "check": "text-hold", "values": {"value": 1.5}}]}]}"#;
-    let c = controller::normalize(&serde_json::from_str(j).unwrap()).unwrap();
-    let controller::Kind::Rule { check, values, level } = &c.groups[0].fields[0].kind else { panic!("a rule") };
-    assert_eq!((check.as_str(), level.as_deref()), ("./checks/clear.ts", Some("warn")));
-    assert_eq!(values.as_ref().unwrap()["platform"], "tiktok");
-    assert_eq!(controller::normalize(&serde_json::to_value(&c).unwrap()).unwrap(), c, "it reads back as written");
-}
-
-#[test]
-fn a_value_is_checked_against_its_field() {
-    let c = controller::normalize(&serde_json::from_str(DELIVERY).unwrap()).unwrap();
-    let cs = [c];
-    let f = |p: &str| controller::field(&cs, p).unwrap();
-    assert!(controller::check_value(f("delivery.format.loudness"), &serde_json::json!(-16)).is_ok());
-    assert!(controller::check_value(f("delivery.format.loudness"), &serde_json::json!(4)).unwrap_err().contains("between -30 and 0"));
-    assert!(controller::check_value(f("delivery.format.aspect-ratio"), &serde_json::json!("16:9")).unwrap_err().contains("one of: 9:16, 4:5, 1:1"));
-    assert!(controller::check_value(f("delivery.format.burn-in-captions"), &serde_json::json!("yes")).is_err());
-    assert!(controller::field(&cs, "delivery.format.nope").is_none());
 }
