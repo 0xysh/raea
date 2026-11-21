@@ -189,6 +189,7 @@ members = [
     "runtime/scene2d",
     "runtime/shared",
     "apps/ask",
+    "apps/double",
     "apps/check",
     "apps/check/flash",
     "apps/check/inbox",

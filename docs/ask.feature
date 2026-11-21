@@ -207,7 +207,7 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
 
   Rule: AK8. The fingerprint asks too
 
-    @needs:AK3
+    @needs:AK3 @done
     Scenario: AK8. A double check on the fingerprint's flags
       Given the plan
         | crate                | file                     | lines | job                                                                    |
@@ -222,6 +222,22 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
       And it costs by the flags, never the whole piece
       And the app's rule_check asks the rules nothing measures, and the fingerprint with `--ask unsure`, before it asks
         the agent for its own verdicts, so the agent opens only the frames clef flags
+      Status 11-20: done. raea-app-double (apps/double/src/lib.rs, 165 lines) asks each flag, and with `unsure` each run
+        of windows an axis puts in its plausible band unflagged, as a yes/no question in the axis's first words (a
+        quality axis is flagged on no), seeing the picture or hearing the sound as the axis does, on that moment's
+        window, through raea-app-ask's runner: moments on the same window share a call, and the question carries the
+        axis's words as its label words, so the person's notes calibrate it (AK6, AK7). A moment it couldn't ask (no
+        route, the pool spent) says why, and the score goes on. Each answer replaces clef's last `eye:clef` row for that
+        moment in the ledger. In the app (raea-feed), rule_check scores with `--ask unsure`: a gating flag clef doesn't
+        see becomes one to look at, not to fix; advice flags clef sees none of hold; a moment the fingerprint was only
+        unsure of is flagged where clef sees it; the rules nothing measures go to clef in one call, and the agent's
+        verdict settles any of them. Tests: flags_are_asked_and_unsure_adds_the_plausible_windows_run_together,
+        an_axis_asks_as_it_senses_and_a_quality_is_flagged_on_no,
+        each_flag_is_asked_on_its_own_window_and_said_beside_it_and_kept_as_clefs; the feed's rules-tools tests. Real
+        run: a 10 s render's five flags; clef saw no `dark` on a frame that is plainly lit (the fingerprint had it
+        gating), agreed it's a computer-generated scene (0.96), $0.0007, and a second run cost nothing (cache). The
+        same run showed the fingerprint judging sound axes on a render with no sound track (an empty clip's CLAP
+        vector); fixed apart from AK8, in raea-sys-columns: sound is in a file only when it has levels
 
   Rule: AK9. Handing a question to a local head
 
