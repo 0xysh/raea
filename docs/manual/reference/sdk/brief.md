@@ -156,6 +156,7 @@ type Deliverable = { name: string, /** * "90 s", "16:9", "with sound" */ specs?:
 | `about` | `string` | One line: what it tracks and when it judges ("Short ads for one brand: pace, type on screen, the brand's colours"). |
 | `extends` | `string` | The fingerprint it builds on, by name: it started from that one's axes. |
 | `applies` | `Applies` | Which pieces it judges when its project or workspace holds more than one. |
+| `ask` | `"flags" \| "unsure"` | Its flags asked again of the decision model as it scores: "flags", or "unsure" for the moments it's unsure of too (`raea fingerprint score --ask`). Costs by the flags; each answer is clef's evidence, never yours. |
 | `axes` (required) | `Axis[]` | What it notices, each axis with its words and the sense its head reads. |
 | `encoders` | `Record<string, string>` | Each encoder's id and its file's sha256: heads trained on other encoders' columns are refused. |
 
