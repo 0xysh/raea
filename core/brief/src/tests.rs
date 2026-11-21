@@ -14,9 +14,7 @@ fn declarations_match_the_committed_file() {
 #[test]
 fn a_brief_reads_and_its_doctor_asks_for_what_is_missing() {
     let b: Brief = read("brief.ts", r#"{"title": "A walkthrough", "mode": ["explain"], "assumed": ["voice"], "voice": "one calm narrator",
-        "deliver": [{"name": "Walkthrough", "specs": ["60 s", "16:9"]}],
-        "stages": [{"name": "", "tasks": [{"text": "Storyboard it", "agents": ["director"], "mark": "done"}]}]}"#).unwrap();
-    assert_eq!(b.stages[0].tasks[0].mark, brief::Mark::Done);
+        "deliver": [{"name": "Walkthrough", "specs": ["60 s", "16:9"]}]}"#).unwrap();
     let d = brief::doctor(&b);
     assert!(d.iter().any(|m| m.contains("`believe`")), "{d:?}");
     assert!(d.iter().any(|m| m.contains("no script")), "{d:?}");
@@ -68,26 +66,34 @@ fn a_taste_line_holds_any_check_by_name_or_path_with_values_and_a_level() {
 }
 
 #[test]
-fn a_plan_leaves_nothing_without_a_material() {
-    let ok: Plan = read("plan.ts", r#"{"concept": {"what": "flight feather", "style": "realistic", "size": 0.25, "seenFrom": 0.3, "material": "keratin"},
+fn an_objects_parts_leave_nothing_without_a_material() {
+    let ok: Parts = read("feather.parts.ts", r#"{"concept": {"what": "flight feather", "style": "realistic", "size": 0.25, "seenFrom": 0.3, "material": "keratin"},
         "parts": {
           "rachis": {"role": "shaft", "level": "primary"},
           "vane": {"role": "vane", "level": "secondary", "parent": "rachis", "count": 2, "style": "barred brown"},
           "barb": {"role": "barb", "level": "tertiary", "parent": "vane", "count": {"min": 300, "max": 500}, "near": "separate barbs, a few split gaps"}}}"#).unwrap();
-    assert_eq!(plan::check(&ok), Vec::<String>::new());
-    assert_eq!(plan::resolve(&ok, "barb").unwrap(), plan::Resolved { material: "keratin".into(), style: "barred brown".into() });
+    assert_eq!(parts::check(&ok), Vec::<String>::new());
+    assert_eq!(parts::resolve(&ok, "barb").unwrap(), parts::Resolved { material: "keratin".into(), style: "barred brown".into() });
 
     let mut bad = ok.clone();
     bad.concept.material = None;
     bad.parts.get_mut("rachis").unwrap().parent = Some("calamus".into());
-    let e = plan::check(&bad);
+    let e = parts::check(&bad);
     assert!(e.iter().any(|m| m.contains("`calamus` isn't planned")), "{e:?}");
     assert!(e.iter().any(|m| m.contains("no root")), "{e:?}");
 }
 
 #[test]
 fn a_close_view_needs_tertiary_detail() {
-    let p: Plan = read("plan.ts", r#"{"concept": {"what": "toy rocking horse", "style": "painted wood", "size": 0.9, "seenFrom": 0.5, "material": "beech"},
+    let p: Parts = read("horse.parts.ts", r#"{"concept": {"what": "toy rocking horse", "style": "painted wood", "size": 0.9, "seenFrom": 0.5, "material": "beech"},
         "parts": {"body": {"role": "body", "level": "primary"}, "rocker": {"role": "rocker", "level": "secondary", "parent": "body", "count": 2}}}"#).unwrap();
-    assert!(plan::check(&p).iter().any(|m| m.contains("tertiary")));
+    assert!(parts::check(&p).iter().any(|m| m.contains("tertiary")));
+}
+
+#[test]
+fn an_older_brief_with_stages_still_reads_and_never_writes_them() {
+    let b: Brief = read("brief.ts", r#"{"title": "Old", "stages": [{"name": "", "tasks": [{"text": "Write the plan", "mark": "todo"}]}]}"#).unwrap();
+    assert!(b.stages.is_some());
+    assert!(!serde_json::to_string(&b).unwrap().contains("stages"));
+    assert!(!declarations().contains("stages"), "the schema an agent writes has no stages (docs/plan.feature PL8a)");
 }

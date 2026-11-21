@@ -56,7 +56,7 @@ raea's specs are TypeScript files whose default export is checked against a sche
 | `NAME.script.ts` | A storyboard: scenes of beats, what's on screen, what each scene must land |
 | `~/.raea/taste/taste.ts` | The person's taste, which beats any guide's default |
 | `taste.ts` | A workspace's or a project's rules, which `raea check` holds every piece to |
-| `plan.ts` | A frozen plan for a build, checked by raea |
+| `NAME.parts.ts` | An object's parts, frozen before it's built, checked by raea |
 
 ```sh
 raea spec brief.ts        # prints the brief as JSON, checked against its schema

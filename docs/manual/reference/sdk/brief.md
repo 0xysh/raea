@@ -1,6 +1,6 @@
 ---
 title: "raea/brief"
-summary: "The specs an agent writes as data: brief, script, taste and plan, checked against raea's schemas."
+summary: "The specs an agent writes as data: brief, script, taste and an object's parts, checked against raea's schemas."
 order: 4
 sources: ["sdk/raea/src/brief.ts", "core/brief/src"]
 ---
@@ -30,16 +30,17 @@ See [Workspaces and projects](../../concepts/workspaces.md) for where each spec 
 <!-- generated:begin by tools/manual-ref/sdk.ts from the SDK's exports and doc comments; edit outside this block -->
 
 ```ts
-import { brief, fingerprint, plan, script } from "raea/brief"
+import { brief, fingerprint, parts, script } from "raea/brief"
 ```
 
-`raea/brief` exports 5 functions, 27 types. Source: [sdk/raea/src/brief.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/brief.ts).
+`raea/brief` exports 5 functions, 24 types. Source: [sdk/raea/src/brief.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/brief.ts).
 
 ## Functions
 
 ### `brief`
 
-A project's brief (brief.ts): what to make, for whom, the one thing to believe, its deliverables and staged tasks.
+A project's brief (brief.ts): what to make, for whom, the one thing to believe and its deliverables. Its tasks are
+the project's plan.org.
 
 ```ts
 function brief(b: Brief): Brief
@@ -53,12 +54,12 @@ A fingerprint (fingerprint.ts): its axes and the encoders its heads were trained
 function fingerprint(f: Fingerprint): Fingerprint
 ```
 
-### `plan`
+### `parts`
 
-An object's plan (plan.ts): its parts by name, levels, counts, materials.
+An object's parts (NAME.parts.ts), written before any geometry: each by name, its level, count and material.
 
 ```ts
-function plan(p: Plan): Plan
+function parts(p: Parts): Parts
 ```
 
 ### `script`
@@ -170,12 +171,6 @@ type Level = "primary" | "secondary" | "tertiary"
 type Line = { /** * a character, or "narrator" */ who: string, says: string, /** * a screenplay's parenthetical ("quietly") */ how?: string, }
 ```
 
-### `Mark`
-
-```ts
-type Mark = "todo" | "done" | "dropped"
-```
-
 ### `Modality`
 
 What an axis's head reads: the frames (SigLIP 2), how they change, their look, the sound (CLAP) or its events (YAMNet).
@@ -190,10 +185,10 @@ type Modality = "picture" | "change" | "look" | "sound" | "events" | "text"
 type Part = { /** * the label it carries into the world ("seat", "leaf", "gem") */ role: string, level: Level, /** * the part it sits on or in; none for the root */ parent?: string, count?: Count, /** * its own, else its parent's, else the concept's */ material?: string, style?: string, /** * what a near cro…
 ```
 
-### `Plan`
+### `Parts`
 
 ```ts
-type Plan = { concept: Concept, /** * by name; the build's parts are typed from these keys, so a planned part the build skips is a tsc error */ parts: { [key in string]: Part }, }
+type Parts = { concept: Concept, /** * by name; the build's parts are typed from these keys, so a planned part the build skips is a tsc error */ parts: { [key in string]: Part }, }
 ```
 
 ### `Reference`
@@ -236,18 +231,6 @@ type Script = { title: string, logline?: string, scenes: Array<Scene>, }
 
 ```ts
 type Section = { heading: string, text: string, }
-```
-
-### `Stage`
-
-```ts
-type Stage = { name: string, tasks: Array<Task>, }
-```
-
-### `Task`
-
-```ts
-type Task = { text: string, /** * a task linked to an item takes the item's state (the work is the truth); this is for unlinked ones */ mark?: Mark, agents?: Array<string>, item?: string, tags?: Array<string>, due?: string, /** * the craft verb it was written as ("quieter"): agents read it, the page shows th…
 ```
 
 ### `Taste`

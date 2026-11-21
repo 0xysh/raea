@@ -40,11 +40,7 @@ assumed?: Array<string>,
 /**
  * prose sections beyond the fields above (Goal, Background), in order
  */
-sections?: Array<Section>, deliver?: Array<Deliverable>, references?: Array<Reference>, 
-/**
- * the tasks, in stages ("Act one", "The cut")
- */
-stages?: Array<Stage>, agents?: Array<Agent>, };
+sections?: Array<Section>, deliver?: Array<Deliverable>, references?: Array<Reference>, agents?: Array<Agent>, };
 
 export type Section = { heading: string, text: string, };
 
@@ -67,20 +63,6 @@ brief?: string,
 script?: string, };
 
 export type Reference = { target: string, note?: string, };
-
-export type Stage = { name: string, tasks: Array<Task>, };
-
-export type Mark = "todo" | "done" | "dropped";
-
-export type Task = { text: string, 
-/**
- * a task linked to an item takes the item's state (the work is the truth); this is for unlinked ones
- */
-mark?: Mark, agents?: Array<string>, item?: string, tags?: Array<string>, due?: string, 
-/**
- * the craft verb it was written as ("quieter"): agents read it, the page shows the text
- */
-verb?: string, };
 
 export type Agent = { name: string, role?: string, };
 
@@ -161,7 +143,7 @@ export type RuleLevel = "error" | "warn" | "note";
 
 export type Check = { "form": "text-hold", "value": number } | { "form": "text-above", "value": number } | { "form": "text-below", "value": number } | { "form": "text-margin", "value": number } | { "form": "loudness", "value": number } | { "form": "still-max", "value": number };
 
-export type Plan = { concept: Concept, 
+export type Parts = { concept: Concept, 
 /**
  * by name; the build's parts are typed from these keys, so a planned part the build skips is a tsc error
  */

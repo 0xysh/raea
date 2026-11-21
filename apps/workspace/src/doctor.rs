@@ -86,6 +86,16 @@ fn old_controllers(base: &Path, ws: Option<&Path>, out: &mut Vec<Finding>) {
     }
 }
 
+/// A brief.ts that still keeps tasks in `stages` (docs/plan.feature PL8a): they read, unread, and belong in plan.org.
+fn briefs_with_tasks(base: &Path, out: &mut Vec<Finding>) {
+    let f = base.join("brief.ts");
+    let Ok(text) = std::fs::read_to_string(&f) else { return };
+    if text.lines().any(|l| l.trim_start().starts_with("stages:") || l.trim_start().starts_with("\"stages\":")) {
+        let says = format!("{}: keeps tasks in `stages`, which raea no longer reads; move each to the project's plan.org (an Org heading under its stage, its mark as TODO, DONE or DROPPED), then delete `stages`", f.display());
+        out.push(Finding { says, fix: Fix::No });
+    }
+}
+
 /// The `version:` in a SKILL.md's front matter.
 fn skill_version(md: &Path) -> Option<String> {
     let text = std::fs::read_to_string(md).ok()?;
@@ -101,6 +111,7 @@ pub fn findings(from: &Path, skills: &[(&str, PathBuf)], version: &str) -> Vec<F
     let base = project.clone().or_else(|| ws.clone()).unwrap_or_else(|| from.to_path_buf());
     old_briefs(&base, if project.is_some() { 2 } else { 1 }, &mut out);
     old_controllers(&base, ws.as_deref(), &mut out);
+    briefs_with_tasks(&base, &mut out);
     if let Some(ws) = &ws {
         let name = ws.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let keys = [("workspace.id", new_id("ws")), ("workspace.name", name), ("workspace.layout", "monorepo".to_string())];
