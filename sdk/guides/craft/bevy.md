@@ -65,8 +65,10 @@ the rest come from `raea`.
 3. **Colours are hex** (`"#ff7a00"`), from the brand kit in a branded piece. CSS variables don't reach the 3D.
 4. **Name what comes and goes.** Parts are matched across frames by `name`, else by kind and shape in tree order.
    A Mesh that appears, disappears or swaps places with one of the same shape needs a `name`.
-5. **A shape is fixed for the life of a part.** Animate position, rotation, scale, colour, opacity, glow,
-   roughness and metalness; don't change `args` or `shape` frame to frame (that's a new part each frame).
+5. **Grow by scale; a changed shape is a new mesh.** Animate position, rotation, scale, colour, opacity, glow,
+   roughness and metalness. A part whose `shape`, `args` or words change is built again on each frame they change
+   (docs/stage-guards.feature SG1), which is right but costs a mesh a frame: a bar that grows is a fixed box scaled, and
+   a counter's words change only when its number does.
 6. **One camera a frame; each frame's own effects.** The first active camera in the tree is the piece's: give each
    shot its own `<Camera3d>` and switch them with `is_active={...}`, so a cut between cameras is one render, not one
    render a camera joined after (the frame another camera becomes active is drawn as a shot rendered alone starts,
@@ -78,5 +80,17 @@ the rest come from `raea`.
    `raea/light`, `Transform` from `raea/transform`, `Canvas3D`, `Bloom` and the rest from `raea/3d`); a missing one
    fails the render. `staticFile`, `Sequence`, `spring` and the
    hooks come from `raea`.
-8. **Render and look.** Render stills where things happen (`raea render edit.tsx --at A,B,C -o stills/`) and look at them. A 3D frame that renders
+8. **One clock.** A scene is a `<Sequence from>`, and every part reads `useCurrentFrame()`. Never pass a frame down as
+   a prop to time a part: RichText's `at` and `exitAt` count in its Sequence's frames, and one past its last frame is
+   refused (SG5). Render a piece whole, one frame after another; a piece rendered in parts is a workaround, never the
+   plan.
+9. **Type that reads.** Words that name or point at a part go in the page over the 3D, sized in pixels of the frame,
+   kept clear of the parts they name. Words in the world (a sign, a page in a book) are RichText: at least 22 px tall
+   (caps) at 1080 lines, turned within 35° of the camera, inside the title-safe area, held still for their reading time
+   (words ÷ 3 a second, plus half a second) and fully revealed before they go.
+10. **A camera that settles.** Time a camera's keys by frames and pace the path by time, so its speed carries across
+   each key: a spline whose segments each run 0 to 1 whatever their length jumps speed at every key (11-21: 51 of 155
+   keys jumped 2x or more). Never push in and pull back, or pan one way then the other, within 1.5 s. A camera still
+   moving while words are up gives them their reading time first.
+11. **Render and look.** Render stills where things happen (`raea render edit.tsx --at A,B,C -o stills/`) and look at them. A 3D frame that renders
    black usually has no light or a camera inside or behind the subject.

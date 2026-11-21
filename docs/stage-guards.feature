@@ -215,3 +215,5 @@ Feature: Stage guards: a 3D render an agent can't break
         | grow a part by its transform's scale until SG1 lands; remount it when its words change                |
         | render frame-pure: SG9 runs on every render; a chunked render is a workaround, never the plan         |
       And each rule names the check that enforces it
+      # Status 11-21 (branch stage-guards): sdk/guides/craft/bevy.md's rules 5 and 8-10 say these (grow by scale, one
+      # clock, type that reads, a camera that settles). Left: the checks they name, Line3d, cameraPath and Label.
