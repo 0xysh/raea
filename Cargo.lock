@@ -13756,6 +13756,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-app-double"
+version = "0.1.0"
+dependencies = [
+ "raea-app-ask",
+ "raea-core-ask",
+ "raea-io-assets",
+ "raea-io-clef",
+ "raea-sys-columns",
+ "raea-sys-fingerprint",
+ "raea-sys-fingerprint-use",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-app-engines"
 version = "0.1.0"
 dependencies = [
@@ -13778,6 +13793,7 @@ dependencies = [
  "dunce",
  "fastrand",
  "raea-app-check",
+ "raea-app-double",
  "raea-io-home",
  "raea-sys-columns",
  "raea-sys-fingerprint",
