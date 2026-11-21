@@ -31,7 +31,7 @@ const GROUPS: [string, string, string[]][] = [
   ["Footage", "Takes, cuts and the camera, from your own media.", ["media", "cut", "frame", "track", "splat", "mezz", "neural"]],
   ["Sound", "Music read, foley and instruments made on this machine.", ["song", "sounds", "sao", "tokensynth", "setup-audio"]],
   ["Generate and 3D tools", "Generated media, physics and weathering bakes, clothes and motion for SOMA's body, Blender and Godot.", ["gen", "physics", "wear", "clothes", "motion", "blender", "godot"]],
-  ["Agents and setup", "What an agent reads and shows the person, and the tools raea installs.", ["guide", "context", "notes", "show", "skill", "skills", "setup", "bug"]],
+  ["Agents and setup", "What an agent reads and shows the person, and the tools raea installs.", ["guide", "context", "notes", "show", "skill", "skills", "setup", "bug", "ask"]],
 ]
 /** A verb's page: VERB.md, but index.md is this section's own page, so raea index's is indexer.md */
 const pageOf = (verb: string) => (verb === "index" ? "indexer.md" : `${verb}.md`)
