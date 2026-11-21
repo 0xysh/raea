@@ -176,13 +176,19 @@ const utf8 = (c: string) => { const n = c.codePointAt(0)!; return n < 0x80 ? 1 :
 export function RichText(props: RichTextProps) {
   const owner = "RichText";
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
   const { position = [0, 0, 0], rotation = [0, 0, 0], scale = 1, size = 0.5, align = "center", each = 2, by = "letter", at = 0, exitEach = 0 } = props;
   checkVec(owner, "position", position);
   checkVec(owner, "rotation", rotation);
   if (!(size > 0) || !Number.isFinite(size)) throw new RangeError(`${owner}: size is the em in metres, a positive number, got ${size}`);
   if (!["left", "center", "right"].includes(align)) throw new RangeError(`${owner}: align is left, center or right, got ${JSON.stringify(align)}`);
   if (props.exit !== undefined && props.exitAt === undefined) throw new Error(`${owner}: an exit needs exitAt (the local frame it starts)`);
+  // one clock (docs/stage-guards.feature SG5): `at` and `exitAt` are frames of this Sequence, as useCurrentFrame counts
+  // them. A frame from another clock (a scene's own frame passed down as a prop) can fall past the Sequence's end, where
+  // the move never starts: 11-21, a quote whose reveal was set at its scene's frame 1013 never appeared in a 150-frame part
+  for (const [k, v] of [["at", props.at], ["exitAt", props.exitAt]] as const) {
+    if (v !== undefined && Number.isFinite(durationInFrames) && v >= durationInFrames) throw new RangeError(`${owner}${props.name ? ` '${props.name}'` : ""}: ${k} ${v} is after this Sequence's last frame (${durationInFrames - 1}). Give ${k} in this Sequence's frames (useCurrentFrame), never a frame passed down as a prop, or put the scene in a <Sequence from>.`);
+  }
   const runs = textRuns(owner, props);
   // the glyphs: every character that isn't a space, with its byte in the joined text (raea-render lays the text out whole)
   type G = { ch: string; at: number; span: number; color: string; line: number; word: number; inWord: number };

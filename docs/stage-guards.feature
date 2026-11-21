@@ -127,6 +127,8 @@ Feature: Stage guards: a 3D render an agent can't break
         this composition's last frame (149). Give `at` in this Sequence's frames (useCurrentFrame), or put the scene
         in a <Sequence from>."
       And the 3D guide says a scene is a <Sequence>, never a frame passed down as a prop
+      # Status 11-21 (branch stage-guards): RichText refuses an `at` or `exitAt` at or past its Sequence's last frame,
+      # naming the prop and the fix. clock.ts (the same for the other parts that take a frame) is left.
 
     Scenario: SG6. Lines are lines
       Given the plan
