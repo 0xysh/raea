@@ -1,10 +1,13 @@
 //! Every answer kept (docs/ask.feature AK3), so a question can be labelled, calibrated and reworded later (AK6, AK7):
 //! each call in calls.jsonl (the file, the window, the state, the clips it sent by hash, the route and the cost) and each
 //! answer in answers.jsonl (the call, the question and its version, the reading). The clips themselves are kept by hash
-//! in media/, at most 2 GB, the oldest out first, so new words can be asked of the same media.
+//! in media/, at most 2 GB, the oldest out first, so new words can be asked of the same media. A call keeps what its
+//! file was (`ident`), so a note on the render's copy in the feed labels it (labels.rs), and an answer keeps its whole
+//! question, so a verdict reads in its terms and `raea ask try` can reword it.
 
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::io::{Read as _, Seek as _, SeekFrom};
+use std::path::{Path, PathBuf};
 
 use raea_core_ask::{Question, Reading};
 use serde_json::{Value, json};
@@ -26,7 +29,7 @@ pub fn new_id(prefix: &str) -> String {
     format!("{prefix}-{:012x}", h & 0xffff_ffff_ffff)
 }
 
-fn now() -> String {
+pub fn now() -> String {
     let s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     s.to_string()
 }
@@ -36,15 +39,55 @@ fn append(file: &str, row: &Value) {
     if std::fs::create_dir_all(&d).is_err() {
         return;
     }
+    // one write a row: several runs (a script's, two at once) append to the same file, and a row written in pieces
+    // could be split by another's
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(d.join(file)) {
-        let _ = writeln!(f, "{row}");
+        let _ = f.write_all(format!("{row}\n").as_bytes());
     }
+}
+
+fn hex(digest: &[u8]) -> String {
+    digest.iter().take(16).map(|b| format!("{b:02x}")).collect()
+}
+
+/// What a file is, cheaply: its size and a hash of its first and last MB. A render is known again by its copy in the
+/// feed, and a later render to the same path isn't taken for it.
+pub fn ident(path: &Path) -> Option<String> {
+    const MB: u64 = 1 << 20;
+    let mut f = std::fs::File::open(path).ok()?;
+    let len = f.metadata().ok()?.len();
+    let mut h = Sha256::new();
+    let mut part = vec![0u8; len.min(MB) as usize];
+    f.read_exact(&mut part).ok()?;
+    h.update(&part);
+    if len > 2 * MB {
+        f.seek(SeekFrom::Start(len - MB)).ok()?;
+        f.read_exact(&mut part).ok()?;
+        h.update(&part);
+    }
+    Some(format!("{len}-{}", hex(&h.finalize())))
+}
+
+/// The size an ident names, to pass over files that can't be it without reading them.
+pub fn ident_len(ident: &str) -> Option<u64> {
+    ident.split_once('-')?.0.parse().ok()
+}
+
+/// One of the record's files written whole, through a temporary file, so a reader never sees half of it.
+pub fn write_whole(file: &str, text: &str) -> Result<(), String> {
+    let d = dir();
+    let tmp = d.join(format!("{file}.{}.tmp", std::process::id()));
+    let put = || -> std::io::Result<()> {
+        std::fs::create_dir_all(&d)?;
+        std::fs::write(&tmp, text)?;
+        std::fs::rename(&tmp, d.join(file))
+    };
+    put().map_err(|e| format!("{}: {e}", d.display()))
 }
 
 /// A clip kept by its hash, as `HASH.EXT` (already kept is left alone).
 pub fn keep_media(bytes: &[u8], ext: &str) -> String {
-    let hash: String = Sha256::digest(bytes).iter().take(16).map(|b| format!("{b:02x}")).collect();
-    let name = format!("{hash}.{ext}");
+    let name = format!("{}.{ext}", hex(&Sha256::digest(bytes)));
     let d = dir().join("media");
     let p = d.join(&name);
     if !p.is_file() && std::fs::create_dir_all(&d).is_ok() {
@@ -82,16 +125,22 @@ pub fn prune(cap: u64) {
 #[allow(clippy::too_many_arguments)]
 pub fn call(file: &str, project: Option<&str>, from: f64, to: Option<f64>, state: &str, media: &[String], route: &str, cost: f64, cached: bool) -> String {
     let id = new_id("c");
-    append("calls.jsonl", &json!({"id": id, "at": now(), "file": file, "project": project, "from": from, "to": to, "state": state, "media": media, "route": route, "cost": cost, "cached": cached}));
+    let row = json!({
+        "id": id, "at": now(), "file": file, "ident": ident(Path::new(file)), "project": project, "from": from, "to": to, "state": state,
+        "media": media, "route": route, "cost": cost, "cached": cached,
+    });
+    append("calls.jsonl", &row);
     id
 }
 
 /// One answer kept; its id.
 pub fn answer(call: &str, file: &str, q: &Question, r: &Reading, flagged: bool) -> String {
     let id = new_id("a");
+    let whole = serde_json::to_value(Question { calibration: None, ..q.clone() }).unwrap_or_default();
     let row = json!({
         "id": id, "at": now(), "call": call, "file": file, "question": q.id, "version": q.version(), "ask": q.ask,
         "value": r.value, "problem": r.problem, "choice": r.choice, "says": r.says, "flagged": flagged, "calibrated": q.calibrated(),
+        "q": whole,
     });
     append("answers.jsonl", &row);
     id

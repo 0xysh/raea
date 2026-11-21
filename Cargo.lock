@@ -13645,6 +13645,8 @@ dependencies = [
  "raea-io-assets",
  "raea-io-clef",
  "raea-io-home",
+ "raea-io-trace",
+ "raea-sys-fingerprint",
  "serde",
  "serde_json",
  "sha2 0.10.9",

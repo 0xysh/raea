@@ -2,7 +2,9 @@
 //! beside it and what of the picture its questions look at, at most 64 questions a call, the voice question added to a
 //! call whose questions depend on whether anyone speaks when that isn't known), each clip cut once, the calls
 //! made in parallel, the answers streamed back as they come and kept. A pool that's spent partway keeps what came and
-//! reports the rest as waiting for it. `dry` cuts the media and says what would be sent, and spends nothing.
+//! reports the rest as waiting for it. `dry` cuts the media and says what would be sent, and spends nothing. A group can
+//! carry clips kept from an earlier call instead of a file to cut (`raea ask try`), and every question goes out with the
+//! person's own calibration when it has earned one (calibrate.rs).
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -15,7 +17,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::prepare::{self, Piece, VOICE};
-use crate::record;
+use crate::{calibrate, record};
 
 /// What to ask of one file: its questions (prepared), those dropped with why, a window over all of them (else each
 /// question's own), and files set beside it (to pick between, or before and after).
@@ -36,6 +38,16 @@ pub struct Group {
     pub hears: bool,
     pub with: Vec<PathBuf>,
     pub questions: Vec<Question>,
+    /// clips kept from an earlier call, sent again in place of cutting the file
+    pub kept: Option<Arc<Kept>>,
+}
+
+/// An earlier call's clips and state, and their seconds of video and sound (for the estimate).
+pub struct Kept {
+    pub media: Media,
+    pub state: String,
+    pub video_seconds: f64,
+    pub sound_seconds: f64,
 }
 
 /// One answer, or why a question wasn't asked or still waits: the line `raea ask --json` prints for each.
@@ -111,6 +123,7 @@ fn picks(p: Picks, files: usize) -> Vec<String> {
 pub fn plan(entries: &[Entry]) -> (Vec<Group>, Vec<Answer>) {
     let mut groups: Vec<Group> = Vec::new();
     let mut unasked = Vec::new();
+    let mine = calibrate::local();
     for e in entries {
         let file = e.piece.file.display().to_string();
         for (id, why) in &e.dropped {
@@ -120,6 +133,7 @@ pub fn plan(entries: &[Entry]) -> (Vec<Group>, Vec<Answer>) {
             let w = e.window.or(q.window).unwrap_or_default();
             let (from, to) = (w.from.unwrap_or(0.0).max(0.0), w.to);
             let mut q = q.clone();
+            calibrate::apply(&mut q, &mine);
             if let Some(p) = q.picks {
                 q.kind = Kind::Choose;
                 q.options = picks(p, 1 + e.with.len());
@@ -136,7 +150,7 @@ pub fn plan(entries: &[Entry]) -> (Vec<Group>, Vec<Answer>) {
                     g.hears |= q.hears;
                     g.questions.push(q);
                 }
-                None => groups.push(Group { piece: e.piece.clone(), from, to, sees: q.sees, hears: q.hears, with: e.with.clone(), questions: vec![q] }),
+                None => groups.push(Group { piece: e.piece.clone(), from, to, sees: q.sees, hears: q.hears, with: e.with.clone(), questions: vec![q], kept: None }),
             }
         }
     }
@@ -163,6 +177,9 @@ fn cut(cuts: &Cuts, key: String, make: impl FnOnce() -> Result<Vec<u8>, String>)
 
 /// A group's media, and its seconds of video and of sound (for the estimate).
 fn media_of(g: &Group, cuts: &Cuts) -> Result<(Media, f64, f64), String> {
+    if let Some(k) = &g.kept {
+        return Ok((k.media.clone(), k.video_seconds, k.sound_seconds));
+    }
     let files: Vec<&Path> = std::iter::once(g.piece.file.as_path()).chain(g.with.iter().map(PathBuf::as_path)).collect();
     let (from, to) = (g.from, g.to);
     let span = |p: &media::Probe| (to.unwrap_or(p.seconds) - from).clamp(0.0, p.seconds.max(0.1));
@@ -208,6 +225,11 @@ enum Done {
 /// Every entry asked, at most `jobs` calls at once, each event told to `out` as it comes (in the caller's thread).
 pub fn run(entries: Vec<Entry>, o: &Opts, out: &mut dyn FnMut(Event)) -> Summary {
     let (groups, unasked) = plan(&entries);
+    run_groups(groups, unasked, o, out)
+}
+
+/// Planned groups asked, the questions not asked told first.
+pub fn run_groups(groups: Vec<Group>, unasked: Vec<Answer>, o: &Opts, out: &mut dyn FnMut(Event)) -> Summary {
     let mut sum = Summary::default();
     for a in &unasked {
         out(Event::Answer(a));
@@ -229,7 +251,8 @@ pub fn run(entries: Vec<Entry>, o: &Opts, out: &mut dyn FnMut(Event)) -> Summary
                         match media_of(g, cuts) {
                             Err(e) => Done::Failed(e),
                             Ok((m, vs, ss)) => {
-                                let call = Call { state: g.piece.state(), questions: g.questions.clone(), media: m };
+                                let state = g.kept.as_ref().map_or_else(|| g.piece.state(), |k| k.state.clone());
+                                let call = Call { state, questions: g.questions.clone(), media: m };
                                 let estimate = limits::estimate(vs, ss, call.media.stills.len(), call.state.len(), call.questions.len());
                                 if o.dry {
                                     Done::Would(would(g, &call, estimate))

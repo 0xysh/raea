@@ -1,7 +1,9 @@
 //! `raea ask` (docs/ask.feature AK3): questions about a piece's picture and sound, from the command line or a batch,
 //! prepared (prepare.rs), asked in parallel (runner.rs) and kept (record.rs). It prints as answers come: words and a
 //! probability a line, or with `--json` one JSON object a line (an answer, a call `--dry` would make, then the summary).
-//! `--gate` exits 1 when a calibrated question flags (`--gate any`: when any does), for a pipeline.
+//! `--gate` exits 1 when a calibrated question flags (`--gate any`: when any does), for a pipeline. `verdict`,
+//! `calibrate` and `try` label the answers, calibrate the questions on them and measure new words (labels.rs,
+//! calibrate.rs; AK6-AK7).
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read as _;
@@ -11,12 +13,14 @@ use std::sync::Arc;
 use raea_core_ask::{Kind, Question, Window, library};
 use serde_json::{Value, json};
 
+use crate::labels::{self, span};
 use crate::prepare::{self, Piece};
 use crate::runner::{self, Entry, Event, Opts};
+use crate::{calibrate, record};
 
-pub const USAGE: &str = "raea ask FILE [QUESTION...] [--choose A,B,C] [--grade] [--rate N] [--flag ANSWERS] [--set NAME] [--std ID] [--from S] [--to S] [--at S] [--with FILE2] [--brief brief.ts|none] [--words words.json] [--voice yes|no] [--state TEXT] [--dry] [--json] [--gate [any]] [--jobs N] | ask --batch FILE [--dry] [--json] [--gate [any]] [--jobs N] | ask list [SET] [--json]   (questions about a piece's picture and sound, answered by clef-omni and paid from your raea plan's pool when the app is signed in, else RAEA_AGENT_KEY's, else your own Cloudflare keys: your own words, or the standard sets (rubric, av, defects, platform, decide); every question about one clip goes in one call, --batch (a JSON list or JSON lines, - for stdin) asks many clips in parallel; --dry says what would be sent and spends nothing; answers are advice until a question is calibrated)";
+pub const USAGE: &str = "raea ask FILE [QUESTION...] [--choose A,B,C] [--grade] [--rate N] [--flag ANSWERS] [--set NAME] [--std ID] [--from S] [--to S] [--at S] [--with FILE2] [--brief brief.ts|none] [--words words.json] [--voice yes|no] [--state TEXT] [--dry] [--json] [--gate [any]] [--jobs N] | ask --batch FILE [--dry] [--json] [--gate [any]] [--jobs N] | ask list [SET] [--json] | ask verdict ANSWER WORD [--eye NAME] | ask calibrate [ID] [--json] | ask try WORDS --like ID [--dry] [--json] [--jobs N]   (questions about a piece's picture and sound, answered by clef-omni and paid from your raea plan's pool when the app is signed in, else RAEA_AGENT_KEY's, else your own Cloudflare keys: your own words, or the standard sets (rubric, av, defects, platform, decide); every question about one clip goes in one call, --batch (a JSON list or JSON lines, - for stdin) asks many clips in parallel; --dry says what would be sent and spends nothing; answers are advice until a question is calibrated: verdict labels an answer, calibrate holds each question to your verdicts, notes and approvals, try asks new words of its labelled clips)";
 
-const VALUED: [&str; 15] = ["--choose", "--rate", "--flag", "--set", "--std", "--from", "--to", "--at", "--with", "--brief", "--words", "--voice", "--state", "--jobs", "--batch"];
+const VALUED: [&str; 17] = ["--choose", "--rate", "--flag", "--set", "--std", "--from", "--to", "--at", "--with", "--brief", "--words", "--voice", "--state", "--jobs", "--batch", "--eye", "--like"];
 const BARE: [&str; 4] = ["--grade", "--dry", "--json", "--gate"];
 
 /// The arguments: the words that aren't flags, each flag's values, and whether `--gate` is `--gate any`.
@@ -208,8 +212,10 @@ fn list(a: &Args, rubric: Option<&str>) -> Result<String, String> {
         None => library::SETS.iter().map(|s| s.to_string()).collect(),
     };
     let mut out = Vec::new();
+    let mine = calibrate::local();
     for s in &sets {
-        let qs = library::set(s, rubric)?;
+        let mut qs = library::set(s, rubric)?;
+        qs.iter_mut().for_each(|q| calibrate::apply(q, &mine));
         if a.has("--json") {
             out.push(json!({"set": s, "questions": qs}).to_string());
             continue;
@@ -221,14 +227,6 @@ fn list(a: &Args, rubric: Option<&str>) -> Result<String, String> {
         }
     }
     Ok(out.join("\n"))
-}
-
-fn span(from: f64, to: Option<f64>) -> String {
-    match to {
-        Some(t) => format!("{from:.0}-{t:.0} s"),
-        None if from > 0.0 => format!("from {from:.0} s"),
-        None => "whole".into(),
-    }
 }
 
 /// An event as a line of text.
@@ -278,16 +276,27 @@ pub fn cli(args: &[String]) -> i32 {
 fn run(args: &[String]) -> Result<i32, String> {
     let a = Args::parse(args)?;
     let rubric = rubric_md();
-    if a.words.first().is_some_and(|w| w == "list") && !Path::new("list").exists() {
-        println!("{}", list(&a, rubric.as_deref())?);
-        return Ok(0);
+    let jobs = a.one("--jobs").map(|j| j.parse::<usize>().map_err(|_| format!("ask: --jobs takes a number, got {j:?}"))).transpose()?.unwrap_or(4);
+    let sub = a.words.first().map(String::as_str).filter(|w| !Path::new(w).exists());
+    match sub {
+        Some("list") => {
+            println!("{}", list(&a, rubric.as_deref())?);
+            return Ok(0);
+        }
+        Some("verdict") => {
+            let [_, answer, said] = a.words.as_slice() else { return Err(format!("ask verdict ANSWER WORD: the answer's id (from --json or {}) and your answer to its question", record::dir().join("answers.jsonl").display())) };
+            println!("{}", labels::verdict(answer, said, a.one("--eye"))?);
+            return Ok(0);
+        }
+        Some("calibrate") => return calibrated(&a),
+        Some("try") => return tried(&a, jobs),
+        _ => {}
     }
     let mut pieces = Pieces::new();
     let entries = match a.one("--batch") {
         Some(b) => from_batch(b, rubric.as_deref(), &mut pieces)?,
         None => from_args(&a, rubric.as_deref(), &mut pieces)?,
     };
-    let jobs = a.one("--jobs").map(|j| j.parse::<usize>().map_err(|_| format!("ask: --jobs takes a number, got {j:?}"))).transpose()?.unwrap_or(4);
     let (json_out, dry) = (a.has("--json"), a.has("--dry"));
     let files = pieces.len();
     let sum = runner::run(entries, &Opts::new(jobs, dry), &mut |e| {
@@ -321,4 +330,56 @@ fn run(args: &[String]) -> Result<i32, String> {
     // a gate fails on a flag (a calibrated one, or with `any` any), and on questions still waiting for the pool
     let flagged = if a.gate_any { sum.flagged } else { sum.flagged_calibrated };
     Ok(i32::from(a.has("--gate") && (flagged > 0 || sum.waiting > 0)))
+}
+
+/// A version's standing as a line, with its misses below when it doesn't separate.
+fn standing_line(s: &calibrate::Standing) -> String {
+    let auc = s.auc.map_or_else(|| "no AUC".to_string(), |a| format!("AUC {a:.2}"));
+    let mut out = format!("{} ({}) \"{}\": {}, {auc} on {} labels; {}", s.id, &s.version[..8.min(s.version.len())], s.ask, s.state, s.problems + s.clean, s.why);
+    if s.others > 0 {
+        out += &format!(" ({} from other eyes, not counted)", s.others);
+    }
+    for m in &s.misses {
+        let what = if m.bad { "a problem it scored" } else { "clean work it scored" };
+        out += &format!("\n    {what} {:.2}: {} ({}){}", m.problem, m.file, m.span, m.note.as_ref().map(|n| format!(" \"{n}\"")).unwrap_or_default());
+    }
+    out
+}
+
+/// `raea ask calibrate [ID]`: the feed's labels read again and each labelled question held to its labels.
+fn calibrated(a: &Args) -> Result<i32, String> {
+    let (all, (yes, no)) = calibrate::calibrate(a.words.get(1).map(String::as_str))?;
+    if a.has("--json") {
+        println!("{}", json!({"feed": {"problems": yes, "clean": no}}));
+        all.iter().for_each(|s| println!("{}", serde_json::to_string(s).unwrap_or_default()));
+        return Ok(0);
+    }
+    println!("from the feed: {yes} note{} that saw a problem, {no} approval{} without one", if yes == 1 { "" } else { "s" }, if no == 1 { "" } else { "s" });
+    if all.is_empty() {
+        println!("no labelled questions yet: raea ask verdict ANSWER WORD labels one, and your notes on a posted render do too");
+    }
+    all.iter().for_each(|s| println!("{}", standing_line(s)));
+    Ok(0)
+}
+
+/// `raea ask try WORDS --like ID`: new words asked of a question's labelled clips, both held to the same labels.
+fn tried(a: &Args, jobs: usize) -> Result<i32, String> {
+    let words = a.words[1..].join(" ");
+    let like = a.one("--like").ok_or("ask try WORDS --like ID: the question whose labelled clips the new words are asked of")?;
+    if words.trim().is_empty() {
+        return Err("ask try WORDS --like ID: the new words".into());
+    }
+    let json_out = a.has("--json");
+    let (sum, both) = calibrate::try_words(like, &words, &Opts::new(jobs, a.has("--dry")), &mut |e| match (&e, json_out) {
+        (Event::Would(v), true) => println!("{}", json!({"would": v})),
+        (Event::Answer(r), true) => println!("{}", serde_json::to_string(r).unwrap_or_default()),
+        (e, false) => println!("{}", line(e, 2)),
+    })?;
+    match (both, json_out) {
+        (None, true) => println!("{}", json!({"summary": sum})),
+        (None, false) => println!("{} call{}, about ${:.4}; nothing was sent", sum.calls, if sum.calls == 1 { "" } else { "s" }, sum.estimate),
+        (Some((old, new)), true) => println!("{}", json!({"summary": sum, "old": old, "new": new})),
+        (Some((old, new)), false) => println!("${:.4} for {} calls\nold words: {}\nnew words: {}", sum.cost, sum.calls, standing_line(&old), standing_line(&new)),
+    }
+    Ok(i32::from(!a.has("--dry") && sum.calls == 0))
 }

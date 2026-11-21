@@ -14,7 +14,7 @@ fn rubric() -> String {
     std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../sdk/guides/craft/rubric.md")).expect("the craft rubric")
 }
 
-fn setup() {
+pub(crate) fn setup() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     // SAFETY: set once, before any test reads it, to the same value for every test
     ONCE.call_once(|| unsafe { std::env::set_var("RAEA_ASK_DIR", std::env::temp_dir().join(format!("raea-ask-test-{}", std::process::id()))) });

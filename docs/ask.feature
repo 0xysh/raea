@@ -165,14 +165,23 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
 
   Rule: AK6-AK7. Better with use
 
-    @needs:AK3
+    @needs:AK3 @done
     Scenario: AK6. Labels
       Given the plan
         | crate        | file                    | lines | job                                                                    |
         | raea-app-ask | apps/ask/src/labels.rs  | 220   | an item's notes matched to the questions' label words (a match is yes, an approval with none is no); `raea ask verdict ANSWER yes|no`; an agent's own look kept as another eye |
       Then the person's labels count toward calibration, and an agent's are kept as `eye:agent` and never counted
+      Status 11-20: done. A label belongs to a question and the clips a call sent (by hash), never to one answer, so
+        new words asked of the same clips have the same labels. An approval is a post the person marked done (the
+        feed's PL8c approval). A note labels the render it was left on: each call keeps its file's identity (size and a
+        hash of its first and last MB), matched to the post's copy in the feed, so a later render to the same path
+        isn't labelled by an earlier one's note. Only the person's notes count (author kind person), pinned inside the
+        window (1.5 s before to 0.5 s after a pin) or not pinned. A verdict is the person's answer in the question's
+        own terms (a question flagged on no takes no as the problem; a grade's lower half is one) and beats a note,
+        which beats an approval. Tests: a_persons_note_on_the_posted_render_labels_it_and_an_approval_labels_it_clean,
+        a_verdict_reads_in_the_questions_terms_and_another_eyes_isnt_counted
 
-    @needs:AK6
+    @needs:AK6 @done
     Scenario: AK7. Calibrate, and try new words
       Given the plan
         | crate        | file                      | lines | job                                                                    |
@@ -184,6 +193,17 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
         question's words change only with a better AUC on raea's bench
       And a standard question ships with raea's calibration from that bench, and the person's own replaces it once it
         passes the gates
+      Status 11-20: done. `raea ask calibrate [ID]` reads the feed's labels again and holds each labelled version to
+        them through the fingerprint's own auc, quantile and gates (raea-sys-fingerprint). Clef isn't trained on the
+        labels, so its AUC on them is held out already; the threshold, the one thing fitted, flags 10% of the clean
+        labels. A version that passes is kept in ~/.raea/ask/calibration.json and goes out with the question from then
+        on (the runner's plan applies it, so every caller has it, and `raea ask list` shows it); one that stops passing
+        loses it. `raea ask try` sends the new words with each labelled call's kept clips and state through the same
+        runner, so its answers are recorded and calibrate as their own version later. The platform set's 17 questions
+        ship with the packs' calibration (AK1); the other sets have none from raea's bench yet. Test:
+        labels_from_three_projects_calibrate_a_question_and_new_words_are_measured_on_the_same_clips (18 of each from 3
+        projects calibrate at AUC 1.0, flat answers don't separate and list their misses, and new words on the same 36
+        clips go from 0.5 to 1.0)
 
   Rule: AK8. The fingerprint asks too
 
@@ -191,8 +211,10 @@ Feature: Ask: questions about a piece's picture and sound, answered by the decis
     Scenario: AK8. A double check on the fingerprint's flags
       Given the plan
         | crate                | file                     | lines | job                                                                    |
-        | raea-app-ask         | apps/ask/src/double.rs   | 160   | a score's flagged moments, each asked in its axis's own words on its own window; the answers beside the flags and kept as evidence |
-        | raea-app-fingerprint | apps/fingerprint/src/verbs.rs | 15 | `score --ask` and fingerprint.ts's `ask` hand the flagged moments to raea-app-ask |
+        | raea-app-double      | apps/double/src/lib.rs   | 160   | a score's flagged moments, each asked in its axis's own words on its own window through raea-app-ask's runner; the answers beside the flags and kept as evidence |
+        | raea-app-fingerprint | apps/fingerprint/src/verbs.rs | 15 | `score --ask` and fingerprint.ts's `ask` hand the flagged moments to raea-app-double |
+      And 11-20: the double check is its own crate, using raea-app-ask and the fingerprint, since raea-app-ask holds
+        1841 of its 2000 lines after AK7
       Then `raea fingerprint score FILE --ask` (or `ask: "flags"` in fingerprint.ts) asks each flagged moment, and
         `ask: "unsure"` also each moment between an axis's plausible and strong bands
       And each flag says "clef agrees (0.71)" or "clef doesn't see it (0.08)", and each answer is an `eye:clef`
