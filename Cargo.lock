@@ -13739,6 +13739,7 @@ name = "raea-app-direction"
 version = "0.1.0"
 dependencies = [
  "dunce",
+ "image",
  "raea-app-check",
  "raea-app-check-text",
  "raea-app-notes",
@@ -13746,6 +13747,7 @@ dependencies = [
  "raea-core-brief",
  "raea-core-facts",
  "raea-io-home",
+ "raea-io-media",
  "raea-io-trace",
  "raea-runtime-bundle",
  "raea-runtime-react",

@@ -241,6 +241,29 @@ Feature: Stage guards: a 3D render an agent can't break
       Then any part whose pixels differ beyond the encoder's noise is an error naming the part, the frame and the props
         that differ
       And this catches SG1–SG4 and any later fault of the same kind before a person sees it
+      # Status 11-21 (branch stage-guards-8): built for a video with 3D in it, more than 60 frames. At the render's end
+      # one more raea renders the sample with `--at` (each frame reached by a jump) and each still is held to the
+      # video's frame: a channel off by more than 96 levels through a 3x3 erosion (tools/frame-pure-3d.sh's bar, which
+      # drops the encoder's and a glyph edge's lone pixels), on more than 1e-4 of the frame. The largest channel, not
+      # luma: the positive control (a box moved by a counter outside the frame) put an orange box where the alone frame
+      # has grey floor, 68 levels apart in luma and 116 in blue. A frame that differs is rendered
+      # alone (`--frame N`, its own process): still different, a `frame-pure` error naming the frame, the patch's box,
+      # the parts under it (the still's manifest now lists each frame's parts on screen, raea-sys-stage's on_screen)
+      # and the two pictures, kept in OUT.frame-pure/; matching alone, a `frame-pure-jump` warning (raea's fault, not
+      # the composition's). The sample is every 300th frame, the last (most history behind it, so a render under 300
+      # frames is sampled too) and the frame after each remount, from the manifest's new `remounts`; at most 64.
+      # Left: "each chunk's first" (raea render has no chunks of its own); "the props that differ" (React is
+      # frame-pure, so both routes hand the engine the same props: what differs is the engine's state, and the
+      # error names the parts instead). RAEA_FRAME_PURE=0 skips it. Measured before building, alone (`--frame N`)
+      # against the sequence on four real scenes of 91-180 frames: three match exactly (SSIM 1.0); one under Solari
+      # GI differs in SSIM (0.97-0.99, the GI's history) with no patch past the bar after frame 0.
+      Given the plan
+        | crate               | file                         | lines | job                                                                    |
+        | raea-app-direction  | apps/direction/src/pure.rs   | 230   | the sample, the stills and the alone frame, the patch, the parts under it, the findings |
+        | raea-app-direction  | apps/direction/src/rendered.rs | +2  | a video render's end runs it beside the text rules                     |
+        | raea-runtime-export | runtime/export/src/scene.rs  | +40   | the manifest's `parts` (stills) and `remounts` (longer renders)        |
+        | raea-runtime-export | runtime/export/src/lib.rs    | +4    | write_manifest takes them                                              |
+        | raea-sys-stage      | systems/stage/src/framing.rs | +12   | on_screen: each part's box on screen, named                            |
 
     Scenario: SG10. 3D type that reads
       Given the plan

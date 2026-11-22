@@ -55,6 +55,18 @@ fn own_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<(Vec3,
     }
 }
 
+/// Each part of known size that shows in a frame: its name as the checks call it, and its box on screen, [x0, y0, x1,
+/// y1] in px (SG9 names the parts under a patch that differs between a frame rendered in sequence and alone).
+pub fn on_screen(its: &[raea_core_scene::Item], w: u32, h: u32) -> Vec<(String, [f32; 4])> {
+    let Some(v) = crate::view::View::of(its, w, h) else { return Vec::new() };
+    let mut boxes = HashMap::new();
+    let seen = |it: &raea_core_scene::Item, boxes: &mut HashMap<_, _>| {
+        let (lo, hi) = own_box(it, boxes)?;
+        v.bounds(corners(&it.world, lo, hi)).filter(|b| v.share(*b) > 0.0)
+    };
+    its.iter().filter_map(|it| Some((called(it), seen(it, &mut boxes)?))).collect()
+}
+
 pub(crate) fn check(st: &Stage) -> Vec<Finding> {
     let n = st.all.len();
     let mut boxes = HashMap::new();
@@ -171,6 +183,16 @@ mod tests {
         crate_.shape = Some("box(4, 4, 4)".into());
         let fs: Vec<Vec<Item>> = (0..120).map(|i| vec![cam([0.0, 1.0, 6.0], if (30..90).contains(&i) { [40.0, -1.0, 6.0] } else { [-5.0, 0.0, 0.0] }), floor.clone(), crate_.clone()]).collect();
         assert!(run(fs).iter().any(|f| f.check == "frame-empty"));
+    }
+
+    #[test]
+    fn parts_on_screen_are_named_with_their_boxes() {
+        let its = vec![cam([0.0, 0.0, 6.0], [0.0; 3]), cube("dash", [0.0; 3]), cube("gone", [0.0, 0.0, 20.0])];
+        let on = super::on_screen(&its, 1920, 1080);
+        assert_eq!(on.len(), 1, "{on:?}");
+        let (name, b) = &on[0];
+        assert!(name.contains("dash"), "{name}");
+        assert!(b[0] < 960.0 && b[2] > 960.0 && b[1] < 540.0 && b[3] > 540.0, "{b:?}");
     }
 
     #[test]

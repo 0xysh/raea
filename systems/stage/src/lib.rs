@@ -13,6 +13,7 @@ mod framing;
 mod motion;
 mod text;
 mod view;
+pub use framing::on_screen;
 pub use view::View;
 
 /// Who says these findings, in a render.
