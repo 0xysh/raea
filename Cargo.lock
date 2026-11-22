@@ -16250,6 +16250,7 @@ dependencies = [
  "audioadapter-buffers",
  "cpal 0.15.3",
  "firewheel",
+ "raea-io-home",
  "raea-io-media",
  "raea-io-trace",
  "raea-sys-mix-level",

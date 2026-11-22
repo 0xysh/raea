@@ -157,6 +157,7 @@ Feature: Stage guards: a 3D render an agent can't break
       # Status 11-21 (branch stage-guards-4): built ("frame N: Could not despawn entity: the text part 'quote' had
       # already gone, despawned with another part it hung from"); the store test covers it.
 
+    @done
     Scenario: SG4a. A long render's memory stays flat
       Given the plan
         | crate               | file                          | lines | job                                                                   |
@@ -206,6 +207,8 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-runtime-endchecks | runtime/endchecks/src/lib.rs | +55 | EndChecks: the clipping check, the staging and the parts on screen fed each frame's parts as it's drawn |
         | raea-runtime-export | runtime/export/src/fed.rs     | +3    | a live render's frames go to EndChecks as they're drawn               |
         | raea-runtime-export | runtime/export/src/scene.rs   | 0     | a still's frames go to EndChecks one at a time, its parts made and let go (3 lines shorter) |
+        | raea-sys-mix        | systems/mix/src/offline.rs    | +23   | Streamer: each frame's samples to a scratch file as they come, read back once after the last (13 KB a frame held before) |
+        | raea-runtime-export | runtime/export/src/fed.rs     | +1    | a render with nothing to hear lets its bounce go unread               |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
       # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
       # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
@@ -294,6 +297,14 @@ Feature: Stage guards: a 3D render an agent can't break
       # GB before). Still not met: the frames grow. The control's 1.06 GB at frame 1,000 is 1.32 GB at 13,000 (+25%;
       # +20% over frame 2,000), as before; the film's frames now carry the clipping check's solids for the parts on
       # screen, 2.31 GB at frame 1,000 and 2.91 GB at 13,000 (+26%), 4.13 GB in its densest minute (frame 5,000).
+      # Most of the control's growth was the bounce: its streamer reserved both channels for the whole render and
+      # filled them a frame at a time (12.8 KB a frame, Malloc Large's resident pages climbing at a constant size). Its
+      # samples now go to a scratch file as they come, read back once after the last frame, and not at all when
+      # nothing sounded. The streamer alone, pushed the control's 13,200 silent frames: 26.8 MB at frame 1,800 and 167
+      # MB at 13,199 before, 4.8 MB and 5.8 MB after. Met, on the release build of the whole stack (11-22): the
+      # control's 1,064.5 MB at its first minute (frame 1,800) is 1,151.4 MB at frame 13,000, +8.2% (it was +20%), and
+      # 1,148.2 MB after the end checks; marked every 200 frames, it rises 7.9 KB a frame, about 3 KB of it each frame's
+      # manifest entry kept as JSON values, which is what to move next for more room under the bar.
 
   Rule: The SDK stops allowing it
 

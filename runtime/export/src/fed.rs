@@ -219,7 +219,7 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
     let notes: std::cell::RefCell<Vec<raea_sys_mix::ToneCue>> = std::cell::RefCell::new(Vec::new());
     let dir = cx.dir.to_path_buf();
     // the sound bounced as the frames come, on its own thread (it was mixed after the last frame: 3 s on the export)
-    let streamer = std::cell::RefCell::new(Some(raea_sys_mix::offline::Streamer::start(fps, total.max(0) as usize)));
+    let streamer = std::cell::RefCell::new(Some(raea_sys_mix::offline::Streamer::start(fps)));
     // a video's 3D made live is checked as its frames come, each frame's parts let go once read (SG4a)
     let ends = std::cell::RefCell::new(LIVE_CLIPS.load(std::sync::atomic::Ordering::Relaxed).then(|| raea_runtime_endchecks::EndChecks::new(w, h, fps)));
     let t0 = std::time::Instant::now();
@@ -309,14 +309,15 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
             let p = program_of(&frames.borrow(), w, h, fps, false);
             sound_lint(&p, fps);
             let st = streamer.borrow_mut().take().ok_or("the sound was asked for twice")?;
+            if frames.borrow().iter().all(|(_, f)| f.sounds.is_empty()) && notes.borrow().iter().all(|n| n.is_empty()) {
+                st.discard()?;
+                no_sound_but_declared(js)?;
+                return Ok(None);
+            }
             let t_bounce = std::time::Instant::now();
             let raw = st.finish()?;
             let bounce_ms = t_bounce.elapsed().as_secs_f64() * 1e3;
             let t_master = std::time::Instant::now();
-            if frames.borrow().iter().all(|(_, f)| f.sounds.is_empty()) && notes.borrow().iter().all(|n| n.is_empty()) {
-                no_sound_but_declared(js)?;
-                return Ok(None);
-            }
             let (master, a) = core_master_raw(&raw, frames.borrow().iter().find_map(|(_, f)| f.mix))?;
             if let Some(p) = std::env::var_os("RAEA_AUDIO_BOUNCE") {
                 raea_sys_mix::write_wav(&a, Path::new(&p))?;

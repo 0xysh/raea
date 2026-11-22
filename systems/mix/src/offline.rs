@@ -159,7 +159,7 @@ pub fn bounce(frames: &[Cue], fps: f64, master: Option<(f64, f64)>) -> Result<ra
 /// master is then `master_raw` over it, the same limiter the live master node runs, sample for sample: one bounce, and
 /// mastering (or mastering again for AAC) is a pass over a buffer.
 pub fn bounce_raw(frames: &[Cue], fps: f64) -> Result<raea_io_media::Audio, String> {
-    let s = Streamer::start(fps, frames.len());
+    let s = Streamer::start(fps);
     for c in frames {
         s.push(c.clone());
     }
@@ -233,38 +233,37 @@ fn mastered(raw: &raea_io_media::Audio, mix: Option<(f64, f64)>, encode: Encode)
 }
 
 /// A raw bounce made as the frames come (a render streams each frame's cue while it draws the frames), on its own
-/// thread: the sound is ready when the last frame is.
+/// thread: the sound is ready when the last frame is. Each frame's samples go to a scratch file (stereo f32, interleaved;
+/// `done` gives it and its length) as they come, so a long render doesn't hold its sound (13 KB a frame, SG4a).
 pub struct Streamer {
     tx: std::sync::mpsc::Sender<Cue>,
-    done: std::thread::JoinHandle<Result<raea_io_media::Audio, String>>,
+    done: std::thread::JoinHandle<Result<(std::fs::File, usize), String>>,
 }
 
 impl Streamer {
-    /// A bounce of `frames` frames at `fps` (the count sizes its buffers once; more frames than that still come out).
-    pub fn start(fps: f64, frames: usize) -> Streamer {
+    /// A bounce at `fps`, of as many frames as are pushed.
+    pub fn start(fps: f64) -> Streamer {
         let (tx, rx) = std::sync::mpsc::channel::<Cue>();
         let done = std::thread::Builder::new()
             .name("raea mixer bounce".into())
-            .spawn(move || -> Result<raea_io_media::Audio, String> {
+            .spawn(move || -> Result<(std::fs::File, usize), String> {
                 let mut e = Engine::new(fps, None)?;
                 e.cx.queue_event_for(e.master, event(crate::nodes::Master { pre: 1.0, ceiling: 1.0, bypass: true }));
                 e.cx.update().map_err(|x| format!("{x:?}"))?;
-                // each channel filled as the frames come, from one frame's interleaved samples at a time: an
-                // interleaved copy of the whole sound split at the end held it twice (340 MB on a 7-minute film, SG4a)
-                let size = e.score.t(frames as i64).max(0) as usize;
-                let (mut l, mut r, mut buf) = (Vec::with_capacity(size), Vec::with_capacity(size), Vec::new());
-                let mut f = 0i64;
+                let mut out = std::io::BufWriter::new(raea_io_home::scratch_file("bounce")?);
+                let (mut len, mut buf, mut bytes, mut f) = (0usize, Vec::new(), Vec::new(), 0i64);
                 for cue in rx {
                     e.feed(f, &cue, 0)?;
-                    let n = (e.score.t(f + 1).max(0) as usize).saturating_sub(l.len());
+                    let n = (e.score.t(f + 1).max(0) as usize).saturating_sub(len);
                     buf.clear();
                     buf.resize(n * 2, 0.0);
                     e.pull(&mut buf)?;
-                    l.extend(buf.iter().step_by(2));
-                    r.extend(buf.iter().skip(1).step_by(2));
-                    f += 1;
+                    bytes.clear();
+                    bytes.extend(buf.iter().flat_map(|s: &f32| s.to_le_bytes()));
+                    std::io::Write::write_all(&mut out, &bytes).map_err(scratch)?;
+                    (len, f) = (len + n, f + 1);
                 }
-                Ok(raea_io_media::Audio { rate: RATE, channels: vec![l, r] })
+                Ok((out.into_inner().map_err(|x| scratch(x.into_error()))?, len))
             })
             .expect("bounce thread");
         Streamer { tx, done }
@@ -275,11 +274,35 @@ impl Streamer {
         let _ = self.tx.send(cue);
     }
 
-    /// The raw bounce of every frame pushed.
+    /// The raw bounce of every frame pushed, read back from its scratch file.
     pub fn finish(self) -> Result<raea_io_media::Audio, String> {
+        let (file, len) = self.wait()?;
+        let mut read = std::io::BufReader::new(file);
+        std::io::Seek::rewind(&mut read).map_err(scratch)?;
+        let (mut l, mut r, mut two) = (Vec::with_capacity(len), Vec::with_capacity(len), [0u8; 8]);
+        for _ in 0..len {
+            std::io::Read::read_exact(&mut read, &mut two).map_err(scratch)?;
+            l.push(f32::from_le_bytes([two[0], two[1], two[2], two[3]]));
+            r.push(f32::from_le_bytes([two[4], two[5], two[6], two[7]]));
+        }
+        Ok(raea_io_media::Audio { rate: RATE, channels: vec![l, r] })
+    }
+
+    /// The bounce let go unread: nothing sounded.
+    pub fn discard(self) -> Result<(), String> {
+        self.wait().map(drop)
+    }
+
+    fn wait(self) -> Result<(std::fs::File, usize), String> {
         drop(self.tx);
         self.done.join().map_err(|_| "the bounce thread panicked".to_string())?
     }
+}
+
+/// A failure writing or reading the bounce's scratch file, a full disk said as one.
+fn scratch(x: std::io::Error) -> String {
+    let full = x.kind() == std::io::ErrorKind::StorageFull;
+    format!("the bounce's scratch file: {}{x}", if full { "the disk is full, free some room and render again: " } else { "" })
 }
 
 #[cfg(test)]
