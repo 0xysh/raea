@@ -19,10 +19,10 @@ const Shot = () => <Camera3d transform={Transform.fromXyz(-2, 2.5, 5).lookingAt(
 <!-- generated:begin by tools/manual-ref/sdk.ts from the SDK's exports and doc comments; edit outside this block -->
 
 ```ts
-import { Camera3d, Canvas3D, checkMatchmove, Hdr } from "raea/camera"
+import { Camera3d, cameraPath, Canvas3D, checkMatchmove } from "raea/camera"
 ```
 
-`raea/camera` exports 5 components, 1 hook, 3 functions, 9 types. Bevy's counterpart: `bevy_camera`. Source: [sdk/raea/src/camera.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/camera.ts).
+`raea/camera` exports 5 components, 1 hook, 4 functions, 13 types. Bevy's counterpart: `bevy_camera`. Source: [sdk/raea/src/camera.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/camera.ts).
 
 ## Components
 
@@ -97,6 +97,24 @@ function useMatchmove(): MatchmoveState
 
 ## Functions
 
+### `cameraPath`
+
+A camera path through keys timed in frames, paced by time so the camera's speed carries smoothly across every key.
+It eases at the first key and the last, stops at a key with `hold`, and never overshoots a key and comes back.
+
+```tsx
+const path = cameraPath([
+  { at: 0, pos: [0, 2, 9], look: [0, 1, 0] },
+  { at: 60, pos: [3, 2, 6], look: [0, 1, 0], hold: 30 },
+  { at: 150, pos: [1, 1.5, 3], look: [0, 1.2, 0], fov: 30 },
+]);
+<Camera3d {...path.camera(useCurrentFrame())} />
+```
+
+```ts
+function cameraPath(keys: readonly CameraKey[]): CameraPath
+```
+
 ### `checkMatchmove`
 
 Checks a Matchmove's props; throws a TypeError or RangeError naming the prop.
@@ -127,6 +145,36 @@ function matchmoveView(footage: { width: number; height: number; }, frame: { wid
 ### `Camera3dProps`
 
 The props of [`Camera3d`](#camera3d), tabled there.
+
+### `CameraKey`
+
+A key of a camera path: where the camera is at a frame, and what it looks at.
+
+```ts
+type CameraKey = { /** The frame the camera reaches this key, in the frames of the Sequence it plays in (useCurrentFrame). */ at: number; /** Where the camera is. */ pos: CameraVec3; /** The point it looks at. */ look: CameraVec3; /** Its vertical field of view in degrees. Left out, the key before's (38 at the fi…
+```
+
+### `CameraPath`
+
+A camera path built by cameraPath.
+
+```ts
+type CameraPath = { /** The camera at a frame (a fraction is fine): the first key's before it, the last key's after it. */ at(frame: number): CameraPose; /** Camera3d's props at a frame: its transform, looking at the look point, and its projection (fov in radians, as *  Bevy's is; the keys' are degrees). `<Camera3…
+```
+
+### `CameraPose`
+
+Where the camera is at a frame, what it looks at and its vertical field of view in degrees.
+
+```ts
+type CameraPose = { pos: CameraVec3; look: CameraVec3; fov: number }
+```
+
+### `CameraVec3`
+
+```ts
+type CameraVec3 = [number, number, number]
+```
 
 ### `CameraViewport`
 
