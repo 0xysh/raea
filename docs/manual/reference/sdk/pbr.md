@@ -399,6 +399,8 @@ The props of [`ExtendedMaterial`](#extendedmaterial), tabled there.
 | `scattering` | `number` | how much light it throws back toward the eye (0.3 by default): higher reads as bright dust or mist |
 | `anisotropy` | `number` | how far forward it scatters, -1 to 1 (0.5 by default): near 1 the shafts glow when you look toward the light |
 | `falloff` | `number` | how fast it thins going up, per metre from the box's floor (0 by default: even throughout): 0.5 is a ground fog that's a third as thick two metres up. A box wide and tall with a falloff is height fog. Only <VolumetricFog mode="froxel"> draws it; the march draws the box evenly |
+| `soft` | `number` | how far in from each face its density ramps up, as a share of the box's half-size, 0 to 1 (0 by default: a hard box): 0.5 and up hides a small volume's edges (steam, a smoke column). Only <VolumetricFog mode="froxel"> |
+| `taper` | `number` | how much narrower its floor is than its top, 0 to 1 (0 by default: a box): 0.7 is a plume rising off a tank, widening as it climbs. Only <VolumetricFog mode="froxel"> |
 | `density_texture` | `string` | Bevy's density_texture: a 3D.ktx2 image in the media folder whose values scale the density through the box (a cloud, a bunny of smoke); the box draws evenly without one. Only the march draws it |
 
 ### `GridExtensionProps`
