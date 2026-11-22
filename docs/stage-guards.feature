@@ -416,8 +416,9 @@ Feature: Stage guards: a 3D render an agent can't break
 
     Scenario: SG14. The frame is composed
       Given the plan
-        | crate          | file                         | lines | job                                                                             |
-        | raea-sys-stage | systems/stage/src/framing.rs | 182   | the share of the frame any part covers (a grid of their boxes), and the shot's subject cut by the edge |
+        | crate          | file                          | lines | job                                                                                                    |
+        | raea-sys-stage | systems/stage/src/framing.rs  | 314   | the share of the frame any part covers (a grid of their boxes), and the shot's subject cut by the edge |
+        | raea-sys-stage | systems/stage/src/manifest.rs | +17   | a CSS background over half the frame is the page's ground, not shown                                   |
       Then the part a shot is about (one a Label or pin points at, else the nearest named part) cut by the frame's edge
         for more than 10 frames is an error
       And under 8% of the frame showing any part, for more than 1 s, is an error
@@ -437,6 +438,22 @@ Feature: Stage guards: a 3D render an agent can't break
       # nobuild's Solari dummy buffer was sized for its 64-byte vertex; at 48 the GPU refused that frame), 1:05 and
       # 1:09-1:12 read empty too: a dark sphere half in frame, then a canyon's walls filling it, backdrop by the same
       # rule. Left: the subject a Label points at; a room's inside as content.
+      # Branch stage-guards-17: frame-empty is an error. Three causes of false and missed empties, each measured. A
+      # room's walls were backdrop by the slab rule: a standing slab (its thin side within 45 degrees of level) fills
+      # the frame now, though it is never the shot's subject; a floor, water or a ceiling still doesn't. A model's size
+      # wasn't known: its file's box (read once a render) adds coverage now but never judges a frame, since raea poses
+      # a person's joints off its rest box (two character sheets read empty when it did), and a room model round the
+      # camera leaves the frame unjudged, as a mesh across the camera's plane does. And the page's ground counted as
+      # shown: since stage-guards-9 a frame with a background colour read as full, so the film's two full-frame cream
+      # fills hid all five of its empty stretches, the blank frame at 6:04 among them; a CSS background (a colour or a
+      # gradient) over half the frame is ground now, an <img> or svg still shown. A frame pass or a set of copies
+      # (<Instances>) leaves a frame unjudged, as grass does, and fire is of unknown size, as a model is. raea scene
+      # stage over the 29 clean scenes, Stay and the film: Stay's 8 empty stretches are gone, the film's 5 stay (1:59,
+      # 3:07, 3:41, 5:54 and 6:03-6:07: the notes' 3:40, 6:04 and 6:08), no clean scene has one, and every other
+      # check's findings are the same. Rendered whole with their pages known: the film fails on four (3:07, 3:41, 5:54
+      # and 6:03-6:07; 1:59 holds a caption that fills it), 439 errors where it had 435, and Stay (approved) on none,
+      # its findings otherwise the same as before (its three meant errors, three warnings). Left: the subject a Label
+      # points at; subject-cut stays a warning (33, on Stay and four clean scenes).
 
     @done
     Scenario: SG15. A broken render can't be posted

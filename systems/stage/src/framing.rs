@@ -32,15 +32,7 @@ pub(crate) fn own_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Op
     match it.kind {
         "mesh" => {
             let shape = it.shape.as_deref()?;
-            *boxes.entry(shape.to_string()).or_insert_with(|| {
-                let t = raea_core_shape::cached(shape).ok()?;
-                let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-                for p in &t.positions {
-                    lo = lo.min(Vec3::from(*p));
-                    hi = hi.max(Vec3::from(*p));
-                }
-                (lo.x <= hi.x).then_some((lo, hi))
-            })
+            *boxes.entry(shape.to_string()).or_insert_with(|| span(raea_core_shape::cached(shape).ok()?.positions.iter().copied()))
         }
         "text" => {
             let words = it.props.get("text").and_then(serde_json::Value::as_str).unwrap_or("");
@@ -60,6 +52,46 @@ pub(crate) fn own_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Op
 pub(crate) fn backdrop(it: &raea_core_scene::Item, lo: Vec3, hi: Vec3) -> bool {
     let ext = (hi - lo) * it.world.to_scale_rotation_translation().0.abs();
     ext.max_element() > BACKDROP_M && ext.min_element() < SLAB * ext.max_element()
+}
+
+/// A model's box in its own space, from its file's triangles (each file read once a render); None for one whose file
+/// animates or can't be read. Coverage only, never sure: raea may pose its joints (a person walks off its rest box), and
+/// a box is mostly air round a tree, so it never makes a frame judged, nor judges words over it (SG11); but a frame
+/// its box fills isn't empty (Stay's pool room of wall models read empty with their origins out of view: SG14).
+fn model_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<(Vec3, Vec3)>>) -> Option<(Vec3, Vec3)> {
+    let src = raea_core_scene::src_path(it.props.get("src").and_then(serde_json::Value::as_str)?);
+    *boxes.entry(format!("model:{src}")).or_insert_with(|| {
+        let (groups, moves) = raea_core_scene::gltf_tris(&src).ok()?;
+        if moves {
+            return None;
+        }
+        let mut points = Vec::new();
+        for (_, tris) in &groups {
+            points.extend(tris.iter().flatten().copied());
+        }
+        span(points)
+    })
+}
+
+/// The box round some points, None for none.
+fn span<P: Into<Vec3>>(points: impl IntoIterator<Item = P>) -> Option<(Vec3, Vec3)> {
+    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+    for p in points {
+        let p = p.into();
+        lo = lo.min(p);
+        hi = hi.max(p);
+    }
+    (lo.x <= hi.x).then_some((lo, hi))
+}
+
+/// A backdrop slab standing up, its thin side facing within 45 degrees of level: a wall, not a floor, water or a
+/// ceiling. A frame of floor and fog is empty; one of a room's walls or a canyon's is not (Stay's pool room and canyon
+/// read empty when every slab was backdrop: SG14).
+fn standing(it: &raea_core_scene::Item, lo: Vec3, hi: Vec3) -> bool {
+    let (scale, turn, _) = it.world.to_scale_rotation_translation();
+    let ext = (hi - lo) * scale.abs();
+    let thin = if ext.x <= ext.y && ext.x <= ext.z { Vec3::X } else if ext.y <= ext.z { Vec3::Y } else { Vec3::Z };
+    (turn * thin).y.abs() < std::f32::consts::FRAC_1_SQRT_2
 }
 
 /// Each part of known size that shows in a frame: its name as the checks call it, and its box on screen, [x0, y0, x1,
@@ -99,23 +131,36 @@ pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
         let mut sure = true;
         let mut best: Option<(String, f32, f32, bool)> = None;
         for it in its {
-            if matches!(it.kind, "plate" | "sprite" | "shape2d" | "grass" | "splat" | "meshseq") {
+            // drawn where the boxes can't say: footage, 2D, a field, a shader over the frame, a set of copies (<Instances>)
+            if matches!(it.kind, "plate" | "sprite" | "shape2d" | "grass" | "splat" | "meshseq" | "frame_pass") || it.at.is_some() {
                 sure = false;
                 continue;
             }
             let Some((lo, hi)) = own_box(it, &mut boxes) else {
                 // a model or other part of unknown size: judged only when its origin is well out of view
-                if matches!(it.kind, "model" | "entity") {
+                if matches!(it.kind, "model" | "entity" | "fire") {
                     if let Some([x, y, _]) = v.project(super::origin(it)) {
                         if x > -0.5 * st.w && x < 1.5 * st.w && y > -0.5 * st.h && y < 1.5 * st.h {
                             sure = false;
                         }
                     }
                 }
+                // its file's box fills what it shows, a floor's or terrain's left out as a slab mesh's is; across the
+                // camera's plane (a room model round it: Stay's pool) it may fill the view
+                let model = (it.kind == "model").then(|| model_box(it, &mut boxes)).flatten();
+                if let Some((lo, hi)) = model.filter(|(lo, hi)| !backdrop(it, *lo, *hi) || standing(it, *lo, *hi)) {
+                    match v.bounds(corners(&it.world, lo, hi)) {
+                        Some(b) if v.share(b) > 0.0 => mark(&mut grid, b, st.w, st.h),
+                        Some(_) => {}
+                        None => sure &= corners(&it.world, lo, hi).into_iter().all(|p| v.project(p).is_none()),
+                    }
+                }
                 continue;
             };
-            // a floor or wall round the camera is backdrop before it is a part behind it
-            if backdrop(it, lo, hi) {
+            // a floor, water or a ceiling round the camera is backdrop before it is a part behind it; a wall (a slab
+            // standing up: a room's, a canyon's) is what the frame shows, so it fills the frame, but is never its subject
+            let wall = backdrop(it, lo, hi) && standing(it, lo, hi);
+            if backdrop(it, lo, hi) && !wall {
                 continue;
             }
             let Some(b) = v.bounds(corners(&it.world, lo, hi)) else {
@@ -127,6 +172,10 @@ pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
             let whole = ((b[2] - b[0]) * (b[3] - b[1]) / (st.w * st.h)).max(1e-9);
             if inside > 0.0 {
                 mark(&mut grid, b, st.w, st.h);
+            }
+            // a wall fills the frame but isn't its subject
+            if wall {
+                continue;
             }
             // the subject: the named part showing most, when it could fit in the frame
             if it.props.get("name").is_some() && inside > 0.0 && best.as_ref().is_none_or(|s| inside > s.1) {
@@ -149,7 +198,7 @@ pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
         if st.secs(a, b) >= EMPTY_SECS && t0 > FADE_SECS && t1 < total - FADE_SECS {
             let least = covered[a..=b].iter().copied().fold(1.0, f32::min);
             let says = format!("almost nothing is on screen from {} to {} ({:.0}% of the frame shows any part)", st.at(a), st.at(b), least * 100.0);
-            out.push(st.finding("frame-empty", Level::Warn, a, b, says).fix("aim the camera at what the shot is about, or bring it into the frame"));
+            out.push(st.finding("frame-empty", Level::Error, a, b, says).fix("aim the camera at what the shot is about, or bring it into the frame"));
         }
     }
     for (a, b) in runs(st, n, |k| subject[k].as_ref().is_some_and(|(_, out, fits)| *fits && *out > CUT_LO && *out < CUT_HI)) {
@@ -190,6 +239,18 @@ mod tests {
     }
 
     #[test]
+    fn copies_or_a_shader_over_the_frame_leave_it_unjudged() {
+        // the empty stretch of the test above, with a forest of copies or a frame pass in it: either may fill the frame
+        let aimed = |extra: Item| (0..120).map(|i| vec![cam([0.0, 0.0, 6.0], if (30..90).contains(&i) { [0.0, 40.0, 0.0] } else { [0.0; 3] }), cube("dash", [0.0; 3]), extra.clone()]).collect::<Vec<_>>();
+        let mut forest = cube("forest", [0.0, 30.0, 0.0]);
+        forest.at = Some("[0,0,0, 0,0,0, 1,1,1]".into());
+        assert!(!run(aimed(forest)).iter().any(|f| f.check == "frame-empty"));
+        assert!(!run(aimed(item("frame_pass", json!({}), Mat4::IDENTITY))).iter().any(|f| f.check == "frame-empty"));
+        let f = run(aimed(item("fog", json!({}), Mat4::IDENTITY)));
+        assert!(f.iter().any(|f| f.check == "frame-empty" && f.level == Level::Error), "{f:?}");
+    }
+
+    #[test]
     fn words_or_a_video_in_the_page_fill_the_frame() {
         let fs: Vec<Vec<Item>> = (0..120).map(|i| vec![cam([0.0, 0.0, 6.0], if (30..90).contains(&i) { [0.0, 40.0, 0.0] } else { [0.0; 3] }), cube("dash", [0.0; 3])]).collect();
         let n: Vec<i64> = (0..120).collect();
@@ -209,6 +270,41 @@ mod tests {
         crate_.shape = Some("box(4, 4, 4)".into());
         let fs: Vec<Vec<Item>> = (0..120).map(|i| vec![cam([0.0, 1.0, 6.0], if (30..90).contains(&i) { [40.0, -1.0, 6.0] } else { [-5.0, 0.0, 0.0] }), floor.clone(), crate_.clone()]).collect();
         assert!(run(fs).iter().any(|f| f.check == "frame-empty"));
+    }
+
+    #[test]
+    fn a_rooms_wall_filling_the_frame_is_what_it_shows() {
+        // the same floor and crate, and a 30 m wall standing 8 m off along the look away: the room's inside, not empty
+        let mut floor = item("mesh", json!({"name": "floor"}), Mat4::from_translation(Vec3::new(0.0, -1.0, 0.0)));
+        floor.shape = Some("box(100, 0.1, 100)".into());
+        let mut wall = item("mesh", json!({"name": "wall"}), Mat4::from_translation(Vec3::new(8.0, 3.0, 6.0)));
+        wall.shape = Some("box(0.2, 10, 30)".into());
+        let mut crate_ = cube("crate", [-5.0, 0.0, 0.0]);
+        crate_.shape = Some("box(4, 4, 4)".into());
+        let fs: Vec<Vec<Item>> = (0..120).map(|i| vec![cam([0.0, 1.0, 6.0], if (30..90).contains(&i) { [40.0, 1.0, 6.0] } else { [-5.0, 0.0, 0.0] }), floor.clone(), wall.clone(), crate_.clone()]).collect();
+        let f = run(fs);
+        assert!(!f.iter().any(|f| f.check == "frame-empty"), "{f:?}");
+        // a wall is never the shot's subject: looking at it alone cuts nothing
+        assert!(!f.iter().any(|f| f.check == "subject-cut" && f.says.contains("wall")), "{f:?}");
+    }
+
+    #[test]
+    fn a_model_filling_the_frame_is_sized_from_its_file() {
+        // a cabinet scaled 20x (25 m wide, 18 m tall), the camera 6 m off its face near the top: its origin (its base)
+        // is far below the frame, so before its file was read the frame was judged empty
+        let cabinet = |src: &str| item("model", json!({"name": "cabinet", "src": src}), Mat4::from_scale(Vec3::splat(20.0)));
+        // the middle two seconds of four; before and after, the camera turns round to a 6 m crate behind it
+        let mut crate_ = cube("crate", [0.0, 16.0, 25.0]);
+        crate_.shape = Some("box(6, 6, 6)".into());
+        let look = |i: usize| if (30..90).contains(&i) { [0.0, 16.0, 0.0] } else { [0.0, 16.0, 25.0] };
+        let shot = |src: &str| (0..120).map(|i| vec![cam([0.0, 16.0, 15.0], look(i)), cabinet(src), crate_.clone()]).collect::<Vec<_>>();
+        let f = run(shot("../../sdk/react/bench/games/room3d/media/cabinet.glb"));
+        assert!(!f.iter().any(|f| f.check == "frame-empty"), "{f:?}");
+        assert!(run(shot("../../sdk/react/bench/games/room3d/media/no-such.glb")).iter().any(|f| f.check == "frame-empty"));
+        // the camera inside it (a room model round the camera), looking away from its origin: not an empty frame
+        let inside = |src: &str| (0..120).map(|i| vec![cam([0.0, 9.0, 4.0], if (30..90).contains(&i) { [0.0, 9.0, 9.0] } else { [0.0, 16.0, 25.0] }), cabinet(src), crate_.clone()]).collect::<Vec<_>>();
+        let f = run(inside("../../sdk/react/bench/games/room3d/media/cabinet.glb"));
+        assert!(!f.iter().any(|f| f.check == "frame-empty"), "{f:?}");
     }
 
     #[test]

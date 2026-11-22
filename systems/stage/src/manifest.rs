@@ -14,8 +14,11 @@ const STILLS: usize = 16;
 const REMOUNT: usize = 20;
 
 /// What each frame (`nums`) of the manifest's frames draws in its page: its words (what they say, their ink's box,
-/// whether they may sit on a part), its videos' boxes and its pictures', the nearly invisible left out.
-pub fn pages(frames: &[Value], nums: &[i64]) -> Vec<Page> {
+/// whether they may sit on a part), its videos' boxes and its pictures', the nearly invisible left out, and a CSS
+/// background (a colour or a gradient) over half the w x h frame or more: the page's ground, under the 3D or alone, not
+/// something shown (an <img> or an svg is). The film's blank cream frame at 6:04 read as full while its background
+/// counted (SG14).
+pub fn pages(frames: &[Value], nums: &[i64], w: u32, h: u32) -> Vec<Page> {
     let by: HashMap<i64, &Value> = frames.iter().filter_map(|e| Some((e["frame"].as_i64()?, e))).collect();
     // an entry's box as [x0, y0, x1, y1], when it shows
     let shown = |e: &Value, key: &str| {
@@ -34,7 +37,7 @@ pub fn pages(frames: &[Value], nums: &[i64]) -> Vec<Page> {
         .map(|f| Page {
             words: list(by.get(f), "text").filter_map(words).collect(),
             videos: list(by.get(f), "videos").filter_map(|v| shown(v, "box")).collect(),
-            pictures: list(by.get(f), "pictures").filter_map(|v| shown(v, "box")).collect(),
+            pictures: list(by.get(f), "pictures").filter_map(|v| shown(v, "box").filter(|b| !matches!(v["kind"].as_str(), Some("fill" | "background")) || (b[2] - b[0]) * (b[3] - b[1]) < 0.5 * (w * h) as f32)).collect(),
         })
         .collect()
 }
@@ -87,11 +90,25 @@ mod tests {
             {"text": "faded", "box": [0, 50, 400, 40], "opacity": 0.05},
             {"text": "on it", "box": [0, 100, 400, 40], "allowOverlap": true}
         ], "videos": [{"box": [0, 0, 1920, 1080], "opacity": 1.0}], "pictures": [{"box": [5, 5, 10, 10]}]})];
-        let p = super::pages(&frames, &[7, 8]);
+        let p = super::pages(&frames, &[7, 8], 1920, 1080);
         assert_eq!(p.len(), 2);
         assert_eq!(p[0].words.len(), 2, "{:?}", p[0].words);
         assert_eq!((p[0].words[0].bx, p[0].words[1].allow_overlap), ([10.0, 0.0, 110.0, 40.0], true));
         assert_eq!((p[0].videos.len(), p[0].pictures[0]), (1, [5.0, 5.0, 15.0, 15.0]));
         assert!(p[1].words.is_empty() && p[1].videos.is_empty());
+    }
+
+    #[test]
+    fn the_pages_background_fill_is_ground_not_shown() {
+        // the film's 6:04: its cream background, twice, full frame, and a gradient; a lower third's bar and a photo stay
+        let frames = vec![json!({"frame": 1, "pictures": [
+            {"kind": "fill", "box": [0, 0, 1920, 1080], "opacity": 1.0},
+            {"kind": "fill", "box": [0, 0, 1920, 1080], "opacity": 1.0},
+            {"kind": "fill", "box": [52, 862, 645, 44], "opacity": 1.0},
+            {"kind": "background", "box": [0, 0, 1920, 1080], "opacity": 1.0},
+            {"kind": "img", "box": [0, 0, 1920, 1080], "opacity": 1.0}
+        ]})];
+        let p = super::pages(&frames, &[1], 1920, 1080);
+        assert_eq!(p[0].pictures, vec![[52.0, 862.0, 697.0, 906.0], [0.0, 0.0, 1920.0, 1080.0]]);
     }
 }

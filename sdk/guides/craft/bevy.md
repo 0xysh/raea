@@ -107,8 +107,9 @@ the rest come from `raea`.
    gives them their reading time first. `raea render` fails on a speed that changes over 2x within 3 frames
    (`camera-lurch`) and on a dolly in and back out (`camera-reverse`): SG13.
 11. **Render and look.** Before a render, `raea scene stage edit.tsx` steps every frame without drawing and runs the
-   checks above, and the render runs them again at its end, beside clipping: it warns when almost nothing is on screen
-   for a second (`frame-empty`) or the shot's part is cut by the edge (`subject-cut`), SG14. Render stills where things
-   happen (`raea render edit.tsx --at A,B,C -o stills/`) and look at them. A 3D frame that renders black usually has no
-   light or a camera inside or behind the subject. `raea show` refuses a render that still holds an error, naming each:
-   fix it, or say why it goes anyway with `--despite CHECK "why"`, which the person reads (SG15).
+   checks above, and the render runs them again at its end, beside clipping: it fails when almost nothing is on screen
+   for a second (`frame-empty`: the page's background colour or gradient isn't something on screen; a room's walls, or
+   words in the page, are) and warns when the shot's part is cut by the edge (`subject-cut`), SG14. Render stills
+   where things happen (`raea render edit.tsx --at A,B,C -o stills/`) and look at them. A 3D frame that renders black
+   usually has no light or a camera inside or behind the subject. `raea show` refuses a render that still holds an
+   error, naming each: fix it, or say why it goes anyway with `--despite CHECK "why"`, which the person reads (SG15).
