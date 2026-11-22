@@ -1,11 +1,5 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true,
-    "noUnusedLocals": true,
-    "lib": ["ES2023"]
-  },
+  "compilerOptions": { "allowImportingTsExtensions": true },
   "include": ["src", "test/types.ts", "test/fixture.ts"]
 }

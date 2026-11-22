@@ -23,26 +23,27 @@ export function mutants(s: AnyStory, telling?: string, seed = 0): Mutant[] {
   const beats = (): Tell => clone(base.tellings[t]);
   const withTelling = (b: Tell, world = base.world): AnyStory => ({ ...clone(base), world: clone(world), tellings: { ...clone(base.tellings), [t]: b } }) as unknown as AnyStory;
   const keys = Object.keys(base.world);
+  const bk = (i: number, b: Tell = base.tellings[t]) => b[i]?.id ?? `b${i}`;
 
   base.tellings[t].forEach((beat, i) => {
     for (const p of listOf(beat.setup)) {
       if (!base.tellings[t].some((x, j) => j > i && listOf(x.pays).includes(p))) continue;
       const b = beats(); b[i] = { ...b[i], setup: listOf(b[i].setup).filter((x) => x !== p) };
-      out.push({ story: withTelling(b), telling: t, label: { kind: "drop-setup", at: `b${i}`, says: `the setup "${p}" was removed`, expect: "setup" } });
+      out.push({ story: withTelling(b), telling: t, label: { kind: "drop-setup", at: bk(i), says: `the setup "${p}" was removed`, expect: "setup" } });
     }
     for (const p of listOf(beat.pays)) {
       const b = beats(); b[i] = { ...b[i], pays: listOf(b[i].pays).filter((x) => x !== p) };
-      out.push({ story: withTelling(b), telling: t, label: { kind: "drop-payoff", at: `b${i}`, says: `the payoff of "${p}" was removed`, expect: "setup" } });
+      out.push({ story: withTelling(b), telling: t, label: { kind: "drop-payoff", at: bk(i), says: `the payoff of "${p}" was removed`, expect: "setup" } });
     }
     const turning = beat.shows.filter((k) => Object.values(base.world[k]?.turns ?? {}).some((d) => d));
     if (turning.length && !base.tellings[t].some((x, j) => j !== i && x.shows.some((k) => turning.includes(k)))) {
       const world = clone(base.world);
       for (const k of turning) world[k] = { ...world[k], turns: {} } as Ev;
-      out.push({ story: withTelling(beats(), world), telling: t, label: { kind: "flatten-beat", at: `b${i}`, says: `b${i}'s events no longer turn anything`, expect: "turns" } });
+      out.push({ story: withTelling(beats(), world), telling: t, label: { kind: "flatten-beat", at: bk(i), says: `${bk(i)}'s events no longer turn anything`, expect: "turns" } });
     }
     if (i + 1 < base.tellings[t].length) {
       const b = beats(); [b[i], b[i + 1]] = [b[i + 1], b[i]];
-      out.push({ story: withTelling(b), telling: t, label: { kind: "swap-beats", at: `b${i}`, says: `b${i} and b${i + 1} were swapped` } });
+      out.push({ story: withTelling(b), telling: t, label: { kind: "swap-beats", at: bk(i), says: `${bk(i)} and ${bk(i + 1)} were swapped` } });
     }
   });
 
@@ -69,7 +70,7 @@ export function mutants(s: AnyStory, telling?: string, seed = 0): Mutant[] {
     const shownLater = new Set(b.slice(i).flatMap((x) => x.shows));
     const causeOfLater = beat.shows.some((k) => [...shownLater].some((l) => listOf(base.world[l]?.because).includes(k)));
     if (i > 0 && causeOfLater && !b.some((x) => x.shows.some((k) => beat.shows.includes(k))) && !b.some((x) => listOf(x.pays).some((p) => listOf(beat.setup).includes(p))))
-      out.push({ story: withTelling(b), telling: t, label: { kind: "drop-cause-beat", at: `b${i}`, says: `b${i}, the only sight of a cause, was cut`, expect: "and-then" } });
+      out.push({ story: withTelling(b), telling: t, label: { kind: "drop-cause-beat", at: bk(i), says: `${bk(i)}, the only sight of a cause, was cut`, expect: "and-then" } });
   });
 
   const world = clone(base.world);
@@ -78,7 +79,7 @@ export function mutants(s: AnyStory, telling?: string, seed = 0): Mutant[] {
   const b = beats();
   const at = Math.max(1, Math.floor(b.length / 2));
   b.splice(at, 0, { shows: ["orphan"] });
-  out.push({ story: withTelling(b, world), telling: t, label: { kind: "orphan-event", at: `b${at}`, says: "an uncaused event that turns nothing was inserted", expect: "cause" } });
+  out.push({ story: withTelling(b, world), telling: t, label: { kind: "orphan-event", at: bk(at, b), says: "an uncaused event that turns nothing was inserted", expect: "cause" } });
   return out;
 }
 

@@ -23,7 +23,7 @@ export function compileScript(s: AnyStory, telling?: string, seed = 0): Script &
     const b: ScriptBeat = { onScreen: onScreenOf(s, beat, seed), ...(lines.length ? { lines } : {}), ...(beat.seconds ? { seconds: beat.seconds } : {}) };
     const pays = listOf(beat.pays), answered = a.answered;
     const payoff = [...pays.map((p) => `pays off ${p}`), ...answered.map((f) => `answers ${f}`)].join("; ");
-    return { heading: `${key.toUpperCase()}${beat.feel ? ` · ${beat.feel}` : ""}`, beats: [b], ...(payoff ? { payoff } : {}) };
+    return { heading: `${key.toUpperCase()}${beat.feel ? ` · ${beat.feel}` : ""}`, beats: [b], ...(payoff ? { payoff } : {}), beat: key };
   });
   return { title: info.title ?? "Untitled", ...(info.premise ? { logline: info.premise } : {}), scenes, beats: beatsOf(w).map((b) => b.key) };
 }

@@ -2,7 +2,7 @@
 // given (sample.ts), so a loaded world is always one definite story. Components:
 //   values  { Key, Value }        facts  { Key, Fact }        agents  { Key, Agent }
 //   events  { Key, Event, Order }  (Order: its place in the world's story order)
-//   beats   { Key, Beat, Index }   (Index: its place in the telling; Key "b0", "b1" ...)
+//   beats   { Key, Beat, Index }   (Index: its place in the telling; Key its id, else "b0", "b1" ...)
 // Resources: "Story" (title, premise, idea, lenses, telling's name) and "Keys" (each key's entity, by kind).
 import { World, type Entity } from "./ecs.ts";
 import type { Agent, AnyStory, Beat, Event, Value } from "./model.ts";
@@ -32,7 +32,7 @@ export function load(s: AnyStory, telling?: string, seed = 0): World {
   for (const [k, f] of Object.entries((r.facts ?? {}) as Record<string, string>)) keys.facts[k] = w.spawn({ Key: k, Fact: { text: f } });
   for (const [k, a] of Object.entries(r.agents as Record<string, RAgent>)) keys.agents[k] = w.spawn({ Key: k, Agent: a });
   Object.entries(r.world as Record<string, REvent>).forEach(([k, e], i) => (keys.events[k] = w.spawn({ Key: k, Event: e, Order: i })));
-  (beats as RBeat[]).forEach((b, i) => keys.beats.push(w.spawn({ Key: `b${i}`, Beat: b, Index: i })));
+  (beats as RBeat[]).forEach((b, i) => keys.beats.push(w.spawn({ Key: b.id ?? `b${i}`, Beat: b, Index: i })));
   w.setResource<Keys>("Keys", keys);
   w.setResource<StoryInfo>("Story", { title: r.title, premise: r.premise as string | undefined, idea: r.idea, lenses: r.lenses ?? [], telling: name });
   return w;

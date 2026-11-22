@@ -181,15 +181,16 @@ A composition uses the story explicitly: `useBeat(launch, "30s", 2)` gives a bea
 ### The Rust changes it needs (small, and the only ones)
 
 The SDK stays TypeScript. Rust only has to let a story through and point back at it:
-1. **`Brief.story`**: the brief refuses unknown fields (`deny_unknown_fields`), so `brief({ story })` is refused today.
-   Add `story: Option<serde_json::Value>` that Rust keeps without reading. Its TypeScript type comes from
-   `raea/story`, not from ts-rs (the brief's TS type is widened in `brief.ts`).
-2. **`Scene.beat`**: an optional beat id on a script's scene, so the screenplay and the A/V table show which beat each
-   scene plays, and a check can follow it.
-3. **Story checks without a composition**: let `raea check story.ts` (or a brief with a story) run checks marked
-   `over: "story"` once, with no world, so a story is checked before anything is drawn.
-4. **Checks by package path**: let a taste line name `raea/story/checks/turns` as well as a project file, so a project
-   uses the SDK's checks without copying them.
+1. **`Brief.story`**: the brief refuses unknown fields (`deny_unknown_fields`), so `brief({ story })` was refused.
+   It's now `story?: unknown` (Rust keeps it as written and reads nothing in it).
+2. **`Scene.beat`**: an optional beat id on a script's scene; `compileScript` writes it, so a scene says which beat it
+   plays.
+3. **Story checks without a composition**: `raea check launch.story.ts` runs every taste rule whose `.ts` check is
+   `over: "story"` or `"both"` once, with no frames, so only its `after` speaks. A story is checked before anything is
+   drawn.
+
+A fourth was planned (naming the SDK's checks by package path in taste.ts) and dropped: a project's own three-line
+`checks/story.ts` that imports its story and calls `storyCheck` is more explicit, which is what Shane asked for.
 
 ## The model, as a module
 
@@ -366,7 +367,7 @@ chooses (Shane's notes are the training data that matter most).
 
 | step | what | confidence |
 |---|---|---|
-| ST0 | the model's types (world, telling, render) and `story()`, compiled to `script.ts`; the four Rust changes (`Brief.story`, `Scene.beat`, story-only checks, checks by package path); the feed shows the story above its script | high |
+| ST0 | the model's types (world, telling, render) and `story()`, compiled to `script.ts`; the three Rust changes (`Brief.story`, `Scene.beat`, story-only checks) | high |
 | ST1 | exact checks: turns, causes, setups and payoffs, rhythm, arc | high |
 | ST2 | the knowledge model: suspense, mystery, surprise curves and the plot-hole check | medium-high |
 | ST3 | lenses: McKee, Pixar spine, Storynomics, PAS first (the ones ads need), then Campbell/Vogler, Harmon, Save the Cat, Kishōtenketsu, Propp, Bernays | high for the exact parts; their maps are inferred, so medium |

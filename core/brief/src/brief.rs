@@ -56,6 +56,11 @@ pub struct Brief {
     #[serde(default)]
     #[ts(as = "Option<Vec<Agent>>", optional)]
     pub agents: Vec<Agent>,
+    /// the project's stories, imported explicitly (raea/story, docs/story.md): one, or several by name. Kept as written:
+    /// raea reads nothing in it, the story SDK and the checks that import it do
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "unknown", optional)]
+    pub story: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

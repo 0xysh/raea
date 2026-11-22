@@ -44,6 +44,7 @@ test("a telling compiles to a Script, the world to storylets a drama manager pla
   expect(sc.scenes.length).toBe(4);
   expect(sc.scenes[0].heading).toBe("B0 · curiosity");
   expect(sc.scenes[3].payoff).toBe("pays off how; answers recipeRuns");
+  expect(sc.scenes.map((x) => x.beat)).toEqual(["b0", "b1", "b2", "b3"]);
   const played = dramaManager(compileStorylets(launch), [0.2, 0.6, 0.4, 1]);
   expect(played).toEqual(["week", "doubles", "tries", "ships"]);
   const withLines = { ...launch, tellings: { "30s": [{ shows: ["tries" as const], says: [{ who: "team" as const, says: "Fine. One recipe.", means: "I don't believe it" }] }] } };

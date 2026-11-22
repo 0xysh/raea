@@ -39,6 +39,7 @@ export function checkWorld(w: World): Finding[] {
   for (const { event, cause } of c.later) add("cause", "error", event, `${event} is caused by ${cause}, which happens later in the world`, "reorder the world, or change the cause");
   for (const k of c.deadEnds) add("dead-end", "note", k, `the event ${k} causes nothing that follows`, "let a later event come from it, or cut it");
 
+  const keyAt = (i: number) => beats[i]?.key ?? `b${i}`;
   const planted = new Map<string, number>();
   const paid = new Set<string>();
   for (const { key, beat, index } of beats) {
@@ -50,7 +51,7 @@ export function checkWorld(w: World): Finding[] {
     }
     for (const s of listOf(beat.setup)) if (!planted.has(s)) planted.set(s, index);
   }
-  for (const [s, at] of planted) if (!paid.has(s)) add("setup", "warn", `b${at}`, `b${at} sets up "${s}", which is never paid off`, "pay it off in a later beat (pays), or cut the setup");
+  for (const [s, at] of planted) if (!paid.has(s)) add("setup", "warn", keyAt(at), `${keyAt(at)} sets up "${s}", which is never paid off`, "pay it off in a later beat (pays), or cut the setup");
 
   for (const b of w.resource<Break[]>("BeliefBreaks") ?? [])
     add("belief", "error", b.event, `${b.who} acts on "${b.fact}" in ${b.event} without knowing it yet`, `let ${b.who} learn it earlier (an event that sets or learns it), or drop it from needs`);

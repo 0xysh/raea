@@ -78,6 +78,8 @@ export type Line<A extends string> = {
 };
 
 export type Beat<F extends string, A extends string, E extends string, S extends string> = {
+  /** its name: what a composition's Sequence and raea check call it (default b0, b1 ... by place) */
+  id?: string;
   /** the events the audience sees; a beat with none is narration or a title over them */
   shows: NoInfer<E>[];
   /** facts the audience learns here beyond what the shown events set */

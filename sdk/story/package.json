@@ -8,9 +8,13 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./checks": "./src/raea/checks.ts"
+    "./raea/checks": "./src/raea/checks.ts",
+    "./raea/compose": "./src/raea/compose.tsx"
   },
   "scripts": {
     "test": "bun test test"
+  },
+  "peerDependencies": {
+    "react": "19.2.0"
   }
 }

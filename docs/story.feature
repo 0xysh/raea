@@ -51,7 +51,11 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
     Scenario: ST0c. The brief imports stories, and a script's scene names its beat
       Given brief({ ..., story: launch }) or story: { launch, quest1 }
       Then raea reads the brief with its story kept as it is (Brief.story, opaque to Rust)
-      And a script's scene may carry beat: "<id>", which the screenplay and the A/V table show
+      And a script's scene may carry beat: "<id>" (compileScript writes it)
+      And the plan:
+        | crate           | file                       | lines | job                         |
+        | raea-core-brief | core/brief/src/brief.rs    | 140   | Brief.story, kept as written |
+        | raea-core-brief | core/brief/src/script.rs   | 90    | Scene.beat                   |
 
   Rule: ST1. Systems derive what's never written
 
@@ -124,7 +128,14 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
       Given a project whose brief imports a story and whose composition names its Sequences by beat id
       When raea check runs
       Then the story-only, on-screen and render checks run as ordinary raea/check checks
-      And they can be named by package path in taste.ts, and a story is checked with no composition (raea check story.ts)
+      And a story is checked with no composition: raea check NAME.story.ts runs every check over "story" or "both" once,
+        with no frames
+      And the plan:
+        | crate              | file                              | lines | job                                             |
+        | sdk                | sdk/story/src/raea/checks.ts      | 120   | storyCheck: the story's findings and its beats on screen |
+        | sdk                | sdk/story/src/raea/compose.tsx    | 80    | beatTimes and <Beat>                             |
+        | raea-app-direction | apps/direction/src/check.rs       | 420   | raea check NAME.story.ts                         |
+        | raea-app-direction | apps/direction/src/ts.rs          | 120   | a check's `over`                                 |
 
     Scenario: ST5b. A telling compiles to a script, to storylets and to dialogue
       Then compileScript gives raea/brief's Script, each scene carrying its beat
