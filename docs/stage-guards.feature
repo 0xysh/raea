@@ -410,6 +410,10 @@ Feature: Stage guards: a 3D render an agent can't break
       # GI differs in SSIM (0.97-0.99, the GI's history) with no patch past the bar after frame 0. On the whole film
       # (13,175 frames), its 64 stills past frame 3,600 made live (SG4a): none differs. The positive control is still
       # caught and six real scenes are clean on that route.
+      # Stay rendered whole (11-22, the release build of the 0.1.9 stack): 12 frame-pure errors from frame 230 on, each
+      # a shot after the black open drawn far darker than the same frame rendered alone (the pool, the canyon, the
+      # montage, the paint, the sea), the fault Stay's own code works round by rendering a shot a process
+      # (tools/film.sh). Its 35 chunks on that route: 0 errors. Left: why a whole render's later shots lose their light.
       Given the plan
         | crate               | file                         | lines | job                                                                    |
         | raea-app-direction  | apps/direction/src/pure.rs   | 234   | the sample, the stills and the alone frame, the patch, the parts under it, the findings |
@@ -521,6 +525,9 @@ Feature: Stage guards: a 3D render an agent can't break
       # 29 clean scenes: 3 warnings, all real (creatures' camera locked to the raccoon as it breaks from a walk to a
       # run, 2.4x); the 13 errors are the same. On film2: 6 warnings beside its 41 errors. `raea fingerprint things`
       # keeps its own for video with no 3D scene (footage).
+      # Stay's own reversal (11-22): its montage's glasshouse pair (72.26-73.50 s) slid past the plant while aimed at
+      # it; the move now ends where it comes nearest, and its words over the picture ('turn', the end title) say
+      # data-allow-overlap. Rendered whole it has neither error.
 
     Scenario: SG14. The frame is composed
       Given the plan
