@@ -4,7 +4,7 @@
 // beat carries the words a viewer gets (onScreen and lines), so a telling reads as a script with no annotations: what
 // the extractor reads and the critic judges.
 //
-//   bun models/corpus.ts N [--out ~/.vd/story] [--model anthropic/claude-haiku-5.5] [--jobs 16] [--seed 0]
+//   bun models/corpus.ts N [--out ~/.vd/story] [--model anthropic/claude-haiku-5.5] [--jobs 16] [--seed 0] [--long]
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +34,16 @@ const KINDS: [string, number, string][] = [
   ["fable", 5, "4 to 7 beats; animals or objects; a lie the hero believes and drops"],
   ["documentary short", 5, "4 to 7 beats; real-feeling people, a turn from bad to better or worse"],
 ];
+// --long: films told a beat a shot, as a short film's shot list is (the shape of a held-out story like models/validate.ts
+// reads): one event can span several shots in a row, so the long telling is 20 to 40 beats over 12 to 30 events
+const LONG: [string, number, string][] = [
+  ["wordless animated short film, told a beat a shot", 40, "20 to 40 beats, a beat a shot; 12 to 30 events; one event can span several shots in a row; few or no lines; a journey with a mentor, a threshold, an ordeal, a reward and a return"],
+  ["short live-action drama, told a beat a shot", 30, "20 to 35 beats, a beat a shot; 12 to 25 events; a want against a need, a secret, a dilemma late"],
+  ["game's story mission, told a beat a shot", 15, "20 to 30 beats; 12 to 20 events; a quest giver, an obstacle, a betrayal, a reward; setups paid off"],
+  ["long brand film, told a beat a shot", 15, "20 to 30 beats; 12 to 20 events; the customer is the hero, the product the mentor; a claim backed by proof shown"],
+];
+const LONG_RUN = process.argv.includes("--long");
+if (LONG_RUN) KINDS.splice(0, KINDS.length, ...LONG);
 const MOODS = ["hopeful", "funny", "tense", "quiet", "bittersweet", "urgent", "warm", "dry", "eerie", "triumphant"];
 
 function premise(i: number): { kind: string; shape: string; brand: string; mood: string } {
@@ -63,7 +73,7 @@ async function ask(messages: { role: string; content: string }[]): Promise<{ tex
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", "X-Title": "story-corpus" },
-      body: JSON.stringify({ model: MODEL, messages, temperature: 1, max_tokens: 9000, reasoning: { max_tokens: 1500 }, response_format: { type: "json_object" }, usage: { include: true } }),
+      body: JSON.stringify({ model: MODEL, messages, temperature: 1, max_tokens: process.argv.includes("--long") ? 14000 : 9000, reasoning: process.argv.includes("--long") ? { enabled: false } : { max_tokens: 1500 }, response_format: { type: "json_object" }, usage: { include: true } }),
     });
     if (res.status === 429 || res.status >= 500) { await new Promise((r) => setTimeout(r, 2000 * (attempt + 1))); continue; }
     const j: any = await res.json();
@@ -81,8 +91,10 @@ function judgeIt(j: unknown) {
   const { story, errors } = fromData(j);
   if (!story) return { story, errors: errors.map((e) => `${e.at}: ${e.says}`), findings: [] as string[] };
   let findings: string[] = [];
+  const n = ((j as any)?.tellings?.main ?? []).length, ev = Object.keys((j as any)?.world ?? {}).length;
+  if (LONG_RUN && (n < 20 || ev < 12)) findings.push(`the telling has ${n} beats over ${ev} events; it needs 20 to 40 beats (a beat a shot) over 12 to 30 events`);
   if (!errors.length) {
-    try { findings = checkStory(story, "main").filter((f) => f.level === "error").map((f) => `${f.check} at ${f.about}: ${f.says}`); }
+    try { findings = findings.concat(checkStory(story, "main").filter((f) => f.level === "error").map((f) => `${f.check} at ${f.about}: ${f.says}`)); }
     catch (e) { findings = [`the checker couldn't read it: ${(e as Error).message}`]; }
   }
   return { story, errors: errors.map((e) => `${e.at}: ${e.says}`), findings };
@@ -95,7 +107,7 @@ async function one(i: number) {
   const p = premise(i);
   const msgs = [
     { role: "system", content: GUIDE },
-    { role: "user", content: `Write a ${p.mood} ${p.kind}${p.kind.includes("launch") || p.kind.includes("ad") ? ` for ${p.brand} (a made-up company: invent what it makes, in its line)` : ""}. Shape: ${p.shape}. Make it specific and surprising, not generic.` },
+    { role: "user", content: `Write a ${p.mood} ${p.kind}${p.kind.includes("launch") || p.kind.includes("ad") ? ` for ${p.brand} (a made-up company: invent what it makes, in its line)` : ""}. Shape: ${p.shape}. Make it specific and surprising, not generic.${LONG_RUN ? " This is a long telling: tellings.main must have between 20 and 40 beats, one per shot (number them in your head as you go), over 12 to 30 world events. A run of shots can show the same event." : ""}` },
   ];
   const first = await ask(msgs);
   spent += first.usd;
