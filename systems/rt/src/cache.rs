@@ -78,9 +78,12 @@ pub(crate) struct Passes(pub [CachedComputePipelineId; 6]);
 /// cache's group 1
 pub(crate) fn queue(cache: &PipelineCache, assets: &AssetServer, layouts: &[BindGroupLayoutDescriptor]) -> Passes {
     let (compact, gi) = (assets.load("embedded://raea_sys_rt/compact.wesl"), assets.load("embedded://raea_sys_rt/gi.wesl"));
-    Passes([(&compact, "decay"), (&compact, "scan_cells"), (&compact, "scan_blocks"), (&compact, "list"), (&gi, "learn"), (&gi, "blend")].map(|(shader, entry)| {
-        cache.queue_compute_pipeline(ComputePipelineDescriptor { label: Some(format!("raea_gi_cache_{entry}").into()), layout: layouts.to_vec(), shader: shader.clone(), entry_point: Some(entry.into()), ..default() })
-    }))
+    Passes([(&compact, "decay"), (&compact, "scan_cells"), (&compact, "scan_blocks"), (&compact, "list"), (&gi, "learn"), (&gi, "blend")].map(|(shader, entry)| pipeline(cache, "raea_gi_cache", layouts, shader, entry)))
+}
+
+/// One of raea GI's compute passes: `entry` of `shader` over `layouts`, labelled `{label}_{entry}`.
+pub(crate) fn pipeline(cache: &PipelineCache, label: &str, layouts: &[BindGroupLayoutDescriptor], shader: &Handle<Shader>, entry: &str) -> CachedComputePipelineId {
+    cache.queue_compute_pipeline(ComputePipelineDescriptor { label: Some(format!("{label}_{entry}").into()), layout: layouts.to_vec(), shader: shader.clone(), entry_point: Some(entry.to_owned().into()), ..default() })
 }
 
 /// The cache's buffers (zeroed: every cell empty) and the update's arguments, copied from the list's.
@@ -96,8 +99,9 @@ pub(crate) fn buffers(device: &RenderDevice) -> Buffers {
 }
 
 pub(crate) fn bind(device: &RenderDevice, layout: &BindGroupLayout, b: &Buffers, upkeep: BindingResource) -> BindGroup {
-    let mut entries: Vec<BindGroupEntry> = b.all.iter().enumerate().map(|(i, buffer)| BindGroupEntry { binding: i as u32, resource: buffer.as_entire_binding() }).collect();
-    entries.push(BindGroupEntry { binding: BUFFERS.len() as u32, resource: upkeep });
+    // the buffers in order, then the upkeep uniform
+    let resources = b.all.iter().map(|b| b.as_entire_binding()).chain([upkeep]);
+    let entries: Vec<BindGroupEntry> = resources.enumerate().map(|(i, resource)| BindGroupEntry { binding: i as u32, resource }).collect();
     device.create_bind_group("raea_gi_cache", layout, &entries)
 }
 

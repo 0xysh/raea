@@ -35,25 +35,31 @@ pub fn shadow(app: &mut App, edit_dir: &Path, prog: &Program) {
         let declared = DECLARED.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
         for (rel, file) in walk(&dir) {
             if std::fs::metadata(&file).is_ok_and(|m| m.len() == 0) {
-                let builtin = declared.iter().find(|(r, _)| *r == rel).map(|(_, t)| t.as_bytes().to_vec());
-                match builtin.or_else(|| original(app, &rel)).map(|b| std::fs::write(&file, b)) {
-                    Some(Ok(())) => filled.push(rel),
-                    Some(Err(e)) => eprintln!("raea: {}: {e}", file.display()),
-                    None => stray.push(rel),
+                let builtin = declared.get(rel.as_str()).map(|t| t.as_bytes().to_vec());
+                let Some(text) = builtin.or_else(|| original(app, &rel)) else {
+                    stray.push(rel);
+                    continue;
+                };
+                match std::fs::write(&file, text) {
+                    Ok(()) => filled.push(rel),
+                    Err(e) => eprintln!("raea: {}: {e}", file.display()),
                 }
                 continue;
             }
             let fork = raea_sys_frame::bevy_api::swapped(&rel);
             match replace(app, &rel, &file, &mut swaps) {
                 Some(_) => ours.push(if fork { format!("{rel} (over raea's fork of Bevy's)") } else { rel }),
-                None if declared.iter().any(|(r, _)| *r == rel) => ours.push(format!("{rel} (read as its pass is made)")),
+                None if declared.contains_key(rel.as_str()) => ours.push(format!("{rel} (read as its pass is made)")),
                 None => stray.push(rel),
             }
         }
         if !ours.is_empty() {
             eprintln!("raea: {} of the engine's shaders from {} in place of this raea's ({}); each is tied to this raea's version of it (docs/nobuild.feature NB5b)", ours.len(), dir.display(), ours.join(", "));
         }
-        let ours: Vec<String> = ours.into_iter().map(|r| r.split(" (").next().unwrap_or_default().to_string()).collect();
+        // the bare paths, without what was said of each
+        for r in &mut ours {
+            r.truncate(r.find(" (").unwrap_or(r.len()));
+        }
         if !stray.is_empty() {
             eprintln!("raea: {} has no engine shader at {} (the path is <crate>/<path under its src>, as Bevy embeds it)", dir.display(), stray.join(", "));
         }
@@ -129,7 +135,7 @@ fn with_constants(app: &mut App, set: &[consts::ShaderConstant], swaps: &mut Vec
     let declared = DECLARED.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
     let (mut said, mut changed) = (Vec::new(), Vec::new());
     for shader in shaders {
-        let builtin = declared.iter().find(|(r, _)| *r == shader).map(|(_, t)| *t);
+        let builtin = declared.get(shader).copied();
         let base = match builtin {
             Some(b) => Some(source(shader, b).into_owned()),
             None => original(app, shader).and_then(|b| String::from_utf8(b).ok()),
@@ -168,16 +174,15 @@ fn with_constants(app: &mut App, set: &[consts::ShaderConstant], swaps: &mut Vec
 
 /// The shaders crates read through `text` (`declare`), each path and its built-in text: a project's file for one isn't
 /// stray, and an empty one is filled with it.
-static DECLARED: std::sync::Mutex<Vec<(&'static str, &'static str)>> = std::sync::Mutex::new(Vec::new());
+static DECLARED: std::sync::Mutex<std::collections::BTreeMap<&'static str, &'static str>> = std::sync::Mutex::new(std::collections::BTreeMap::new());
 
 /// Names the shaders a crate reads through `text`: each as `<crate>/<path under its src>` with its built-in text. Call
 /// before the Engine's plugins finish (a plugin's build).
 pub fn declare(shaders: &[(&'static str, &'static str)]) {
     let mut d = DECLARED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    for s in shaders {
-        if !d.iter().any(|(r, _)| *r == s.0) {
-            d.push(*s);
-        }
+    for &(rel, text) in shaders {
+        // a shader declared twice keeps its first text
+        d.entry(rel).or_insert(text);
     }
 }
 

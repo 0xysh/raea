@@ -72,7 +72,11 @@ pub fn stat_value(var: &str) -> Option<String> {
 /// `name=value` gives a view its value (a channel chosen again takes the later value).
 pub fn choose(channels: &[String]) {
     let mut c = chosen();
-    for n in channels.iter().map(|n| n.trim().trim_start_matches("RAEA_").to_ascii_lowercase()).filter(|n| !n.is_empty()) {
+    for n in channels {
+        let n = n.trim().trim_start_matches("RAEA_").to_ascii_lowercase();
+        if n.is_empty() {
+            continue;
+        }
         let key = n.split('=').next().unwrap_or_default().to_string();
         c.retain(|o| o.split('=').next() != Some(key.as_str()));
         c.push(n);
@@ -111,7 +115,7 @@ pub fn stats() -> Value {
     let g = TOTALS.lock().ok();
     let t = g.as_ref().and_then(|g| g.as_ref());
     let passes: serde_json::Map<String, Value> = t.into_iter().flat_map(|t| t.passes.iter()).map(|(k, (n, sum, max))| (k.clone(), json!({"n": n, "mean_ms": round(sum / *n as f64), "max_ms": round(*max)}))).collect();
-    let counters: serde_json::Map<String, Value> = t.into_iter().flat_map(|t| t.counters.iter()).map(|(k, n)| (k.clone(), json!(n))).collect();
+    let counters = t.map_or(json!({}), |t| json!(t.counters));
     json!({"chosen": chosen(), "passes": passes, "counters": counters})
 }
 

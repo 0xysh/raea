@@ -76,8 +76,8 @@ pub fn install(app: &mut App) {
     render_app.add_systems(Core3d, draw.in_set(Core3dSystems::EarlyPostProcess));
 }
 
-/// the i-th of the Halton sequence in base b, in 0-1
-fn halton(mut i: u32, b: u32) -> f32 {
+/// the i-th of the Halton sequence in base b, in 0-1 (a jitter's places; raea-render-raytrace's upscale uses it too)
+pub fn halton(mut i: u32, b: u32) -> f32 {
     let (mut f, mut r) = (1.0, 0.0);
     while i > 0 {
         f /= b as f32;
@@ -167,7 +167,7 @@ fn init_pipeline(mut commands: Commands, device: Res<RenderDevice>, assets: Res<
     );
     let shader = assets.load("embedded://raea_sys_post/steady.wesl");
     let pipeline = |format: TextureFormat| {
-        let target = |format| Some(ColorTargetState { format, blend: None, write_mask: ColorWrites::ALL });
+        let target = |format: TextureFormat| Some(ColorTargetState::from(format));
         cache.queue_render_pipeline(RenderPipelineDescriptor {
             label: Some("steady".into()),
             layout: vec![layout.clone()],

@@ -25,7 +25,7 @@ fn overrides() -> &'static Overrides {
         let var = |n: &str| std::env::var(n).ok();
         // "0" turns a switch off and anything else on, as each variable did on its own
         let switch = |n: &str| var(n).map(|v| v != "0");
-        let num = |n: &str| var(n).and_then(|v| v.parse::<f32>().ok()).filter(|v| v.is_finite() && *v > 0.0);
+        let num = |n: &str| var(n).and_then(|v| v.parse::<f32>().ok()).filter(|v| (f32::MIN_POSITIVE..f32::INFINITY).contains(v));
         Overrides {
             denoise: switch("RAEA_SOLARI_DENOISE"),
             guides: switch("RAEA_SOLARI_PSR"),
@@ -58,9 +58,8 @@ pub(crate) fn of(s: Option<&SolariSettings>) -> SolariSettings {
     s
 }
 
-/// The variables set, each with its value and the prop it overrides.
-fn set() -> Vec<(&'static str, String, &'static str)> {
-    [
+/// The variables that override a prop, each with the prop.
+const VARS: &[(&str, &str)] = &[
         ("RAEA_SOLARI_DENOISE", "denoise"),
         ("RAEA_SOLARI_PSR", "guides"),
         ("RAEA_SOLARI_PSR_DEPTH", "reflectionDepth"),
@@ -72,11 +71,7 @@ fn set() -> Vec<(&'static str, String, &'static str)> {
         ("RAEA_SOLARI_DYNAMIC", "dynamic"),
         ("RAEA_EMIT_TAA_SHARP", "emissiveSharpness"),
         ("RAEA_SOLARI_SCALE", "scale"),
-    ]
-    .into_iter()
-    .filter_map(|(n, prop)| std::env::var(n).ok().map(|v| (n, v, prop)))
-    .collect()
-}
+];
 
 /// A view's settings as they apply, into the run's trace (`solari_settings`: the view, each field, and the variables
 /// that overrode a prop) the first frame and whenever they change, so a render says what it drew with; and once a run,
@@ -87,14 +82,7 @@ pub(crate) fn record(view: Entity, s: &SolariSettings, scale: f32, seen: &mut Ha
         return;
     }
     seen.insert(view, s.clone());
-    let env = set();
-    static SAID: std::sync::Once = std::sync::Once::new();
-    if !env.is_empty() {
-        SAID.call_once(|| {
-            let list: Vec<String> = env.iter().map(|(n, v, prop)| format!("{n}={v} over {prop}")).collect();
-            eprintln!("raea: <SolariLighting> on every camera: {} (docs/nobuild.feature NB1a)", list.join(", "));
-        });
-    }
+    let env = raea_io_trace::overrides("SolariLighting", VARS);
     raea_io_trace::event(
         "solari_settings",
         serde_json::json!({
@@ -105,19 +93,4 @@ pub(crate) fn record(view: Entity, s: &SolariSettings, scale: f32, seen: &mut Ha
             "env": env.iter().map(|(n, v, _)| format!("{n}={v}")).collect::<Vec<_>>(),
         }),
     );
-}
-
-impl SolariSettings {
-    /// the emission is taken out before the denoiser and put back after ("taa" or "split")
-    pub(crate) fn split(&self) -> bool {
-        self.emissive != "mask"
-    }
-    /// the emission's history is gathered over frames (emit_taa.rs)
-    pub(crate) fn taa(&self) -> bool {
-        self.emissive == "taa"
-    }
-    /// a view drawn small is denoised and brought up in one pass
-    pub(crate) fn one_pass(&self) -> bool {
-        self.upscale != "two"
-    }
 }

@@ -76,18 +76,14 @@ fn shadow(s: &str) -> Option<ShadowRule> {
     })
 }
 
-fn var(name: &str) -> Option<String> {
-    std::env::var(name).ok()
-}
-
 /// a variable's whole number over 0
 fn count(name: &str) -> Option<u32> {
-    var(name).and_then(|v| v.parse().ok()).filter(|v: &u32| *v > 0)
+    std::env::var(name).ok()?.parse().ok().filter(|v: &u32| *v > 0)
 }
 
 /// a variable's comma-separated numbers, each over its place's prop
 fn list<T: std::str::FromStr>(name: &str) -> Vec<Option<T>> {
-    var(name).map(|v| v.split(',').map(|x| x.trim().parse().ok()).collect()).unwrap_or_default()
+    std::env::var(name).unwrap_or_default().split(',').map(|x| x.trim().parse().ok()).collect()
 }
 
 /// The camera row's tuning, each RAEA_FOG_* variable over its prop.
@@ -122,36 +118,41 @@ pub fn tuning(vals: &Vals) -> Tuning {
         },
     };
     // the variables, as they read before they were props
-    if let Some(r) = var("RAEA_FOG_SHADOW").as_deref().and_then(shadow) {
+    if let Some(r) = std::env::var("RAEA_FOG_SHADOW").ok().as_deref().and_then(shadow) {
         t.shadow = r;
     }
-    if let Some(v) = var("RAEA_FOG_HERO_EXACT") {
+    if let Some(v) = std::env::var("RAEA_FOG_HERO_EXACT").ok() {
         t.hero_exact = v != "0";
     }
-    if let Some(v) = var("RAEA_FOG_TRICUBIC_T") {
+    if let Some(v) = std::env::var("RAEA_FOG_TRICUBIC_T").ok() {
         t.tricubic = v != "0";
     }
-    let e: Vec<Option<f32>> = list("RAEA_FOG_EPI");
-    let at = |i: usize| e.get(i).copied().flatten();
-    t.epi.line_gap = at(0).map_or(t.epi.line_gap, |v| v.max(0.5));
-    t.epi.spacing = at(1).map_or(t.epi.spacing, |v| v.max(0.5));
-    t.epi.every = at(2).map_or(t.epi.every, |v| (v as u32).max(1));
-    t.epi.rel = at(3).unwrap_or(t.epi.rel);
-    t.epi.abs = at(4).unwrap_or(t.epi.abs);
-    t.epi.depth = at(5).unwrap_or(t.epi.depth);
-    if let Some(v) = var("RAEA_FOG_SOLARI") {
+    // RAEA_FOG_EPI=line,spacing,every,rel,abs,depth: each number given over its prop
+    for (i, v) in list::<f32>("RAEA_FOG_EPI").into_iter().enumerate() {
+        let Some(v) = v else { continue };
+        match i {
+            0 => t.epi.line_gap = v.max(0.5),
+            1 => t.epi.spacing = v.max(0.5),
+            2 => t.epi.every = (v as u32).max(1),
+            3 => t.epi.rel = v,
+            4 => t.epi.abs = v,
+            5 => t.epi.depth = v,
+            _ => {}
+        }
+    }
+    if let Some(v) = std::env::var("RAEA_FOG_SOLARI").ok() {
         t.solari.on = v != "0";
     }
     t.solari.candidates = count("RAEA_FOG_SOLARI_CANDIDATES").unwrap_or(t.solari.candidates);
     t.solari.frames = count("RAEA_FOG_SOLARI_FRAMES").unwrap_or(t.solari.frames);
     t.solari.sky_rays = count("RAEA_FOG_SOLARI_SKY").unwrap_or(t.solari.sky_rays);
-    if let Some(p) = var("RAEA_FOG_SOLARI_PARTS") {
+    if let Some(p) = std::env::var("RAEA_FOG_SOLARI_PARTS").ok() {
         (t.solari.lamps, t.solari.sky) = (p.contains("lamps"), p.contains("sky"));
     }
-    if let Some(v) = var("RAEA_FOG_SOLARI_FILTER") {
+    if let Some(v) = std::env::var("RAEA_FOG_SOLARI_FILTER").ok() {
         t.solari.filter = v != "0";
     }
-    if let Some(g) = var("RAEA_FOG_SOLARI_GUIDE").and_then(|v| v.parse::<u32>().ok()) {
+    if let Some(g) = std::env::var("RAEA_FOG_SOLARI_GUIDE").ok().and_then(|v| v.parse::<u32>().ok()) {
         t.solari.guide = g & 3;
     }
     t
@@ -166,12 +167,11 @@ pub fn grid(tile: u32, slices: u32, samples: u32) -> (u32, u32, u32) {
 
 /// RAEA_FOG_HERO over the `hero` prop ("0" off, anything else on).
 pub fn hero(prop: bool) -> bool {
-    var("RAEA_FOG_HERO").map_or(prop, |v| v != "0")
+    std::env::var("RAEA_FOG_HERO").ok().map_or(prop, |v| v != "0")
 }
 
-/// The RAEA_FOG_* variables set, each with the prop it overrides.
-fn env() -> Vec<(&'static str, String, &'static str)> {
-    [
+/// The RAEA_FOG_* variables that override a prop, each with the prop.
+const VARS: &[(&str, &str)] = &[
         ("RAEA_FOG_MODE", "mode"),
         ("RAEA_FOG_HERO", "hero"),
         ("RAEA_FOG_GRID", "tile, slices, samples"),
@@ -186,23 +186,12 @@ fn env() -> Vec<(&'static str, String, &'static str)> {
         ("RAEA_FOG_SOLARI_PARTS", "solari.lamps and solari.sky"),
         ("RAEA_FOG_SOLARI_FILTER", "solari.filter"),
         ("RAEA_FOG_SOLARI_GUIDE", "solari.guide"),
-    ]
-    .into_iter()
-    .filter_map(|(n, prop)| var(n).map(|v| (n, v, prop)))
-    .collect()
-}
+];
 
 /// A camera's fog as it draws, into the run's trace (`fog_settings`) each time it's put on: the mode, and for the grid
 /// every setting; and once a run, on stderr, which variables override <VolumetricFog>'s props.
 pub fn record(camera: Entity, mode: &str, fog: Option<&FroxelFog>) {
-    let env = env();
-    static SAID: std::sync::Once = std::sync::Once::new();
-    if !env.is_empty() {
-        SAID.call_once(|| {
-            let list: Vec<String> = env.iter().map(|(n, v, prop)| format!("{n}={v} over {prop}")).collect();
-            eprintln!("raea: <VolumetricFog> on every camera: {} (docs/nobuild.feature NB1a)", list.join(", "));
-        });
-    }
+    let env = raea_io_trace::overrides("VolumetricFog", VARS);
     let mut j = serde_json::json!({ "camera": camera.to_bits(), "mode": mode, "env": env.iter().map(|(n, v, _)| format!("{n}={v}")).collect::<Vec<_>>() });
     if let Some(f) = fog {
         let (t, e, s) = (&f.tune, &f.tune.epi, &f.tune.solari);

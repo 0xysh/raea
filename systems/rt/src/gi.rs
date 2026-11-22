@@ -12,10 +12,7 @@
 //! RAEA_GI_SHOW=volume: the probes light the scene through Bevy's irradiance volume (see `install`). Unset, nothing
 //! changes.
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::atomic::Ordering;
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -35,6 +32,8 @@ use bevy::{
         Render, RenderApp, RenderStartup, RenderSystems,
     },
 };
+
+use crate::timer::Timer;
 
 /// rays a probe each round (gi.wesl's RAYS: a workgroup a probe, a ray a thread)
 const RAYS: u32 = 64;
@@ -199,9 +198,7 @@ fn init(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCac
     let shader = assets.load("embedded://raea_sys_rt/gi.wesl");
     let cache_layout = crate::cache::layout();
     let layouts = vec![layout.clone(), cache_layout.clone()];
-    let [id, resolve] = ["main", "resolve"].map(|entry| {
-        cache.queue_compute_pipeline(ComputePipelineDescriptor { label: Some(format!("raea_gi_{entry}").into()), layout: layouts.clone(), shader: shader.clone(), entry_point: Some(entry.into()), ..default() })
-    });
+    let [id, resolve] = ["main", "resolve"].map(|entry| crate::cache::pipeline(&cache, "raea_gi", &layouts, &shader, entry));
     let passes = crate::cache::queue(&cache, &assets, &layouts);
     let sampler = device.create_sampler(&SamplerDescriptor { label: Some("raea gi sky"), mag_filter: FilterMode::Linear, min_filter: FilterMode::Linear, ..default() });
     let shown = std::env::var("RAEA_GI_SHOW").as_deref() == Ok("volume");
@@ -216,19 +213,11 @@ struct State {
     cache: Option<crate::cache::Buffers>,
     frame: u32,
     key: Option<[u32; 9]>,
-    timer: Option<Timer>,
+    /// the cache's start and end, the probes' start and end; the read-back also takes the cache's live cells
+    timer: Option<Timer<()>>,
     /// each timed frame's GPU milliseconds, the cache's and the probes', and the cache's live cells
     seen: Vec<(f64, f64, u32)>,
     written: Option<std::time::Instant>,
-}
-
-struct Timer {
-    set: wgpu::QuerySet,
-    resolve: wgpu::Buffer,
-    read: wgpu::Buffer,
-    period: f64,
-    /// a frame's timestamps on their way back
-    pending: Option<Arc<AtomicBool>>,
 }
 
 /// what the grid is lit from: the sun and the sky (and its size); any change starts every mean again. Not its place:
@@ -307,7 +296,7 @@ fn update(
     let cells = state.cache.get_or_insert_with(|| crate::cache::buffers(&device));
     let cache_group = crate::cache::bind(&device, &cache.get_bind_group_layout(&p.cache_layout), cells, upkeep.binding().unwrap());
     if state.timer.is_none() && device.features().contains(WgpuFeatures::TIMESTAMP_QUERY) {
-        state.timer = Some(timer(&device, &queue));
+        state.timer = Some(Timer::new(&device, &queue, "raea gi timer", 4, 48));
     }
     let (cubes, tags, _) = state.cubes.as_ref().unwrap();
     let group = device.create_bind_group(
@@ -328,7 +317,7 @@ fn update(
     // The probes, only where they light something. Unshown, their pass keeps one workgroup of `resolve`: on the Mac the
     // cache's last pass writes its end time only when a timed pass follows it (11-18: without one it read 0).
     {
-        let writes = state.timer.as_ref().filter(|_| timed).map(|t| wgpu::ComputePassTimestampWrites { query_set: &t.set, beginning_of_pass_write_index: Some(2), end_of_pass_write_index: Some(3) });
+        let writes = state.timer.as_ref().filter(|_| timed).map(|t| t.writes(2));
         let mut pass = enc.begin_compute_pass(&ComputePassDescriptor { label: Some("raea_gi"), timestamp_writes: writes });
         pass.set_bind_group(0, &group, &[]);
         pass.set_bind_group(1, &cache_group, &[]);
@@ -341,45 +330,25 @@ fn update(
         pass.dispatch_workgroups(if p.shown { total.div_ceil(64) } else { 1 }, 1, 1);
     }
     if let Some(t) = state.timer.as_ref().filter(|_| timed) {
-        enc.resolve_query_set(&t.set, 0..4, &t.resolve, 0);
-        enc.copy_buffer_to_buffer(&t.resolve, 0, &t.read, 0, 32);
+        t.resolve_into(&mut enc);
         enc.copy_buffer_to_buffer(&cells.all[crate::cache::COUNT], 0, &t.read, 32, 4);
     }
     queue.submit([enc.finish()]);
     if let Some(t) = state.timer.as_mut().filter(|_| timed) {
-        let done = Arc::new(AtomicBool::new(false));
-        let d = done.clone();
-        t.read.slice(..).map_async(wgpu::MapMode::Read, move |r| d.store(r.is_ok(), Ordering::Release));
-        t.pending = Some(done);
+        t.send(());
     }
     report(&mut state, budget, total);
-}
-
-fn timer(device: &RenderDevice, queue: &RenderQueue) -> Timer {
-    let d = device.wgpu_device();
-    // the cache's start and end, the probes' start and end; the read-back also takes the cache's live cells
-    let set = d.create_query_set(&wgpu::QuerySetDescriptor { label: Some("raea gi timer"), ty: wgpu::QueryType::Timestamp, count: 4 });
-    let resolve = d.create_buffer(&wgpu::BufferDescriptor { label: Some("raea gi timer resolve"), size: 32, usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
-    let read = d.create_buffer(&wgpu::BufferDescriptor { label: Some("raea gi timer read"), size: 48, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    Timer { set, resolve, read, period: queue.get_timestamp_period() as f64, pending: None }
 }
 
 /// the last timed frame's GPU milliseconds, once its readback is done
 fn collect(state: &mut State, shown: bool) {
     let Some(t) = state.timer.as_mut() else { return };
-    let Some(done) = t.pending.as_ref() else { return };
-    if !done.load(Ordering::Acquire) {
-        return;
-    }
-    let (cache_ms, probes_ms, cells) = {
-        let Ok(view) = t.read.slice(..).get_mapped_range() else { return };
-        let ts = |i: usize| u64::from_le_bytes(view[8 * i..8 * i + 8].try_into().unwrap());
-        let ms = |a: usize, b: usize| ts(b).saturating_sub(ts(a)) as f64 * t.period / 1e6;
-        // unshown, the cache runs to the end of the marker pass after it (its own end time reads 0 there)
+    // unshown, the cache runs to the end of the marker pass after it (its own end time reads 0 there)
+    let Some(((cache_ms, probes_ms, cells), ())) = t.take(|ms, view| {
         (if shown { ms(0, 1) } else { ms(0, 3) }, if shown { ms(2, 3) } else { 0.0 }, u32::from_le_bytes(view[32..36].try_into().unwrap()))
+    }) else {
+        return;
     };
-    t.read.unmap();
-    t.pending = None;
     // a frame whose times came back (the probes' pass may be empty: not shown)
     if cache_ms > 0.0 {
         state.seen.push((cache_ms, probes_ms, cells));

@@ -14968,6 +14968,7 @@ dependencies = [
  "objc2-metal-fx",
  "raea-io-trace",
  "raea-sys-engine-shaders",
+ "raea-sys-post",
  "raea-sys-rt",
  "serde_json",
  "wgpu",

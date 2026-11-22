@@ -34,6 +34,7 @@ use objc2_metal::{MTLBlitCommandEncoder, MTLCommandBuffer, MTLCommandEncoder, MT
 use objc2_metal_fx::{MTLFXTemporalScaler, MTLFXTemporalScalerBase, MTLFXTemporalScalerDescriptor};
 use std::sync::atomic::{AtomicBool, Ordering};
 use wgpu::hal::api::Metal;
+use raea_sys_post::steady::halton;
 
 /// No temporal scaler on this GPU: every view draws at its full size.
 static NONE: AtomicBool = AtomicBool::new(false);
@@ -76,16 +77,6 @@ pub(crate) fn jitter_gain(mode: &str, denoiser: bool, denoised: bool) -> f32 {
         (_, true) => 1.0,
         (_, false) => if denoised { 0.0 } else { 1.0 },
     }
-}
-
-fn halton(mut i: u32, base: u32) -> f32 {
-    let (mut f, mut r) = (1.0, 0.0);
-    while i > 0 {
-        f /= base as f32;
-        r += f * (i % base) as f32;
-        i /= base;
-    }
-    r
 }
 
 /// A camera this module jittered, so only its own jitter is taken off when the scale goes back to 1.

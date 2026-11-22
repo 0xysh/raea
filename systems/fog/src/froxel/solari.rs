@@ -142,7 +142,7 @@ pub fn prepare(
     mut views: Query<(Entity, &ViewGrid, &ExtractedView, &SolariLighting, Option<&mut SolariFog>, &super::FroxelFog)>,
 ) {
     // <VolumetricFog solari>, RAEA_FOG_SOLARI_* over it (tuning.rs); a view with it off integrates as without Solari
-    if !views.iter().any(|v| v.5.tune.solari.on) {
+    if views.iter().all(|v| !v.5.tune.solari.on) {
         return;
     }
     let Some(scene) = scene else { return };

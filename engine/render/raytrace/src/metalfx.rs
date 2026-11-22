@@ -250,7 +250,8 @@ fn denoise(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local<Ki
     let st = super::settings::of(item.9);
     let scale = item.5.map_or(1.0, |p| p.0.x as f32 / item.0.main_texture().width() as f32);
     super::settings::record(entity, &st, scale, &mut seen);
-    if !st.denoise || (item.7 && st.one_pass()) {
+    // a view drawn small is denoised and brought up in one pass, unless its upscale is "two"
+    if !st.denoise || (item.7 && st.upscale != "two") {
         return;
     }
     run(entity, item, &st, &device, &mut kit, &mut ctx, false);
@@ -261,7 +262,7 @@ fn denoise_up(view: ViewQuery<Viewed>, device: Res<RenderDevice>, mut kit: Local
     let entity = view.entity();
     let item = view.into_inner();
     let st = super::settings::of(item.9);
-    if !st.denoise || !item.7 || !st.one_pass() {
+    if !st.denoise || !item.7 || st.upscale == "two" {
         return;
     }
     run(entity, item, &st, &device, &mut kit, &mut ctx, true);
@@ -291,7 +292,9 @@ fn run(entity: Entity, item: Item, st: &super::SolariSettings, device: &RenderDe
     // with Solari's guides, the denoiser's depth is theirs: a mirror's pixel as far off as what it reflects, so when what
     // it reflects moves off (an orb in a monitor's glass) the wall now there is a disocclusion and its history goes
     let guide_depth = guides.is_some() && st.reflection_depth;
-    let taa = st.taa();
+    // the emission taken out before the denoiser and put back after ("taa" or "split"), its history gathered over
+    // frames too ("taa", emit_taa.rs)
+    let (split, taa) = (st.emissive != "mask", st.emissive == "taa");
     if kit.views.get(&entity).map(|v| (v.size, v.out_size, v.guide_depth, v.taa.is_some())) != Some((size, out_size, guide_depth, taa)) {
         match View::new(&dev, size, out_size, guide_depth, taa) {
             Ok(v) => {
@@ -321,7 +324,7 @@ fn run(entity: Entity, item: Item, st: &super::SolariSettings, device: &RenderDe
     let reset = solari.reset || kit.views.get(&entity).is_none_or(|v| v.fresh);
     // the jitter's cycle at this render scale, how long a twig glimpsed through it can stay away (emit_taa.wgsl)
     let cycle = super::upscale::cycle(size.x as f32 / full.x as f32, st.jitter_frames) as f32;
-    let words: [f32; 16] = [cam.exposure, if st.split() { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, st.emissive_sharpness, jitter.x, jitter.y, cycle, 0.0];
+    let words: [f32; 16] = [cam.exposure, if split { 1.0 } else { 0.0 }, if reset { 1.0 } else { 0.0 }, super::emit_taa::debug(), out_size.x as f32, out_size.y as f32, size.x as f32, size.y as f32, back.x, back.y, back.z, st.emissive_sharpness, jitter.x, jitter.y, cycle, 0.0];
     let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_ne_bytes()).collect();
     let params = wgpu::util::DeviceExt::create_buffer_init(&dev, &wgpu::util::BufferInitDescriptor { label: Some("metalfx params"), contents: &bytes, usage: wgpu::BufferUsages::UNIFORM });
     let v = kit.views.get_mut(&entity).unwrap();
@@ -366,7 +369,7 @@ fn run(entity: Entity, item: Item, st: &super::SolariSettings, device: &RenderDe
     };
     ctx.add_command_buffer(raw.finish());
     // the emissive back in, after the denoiser's command buffer (add_command_buffer flushed the encoder before it)
-    if st.split() {
+    if split {
     let mut entries = vec![
         wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&color_view) },
         wgpu::BindGroupEntry { binding: 6, resource: params.as_entire_binding() },

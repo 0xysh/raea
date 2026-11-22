@@ -261,7 +261,7 @@ fn given(d: &Detail, at: &GlobalTransform) -> Option<(Vec3, Vec3)> {
     let [x0, y0, z0, x1, y1, z1] = d.bounds[..] else { return None };
     let m = at.affine();
     let corners = (0..8).map(|i| m.transform_point3(Vec3::new([x0, x1][i & 1], [y0, y1][(i >> 1) & 1], [z0, z1][i >> 2])));
-    Some(corners.fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), c| (lo.min(c), hi.max(c))))
+    Some((corners.clone().fold(Vec3::MAX, Vec3::min), corners.fold(Vec3::MIN, Vec3::max)))
 }
 
 /// the meshes' bounds together, in the world; None before any has bounds

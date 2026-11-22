@@ -29,10 +29,10 @@ pub fn catalog(entries: Vec<Entry>) {
     *CATALOG.lock().unwrap() = entries;
 }
 
-/// Every compiled plugin in every App from now on, chosen or not: the generator walks all of their types
-/// (raea-bevy-sdk).
-pub fn choose_every() {
-    EVERY.store(true, Ordering::Relaxed);
+/// Every compiled plugin in every App from now on (`on`), chosen or not: the generator walks all of their types
+/// (raea-bevy-sdk); off again, only the chosen ones.
+pub fn choose_every(on: bool) {
+    EVERY.store(on, Ordering::Relaxed);
 }
 
 /// The catalog's plugins an Engine adds, by name.
@@ -79,7 +79,9 @@ pub fn named(dir: &Path) -> Option<(PathBuf, Vec<String>)> {
 
 /// Whether `s` names a type under `prefix` (at the start of a path, not inside another crate's name).
 fn mentions(s: &str, prefix: &str) -> bool {
-    s.match_indices(prefix).any(|(i, _)| s[..i].chars().next_back().is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == ':')))
+    // what comes before a crate's name inside a longer one: a letter, a digit, `_`, or the `::` of a path above it
+    let inside = |c: char| c.is_alphanumeric() || c == '_' || c == ':';
+    s.match_indices(prefix).any(|(i, _)| !s[..i].ends_with(inside))
 }
 
 /// The plugins an Engine opened on `program` in `dir` adds. Said once on stderr when the project names one this

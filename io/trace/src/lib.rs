@@ -26,10 +26,12 @@ use serde_json::{Value, json};
 
 mod crash;
 mod look;
+mod props;
 mod stats;
 
 use crash::*;
 pub use look::{sessions, status, summarize};
+pub use props::overrides;
 pub use stats::{choose as choose_stats, chosen as chosen_stats, count, pass_ms, stat, stat_value, stats, table as stats_table};
 
 struct Session {

@@ -16,6 +16,8 @@ pub mod far;
 // what a hit sees: each instance's averaged albedo and emission (LT4's first tier)
 pub mod records;
 pub mod traced_ao;
+// a traced pass's GPU time, read back a frame later (raea GI's and the far sun's stats)
+mod timer;
 
 /// Every traced pass asked for: traced AO (RAEA_TRACED_AO), raea GI's probes (RAEA_GI), the sun's far shadow map
 /// (RAEA_SUN_FAR). Nothing when none is.
@@ -93,6 +95,12 @@ struct Held {
     /// the records last written (Records), in the TLAS's order, and their buffer
     records: Vec<records::Record>,
     record_buf: Option<Buffer>,
+}
+
+/// A traced pass's reach from its variable, in metres, if the variable is set: its number when over `least`, else `or`.
+pub(crate) fn reach(var: &str, least: f32, or: f32) -> Option<f32> {
+    let v = std::env::var(var).ok()?;
+    Some(v.parse::<f32>().ok().filter(|r| *r > least).unwrap_or(or))
 }
 
 pub fn install(app: &mut App) {
@@ -253,11 +261,15 @@ fn build_tlas(mut commands: Commands, instances: Option<Res<Instances>>, blases:
         return;
     }
     let t0 = std::time::Instant::now();
-    let with: Vec<_> = instances.0.iter().filter(|(id, ..)| blases.0.contains_key(id)).collect();
+    // the instances whose mesh has its BLAS built, and those still waiting for one
+    let (mut with, mut without) = (Vec::new(), Vec::new());
+    for i in &instances.0 {
+        if blases.0.contains_key(&i.0) { with.push(i) } else { without.push(i) }
+    }
     let now: Vec<(AssetId<Mesh>, [f32; 12], u8)> = with.iter().map(|(id, m, mask, _)| (*id, m.transpose().to_cols_array()[..12].try_into().unwrap(), *mask)).collect();
     let recs: Vec<records::Record> = with.iter().map(|(.., r)| *r).collect();
     if std::env::var_os("RAEA_RT_DEBUG").is_some() {
-        for (id, ..) in instances.0.iter().filter(|(id, ..)| !blases.0.contains_key(id)) {
+        for (id, ..) in without {
             eprintln!("raea rt: no BLAS for {id:?}");
         }
     }

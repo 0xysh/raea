@@ -96,7 +96,7 @@ pub struct Declared {
 pub fn install_all() {
     install();
     // the catalog: an Engine adds those its project chooses (raea_runtime_plugins::choose, docs/nobuild.feature NB4a)
-    raea_runtime_plugins::catalog(declared().iter().filter(|d| compiled().contains(&d.name)).map(|d| raea_runtime_plugins::Entry { name: d.name, needs: d.needs, prefixes: d.prefixes }).collect());
+    raea_runtime_plugins::catalog(built().map(|d| raea_runtime_plugins::Entry { name: d.name, needs: d.needs, prefixes: d.prefixes }).collect());
     bridge::register_natives();
 }
 
@@ -105,7 +105,13 @@ pub fn compiled() -> Vec<&'static str> {
     declared().iter().filter(|d| raea_runtime_plugins::names().iter().any(|n| n == &d.name || n.starts_with(&format!("{}_", d.name)))).map(|d| d.name).collect()
 }
 
+/// The declared plugins this build compiled in.
+fn built() -> impl Iterator<Item = Declared> {
+    let compiled = compiled();
+    declared().into_iter().filter(move |d| compiled.contains(&d.name))
+}
+
 /// The type-path prefixes each compiled plugin's reflected types live under (what the generator keeps).
 pub fn prefixes() -> Vec<&'static str> {
-    declared().iter().filter(|d| compiled().contains(&d.name)).flat_map(|d| d.prefixes.iter().copied()).collect()
+    built().flat_map(|d| d.prefixes.iter().copied()).collect()
 }

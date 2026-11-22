@@ -28,8 +28,6 @@ pub fn env_shown(sent: Option<&V>, cam: &mut BTreeMap<String, V>) {
     cam.insert("env_srcs".into(), V::S(serde_json::to_string(&list).unwrap_or_default()));
 }
 
-/// An <Environment>'s source in env_srcs: its panorama's path, or for <Environment room> `room:` and its blur (three's
-/// RoomEnvironment, which raea-sys-environment's room.rs makes, #165).
 /// <Environment portals>' openings, each four corners in order round it, as a corner and its two neighbours
 fn portal_corners(list: &[Value]) -> Vec<[[f64; 3]; 3]> {
     let point = |p: &Value| -> Option<[f64; 3]> {
@@ -37,13 +35,15 @@ fn portal_corners(list: &[Value]) -> Vec<[[f64; 3]; 3]> {
         Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?, a.get(2)?.as_f64()?])
     };
     list.iter()
-        .filter_map(|q| {
-            let c: Vec<[f64; 3]> = q.as_array()?.iter().filter_map(point).collect();
-            (c.len() == 4).then(|| [c[0], c[1], c[3]])
+        .filter_map(|q| match q.as_array()?.iter().filter_map(point).collect::<Vec<_>>()[..] {
+            [a, b, _, d] => Some([a, b, d]),
+            _ => None,
         })
         .collect()
 }
 
+/// An <Environment>'s source in env_srcs: its panorama's path, or for <Environment room> `room:` and its blur (three's
+/// RoomEnvironment, which raea-sys-environment's room.rs makes, #165).
 pub fn env_src(e: &Item) -> Option<String> {
     if e.props.get("room") == Some(&Value::Bool(true)) {
         return Some(format!("room:{}", n(&e.props, "blur", 0.0)));

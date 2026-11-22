@@ -10,10 +10,7 @@
 //! again RAEA_SUN_FAR_ROWS rows a frame (256), in turn. RAEA_SUN_FAR_STATS: a file the traces' GPU milliseconds are
 //! written to, once a second.
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::atomic::Ordering;
 
 use bevy::{
     core_pipeline::schedule::Core3d,
@@ -32,15 +29,12 @@ use bevy::{
     },
 };
 
-/// The far map's reach from the eye each way, in metres, if RAEA_SUN_FAR asks for one (1, or anything not a number
-/// over 1: 1024).
-pub fn wanted() -> Option<f32> {
-    let v = std::env::var("RAEA_SUN_FAR").ok()?;
-    Some(v.parse::<f32>().ok().filter(|r| *r > 1.0).unwrap_or(1024.0))
-}
+use crate::timer::Timer;
 
 pub fn install(app: &mut App) {
-    let Some(radius) = wanted() else { return };
+    // the far map's reach from the eye each way, in metres, if RAEA_SUN_FAR asks for one (1, or anything not a number
+    // over 1: 1024)
+    let Some(radius) = crate::reach("RAEA_SUN_FAR", 1.0, 1024.0) else { return };
     bevy::asset::embedded_asset!(app, "far.wesl");
     crate::install(app);
     let env = |k: &str, or: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(or);
@@ -108,19 +102,11 @@ struct Held {
     /// the next row to trace again, and the TLAS (its build count) the pass under way catches up with
     row: i32,
     since: u64,
-    timer: Option<Timer>,
+    /// a trace's timestamps, with what it was and its rays while they're on their way back
+    timer: Option<Timer<(Kind, u32)>>,
     /// each timed trace: what it was, its rays, GPU milliseconds
     seen: Vec<(Kind, u32, f64)>,
     written: Option<std::time::Instant>,
-}
-
-struct Timer {
-    set: wgpu::QuerySet,
-    resolve: wgpu::Buffer,
-    read: wgpu::Buffer,
-    period: f64,
-    /// a trace's timestamps on their way back, what it was and its rays
-    pending: Option<(Arc<AtomicBool>, Kind, u32)>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -222,7 +208,7 @@ fn trace(
     held.params = Params { dir: dir.extend(texel), u: u.extend(0.15), v: v.extend(0.0), ray: Vec4::new(start, 2.5 * far.radius + 150.0 / dir.y + 200.0, 0.0, 0.0), map: IVec4::new(size, c.x, c.y, 0), region: IVec4::ZERO };
     let group = device.create_bind_group("raea_far_sun", &cache.get_bind_group_layout(&p.layout), &BindGroupEntries::sequential((buffer.as_entire_binding(), scene.0.as_binding(), &view)));
     if std::env::var_os("RAEA_SUN_FAR_STATS").is_some() && held.timer.is_none() && device.features().contains(WgpuFeatures::TIMESTAMP_QUERY) {
-        held.timer = Some(timer(&device, &queue));
+        held.timer = Some(Timer::new(&device, &queue, "raea far sun timer", 2, 16));
     }
     // a submit each, as each has its own region in the one uniform (a write lands before the submit after it)
     for (kind, region) in traces {
@@ -233,50 +219,29 @@ fn trace(
         let timed = held.timer.as_ref().is_some_and(|t| t.pending.is_none());
         let mut enc = device.create_command_encoder(&CommandEncoderDescriptor { label: Some("raea far sun") });
         {
-            let writes = held.timer.as_ref().filter(|_| timed).map(|t| wgpu::ComputePassTimestampWrites { query_set: &t.set, beginning_of_pass_write_index: Some(0), end_of_pass_write_index: Some(1) });
+            let writes = held.timer.as_ref().filter(|_| timed).map(|t| t.writes(0));
             let mut pass = enc.begin_compute_pass(&ComputePassDescriptor { label: Some("raea_far_sun"), timestamp_writes: writes });
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &group, &[]);
             pass.dispatch_workgroups((region.z as u32).div_ceil(8), (region.w as u32).div_ceil(8), 1);
         }
         if let Some(t) = held.timer.as_ref().filter(|_| timed) {
-            enc.resolve_query_set(&t.set, 0..2, &t.resolve, 0);
-            enc.copy_buffer_to_buffer(&t.resolve, 0, &t.read, 0, 16);
+            t.resolve_into(&mut enc);
         }
         queue.submit([enc.finish()]);
         if let Some(t) = held.timer.as_mut().filter(|_| timed) {
-            let done = Arc::new(AtomicBool::new(false));
-            let d = done.clone();
-            t.read.slice(..).map_async(wgpu::MapMode::Read, move |r| d.store(r.is_ok(), Ordering::Release));
-            t.pending = Some((done, kind, rays));
+            t.send((kind, rays));
         }
     }
     report(&mut held, &far);
 }
 
-fn timer(device: &RenderDevice, queue: &RenderQueue) -> Timer {
-    let d = device.wgpu_device();
-    let set = d.create_query_set(&wgpu::QuerySetDescriptor { label: Some("raea far sun timer"), ty: wgpu::QueryType::Timestamp, count: 2 });
-    let resolve = d.create_buffer(&wgpu::BufferDescriptor { label: Some("raea far sun timer resolve"), size: 16, usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
-    let read = d.create_buffer(&wgpu::BufferDescriptor { label: Some("raea far sun timer read"), size: 16, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    Timer { set, resolve, read, period: queue.get_timestamp_period() as f64, pending: None }
-}
-
 /// the last timed trace's GPU milliseconds, once its readback is done
 fn collect(held: &mut Held) {
     let Some(t) = held.timer.as_mut() else { return };
-    let Some((done, kind, rays)) = t.pending.as_ref().map(|(d, k, r)| (d.load(Ordering::Acquire), *k, *r)) else { return };
-    if !done {
-        return;
+    if let Some((ms, (kind, rays))) = t.take(|ms, _| ms(0, 1)) {
+        held.seen.push((kind, rays, ms));
     }
-    let ms = {
-        let Ok(view) = t.read.slice(..).get_mapped_range() else { return };
-        let ts = |i: usize| u64::from_le_bytes(view[8 * i..8 * i + 8].try_into().unwrap());
-        ts(1).saturating_sub(ts(0)) as f64 * t.period / 1e6
-    };
-    t.read.unmap();
-    t.pending = None;
-    held.seen.push((kind, rays, ms));
 }
 
 /// once a second, to RAEA_SUN_FAR_STATS's file: each timed trace of a kind, its count, rays a trace and GPU

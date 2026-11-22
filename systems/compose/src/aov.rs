@@ -54,8 +54,8 @@ pub fn read(rw: &mut World, fw: u32, fh: u32) -> Result<Aov, String> {
     let mut q = rw.query::<&ViewPrepassTextures>();
     let pick = q
         .iter(rw)
-        .filter(|t| t.depth.is_some() && t.motion_vectors.is_some())
-        .max_by_key(|t| t.size.width * t.size.height)
+        .filter(|t| matches!(t, ViewPrepassTextures { depth: Some(_), motion_vectors: Some(_), .. }))
+        .max_by_key(|t| u64::from(t.size.width) * u64::from(t.size.height))
         .ok_or("no 3D camera drew a depth and motion-vector prepass")?;
     // the target is a row taller than the frame (the frame tag's row, open.rs), at the frame's scale (RAEA_SS)
     let (w, h) = (pick.size.width, pick.size.height.min(fh * (pick.size.width / fw.max(1)).max(1)));
