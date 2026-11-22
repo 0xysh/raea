@@ -219,7 +219,7 @@ type RuleLevel = "error" | "warn" | "note"
 ### `Scene`
 
 ```ts
-type Scene = { /** * where and when ("INT. SENATE - NIGHT", or "The brief page") */ heading?: string, beats: Array<Beat>, /** * what the scene must land */ payoff?: string, }
+type Scene = { /** * where and when ("INT. SENATE - NIGHT", or "The brief page") */ heading?: string, beats: Array<Beat>, /** * what the scene must land */ payoff?: string, /** * the story beat it plays, by its id (raea/story's compileScript writes it; docs/story.feature ST0c) */ beat?: string, }
 ```
 
 ### `Script`

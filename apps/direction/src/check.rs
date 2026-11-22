@@ -249,10 +249,7 @@ fn check_one(tsx: &Path, id: Option<String>, rules: &[Rule], args: &[String], wh
             needs(&mut waits, r);
             continue;
         }
-        let k = files.iter().position(|f| *f == m.file).unwrap_or_else(|| {
-            files.push(m.file.clone());
-            files.len() - 1
-        });
+        let k = file_index(&mut files, &m.file);
         let mut on = m.frames.pick(&worlds);
         if let (true, Some(j)) = (m.render, &join_on_of(&worlds)) {
             on.retain(|f| j.contains(f));
@@ -270,6 +267,14 @@ fn check_one(tsx: &Path, id: Option<String>, rules: &[Rule], args: &[String], wh
     shots.dedup();
     let fps = worlds.first().map_or(30.0, |w| w.fps);
     Ok(Checked { file: tsx.to_path_buf(), id, found: finding::ranked(found), waits, render, shots, fps })
+}
+
+/// Where `f` is in `files`, added at the end when it isn't yet: the one run's checks, each file once.
+fn file_index(files: &mut Vec<PathBuf>, f: &Path) -> usize {
+    files.iter().position(|x| x == f).unwrap_or_else(|| {
+        files.push(f.to_path_buf());
+        files.len() - 1
+    })
 }
 
 /// Whether `r` runs on the composition `tsx` (`id` where its file registers several) of `project`: a rule a note's ask
@@ -376,10 +381,7 @@ fn check_story(file: &Path, rules: &[Rule], unread: Vec<Finding>, args: &[String
         let Some(f) = r.file() else { continue };
         match ts::meta(f, &host.ts) {
             Ok(m) if m.story => {
-                let k = files.iter().position(|x| *x == m.file).unwrap_or_else(|| {
-                    files.push(m.file.clone());
-                    files.len() - 1
-                });
+                let k = file_index(&mut files, &m.file);
                 plan.push(ts::Planned { check: k, frames: Vec::new(), values: r.values.clone(), level: r.level, by: r.by.clone() });
             }
             Ok(_) => {}
