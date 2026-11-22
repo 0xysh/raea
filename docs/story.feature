@@ -187,3 +187,10 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
     Scenario: ST8a. craft/story in the raea skill
       Then craft/story/ holds a router and a page per framework in our own words with sources, and how to write, check,
         sample and score a story with raea/story
+      And raea guide story/router prints it, and the skill carries each page as a copy
+      And the plan:
+        | crate    | file                                  | lines | job                                        |
+        | guides   | sdk/guides/craft/story/router.md      | 50    | which page, which lens                      |
+        | guides   | sdk/guides/craft/story/write.md       | 90    | the three layers, into the project          |
+        | guides   | sdk/guides/craft/story/check.md       | 60    | each finding and its fix                    |
+        | guides   | sdk/guides/craft/story/score.md       | 50    | lenses, the critic, a real shape            |
