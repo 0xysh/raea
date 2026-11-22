@@ -108,10 +108,19 @@ Feature: Stage guards: a 3D render an agent can't break
       Given the plan
         | crate              | file                                  | lines | job                                                                                  |
         | raea-runtime-scene | runtime/scene/src/live.rs             | +3    | text blocks by identity, as the groups are; their glyphs follow their block's id     |
+        | raea-runtime-scene | runtime/scene/src/live.rs             | +10   | plates, splats, sequences, fog, fires and grass by identity                          |
+        | raea-runtime-scene | runtime/scene/src/lib.rs              | 0     | their tracks cut where what they take whole changes (split_kept)                     |
+        | raea-core-scene    | core/scene/src/kept.rs                | +18   | WHOLE: each kind's columns that say what it is, and the props they come from         |
+        | raea-runtime-live  | runtime/live/tests/stage_guards.rs    | +30   | a_new_plate_never_takes_an_old_ones_row                                              |
       Then kept-props3.tsx passes: the new RichText draws its own words in its own colour, and the old one is gone
       And a part that unmounts while another mounts beside it changes nothing else's row
       # Status 11-21 (branch stage-guards): text blocks are rows by identity; a_new_text_never_takes_an_old_ones_row
-      # passes. Fires, fog volumes, plates and the other kinds a live frame diffs whole still take their frame's id.
+      # passes. Branch stage-guards-6: plates, splats, mesh sequences, fog volumes, fires and grass are rows by identity
+      # too, and what each takes whole from its first frame (a plate's clip, a splat's or a sequence's file, a fog's
+      # density texture, a fire's simulation, a field's grids) spawns it again when it changes (core/scene kept.rs
+      # WHOLE): a_new_plate_never_takes_an_old_ones_row. An unnamed fire or fog has only its order to be known by, so
+      # name the ones that come and go. Sprites, 2D shapes and bare entities keep their render ids, which components
+      # target.
 
     @done
     Scenario: SG3. The atlas allocates before it draws

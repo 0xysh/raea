@@ -57,7 +57,9 @@ const PLACED: [&str; 16] = ["x", "y", "z", "q_x", "q_y", "q_z", "q_w", "scale_x"
 /// takes frame by frame (live_dynamic, PLACED), nor its identity. A mesh's and a glyph's colour and a mesh's glow are
 /// sent as columns once they change. A shader's uniforms ride in `three` and `shader`, which change on each frame an
 /// animated uniform does: those stay with their own fix (frozen uniforms), not a part spawned every frame. A model is
-/// spawned again only for a new file, never for its animation's columns.
+/// spawned again only for a new file, never for its animation's columns. The kinds a row takes whole from its first
+/// frame (footage behind the 3D, a splat, a baked sequence, a fog's density texture, a fire's simulation, a field of
+/// grass) keep what they are: a plate on another's row kept the old clip (SG2).
 pub fn kept_col(kind: &str, col: &str) -> bool {
     if matches!(col, "id" | "name") {
         return false;
@@ -68,7 +70,7 @@ pub fn kept_col(kind: &str, col: &str) -> bool {
         "model" => col == "src",
         "text" => !PLACED.contains(&col),
         "glyph" => matches!(col, "target" | "at" | "span" | "ch"),
-        _ => false,
+        _ => WHOLE.iter().any(|(k, cols, _)| *k == kind && cols.contains(&col)),
     }
 }
 
@@ -136,7 +138,11 @@ pub fn spawn_sig(it: &Item) -> u64 {
         "model" => hash_value(it.props.get("src").unwrap_or(&Value::Null), &mut h),
         // a picture's size and cut, a decal's maps and fade (panels_rows, decals_rows)
         "panel" | "decal" => hash_props(&it.props, &mut h, |k| if it.kind == "panel" { ["width", "height", "shadow", "cutout"] } else { ["src", "normalMap", "fade", "unlit"] }.contains(&k)),
-        _ => {}
+        kind => {
+            if let Some((_, _, props)) = WHOLE.iter().find(|(k, ..)| *k == kind) {
+                hash_props(&it.props, &mut h, |k| props.contains(&k));
+            }
+        }
     }
     h.finish()
 }
@@ -165,6 +171,17 @@ pub fn split_kept(tracks: Vec<(String, Vec<Option<Item>>)>) -> Vec<(String, Vec<
     }
     out
 }
+
+/// The kinds whose rows take what they are from their first frame: the kind, its row's columns that say it, the props
+/// they're made from (plates_rows, fogs_rows, fires_rows, grass.rs, splat.rs, meshseq.rs).
+const WHOLE: [(&str, &[&str], &[&str]); 6] = [
+    ("plate", &["src", "k1"], &["src", "k1"]),
+    ("splat", &["src", "morph_to"], &["src", "morphTo"]),
+    ("meshseq", &["src", "map"], &["src", "map"]),
+    ("fogvolume", &["density_texture"], &["density_texture"]),
+    ("fire", &["sim", "seed", "steps"], &["sim", "seed", "steps"]),
+    ("grass", &["grass"], &["spec"]),
+];
 
 /// A mesh's kept inputs as a live scene's row holds them, so a frame on the fast path can tell when one changed (then
 /// the full path, which spawns the part again). Its props are held, not copied: held, they are never changed in place

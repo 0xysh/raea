@@ -7,6 +7,9 @@ pub struct Shot<'a> {
     pub clear: Option<&'a str>,
 }
 
+/// The kinds whose rows are known by their part's identity, not their place in the frame (SG2)
+const BY_IDENTITY: [&str; 12] = ["light", "mesh", "model", "panel", "decal", "text", "plate", "fogvolume", "fire", "grass", "splat", "meshseq"];
+
 /// A live game's 3D (live.rs): its rows made frame by frame from that frame's own scene, as play computed it, instead
 /// of from a scripted run stepped ahead (scene_program). Parts are matched across frames by the identity `tracks`
 /// gives them (a name, else kind and shape counted in tree order), so a part keeps its row as a render's does. The
@@ -20,8 +23,8 @@ pub struct LiveScene {
     /// per row id: its kind, its first values, what was last sent, whether its colour has changed (a render keys
     /// col_r/g/b on every frame once it does), and the frames it has been missing
     pub(crate) rows: std::collections::HashMap<String, LiveRow>,
-    /// rows made per group (lights, meshes, models, panels, decals, texts): the next one's number
-    pub(crate) made: [usize; 6],
+    /// rows made per kind of BY_IDENTITY: the next one's number
+    pub(crate) made: [usize; 12],
     /// row id -> a part's kept inputs this frame (not a light's), for its row (the fast path's SG1 guard)
     pub(crate) kept_now: std::collections::HashMap<String, KeptInputs>,
     pub(crate) cam: BTreeMap<String, V>,
@@ -129,30 +132,24 @@ impl LiveScene {
             let kind = track[0].as_ref().map(|i| i.kind).unwrap_or("directional");
             local.insert(if kind == "directional" { format!("sun{li}") } else { format!("{kind}{li}") }, key);
         }
-        // a text block too (SG2: by its frame's place, a block mounted as another went took that one's row and words)
-        for (prefix, group) in [("mesh", &tr.meshes), ("model", &tr.models), ("plane", &tr.panels), ("decal", &tr.decals), ("text", &tr.texts)] {
+        // a text block too (SG2: by its frame's place, a block mounted as another went took that one's row and words), and
+        // footage, splats, sequences, fog, fires and grass (a plate mounted as another went kept the other's clip)
+        for (prefix, group) in [("mesh", &tr.meshes), ("model", &tr.models), ("plane", &tr.panels), ("decal", &tr.decals), ("text", &tr.texts), ("plate", &tr.plates), ("fog", &tr.fogs), ("fire", &tr.fires), ("grass", &tr.grasses), ("splat", &tr.splats), ("meshseq", &tr.meshseqs)] {
             for (k, (key, _)) in group.iter().enumerate() {
                 local.insert(format!("{prefix}{k}"), key);
             }
         }
         let mut out = Vec::new();
-        // the other kinds (bare entities, Bevy components and resources, fires, fog volumes, splats, plates...): by
-        // the ids a render gives them, a component's target as the live rows name it (G15)
+        // the other kinds (bare entities, Bevy components and resources, sprites, 2D shapes...): by the ids a render
+        // gives them, a component's target as the live rows name it (G15)
         let mut others: Vec<(String, BTreeMap<String, V>)> = Vec::new();
         let mut live_id: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         for (kind, rows) in p.spawns {
-            let group = match kind.as_str() {
-                "light" => 0,
-                "mesh" => 1,
-                "model" => 2,
-                "panel" => 3,
-                "decal" => 4,
-                "text" => 5,
-                "camera" => continue,
-                _ => {
+            let Some(group) = BY_IDENTITY.iter().position(|g| *g == kind) else {
+                if kind != "camera" {
                     others.extend(rows.into_iter().map(|r| (kind.clone(), r)));
-                    continue;
                 }
+                continue;
             };
             for mut row in rows {
                 let Some(V::S(lid)) = row.get("id").cloned() else { continue };

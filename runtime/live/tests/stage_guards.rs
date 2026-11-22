@@ -140,3 +140,30 @@ fn a_still_draws_its_own_frames_shape_and_words() {
     assert_eq!(spans.len(), 2);
     assert!(spans[0].contains("0.0 MB") && spans[1].contains("12.5 MB"));
 }
+
+/// Footage behind the 3D (SG2): a Plate unmounting as another mounts, neither named. The new one is a row of its own
+/// with its own clip; the old one's row is hidden, never handed on with the old clip. A fire whose simulation changes
+/// is spawned again, as a mesh whose shape changes is.
+#[test]
+fn a_new_plate_never_takes_an_old_ones_row() {
+    check_on();
+    let plate = |src: &str| node("Plate", json!({ "src": src, "time": 0.0 }), vec![]);
+    let mut ls = LiveScene::default();
+    ls.open(Shot { scene: &[plate("/clips/street.mp4")], clear: None }, 64, 64, 30.0);
+    let (set, _) = ls.frame(Shot { scene: &[plate("/clips/street.mp4")], clear: None });
+    let old: Vec<String> = set.iter().map(|t| t.id.clone()).collect();
+    let (set, _) = ls.frame(Shot { scene: &[plate("/clips/harbour.mp4")], clear: None });
+    let new = spawned(&set, "plate", "src");
+    assert_eq!(new.len(), 1, "{set:?}");
+    assert!(s(new[0].vals.get("src")).ends_with("harbour.mp4"));
+    assert!(!old.contains(&new[0].id), "a row of its own, not the old plate's");
+    assert!(set.iter().any(|t| t.kind == "plate" && t.id != new[0].id && t.vals.get("visible") == Some(&V::N(0.0))), "{set:?}");
+
+    let fire = |sim: &str| node("Fire", json!({ "sim": { "kind": sim }, "time": 0.0 }), vec![]);
+    let mut ls = LiveScene::default();
+    ls.open(Shot { scene: &[fire("smoke")], clear: None }, 64, 64, 30.0);
+    ls.frame(Shot { scene: &[fire("smoke")], clear: None });
+    let (set, gone) = ls.frame(Shot { scene: &[fire("cloud")], clear: None });
+    assert_eq!(gone.len(), 1, "the old fire dropped");
+    assert!(s(spawned(&set, "fire", "sim").first().and_then(|t| t.vals.get("sim"))).contains("cloud"), "{set:?}");
+}
