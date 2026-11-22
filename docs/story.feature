@@ -109,6 +109,17 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
       Given campbell, vogler, harmon, save-the-cat, kishotenketsu, propp and bernays as lenses
       Then each has its stages, checks and proposals, and bernays only arranges true proof (a claim with no fact behind
         it is a finding)
+      And the plan:
+        | crate | file                                   | lines | job                                                 |
+        | sdk   | sdk/story/src/lenses/common.ts         | 40    | who acts where, masks, the lowest beat              |
+        | sdk   | sdk/story/src/lenses/campbell.ts       | 60    | call, aid, threshold, ordeal, boon, return          |
+        | sdk   | sdk/story/src/lenses/vogler.ts         | 60    | twelve stages; masks checked by what they do        |
+        | sdk   | sdk/story/src/lenses/harmon.ts         | 50    | the circle: the price and the change                |
+        | sdk   | sdk/story/src/lenses/save-the-cat.ts   | 50    | the beat sheet as shares of the telling             |
+        | sdk   | sdk/story/src/lenses/kishotenketsu.ts  | 40    | the late turn, no conflict asked for                |
+        | sdk   | sdk/story/src/lenses/propp.ts          | 50    | lack, test, gift, struggle, the lack made good      |
+        | sdk   | sdk/story/src/lenses/bernays.ts        | 60    | proof seen, a witness, the customer's want; never invented |
+        | sdk   | sdk/story/src/lens.ts                  | 110   | levels and between in the structure                  |
 
   Rule: ST4. Generation without a fixed answer
 

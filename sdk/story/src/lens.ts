@@ -18,7 +18,7 @@ export const lens = (l: Lens): Lens => l;
 
 /** What every lens reads: the structure inferred once per world. */
 export type Structure = {
-  beats: { key: string; beat: RBeat; index: number; turns: Record<string, number>; tension: number; linked: boolean }[];
+  beats: { key: string; beat: RBeat; index: number; turns: Record<string, number>; level: Record<string, number>; tension: number; linked: boolean }[];
   events: { key: string; ev: REvent; order: number }[];
   focus: string | undefined;
   hero: string | undefined;
@@ -31,12 +31,16 @@ export type Structure = {
   firstShowing: (event: string | undefined) => string | undefined;
   lastShowing: (event: string | undefined) => string | undefined;
   focusTurn: (turns: Record<string, number>) => number;
+  /** the focus value's level after a beat (its sum over values when the story names no focus) */
+  focusLevel: (key: string | undefined) => number;
+  /** the beats from one key to another, both left out */
+  between: (from: string | undefined, to: string | undefined) => string[];
 };
 
 const size = (t: Partial<Record<string, number>> | undefined) => Object.values(t ?? {}).reduce<number>((a, d) => a + Math.abs(d ?? 0), 0);
 
 export function structure(w: World): Structure {
-  const beats = beatsOf(w).map((b) => ({ key: b.key, beat: b.beat, index: b.index, turns: w.must<Record<string, number>>(b.e, "Turns"), tension: w.must<number>(b.e, "Tension"), linked: w.must<boolean>(b.e, "Linked") }));
+  const beats = beatsOf(w).map((b) => ({ key: b.key, beat: b.beat, index: b.index, turns: w.must<Record<string, number>>(b.e, "Turns"), level: w.must<Record<string, number>>(b.e, "Level"), tension: w.must<number>(b.e, "Tension"), linked: w.must<boolean>(b.e, "Linked") }));
   const events = eventsOf(w).sort((a, b) => a.order - b.order).map(({ key, ev, order }) => ({ key, ev, order }));
   const agents = Object.fromEntries(Object.entries(keysOf(w).agents).map(([k, e]) => [k, w.must<RAgent>(e, "Agent")]));
   const hero = Object.keys(agents).find((a) => agents[a].role === "customer" || agents[a].mask === "hero") ?? events[0]?.ev.who;
@@ -51,7 +55,10 @@ export function structure(w: World): Structure {
   const climax = after.length ? after.reduce((best, x) => (Math.abs(focusTurn(x.ev.turns as Record<string, number> ?? {})) > Math.abs(focusTurn(best.ev.turns as Record<string, number> ?? {})) ? x : best)).key : undefined;
   const firstShowing = (ev: string | undefined) => (ev ? beats.find((b) => b.beat.shows.includes(ev))?.key : undefined);
   const lastShowing = (ev: string | undefined) => (ev ? [...beats].reverse().find((b) => b.beat.shows.includes(ev))?.key : undefined);
-  return { beats, events, focus, hero, brand, agents, inciting, crisis, climax, firstShowing, lastShowing, focusTurn };
+  const focusLevel = (k: string | undefined) => { const b = beats.find((x) => x.key === k); return b ? focusTurn(b.level) : 0; };
+  const idx = (k: string | undefined) => beats.find((x) => x.key === k)?.index;
+  const between = (a: string | undefined, b: string | undefined) => beats.filter((x) => x.index > (idx(a) ?? -1) && x.index < (idx(b) ?? beats.length)).map((x) => x.key);
+  return { beats, events, focus, hero, brand, agents, inciting, crisis, climax, firstShowing, lastShowing, focusTurn, focusLevel, between };
 }
 
 /** A beat's own label for this lens's stage, when it has one. */

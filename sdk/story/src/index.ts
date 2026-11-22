@@ -11,7 +11,7 @@ export { tension } from "./systems/tension.ts";
 export { analyze, derive, checkStory, checkWorld, type Finding, type Level } from "./checks.ts";
 export { mutants, sampleMutants, type Mutant, type Label, type Kind } from "./mutate.ts";
 export { lens, readThrough, structure, labelled, type Lens, type LensResult, type Proposal, type Reading, type StageMap, type Structure } from "./lens.ts";
-export { LENSES, mckee, pas, pixar, storynomics } from "./lenses/index.ts";
+export { LENSES, bernays, campbell, harmon, kishotenketsu, mckee, pas, pixar, propp, saveTheCat, storynomics, vogler } from "./lenses/index.ts";
 export { sample, samples, matrix, judge, type Sampled, type SampleOptions, type MatrixResult, type MatrixRow } from "./sample.ts";
 export { compileScript, compileStorylets, dramaManager, toInk, toYarn, onScreenOf, type Storylet } from "./compile.ts";
 export { resolved, type RStory } from "./load.ts";

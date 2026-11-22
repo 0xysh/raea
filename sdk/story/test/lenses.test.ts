@@ -30,3 +30,23 @@ test("a story with no dilemma gets a crisis proposed from the hero's want and ne
   expect(r.findings.some((f) => f.check === "mckee:crisis" && f.level === "error")).toBe(true);
   expect(r.proposals.find((p) => p.stage === "crisis")?.onScreen).toBe("kid must choose: win the race, or learn to lose");
 });
+
+test("the ST3b lenses read the launch story", () => {
+  const r = Object.fromEntries(readThrough(launch, ["campbell", "vogler", "harmon", "save-the-cat", "kishotenketsu", "propp", "bernays"].map((k) => LENSES[k]), "30s").map((x) => [x.lens, x]));
+  expect(r.campbell.map.call).toEqual(["b1"]);
+  expect(r.campbell.map.boon).toEqual(["b3"]);
+  expect(r.vogler.map.ordeal).toEqual(["b2"]);
+  expect(r.harmon.findings.map((f) => f.check)).toContain("harmon:take");
+  expect(r.kishotenketsu.map.ten).toEqual(["b3"]);
+  expect(r.propp.map.lack).toEqual(["b1"]);
+  expect(r.propp.map.liquidation).toEqual(["b3"]);
+  expect(r.bernays.map).toMatchObject({ circumstance: ["b3"], witness: ["b3"], claim: ["b3"] });
+  for (const x of Object.values(r)) expect(x.passes).toBe(true);
+});
+
+test("bernays refuses invented proof", () => {
+  const bad = { ...launch, world: { ...launch.world, ships: { ...launch.world.ships, sets: [] } } };
+  const r = readThrough(bad as typeof launch, [LENSES.bernays], "30s")[0];
+  expect(r.findings.map((f) => f.check)).toContain("bernays:invented");
+  expect(r.passes).toBe(false);
+});
