@@ -321,9 +321,9 @@ impl Engine {
     }
 
     /// A live scene's rows dropped, by kind and id: their entities go (and the meshes and surfaces only they held).
-    pub fn remove_rows(&mut self, rows: &[(String, String)]) {
+    pub fn remove_rows(&mut self, rows: &[(String, String)]) -> Result<(), String> {
         rows.iter().for_each(|r| drop(self.kept.remove(r)));
-        remove_rows_from(self.app.world_mut(), rows);
+        remove_rows_from(self.app.world_mut(), rows)
     }
 
     /// The registered Bevy plugins' frame clock: the frames before f stepped through (one update each, their readbacks

@@ -161,7 +161,7 @@ pub fn live_scene(world: &mut World, ls: &mut LiveScene, engine: &mut Option<rae
             let clear = scene_clear(world);
             let (rows, gone) = ls.frame(Shot { scene: &scene, clear: clear.as_deref() });
             if !gone.is_empty() {
-                e.remove_rows(&gone);
+                e.remove_rows(&gone)?;
             }
             if !rows.is_empty() {
                 e.set_rows(&rows)?;
