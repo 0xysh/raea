@@ -277,7 +277,8 @@ module:dev_tools (raea's own debugging overlays)
 module:test (raea's test harness, for raea's own tests)
 module:page-layout (installed by the entry: a composition reads its layout through the DOM on its refs, docs/layout-reads.feature)
 module:dom-reads (installed by the entry on every ref; what it adds is the web's own API)
-module:dom-tree (installed by the entry on every ref; what it adds is the web's own API)"
+module:dom-tree (installed by the entry on every ref; what it adds is the web's own API)
+module:random-colors (its names, random, interpolateColors and OffthreadVideo, come from raea itself; craft/motion.md teaches them)"
 coverage() {
   local corpus v m t f; corpus=$(mktemp "${TMPDIR:-/tmp}/skills-cov.XXXXXX")
   texts | while read -r f; do cat "$f"; echo; done > "$corpus"
