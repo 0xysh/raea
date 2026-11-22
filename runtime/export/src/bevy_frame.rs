@@ -88,7 +88,7 @@ pub(crate) fn bevy_over_3d(world: &mut World, page: &mut raea_runtime_page::Bevy
     // one draw a frame, as the fed render draws it (drawn again, a frame's auto exposure and temporal passes move on);
     // <Pathtracer samples={N}> (or RAEA_LIGHT_SPP=N) draws it N times, the last kept, so a path-traced reference converges (docs/realism.feature LT1),
     // its accumulation started afresh so the frame before isn't in it
-    let spp = raea_sys_frame::pathtracer::samples(e.world_mut());
+    let spp = raea_sys_rt::pathtracer::samples(e.world_mut());
     if spp > 1 {
         raea_render::restart_pathtracer(e.world_mut());
     }

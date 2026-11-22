@@ -259,7 +259,7 @@ export function Pathtracer(p: PathtracerProps = {}) {
   return (
     <>
       <BevyComponent type="bevy_solari::pathtracer::Pathtracer" value={{ reset: p.reset ?? false }} />
-      {settings && <BevyComponent type="raea_sys_frame::pathtracer::PathtracerSettings" value={{ samples: p.samples ?? 1, media: p.media ?? true }} />}
+      {settings && <BevyComponent type="raea_sys_rt::pathtracer::PathtracerSettings" value={{ samples: p.samples ?? 1, media: p.media ?? true }} />}
     </>
   );
 }

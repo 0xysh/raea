@@ -20,8 +20,6 @@ raea-core-scene = { path = "../../core/scene" }
 # the layer key (key_of), shared with the page's half of the layer pass
 raea-sys-layers = { path = "../layers" }
 serde_json = "1"
-# what each engine shader was compiled from, in the run's trace (engine_shaders.rs)
-raea-io-trace = { path = "../../io/trace" }
 raea-io-media = { path = "../../io/media", default-features = false, optional = true }
 
 # the Vulkan device's own memory, for the shadow maps' default size (shadow.rs)

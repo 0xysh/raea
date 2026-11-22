@@ -25,7 +25,7 @@ pub struct ShaderConstants {
     pub values: Vec<ShaderConstant>,
 }
 
-const TYPE: &str = "raea_sys_frame::engine_shaders::consts::ShaderConstants";
+const TYPE: &str = "raea_sys_engine_shaders::consts::ShaderConstants";
 
 /// Every ShaderConstants value the program's first frame has, the last one for a shader and name. A part's components
 /// are `component` rows (runtime/look `components`: its `type`, its `value` as JSON, and `from` when a later frame

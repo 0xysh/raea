@@ -10,10 +10,6 @@ use raea_core_program::eval::{self, Tup};
 use raea_core_program::ir::{Program, V};
 
 pub mod bevy_api;
-// the engine's shaders read from files at load: a project's engine-shaders/, RAEA_ENGINE_SHADERS (docs/nobuild.feature NB5b)
-pub mod engine_shaders;
-// <Pathtracer>'s samples and media (docs/nobuild.feature NB1a)
-pub mod pathtracer;
 /// a camera row's order, clear and viewport among the cameras on its target
 pub mod camera;
 /// a GPU error as the frame's error (#66), Bevy's RenderErrorHandler in the engine

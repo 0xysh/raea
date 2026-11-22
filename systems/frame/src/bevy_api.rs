@@ -37,7 +37,7 @@ pub fn swap_embedded_shader(app: &mut bevy::app::App, path: &str, upstream_fnv: 
 }
 
 /// The embedded shaders swap_embedded_shader replaced with raea's forks: RAEA_ENGINE_SHADERS leaves them as they are,
-/// since the source tree holds Bevy's original, not the fork (engine_shaders.rs).
+/// since the source tree holds Bevy's original, not the fork (raea-sys-engine-shaders).
 static SWAPPED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 /// Whether `path` (as Bevy embeds it) is one of raea's forks of a Bevy shader.
@@ -45,7 +45,7 @@ pub fn swapped(path: &str) -> bool {
     SWAPPED.lock().unwrap_or_else(std::sync::PoisonError::into_inner).iter().any(|p| p == path)
 }
 
-pub(crate) fn fnv1a(bytes: &[u8]) -> u64 {
+pub fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3))
 }
 

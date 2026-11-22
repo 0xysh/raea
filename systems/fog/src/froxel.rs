@@ -198,7 +198,7 @@ fn extract_volumes(mut volumes: ResMut<Volumes>, q: Extract<Query<(&FogVolume, &
     volumes.corners = found.iter().map(|f| f.2).collect();
 }
 
-fn prepare_volumes(mut volumes: ResMut<Volumes>, device: Res<RenderDevice>, queue: Res<RenderQueue>, media: Option<ResMut<PathtracerMedia>>, traced: Query<&raea_sys_frame::pathtracer::PathtracerSettings>) {
+fn prepare_volumes(mut volumes: ResMut<Volumes>, device: Res<RenderDevice>, queue: Res<RenderQueue>, media: Option<ResMut<PathtracerMedia>>, traced: Query<&raea_sys_rt::pathtracer::PathtracerSettings>) {
     // never empty: a storage buffer needs a size
     let mut list = volumes.list.clone();
     if list.is_empty() {
@@ -209,7 +209,7 @@ fn prepare_volumes(mut volumes: ResMut<Volumes>, device: Res<RenderDevice>, queu
     // the reference path tracer walks the same volumes (bevy_solari pathtracer/media.wesl); <Pathtracer media={false}>
     // (or RAEA_PT_MEDIA=0) leaves them out of it, for a frame without its air
     if let Some(mut media) = media {
-        media.0 = if raea_sys_frame::pathtracer::media(&traced) { volumes.buffer.buffer().cloned() } else { None };
+        media.0 = if raea_sys_rt::pathtracer::media(&traced) { volumes.buffer.buffer().cloned() } else { None };
     }
 }
 

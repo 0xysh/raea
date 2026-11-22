@@ -308,8 +308,8 @@ fn run(entity: Entity, item: Item, st: &super::SolariSettings, device: &RenderDe
         .pipeline
         .get_or_insert_with(|| {
             // read from a project's engine-shaders/ or the checkout when one has them (docs/nobuild.feature NB5b)
-            let guides = raea_sys_frame::engine_shaders::text("raea_render_raytrace/metalfx_guides.wgsl", DECODE_WGSL);
-            let taa = raea_sys_frame::engine_shaders::text("raea_render_raytrace/emit_taa.wgsl", super::emit_taa::WGSL);
+            let guides = raea_sys_engine_shaders::text("raea_render_raytrace/metalfx_guides.wgsl", DECODE_WGSL);
+            let taa = raea_sys_engine_shaders::text("raea_render_raytrace/emit_taa.wgsl", super::emit_taa::WGSL);
             let source = format!("{guides}{taa}");
             let module = dev.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("metalfx guides"), source: wgpu::ShaderSource::Wgsl(source.into()) });
             let make = |entry: &str| dev.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("metalfx guides"), layout: None, module: &module, entry_point: Some(entry), compilation_options: Default::default(), cache: None });

@@ -14923,6 +14923,7 @@ dependencies = [
  "raea-runtime-view",
  "raea-sys-compose",
  "raea-sys-compute",
+ "raea-sys-engine-shaders",
  "raea-sys-environment",
  "raea-sys-fog",
  "raea-sys-fog-half",
@@ -14965,9 +14966,9 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-metal 0.3.2",
  "objc2-metal-fx",
- "raea-io-home",
  "raea-io-trace",
- "raea-sys-frame",
+ "raea-sys-engine-shaders",
+ "raea-sys-rt",
  "serde_json",
  "wgpu",
 ]
@@ -15299,6 +15300,7 @@ dependencies = [
  "raea-sys-light-meter",
  "raea-sys-mix",
  "raea-sys-page",
+ "raea-sys-rt",
  "raea-sys-stage",
  "serde_json",
  "wgpu",
@@ -15787,12 +15789,14 @@ name = "raea-sys-compose"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bytemuck",
  "indexmap",
  "raea-core-program",
  "raea-io-trace",
  "raea-sys-frame",
  "raea-sys-rt",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]
@@ -15837,6 +15841,17 @@ dependencies = [
  "raea-core-ease",
  "raea-sys-touch",
  "rayon",
+]
+
+[[package]]
+name = "raea-sys-engine-shaders"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-core-program",
+ "raea-io-trace",
+ "raea-sys-frame",
+ "serde_json",
 ]
 
 [[package]]
@@ -15917,6 +15932,7 @@ dependencies = [
  "raea-core-program",
  "raea-io-trace",
  "raea-sys-frame",
+ "raea-sys-rt",
  "raea-sys-volume",
  "serde_json",
 ]
@@ -15985,7 +16001,6 @@ dependencies = [
  "raea-core-program",
  "raea-core-scene",
  "raea-io-media",
- "raea-io-trace",
  "raea-sys-layers",
  "raea-sys-shots",
  "serde_json",

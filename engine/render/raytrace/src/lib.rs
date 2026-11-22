@@ -96,12 +96,12 @@ impl Default for SolariSettings {
 
 /// Solari's plugins, and RAEA_LIGHT's camera override when it names a path.
 pub fn add(app: &mut App) {
-    app.register_type::<RenderScale>().register_type::<SolariSettings>().register_type::<raea_sys_frame::pathtracer::PathtracerSettings>();
+    app.register_type::<RenderScale>().register_type::<SolariSettings>().register_type::<raea_sys_rt::pathtracer::PathtracerSettings>();
     app.add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<SolariSettings>::default());
-    app.add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<raea_sys_frame::pathtracer::PathtracerSettings>::default());
+    app.add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<raea_sys_rt::pathtracer::PathtracerSettings>::default());
     // the denoiser's own shaders, read from a project's engine-shaders/ or the checkout as its pipelines are made
     #[cfg(target_os = "macos")]
-    raea_sys_frame::engine_shaders::declare(&[("raea_render_raytrace/metalfx_guides.wgsl", metalfx::DECODE_WGSL), ("raea_render_raytrace/emit_taa.wgsl", emit_taa::WGSL)]);
+    raea_sys_engine_shaders::declare(&[("raea_render_raytrace/metalfx_guides.wgsl", metalfx::DECODE_WGSL), ("raea_render_raytrace/emit_taa.wgsl", emit_taa::WGSL)]);
     solari::add(app);
     force::add(app);
 }

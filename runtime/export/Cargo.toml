@@ -18,6 +18,8 @@ raea-runtime-bake = { path = "../bake" }
 raea-render = { path = "../../engine/render", default-features = false, features = ["native", "raytracing"] }
 # a GPU that stopped drawing fails the render (gpu::said)
 raea-sys-frame = { path = "../../systems/frame" }
+# the draws a render takes of each frame (<Pathtracer samples>)
+raea-sys-rt = { path = "../../systems/rt" }
 # renders to files: RenderOpts, render, render_fed
 raea-runtime-encode = { path = "../encode" }
 raea-page = { path = "../../engine/page" }

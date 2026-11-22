@@ -8,6 +8,8 @@ description = "Froxel fog (one medium in a grid along the view), glass seen thro
 
 [dependencies]
 raea-sys-frame = { path = "../frame" }
+# whether the path tracer walks the fog volumes (<Pathtracer media>)
+raea-sys-rt = { path = "../rt" }
 raea-sys-volume = { path = "../volume" }
 raea-core-program = { path = "../../core/program" }
 raea-io-trace = { path = "../../io/trace" }

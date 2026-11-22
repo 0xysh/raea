@@ -43,7 +43,7 @@ pub fn shadow(app: &mut App, edit_dir: &Path, prog: &Program) {
                 }
                 continue;
             }
-            let fork = super::bevy_api::swapped(&rel);
+            let fork = raea_sys_frame::bevy_api::swapped(&rel);
             match replace(app, &rel, &file, &mut swaps) {
                 Some(_) => ours.push(if fork { format!("{rel} (over raea's fork of Bevy's)") } else { rel }),
                 None if declared.iter().any(|(r, _)| *r == rel) => ours.push(format!("{rel} (read as its pass is made)")),
@@ -75,7 +75,7 @@ pub fn shadow(app: &mut App, edit_dir: &Path, prog: &Program) {
     if !swaps.is_empty() {
         let list: Vec<_> = swaps
             .iter()
-            .map(|(rel, t)| serde_json::json!({ "shader": rel, "fnv": format!("{:#x}", super::bevy_api::fnv1a(t.as_bytes())), "project": done.contains(rel), "constants": constants.contains(rel) }))
+            .map(|(rel, t)| serde_json::json!({ "shader": rel, "fnv": format!("{:#x}", raea_sys_frame::bevy_api::fnv1a(t.as_bytes())), "project": done.contains(rel), "constants": constants.contains(rel) }))
             .collect();
         raea_io_trace::event("engine_shaders", serde_json::json!({ "shaders": list }));
     }
@@ -95,7 +95,7 @@ fn from_tree(app: &mut App, root: &Path, done: &[String], swaps: &mut Vec<(Strin
             continue;
         }
         // raea's forks of Bevy's shaders are made from Bevy's at load; the tree's file is Bevy's original
-        if super::bevy_api::swapped(&rel) {
+        if raea_sys_frame::bevy_api::swapped(&rel) {
             forks += 1;
             continue;
         }
@@ -200,7 +200,7 @@ pub fn text(rel: &str, builtin: &'static str) -> std::borrow::Cow<'static, str> 
         }
     }
     if s != builtin {
-        raea_io_trace::event("engine_shader_text", serde_json::json!({ "shader": rel, "fnv": format!("{:#x}", super::bevy_api::fnv1a(s.as_bytes())) }));
+        raea_io_trace::event("engine_shader_text", serde_json::json!({ "shader": rel, "fnv": format!("{:#x}", raea_sys_frame::bevy_api::fnv1a(s.as_bytes())) }));
     }
     s
 }

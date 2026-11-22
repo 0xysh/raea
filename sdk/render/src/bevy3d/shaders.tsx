@@ -28,7 +28,7 @@ export function shaderConstants(list: ReadonlyArray<readonly [string, string, Sh
       if (!Number.isFinite(value)) throw new RangeError(`ShaderConstants: ${name} in ${shader} is a number or a boolean, got ${v}`);
       return { shader, name, value, list: [] };
     });
-  return values.length ? <BevyComponent type="raea_sys_frame::engine_shaders::consts::ShaderConstants" value={{ values }} /> : undefined;
+  return values.length ? <BevyComponent type="raea_sys_engine_shaders::consts::ShaderConstants" value={{ values }} /> : undefined;
 }
 
 /** Sets constants in one of the engine's own shaders (raea's, Bevy's, Solari's) for this scene. Each `const NAME = ...;`

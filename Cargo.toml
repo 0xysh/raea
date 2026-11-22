@@ -117,6 +117,7 @@ members = [
     "systems/page-net",
     "systems/page-ops",
     "systems/frame",
+    "systems/engine-shaders",
     "systems/shots",
     "systems/hold",
     "systems/body",
