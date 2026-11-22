@@ -200,17 +200,38 @@ pub fn tris(m: &Manifold) -> Tris {
     Tris { positions, normals }
 }
 
+/// A shape made faster than this isn't kept on disk: a box is made in microseconds, and a part whose size changed each
+/// frame wrote a file a frame (2.4 million in 12 hours of long renders, 11-21); the disk is for the cuts that cost
+const KEEP_MS: f64 = 2.0;
+/// The bytes of triangles held in memory at most: past it they're let go and made (or read) again as asked, so a
+/// long render's shapes that change each frame don't grow the process for its whole length (SG4a)
+const HELD_BYTES: usize = 1 << 30;
+
+/// The shapes held, and their bytes.
+type Held = (HashMap<String, std::sync::Arc<Tris>>, usize);
+
+/// `t` held for `expr`, the held let go first when they'd pass HELD_BYTES.
+fn hold(cache: &Mutex<Held>, expr: &str, t: &std::sync::Arc<Tris>) {
+    let bytes = (t.positions.len() + t.normals.len()) * 12 + expr.len();
+    let mut c = cache.lock().unwrap();
+    if c.1 + bytes > HELD_BYTES {
+        *c = Default::default();
+    }
+    c.1 += bytes;
+    c.0.insert(expr.to_string(), t.clone());
+}
+
 /// The mesh for an expression, built once per expression (a re-cut or a key that doesn't change the shape costs nothing).
 pub fn cached(expr: &str) -> Result<std::sync::Arc<Tris>, String> {
-    static CACHE: OnceLock<Mutex<HashMap<String, std::sync::Arc<Tris>>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<Held>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
-    if let Some(t) = cache.lock().unwrap().get(expr) {
+    if let Some(t) = cache.lock().unwrap().0.get(expr) {
         return Ok(t.clone());
     }
     // a buffer mesh's own triangles (buffer.rs): data already, so nothing is kept on disk for it
     if let Some(b) = expr.strip_prefix("buffer:") {
         let t = std::sync::Arc::new(buffer_tris(b)?.0);
-        cache.lock().unwrap().insert(expr.to_string(), t.clone());
+        hold(cache, expr, &t);
         return Ok(t);
     }
     // made by this build before, on disk (kept.rs): read back as it was written
@@ -218,14 +239,15 @@ pub fn cached(expr: &str) -> Result<std::sync::Arc<Tris>, String> {
     let t = match kept.as_deref().and_then(kept::read) {
         Some(t) => std::sync::Arc::new(t),
         None => {
+            let made = std::time::Instant::now();
             let t = std::sync::Arc::new(tris(&solid(expr)?));
-            if let Some(p) = &kept {
+            if let Some(p) = kept.as_ref().filter(|_| made.elapsed().as_secs_f64() * 1e3 >= KEEP_MS) {
                 kept::write(p, &t);
             }
             t
         }
     };
-    cache.lock().unwrap().insert(expr.to_string(), t.clone());
+    hold(cache, expr, &t);
     Ok(t)
 }
 

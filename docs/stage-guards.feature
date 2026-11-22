@@ -168,6 +168,7 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-sys-contact    | systems/contact/src/lib.rs    | 0     | the clipping check over spans; each pair's stretches kept as they come |
         | raea-sys-contact    | systems/contact/src/model.rs  | +12   | forget: the files' triangles and the parts' solids let go             |
         | raea-runtime-export | runtime/export/src/scene.rs   | +18   | told_taking: each frame's scene let go as its parts are made; forget and the memory marks after each end step |
+        | raea-core-shape     | core/shape/src/lib.rs         | +25   | cached: shapes held to 1 GB in memory, and only those that took 2 ms or more kept on disk |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
       # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
       # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
@@ -190,6 +191,12 @@ Feature: Stage guards: a 3D render an agent can't break
       # GB to 9.3 GB, its 435 errors, 699 warns and 47 notes the same (the clipping check's in order; it keeps each
       # pair's stretches as they come, not every frame's hit). Still not met: memory grows by about 40% after the first
       # minute (the kept scenes), and the solids of every part are made at once, 3.8 GB on the film.
+      # Branch stage-guards-16: raea-core-shape's cache of each shape expression's triangles held every one for the
+      # process, in memory and on disk, with nothing let go. A part whose size changes each frame is a new expression
+      # each frame, so a long render grew by one mesh a part a frame, and the disk cache gained 2.46 million files
+      # (9.7 GB, 2.2 million of them boxes) in 12 hours of renders on 11-21, filling the disk to 1 GB free. Memory is
+      # now held to 1 GB of triangles (let go past it, made or read again as asked), and only a shape that took 2 ms
+      # or more to make is kept on disk (the boolean cuts it was for; a box takes microseconds).
 
   Rule: The SDK stops allowing it
 
