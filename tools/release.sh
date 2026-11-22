@@ -138,14 +138,14 @@ loader (Debian and Ubuntu: apt install libxkbcommon-x11-0 libxcursor1 libxi6 lib
       cp "$bin/$f" "$stage/bin/"
     done
     # and what a PC with nothing installed and no downloads needs (tools/release/win-bundle.sh): the VC++ runtime
-    # raea.exe and onnxruntime.dll import, FFmpeg (raea's LGPL build) and uv, each with its licence; the list read without
+    # raea.exe and onnxruntime.dll import, FFmpeg (raea's LGPL build), uv and DXC (DX12's shader compiler, #215), each with its licence; the list read without
     # its \r, as GitHub's Windows runner checks it out with CRLF (0.1.8-rc9 looked for "vcruntime140.dll\r")
     for f in $(tr -d '\r' < "$root/tools/release/win-bundle.files"); do
       [ -f "$bin/$f" ] || { echo "release.sh: $bin has no $f (tools/release/win-bundle.sh $bin)" >&2; exit 1; }
       cp "$bin/$f" "$stage/bin/"
     done
     printf '%s\r\n' "raea $version for Windows x86_64 (Windows 10 or 11, a DirectX 12 or Vulkan GPU driver; with no GPU, Mesa's lavapipe and WGPU_BACKEND=vulkan)." \
-      "bin\\ carries what raea needs from outside it: Microsoft's Visual C++ runtime and ONNX Runtime, FFmpeg (LGPL) and uv," \
+      "bin\\ carries what raea needs from outside it: Microsoft's Visual C++ runtime, ONNX Runtime and DXC, FFmpeg (LGPL) and uv," \
       "each with its licence beside it (ffmpeg-README.txt says where FFmpeg's source is)." > "$stage/README.txt" ;;
   *) cp "$bin/raea" "$bin/libraea_bundle.dylib" "$bin/raea-perceive" "$bin/raea-rune-host" "$bin/raea-page-host" "$stage/bin/"
     # stripped as they linked (tools/link-jit.sh, #88); a binary that still holds its debug map is a build from before

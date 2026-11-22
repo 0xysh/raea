@@ -27,7 +27,9 @@ paths for Windows in runtime/bundle). Its bin\ also carries, each with its licen
   and libvpx 1.17.0's decoders (BSD-3-Clause with the WebM project's patent grant: libvpx-LICENSE.txt,
   libvpx-PATENTS.txt) by tools/release/ffmpeg-win.sh, its H.264 encoder Windows' own (Media Foundation), its source
   published as the release tools-ffmpeg-9.0.2-lgpl;
-  uv (uv.exe; Astral, MIT OR Apache-2.0).
+  uv (uv.exe; Astral, MIT OR Apache-2.0);
+  Microsoft's DirectX Shader Compiler v1.8.2502 (dxcompiler.dll, dxil.dll), DX12's shader compiler, redistributed under
+  its licence terms (dxc-LICENSE-MS.txt; its LLVM parts under dxc-LICENSE-LLVM.txt and dxc-LICENSE-MIT.txt).
 The Windows app adds Git for Windows with Git LFS (dugite-native; GPLv2 and its parts' licences, in git\), which raea
 runs as a separate program; its complete corresponding source is published as the release tools-git-<tag>-sources.
 raea.exe, on a PC with no Git, fetches the same build once into its tools cache (io/assets git()).
