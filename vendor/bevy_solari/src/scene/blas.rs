@@ -140,7 +140,7 @@ pub fn prepare_raytracing_blas(
                 vertex_buffer: vertex_slice.buffer,
                 first_vertex: vertex_slice.range.start,
                 // raea: position, normal, uv, tangent and the vertex colour (scene/bindings.wesl PackedVertex)
-                vertex_stride: 64,
+                vertex_stride: super::types::VERTEX_BYTES,
                 index_buffer: Some(index_slice.buffer),
                 first_index: Some(index_slice.range.start),
                 transform_buffer: None,

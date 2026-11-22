@@ -35,7 +35,8 @@ impl BindGroupCacheState {
         // Binding arrays are dense, so freed slots still need something valid bound into them
         let dummy_buffer = render_device.create_buffer(&BufferDescriptor {
             label: Some("solari_dummy_binding_array_buffer"),
-            size: 48,
+            // raea: one traced vertex, the vertex buffers' least binding (it was 48, the vertex before its colour)
+            size: crate::scene::types::VERTEX_BYTES,
             usage: BufferUsages::STORAGE,
             mapped_at_creation: false,
         });

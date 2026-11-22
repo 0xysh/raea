@@ -50,3 +50,8 @@ pub struct SkyPortals(pub Vec<[bevy_math::Vec3; 3]>);
 
 /// raea: how many sky portals the environment uniform holds (bindings.wesl's array)
 pub const MAX_SKY_PORTALS: usize = 8;
+
+// raea: a traced vertex's size in bytes: position, normal, uv, tangent and the vertex colour (scene/bindings.wesl
+// PackedVertex). The BLAS's stride and the binding array's dummy buffer both read it: the dummy left at 48 when the
+// colour came in made the GPU refuse the frame after a part's mesh slab was freed (Stay, frame 1699)
+pub(crate) const VERTEX_BYTES: u64 = 64;
