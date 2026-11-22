@@ -342,9 +342,11 @@ Feature: Stage guards: a 3D render an agent can't break
       # under '185 ads · 11 games' at 5:01, a chart's points at 1:03), which the rule as written counts: a wall of
       # tiles isn't a backdrop by the slab rule. Branch stage-guards-9: words in an element that says
       # data-allow-overlap may sit on any part (the manifest marks them allowOverlap): a headline across a card is an
-      # error, the same words under data-allow-overlap pass. Stay's page text over its pool room (frames 60-580 and
-      # 860-1460) says none. Left: `raea scene stage` doesn't know the page, since it draws none; the 3D guide's rule 9
-      # doesn't name type-over-part yet (the guide's copy in the skills goes with a raea-skills change).
+      # error, the same words under data-allow-overlap pass. Stay (approved), rendered whole with its page known: two
+      # errors, both meant, 'turn' drawn over the plant at 0:49 and the end title 'JUST THAT.' across the screen at
+      # 1:20; each takes data-allow-overlap (Stay already fails on its dolly reversal at 1:12, SG13). Left: `raea scene
+      # stage` doesn't know the page, since it draws none; the 3D guide's rule 9 doesn't name type-over-part yet (the
+      # guide's copy in the skills goes with a raea-skills change).
 
     Scenario: SG12. Nothing snaps
       Given the plan
@@ -400,9 +402,10 @@ Feature: Stage guards: a 3D render an agent can't break
       # colour at least half opaque, past a quarter percent of the frame), and they fill the frame too. Measured on
       # Stay (approved) with its page known: its stretches at 0:39 and 0:45 clear (the page's words), and 0:02-0:18 and
       # 0:29-0:33 still read empty. Those frames show a pool room whose walls, floor and water are backdrop by the slab
-      # rule, so frame-empty stays a warning: a room's inside is content the rule can't see. (Stay's frames past 1699
-      # couldn't be rendered on the 0.1.9 workspace build: Solari's traced vertex is 64 bytes since 7c12c971c4, and a
-      # mesh there binds 48.) Left: the subject a Label points at; a room's inside as content.
+      # rule, so frame-empty stays a warning: a room's inside is content the rule can't see. Past frame 1699 (once
+      # nobuild's Solari dummy buffer was sized for its 64-byte vertex; at 48 the GPU refused that frame), 1:05 and
+      # 1:09-1:12 read empty too: a dark sphere half in frame, then a canyon's walls filling it, backdrop by the same
+      # rule. Left: the subject a Label points at; a room's inside as content.
 
     @done
     Scenario: SG15. A broken render can't be posted
