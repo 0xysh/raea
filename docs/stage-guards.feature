@@ -100,6 +100,12 @@ Feature: Stage guards: a 3D render an agent can't break
       # runtime/live/tests/stage_guards.rs passes (5 tests; live_emissive and live_sheet still pass). Left: SG0's
       # renders of the repros, and a shader's `three` and `shader` columns, whose uniforms change every frame
       # (frozen uniforms keep their own fix rather than a part spawned each frame).
+      # Status 11-21 (stage-guards-15): the `shader` column's uniforms follow the frame. A ShaderExtension whose uniform
+      # was the frame over 89 (blue to red) drew frame 0's blue all video long on main, and SG9 failed it ("frame 89
+      # card: 30136 pixels differ from the frame rendered alone"); now it goes blue, purple, red and SG9 passes. Its
+      # uniforms go as `own:uniforms` rows, as a <Material>'s do (runtime/look own_uniforms, `ext` for a 3D mesh), and
+      # raea-sys-shader own_live.rs packs them into the shaded material's slots when they change (ShaderExt slots_for).
+      # `three` sends its uniforms each frame as `three:uniforms` rows (R3F11).
 
     Scenario: SG2. A part never inherits another part's row
       The cause was live.rs: a text block kept the id its frame gave it (`text0` is the frame's first block), where a
