@@ -38,12 +38,13 @@ and the command says so.
 
 Every render writes its manifest beside its output: `OUT.render.json` (`DIR/NAME.render.json` for a folder of
 frames), or where `--manifest` says. It holds what each frame showed as laid out (each text's words, box, colour and
-size, each video's source and time), the sounds heard and what the render found. `raea check` reads it, and so does
+size, each video's source and time, each picture's box), the sounds heard and what the render found. `raea check` reads it, and so does
 [`raea world`](world.md), which measures the output against it when a check asks.
 
 A render checks what it draws: 3D parts passing into each other (the clipping check), how its 3D is staged (3D type
 too small or turned to read, page type over a part, parts that snap, a camera that lurches, frames with almost nothing
-on screen; `raea scene stage` runs these without drawing, all but the page's) and its pictures' exposure (clipping to white, crushing to black). A video with 3D
+on screen; `raea scene stage` runs these without drawing, all but the page's). Page words meant to sit on a part go
+in an element with `data-allow-overlap` and its pictures' exposure (clipping to white, crushing to black). A video with 3D
 in it, longer than 60 frames, is also checked for frame purity: every 300th frame, its last, and the frame after each
 change of more than 20 parts are rendered again on their own and held to the video's. A patch that differs is an error
 naming the frame and the parts under it, with both pictures kept beside the video (`OUT.frame-pure/`), since a part

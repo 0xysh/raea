@@ -327,6 +327,8 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-sys-stage      | systems/stage/src/lib.rs      | +14   | check_with and told take each frame's page                            |
         | raea-sys-stage      | systems/stage/src/framing.rs  | +16   | the backdrop rule shared; the page's words and videos fill the frame (SG14) |
         | raea-runtime-export | runtime/export/src/run.rs     | +5    | a still's end checks wait for its page                                |
+        | raea-page           | engine/page/src/motion/manifest.rs | +45 | the manifest's pictures (img, svg, background image or colour) and words marked allowOverlap |
+        | raea-runtime-page   | runtime/page/src/bevy_page.rs | +2    | a frame's manifest entry carries them                                 |
       Then a page text box that covers more than 10% of a 3D part's projected box is an error, unless one of them says
         allowOverlap
       And on the film this flags the words over the curves at 2:08 and the headline on the AppLovin card at 6:40
@@ -338,8 +340,11 @@ Feature: Stage guards: a 3D render an agent can't break
       # at 28%), the words over the brand cards from 6:33 to 6:37 (the first card at 61%) and 'social winners often
       # don't' over the hero and the network's logo from 6:38 to 6:41. Some are words over a wall of small parts (54 ad tiles
       # under '185 ads · 11 games' at 5:01, a chart's points at 1:03), which the rule as written counts: a wall of
-      # tiles isn't a backdrop by the slab rule. Left: page text can't say allowOverlap (the manifest has a text's
-      # words and box, not its props), and `raea scene stage` doesn't know the page, since it draws none.
+      # tiles isn't a backdrop by the slab rule. Branch stage-guards-9: words in an element that says
+      # data-allow-overlap may sit on any part (the manifest marks them allowOverlap): a headline across a card is an
+      # error, the same words under data-allow-overlap pass. Stay's page text over its pool room (frames 60-580 and
+      # 860-1460) says none. Left: `raea scene stage` doesn't know the page, since it draws none; the 3D guide's rule 9
+      # doesn't name type-over-part yet (the guide's copy in the skills goes with a raea-skills change).
 
     Scenario: SG12. Nothing snaps
       Given the plan
@@ -391,7 +396,13 @@ Feature: Stage guards: a 3D render an agent can't break
       # (the notes' 3:40), and 21 subject cuts. Branch stage-guards-8: the page's words and videos fill the frame too
       # (the manifest's, as SG11 reads them), so a headline over an empty 3D isn't an empty frame. Still warnings: the
       # page's pictures (img, svg, a CSS background) aren't in the manifest, so one over an empty 3D would be a false
-      # error. Left: those pictures in the manifest, then errors; the subject a Label points at.
+      # error. Branch stage-guards-9: the manifest lists the page's pictures (each img, inline svg, background image or
+      # colour at least half opaque, past a quarter percent of the frame), and they fill the frame too. Measured on
+      # Stay (approved) with its page known: its stretches at 0:39 and 0:45 clear (the page's words), and 0:02-0:18 and
+      # 0:29-0:33 still read empty. Those frames show a pool room whose walls, floor and water are backdrop by the slab
+      # rule, so frame-empty stays a warning: a room's inside is content the rule can't see. (Stay's frames past 1699
+      # couldn't be rendered on the 0.1.9 workspace build: Solari's traced vertex is 64 bytes since 7c12c971c4, and a
+      # mesh there binds 48.) Left: the subject a Label points at; a room's inside as content.
 
     @done
     Scenario: SG15. A broken render can't be posted

@@ -87,7 +87,7 @@ pub(crate) fn check(st: &Stage, page: &[Page]) -> Vec<Finding> {
             let named: Vec<String> = most.iter().take(3).map(|(n, s)| format!("'{n}' ({:.0}%)", s * 100.0)).collect();
             let more = if most.len() > 3 { format!(" and {} more", most.len() - 3) } else { String::new() };
             let says = format!("'{}' in the page covers {}{more} from {} to {}", short(&text), named.join(", "), st.at(a), st.at(b));
-            out.push(st.finding("type-over-part", Level::Error, a, b, says).fix("move the words off it, or beside it with a Label (raea/camera) that points at it; give the part allowOverlap when the words belong on it"));
+            out.push(st.finding("type-over-part", Level::Error, a, b, says).fix("move the words off it, or beside it with a Label (raea/camera) that points at it; words meant to sit on it go in an element with data-allow-overlap"));
         }
     }
     out
