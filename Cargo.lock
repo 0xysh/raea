@@ -13927,6 +13927,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-app-scene"
+version = "0.1.0"
+dependencies = [
+ "dunce",
+ "raea-core-facts",
+ "raea-runtime-bundle",
+ "raea-runtime-export",
+ "raea-sys-contact",
+ "raea-sys-light-meter",
+ "raea-sys-stage",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-app-solid"
 version = "0.1.0"
 dependencies = [
@@ -14218,6 +14232,7 @@ dependencies = [
  "raea-app-media",
  "raea-app-notes",
  "raea-app-play",
+ "raea-app-scene",
  "raea-app-solid",
  "raea-app-sound",
  "raea-app-targets",
@@ -15259,6 +15274,7 @@ dependencies = [
  "raea-sys-light-meter",
  "raea-sys-mix",
  "raea-sys-page",
+ "raea-sys-stage",
  "serde_json",
  "wgpu",
 ]
@@ -16424,6 +16440,18 @@ dependencies = [
  "raea-sys-mesh",
  "raea-sys-sampler",
  "raea-sys-shader",
+ "serde_json",
+]
+
+[[package]]
+name = "raea-sys-stage"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-core-facts",
+ "raea-core-scene",
+ "raea-core-shape",
+ "raea-io-trace",
  "serde_json",
 ]
 

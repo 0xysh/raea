@@ -46,7 +46,7 @@ mod run;
 pub use run::*;
 pub use raea_sys_page::{not_applied, render_said};
 mod scene;
-pub use scene::{USAGE as SCENE_USAGE, cli as scene_cli};
+pub use scene::{all_items, frame_of, items};
 
 /// One <Audio> (or sounding <Video>) on a frame.
 #[derive(Clone, Debug)]

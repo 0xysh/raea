@@ -166,6 +166,7 @@ Feature: Stage guards: a 3D render an agent can't break
       # clip, which can run past the Sequence) and a VolumeSource's from/until (seconds). Screen's `from` isn't
       # checked yet: screenContent isn't a component, so it can't read the Sequence.
 
+    @done
     Scenario: SG6. Lines are lines
       Given the plan
         | crate        | file                              | lines | job                                                                                  |
@@ -177,7 +178,8 @@ Feature: Stage guards: a 3D render an agent can't break
       And SG12 flags a chain of more than 8 parts named `NAME-i` whose ends touch as "a line made of parts: Line3d"
       # Status 11-21 (branch stage-guards-5): Line3d and Tube are built, one BufferMesh each, cut at p; renders of a
       # 120-point Tube and an 80-point Line3d growing over 40 frames read smooth with round ends at every frame. The
-      # meshes guide's recipe uses them. The SG12 flag is SG12's.
+      # meshes guide's recipe uses them. The flag is raea-sys-stage's line-of-parts (a warning, motion.rs): a chain of
+      # more than 8 parts named NAME-i that grows, which on the film names its 108 fields of 16 parts each.
 
     @done
     Scenario: SG7. A camera path that can't lurch
@@ -210,6 +212,10 @@ Feature: Stage guards: a 3D render an agent can't break
   Rule: The render fails when a frame would look broken
     Each check below reads the frame's scene (as systems/contact does) and the page's layout, runs in `raea render`
     and `raea check`, and reports the part, the frame and the fix, as P1 unless it says otherwise.
+    SG10, SG12, SG13 and SG14 are raea-sys-stage (systems/stage): they read each frame's parts through its camera
+    (view.rs; lib.rs finds the shots' cuts), run at the end of every render beside the clipping check
+    (runtime/export/src/scene.rs), and run without drawing in `raea scene stage`, which moved with lint, explain and
+    light out of raea-runtime-export into raea-app-scene (apps/scene) so the export crate keeps room under 2,000 lines.
 
     Scenario: SG9. A frame looks the same however it is reached
       Given a render of more than 60 frames with 3D in it
@@ -220,6 +226,16 @@ Feature: Stage guards: a 3D render an agent can't break
       And this catches SG1–SG4 and any later fault of the same kind before a person sees it
 
     Scenario: SG10. 3D type that reads
+      Given the plan
+        | crate          | file                         | lines | job                                                                             |
+        | raea-sys-stage | systems/stage/src/view.rs    | 118   | the frame's camera (Camera3d's quaternion or a lookAt), a point and a box on screen |
+        | raea-sys-stage | systems/stage/src/lib.rs     | 183   | told and check, the frames as the checks read them, shots, runs, findings     |
+        | raea-sys-stage | systems/stage/src/text.rs    | 217   | each RichText's capitals on screen, its turn from the camera, its box against title-safe, its reveal, its reading time; `read={false}` for scenery |
+        | @raea/render   | sdk/render/src/3d/text.tsx   | +3    | RichText's `read` prop                                                          |
+        | raea-app-scene | apps/scene/src/stage.rs      | 38    | `raea scene stage`: every frame stepped without drawing, the checks, errors fail it |
+        | raea-app-scene | apps/scene/src/lib.rs        | 59    | `raea scene`, moved from raea-runtime-export (lint and explain) with light.rs  |
+        | raea-app-scene | apps/scene/src/light.rs      | 58    | `raea scene light`, moved                                                       |
+        | raea-runtime-export | runtime/export/src/scene.rs | 35 | a render's items, and its end checks: clipping, then staging                    |
       Then every RichText and Text3D is checked on every frame it shows:
         | measure                              | limit                                              |
         | cap height on screen                 | at least 22 px at 1080 (scaled to the frame)       |
@@ -230,6 +246,16 @@ Feature: Stage guards: a 3D render an agent can't break
         | its reveal                           | finished before it unmounts                        |
       And on the film these flag the placement wall's labels (16 px), the floor labels (over 35°) and the store quote
         (a reveal that never starts)
+      # Status 11-21 (branch stage-guards-6): RichText is checked on every frame (systems/stage/src/text.rs): capitals
+      # under 22 px at 1080 are an error; turned past 35° a warning, past 50° an error (squashed under 64%, a floor seen
+      # low); outside title-safe a warning; a reveal never started or never finished an error; held still for less than
+      # its reading time a warning. `read={false}` leaves scenery out. A still stepped alone (raea check --quick, render
+      # --at) is judged for size, angle and safe area, and says nothing of reveals or time. Measured with `raea scene
+      # stage` on film2 (13,174 frames, 64 s): 182 small-type errors (code on screens at 3 to 7 px, labels at 17 to 19
+      # px), 152 angle errors (195 labels at 60 to 75°: 'ASA RULING · UK' at 74° for 12 s, 'KIT' at 71°), no false
+      # error on 33 clean scenes (gambit, sheet3d, lightbench, Stay, floor3, blender-loop). The film was rewritten since
+      # the notes: its placement wall no longer exists, so the 16 px labels can't be named. Left: Text3D, and parts in
+      # front of the words.
 
     Scenario: SG11. 2D type stays off the parts
       Then a page text box that covers more than 10% of a 3D part's projected box is an error, unless one of them says
@@ -237,28 +263,72 @@ Feature: Stage guards: a 3D render an agent can't break
       And on the film this flags the words over the curves at 2:08 and the headline on the AppLovin card at 6:40
 
     Scenario: SG12. Nothing snaps
+      Given the plan
+        | crate          | file                         | lines | job                                                                             |
+        | raea-sys-stage | systems/stage/src/motion.rs  | 311   | cuts; a named part's size or place on screen jumping in one frame, alone; a growing chain of parts named NAME-i (SG6's flag) |
       Then a part whose projected size changes by more than 25% from one frame to the next, with no cut, is an error
       And so is a RichText whose words change without a remount, until SG1 lands
       And on the film this flags the red dot at 1:10.06 and every chunk's first frame in a curve's drawing
+      # Status 11-21 (branch stage-guards-6): part-snap (motion.rs) is a named part's size on screen changing over 25%
+      # in one frame between steady frames, no cut: an error. Measured first as written, it said 1,446 errors on the
+      # film and 1,252 on four clean scenes; what was left out, each a measured false error: a part coming in (no
+      # steady frame before it), a name several items carry in one frame, four or more parts at once (the layout
+      # changing: the creatures reel's 30 tiles), parts reaching over 6 m (water, floors), and a part whose words or
+      # shape change that frame (spawned again as new content, SG1: kept-props2's counter). A jump across a tenth of
+      # the frame is a warning (a tile recycled, a part thrown). Now 0 errors on film2 and on 33 clean scenes. Left:
+      # the red dot at 1:10.06 and the chunks' first frames were drawn wrong by the engine from right props, which only
+      # SG9's re-render sees; and RichText words changing without a remount (SG1).
 
     Scenario: SG13. A camera that settles
+      Given the plan
+        | crate          | file                         | lines | job                                                                             |
+        | raea-sys-stage | systems/stage/src/motion.rs  | 311   | inside each shot, a speed kink in the camera's travel or turn (2x an error, 1.5x a warning), and a dolly or pan undone within 1.5 s |
       Then the camera's speed changing by more than 2x within 3 frames, or its framing reversing (in then out, one way
         then the other) within 1.5 s, is an error, and 1.5x is a warning
       And a camera still moving while type is up past the type's reading time is a warning
       And `raea fingerprint things`'s lurch check folds into this one, so it runs on every render
+      # Status 11-21 (branch stage-guards-6): camera-lurch and camera-reverse (motion.rs) run inside each shot on every
+      # render. Speeds under 0.1 degrees or 3 mm a frame are below a change anyone sees; turns are measured by atan2
+      # (acos of an f32 dot read 0 and 0.02 degrees on alternate frames and said 48 false lurches on Stay). A reversal
+      # is the whole there-and-back within 1.5 s; a dolly in and back out is an error, a pan there and back a warning
+      # (a first-person look round). Words up while the camera moves past their reading time are type-time's warning.
+      # On film2: 41 lurch errors, each at a key where the stage's Catmull-Rom segments differ in length (its speed
+      # jumps there); on the clean scenes, 13 lurches on cameras locked to a walking body (sheet3d) or a first-person
+      # walk starting with no ease, and two dolly reversals (soma_dressed's 0.15 m, Stay's 0.84 m in and 0.43 m out at
+      # 1:12). Left: `raea fingerprint things`' lurch check, still its own.
 
     Scenario: SG14. The frame is composed
+      Given the plan
+        | crate          | file                         | lines | job                                                                             |
+        | raea-sys-stage | systems/stage/src/framing.rs | 182   | the share of the frame any part covers (a grid of their boxes), and the shot's subject cut by the edge |
       Then the part a shot is about (one a Label or pin points at, else the nearest named part) cut by the frame's edge
         for more than 10 frames is an error
       And under 8% of the frame showing any part, for more than 1 s, is an error
       And on the film these flag the AppLovin logo cut at 6:32, the dashboard cut at 0:40 and 7:00, and the empty frames
         at 3:40, 6:04 and 6:08
+      # Status 11-21 (branch stage-guards-6): framing.rs says both, as warnings for now: the page's own 2D (a headline
+      # over an empty 3D) isn't known to them until SG11. Coverage leaves out a slab over 12 m (a floor, a wall: a frame
+      # of floor and fog is empty), and a part wholly behind the camera. On film2: empty frames at 1:59, 3:07 and 3:41
+      # (the notes' 3:40), and 21 subject cuts. Left: errors once SG11 knows the page, and the subject a Label points at.
 
+    @done
     Scenario: SG15. A broken render can't be posted
+      Given the plan
+        | crate    | file                              | lines | job                                                                       |
+        | -        | engine/cli/src/held.ts            | 82    | the newest render that wrote each file shown, from its project's record, and its errors less what was let through |
+        | -        | engine/cli/src/app.ts             | +6    | show refuses before it posts or opens anything; Here lists a folder        |
+        | -        | engine/cli/src/show.ts            | +14   | `--despite CHECK "why"`, and the why on the item's ask line                 |
+        | -        | engine/cli/conformance/held.test.ts | 69  | refused, cleared by a later render, let through either way, frames and absolute outs, the flag |
+        | raea-sys-stage | systems/stage/src/lib.rs    | +12   | a still stepped alone stands for its moment; reveals and reading times only over frames all stepped |
       Then `raea show` refuses a render whose record holds an open SG9–SG14 error, naming each, unless the agent passes
         `--despite CHECK "why"`, which the person sees on the item
       And the agent's hooks run SG10–SG14 on a composition's stills after each save (`raea check --quick`), so the
         fault shows before the first full render
+      # Status 11-21 (branch stage-guards-6): held.ts refuses `raea show` of any file whose newest render in its
+      # project's record holds an error it wasn't let through with, every error named, before it posts or opens
+      # anything (all of a render's errors, not only SG9–SG14's: each one already exited the render 1). `--despite
+      # CHECK "why"` passes one, and the why goes on the item's ask line. The quick check's stills are a render's, so
+      # the stage checks run on them (a still stepped alone is judged for what a still shows).
 
   Rule: SG16. The 3D guide says it first
     Scenario: SG16. The guide's 3D rules, before any recipe

@@ -70,6 +70,9 @@ export interface GlyphStyle {
 export interface RichTextProps {
   /** what it's called across frames, and its glyphs' names over world.* (`${name}:${index}`) */
   name?: string;
+  /** false: scenery, not words to read (a shop sign seen in passing, a page in a book), so raea render doesn't hold it
+   * to type that reads: its size on screen, its angle to the camera, its reveal and its reading time (SG10) */
+  read?: boolean;
   /** the composition pass it draws in ("scene" by default): a frame-wide effect told to skip a pass (<Look skip>,
    * <Outline skip>, <Bloom skip>, <Grade skip>) leaves its pixels as drawn, and <Look passes> gives one its own paint;
    * a piece names at most three passes besides "scene"; keyed per frame */

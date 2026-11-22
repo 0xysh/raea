@@ -47,7 +47,7 @@ pub(crate) fn frames_hold_3d(js: &Path, dir: &Path, frames: &[i64]) -> R<bool> {
 /// since frames are pure (each runtime's first frame is its whole tree). One event a frame, each waited on the JS
 /// thread and back, took the Rome film's 8,064 frames 6 s on a quiet machine and 38 s at load 50, before its engine
 /// could open. RAEA_BAKE_WORKERS sets how many runtimes (4; one for short timelines).
-pub(crate) fn scene_frames_to(js: &Path, dir: &Path, upto: i64) -> R<Option<(Vec<(i64, Frame)>, u32, u32, f64)>> {
+pub fn scene_frames_to(js: &Path, dir: &Path, upto: i64) -> R<Option<(Vec<(i64, Frame)>, u32, u32, f64)>> {
     scene_frames(js, dir, upto, true, &[])
 }
 
