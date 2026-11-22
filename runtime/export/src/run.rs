@@ -97,6 +97,11 @@ pub(crate) fn scene_program_checked(js: &Path, dir: &Path, upto: i64, wanted: Op
         Some(w) => frames.into_iter().filter(|(f, _)| w.contains(f)).collect(),
         None => frames,
     };
+    // stills: their end checks run once their page is laid out (render_bundle_with keeps each still's scene), so
+    // the page's words are known to them (SG11)
+    if wanted.is_some_and(|w| !w.is_empty()) {
+        return Ok(Some(p));
+    }
     // the clipping check on a thread of its own while the engine opens and the frames render (3 s over the Rome
     // film's 8,064 frames, which the render waited for before its engine opened); the render joins it at its end
     struct Prepassed(Vec<(i64, Frame)>);
@@ -106,7 +111,7 @@ pub(crate) fn scene_program_checked(js: &Path, dir: &Path, upto: i64, wanted: Op
     let owned = Prepassed(frames);
     *FED_CLIPPING.lock().unwrap() = Some(std::thread::spawn(move || {
         let o = owned;
-        scene::told(&o.0, w, h, fps)
+        scene::told(&o.0, None, w, h, fps)
     }));
     Ok(Some(p))
 }

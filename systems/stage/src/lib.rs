@@ -10,22 +10,27 @@ use raea_core_scene::{Item, base_ident};
 use serde_json::Value;
 
 mod framing;
+mod manifest;
 mod motion;
+mod page;
 mod text;
 mod view;
 pub use framing::on_screen;
+pub use manifest::{pages, seen};
+pub use page::{Page, Words};
 pub use view::View;
 
 /// Who says these findings, in a render.
 pub const BY: &str = "raea render";
 
-/// The checks on a render's frames, said on stderr and kept with its findings (RAEA_STAGE_CHECK=0 skips them).
-pub fn told(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec<Finding> {
+/// The checks on a render's frames, said on stderr and kept with its findings (RAEA_STAGE_CHECK=0 skips them). `page` is
+/// what each frame's page draws over its 3D (SG11, SG14), none when it isn't known.
+pub fn told(all: &[Vec<Item>], frames: &[i64], page: &[Page], w: u32, h: u32, fps: f64) -> Vec<Finding> {
     if std::env::var("RAEA_STAGE_CHECK").as_deref() == Ok("0") || all.iter().all(|its| its.is_empty()) {
         return Vec::new();
     }
     let t = std::time::Instant::now();
-    let found = check(all, frames, w, h, fps, BY);
+    let found = check_with(all, frames, page, w, h, fps, BY);
     for f in &found {
         eprintln!("raea: {}", f.line());
     }
@@ -38,11 +43,18 @@ pub fn told(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec<
 
 /// Every stage check on the frames (`all[k]` is frame `frames[k]`'s parts), worst first.
 pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64, by: &str) -> Vec<Finding> {
+    check_with(all, frames, &[], w, h, fps, by)
+}
+
+/// check, with what each frame's page draws (`page[k]`, frame `frames[k]`'s): its words held off the parts (SG11),
+/// and its words and videos filling the frame (SG14).
+pub fn check_with(all: &[Vec<Item>], frames: &[i64], page: &[Page], w: u32, h: u32, fps: f64, by: &str) -> Vec<Finding> {
     let st = Stage::new(all, frames, w, h, fps, by);
     let mut out = text::check(&st);
     out.extend(motion::camera(&st));
     out.extend(motion::snaps(&st));
-    out.extend(framing::check(&st));
+    out.extend(framing::check(&st, page));
+    out.extend(page::check(&st, page));
     raea_core_facts::finding::ranked(merged(out))
 }
 

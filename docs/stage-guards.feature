@@ -152,8 +152,28 @@ Feature: Stage guards: a 3D render an agent can't break
       # already gone, despawned with another part it hung from"); the store test covers it.
 
     Scenario: SG4a. A long render's memory stays flat
+      Given the plan
+        | crate               | file                          | lines | job                                                                   |
+        | raea-runtime-export | runtime/export/src/program.rs | +5    | program_of: a frame's program with its 3D left out, for the sound alone |
+        | raea-runtime-export | runtime/export/src/fed.rs     | +22   | a live render's sound step leaves the 3D out; stills_live, one look at the wanted frames with frames_hold_3d |
+        | raea-runtime-export | runtime/export/src/render.rs  | +12   | a still past frame 3,600 made live (LIVE_PAST); stills keep their scenes for the end checks |
+        | raea-sys-stage      | systems/stage/src/manifest.rs | +8    | the remounts counted as the frames go, not all at once                |
+        | raea-core-scene     | core/scene/src/lib.rs         | +30   | spans_of: each part over the frames it's in; tracks_of built on it    |
+        | raea-sys-contact    | systems/contact/src/lib.rs    | 0     | the clipping check over spans                                         |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
-      # Status 11-21: not measured yet (SG4's leak fixed; the bar is the proof).
+      # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
+      # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
+      # each measured: the sound step at a live render's end built the 3D's rows again from every frame's kept scene
+      # (28 GB; it takes the sound's rows alone now); the clipping check held a slot for every part on every frame
+      # (each part over the frames it's in now); the remounts' counts were all kept at once (counted as they go now);
+      # and SG9's 64 stills, reached by rows, built a scene for every frame up to each (over 30 GB, killed). A still
+      # past frame 3,600 makes its 3D live now, as a game's does, unless a compute in it carries state from frame to
+      # frame: raea check --quick on the film went from 10.4 GB and 39 s to 0.8 GB and 9 s. Live stills at frames 300,
+      # 6000 and 13000 match the film's frames exactly, and the two routes' stills at 3293, 6587 and 13174 match each
+      # other in pixels and findings, since a still's end checks now run on its kept scene once its page is laid
+      # out, on either route (the live route ran none before: a game's stills were never staged). Not met: memory
+      # still grows with the frames (about 2 GB at the first minute, 5.7 GB at the last frame), because each frame's
+      # scene is kept for the end checks. Flat needs the checks to run over a window as the frames come.
 
   Rule: The SDK stops allowing it
 
@@ -256,12 +276,14 @@ Feature: Stage guards: a 3D render an agent can't break
       # frame-pure, so both routes hand the engine the same props: what differs is the engine's state, and the
       # error names the parts instead). RAEA_FRAME_PURE=0 skips it. Measured before building, alone (`--frame N`)
       # against the sequence on four real scenes of 91-180 frames: three match exactly (SSIM 1.0); one under Solari
-      # GI differs in SSIM (0.97-0.99, the GI's history) with no patch past the bar after frame 0.
+      # GI differs in SSIM (0.97-0.99, the GI's history) with no patch past the bar after frame 0. On the whole film
+      # (13,175 frames), its 64 stills past frame 3,600 made live (SG4a): none differs. The positive control is still
+      # caught and six real scenes are clean on that route.
       Given the plan
         | crate               | file                         | lines | job                                                                    |
-        | raea-app-direction  | apps/direction/src/pure.rs   | 230   | the sample, the stills and the alone frame, the patch, the parts under it, the findings |
+        | raea-app-direction  | apps/direction/src/pure.rs   | 234   | the sample, the stills and the alone frame, the patch, the parts under it, the findings |
         | raea-app-direction  | apps/direction/src/rendered.rs | +2  | a video render's end runs it beside the text rules                     |
-        | raea-runtime-export | runtime/export/src/scene.rs  | +40   | the manifest's `parts` (stills) and `remounts` (longer renders)        |
+        | raea-sys-stage      | systems/stage/src/manifest.rs | +40  | the manifest's `parts` (stills) and `remounts` (longer renders)        |
         | raea-runtime-export | runtime/export/src/lib.rs    | +4    | write_manifest takes them                                              |
         | raea-sys-stage      | systems/stage/src/framing.rs | +12   | on_screen: each part's box on screen, named                            |
 
@@ -298,9 +320,26 @@ Feature: Stage guards: a 3D render an agent can't break
       # front of the words.
 
     Scenario: SG11. 2D type stays off the parts
+      Given the plan
+        | crate               | file                          | lines | job                                                                   |
+        | raea-sys-stage      | systems/stage/src/page.rs     | 157   | each run of page words over a part's box on screen past 10%, the parts under them named |
+        | raea-sys-stage      | systems/stage/src/manifest.rs | 97    | each frame's page (words, videos, pictures) read from the manifest's frames; the parts and remounts written into it (moved from raea-runtime-export, at its 2,000 lines) |
+        | raea-sys-stage      | systems/stage/src/lib.rs      | +14   | check_with and told take each frame's page                            |
+        | raea-sys-stage      | systems/stage/src/framing.rs  | +16   | the backdrop rule shared; the page's words and videos fill the frame (SG14) |
+        | raea-runtime-export | runtime/export/src/run.rs     | +5    | a still's end checks wait for its page                                |
       Then a page text box that covers more than 10% of a 3D part's projected box is an error, unless one of them says
         allowOverlap
       And on the film this flags the words over the curves at 2:08 and the headline on the AppLovin card at 6:40
+      # Status 11-21 (branch stage-guards-8): page.rs. Words in the page (the manifest's text: its ink's box, opacity
+      # 0.1 or more) over more than 10% of a 3D part's box on screen (inside the frame), for a quarter second or more
+      # or on a still alone, are a `type-over-part` error: one for each run of the words, naming the parts under them
+      # with their shares. A backdrop (framing's slab rule) and a part with allowOverlap are left out. On the film,
+      # 31 errors: the caption over the curves from 2:08.02 to 2:16.04 (16 parts: the week's label at 53%, the curves
+      # at 28%), the words over the brand cards from 6:33 to 6:37 (the first card at 61%) and 'social winners often
+      # don't' over the hero and the network's logo from 6:38 to 6:41. Some are words over a wall of small parts (54 ad tiles
+      # under '185 ads · 11 games' at 5:01, a chart's points at 1:03), which the rule as written counts: a wall of
+      # tiles isn't a backdrop by the slab rule. Left: page text can't say allowOverlap (the manifest has a text's
+      # words and box, not its props), and `raea scene stage` doesn't know the page, since it draws none.
 
     Scenario: SG12. Nothing snaps
       Given the plan
@@ -349,7 +388,10 @@ Feature: Stage guards: a 3D render an agent can't break
       # Status 11-21 (branch stage-guards-6): framing.rs says both, as warnings for now: the page's own 2D (a headline
       # over an empty 3D) isn't known to them until SG11. Coverage leaves out a slab over 12 m (a floor, a wall: a frame
       # of floor and fog is empty), and a part wholly behind the camera. On film2: empty frames at 1:59, 3:07 and 3:41
-      # (the notes' 3:40), and 21 subject cuts. Left: errors once SG11 knows the page, and the subject a Label points at.
+      # (the notes' 3:40), and 21 subject cuts. Branch stage-guards-8: the page's words and videos fill the frame too
+      # (the manifest's, as SG11 reads them), so a headline over an empty 3D isn't an empty frame. Still warnings: the
+      # page's pictures (img, svg, a CSS background) aren't in the manifest, so one over an empty 3D would be a false
+      # error. Left: those pictures in the manifest, then errors; the subject a Label points at.
 
     @done
     Scenario: SG15. A broken render can't be posted

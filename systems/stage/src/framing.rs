@@ -28,7 +28,7 @@ const GX: usize = 48;
 const GY: usize = 27;
 
 /// A part's box in its own space: a shape's, a block of words' (estimated), a picture's; None when it isn't known.
-fn own_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<(Vec3, Vec3)>>) -> Option<(Vec3, Vec3)> {
+pub(crate) fn own_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<(Vec3, Vec3)>>) -> Option<(Vec3, Vec3)> {
     match it.kind {
         "mesh" => {
             let shape = it.shape.as_deref()?;
@@ -55,6 +55,13 @@ fn own_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<(Vec3,
     }
 }
 
+/// A slab wider than BACKDROP_M in the world, its thinnest side under SLAB of its widest: a floor, a set's wall, a sky
+/// plane, the backdrop a frame's parts stand in front of, not one of them.
+pub(crate) fn backdrop(it: &raea_core_scene::Item, lo: Vec3, hi: Vec3) -> bool {
+    let ext = (hi - lo) * it.world.to_scale_rotation_translation().0.abs();
+    ext.max_element() > BACKDROP_M && ext.min_element() < SLAB * ext.max_element()
+}
+
 /// Each part of known size that shows in a frame: its name as the checks call it, and its box on screen, [x0, y0, x1,
 /// y1] in px (SG9 names the parts under a patch that differs between a frame rendered in sequence and alone).
 pub fn on_screen(its: &[raea_core_scene::Item], w: u32, h: u32) -> Vec<(String, [f32; 4])> {
@@ -67,7 +74,18 @@ pub fn on_screen(its: &[raea_core_scene::Item], w: u32, h: u32) -> Vec<(String, 
     its.iter().filter_map(|it| Some((called(it), seen(it, &mut boxes)?))).collect()
 }
 
-pub(crate) fn check(st: &Stage) -> Vec<Finding> {
+/// The coverage grid's cells under a box on screen ([x0, y0, x1, y1] px, clipped to the w x h frame), set.
+fn mark(grid: &mut [bool], b: [f32; 4], w: f32, h: f32) {
+    let (x0, y0) = ((b[0].max(0.0) / w * GX as f32) as usize, (b[1].max(0.0) / h * GY as f32) as usize);
+    let (x1, y1) = (((b[2].min(w) / w * GX as f32).ceil() as usize).min(GX), ((b[3].min(h) / h * GY as f32).ceil() as usize).min(GY));
+    for y in y0..y1 {
+        for x in x0..x1 {
+            grid[y * GX + x] = true;
+        }
+    }
+}
+
+pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
     let n = st.all.len();
     let mut boxes = HashMap::new();
     // each frame: the share covered, whether it can be judged (no part of unknown size in view, no footage or 2D
@@ -97,8 +115,7 @@ pub(crate) fn check(st: &Stage) -> Vec<Finding> {
                 continue;
             };
             // a floor or wall round the camera is backdrop before it is a part behind it
-            let ext = (hi - lo) * it.world.to_scale_rotation_translation().0.abs();
-            if ext.max_element() > BACKDROP_M && ext.min_element() < SLAB * ext.max_element() {
+            if backdrop(it, lo, hi) {
                 continue;
             }
             let Some(b) = v.bounds(corners(&it.world, lo, hi)) else {
@@ -109,19 +126,17 @@ pub(crate) fn check(st: &Stage) -> Vec<Finding> {
             let inside = v.share(b);
             let whole = ((b[2] - b[0]) * (b[3] - b[1]) / (st.w * st.h)).max(1e-9);
             if inside > 0.0 {
-                let (x0, y0) = ((b[0].max(0.0) / st.w * GX as f32) as usize, (b[1].max(0.0) / st.h * GY as f32) as usize);
-                let (x1, y1) = (((b[2].min(st.w) / st.w * GX as f32).ceil() as usize).min(GX), ((b[3].min(st.h) / st.h * GY as f32).ceil() as usize).min(GY));
-                for y in y0..y1 {
-                    for x in x0..x1 {
-                        grid[y * GX + x] = true;
-                    }
-                }
+                mark(&mut grid, b, st.w, st.h);
             }
             // the subject: the named part showing most, when it could fit in the frame
             if it.props.get("name").is_some() && inside > 0.0 && best.as_ref().is_none_or(|s| inside > s.1) {
                 let fits = b[2] - b[0] < 0.9 * st.w && b[3] - b[1] < 0.9 * st.h;
                 best = Some((called(it), inside, 1.0 - inside / whole, fits && scale_of(it) > 0.0));
             }
+        }
+        // the page's words and videos fill the frame too: a headline over an empty 3D isn't an empty frame
+        for b in page.get(k).into_iter().flat_map(|p| p.words.iter().map(|w| w.bx).chain(p.videos.iter().copied()).chain(p.pictures.iter().copied())) {
+            mark(&mut grid, b, st.w, st.h);
         }
         covered[k] = grid.iter().filter(|c| **c).count() as f32 / (GX * GY) as f32;
         judged[k] = sure;
@@ -172,6 +187,17 @@ mod tests {
         assert!(f.iter().any(|f| f.check == "frame-empty"), "{f:?}");
         let framed: Vec<Vec<Item>> = (0..120).map(|_| vec![cam([0.0, 0.0, 4.0], [0.0; 3]), cube("dash", [0.0; 3])]).collect();
         assert!(!run(framed).iter().any(|f| f.check == "frame-empty"));
+    }
+
+    #[test]
+    fn words_or_a_video_in_the_page_fill_the_frame() {
+        let fs: Vec<Vec<Item>> = (0..120).map(|i| vec![cam([0.0, 0.0, 6.0], if (30..90).contains(&i) { [0.0, 40.0, 0.0] } else { [0.0; 3] }), cube("dash", [0.0; 3])]).collect();
+        let n: Vec<i64> = (0..120).collect();
+        let headline = crate::Page { words: vec![crate::Words { text: "The rule".into(), bx: [360.0, 380.0, 1560.0, 700.0], allow_overlap: false }], videos: Vec::new(), pictures: Vec::new() };
+        let f = crate::check_with(&fs, &n, &vec![headline; 120], 1920, 1080, 30.0, "test");
+        assert!(!f.iter().any(|f| f.check == "frame-empty"), "{f:?}");
+        let clip = crate::Page { words: Vec::new(), videos: Vec::new(), pictures: vec![[656.0, 0.0, 1264.0, 1080.0]] };
+        assert!(!crate::check_with(&fs, &n, &vec![clip; 120], 1920, 1080, 30.0, "test").iter().any(|f| f.check == "frame-empty"));
     }
 
     #[test]
