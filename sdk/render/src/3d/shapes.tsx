@@ -6,6 +6,7 @@ import { Place3d, usePlace3d, usePointer3d, type LocalBounds, type PointerHandle
 import { Canvas3DProps, Vec3, checkArgs, checkPass, checkVec, node3d, serialisable } from "./all";
 import { InCanvas3D } from "./model";
 import type { MeshAttribute } from "./attribute";
+import { firstKey, useSequenceFrames } from "./clock";
 
 const FILL = { position: "absolute", left: 0, top: 0, width: "100%", height: "100%" } as const;
 
@@ -477,6 +478,7 @@ function boundsFromChildren(children: ReactNode): LocalBounds | undefined {
  * @deprecated <Mesh3d>, raea/mesh (2D: <Mesh2d>, raea/sprite)
  */
 export function Mesh(props: MeshProps) {
+  useSequenceFrames("Mesh3d", props.name, [["animate's first key", firstKey(props.animate)]]);
   const anim = useAnimation3d(props.animate);
   const { position = [0, 0, 0], rotation = [0, 0, 0], scale = 1, shape } = apply3d(props, anim.values);
   checkVec("Mesh", "position", position);

@@ -128,25 +128,43 @@ Feature: Stage guards: a 3D render an agent can't break
       # Status 11-21: on a build without the fix the cold probe cuts a Space Mono H (179 pixels off against warm); with
       # it, 0 pixels off (SSIM 0.99996). The upstream issue is drafted, not filed: filing it is a public post.
 
+    @done
     Scenario: SG4. A part that won't despawn fails the render
       # Status 11-21: a live scene now drops the rows under another first (a block's glyphs, a part's components), in a
       # respawn and when rows are forgotten, so a block no longer takes its glyphs' entities before their rows go.
+      Given the plan
+        | crate              | file                                  | lines | job                                                                              |
+        | raea-sys-frame     | systems/frame/src/store.rs            | +25   | despawn: try_despawn; a row whose entity had already gone leaves the store and is named (its kind and id) in the error; the store test |
+        | raea-render        | engine/render/src/engine/spawn.rs, engine.rs | +8 | remove_rows_from and Engine::remove_rows return it                           |
+        | raea-runtime-export | runtime/export/src/fed.rs, bevy_frame.rs | +4 | a render fails on it, with the frame                                             |
+        | raea-runtime-react, raea-web | scene/plugin.rs, lib.rs       | +2    | a plain App and the web player pass it on                                        |
       Then "Could not despawn entity" is an error naming the part and the frame, never a log line
-      And a 13,000-frame 3D render's memory stays within 10% of its first minute's
+      # Status 11-21 (branch stage-guards-4): built ("frame N: Could not despawn entity: the text part 'quote' had
+      # already gone, despawned with another part it hung from"); the store test covers it.
+
+    Scenario: SG4a. A long render's memory stays flat
+      Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
+      # Status 11-21: not measured yet (SG4's leak fixed; the bar is the proof).
 
   Rule: The SDK stops allowing it
 
+    @done
     Scenario: SG5. One clock
       Given the plan
         | crate        | file                              | lines | job                                                                                  |
         | @raea/render | sdk/render/src/3d/text.tsx        | +12   | RichText refuses an `at` or `exitAt` outside its Sequence's frames                   |
-        | @raea/render | sdk/render/src/3d/clock.ts        | 40    | the same check for every part that takes a frame (Video's startFrom, Animate3d keys) |
+        | @raea/render | sdk/render/src/3d/clock.ts        | 45    | the same check for every part that takes a frame of its Sequence (Animate3d's first key, BevyComponent's from) |
       Then a reveal set after the composition ends is refused at its first frame: "RichText 'quote': at 1013 is after
         this composition's last frame (149). Give `at` in this Sequence's frames (useCurrentFrame), or put the scene
         in a <Sequence from>."
       And the 3D guide says a scene is a <Sequence>, never a frame passed down as a prop
       # Status 11-21 (branch stage-guards): RichText refuses an `at` or `exitAt` at or past its Sequence's last frame,
-      # naming the prop and the fix. clock.ts (the same for the other parts that take a frame) is left.
+      # naming the prop and the fix. Branch stage-guards-4: clock.ts holds the check, and RichText, a mesh's and a
+      # material's `animate` (its first key: an animation the Sequence's end cuts short is fine, one that never starts
+      # isn't), a lens effect's and MotionBlur's `animate`, and BevyComponent's `from` use it
+      # (sdk/raea/conformance/one-clock.test.tsx). Left out, on purpose: Video's startFrom (a frame of the source
+      # clip, which can run past the Sequence) and a VolumeSource's from/until (seconds). Screen's `from` isn't
+      # checked yet: screenContent isn't a component, so it can't read the Sequence.
 
     Scenario: SG6. Lines are lines
       Given the plan

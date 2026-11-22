@@ -3,6 +3,7 @@ import { useCurrentFrame, useVideoConfig } from "@raea/app/clock";
 import { toHex } from "../colour";
 import { useAnimation3d } from "@raea/math/animate";
 import { Animate3d, Vec3, apply3d, checkShares, checkVec, node3d } from "./all";
+import { firstKey, useSequenceFrames } from "./clock";
 
 export interface FireProps {
   /** parts are matched by name across frames: name a fire that comes and goes */
@@ -169,6 +170,7 @@ export interface LensDistortionProps extends LensCommon {
 }
 
 function lensNode(owner: string, props: Record<string, unknown>) {
+  useSequenceFrames(owner, undefined, [["animate's first key", firstKey(props.animate)]]);
   const anim = useAnimation3d(props.animate as Animate3d | undefined);
   const p = apply3d({ ...props, animate: undefined } as Record<string, unknown>, anim.values);
   const st = p.strength;
@@ -211,6 +213,7 @@ export interface MotionBlurProps {
  * @bevy bevy_post_process::motion_blur::MotionBlur */
 export function MotionBlur(props: MotionBlurProps) {
   const owner = "MotionBlur";
+  useSequenceFrames("MotionBlur", undefined, [["animate's first key", firstKey(props.animate)]]);
   const anim = useAnimation3d(props.animate);
   const p = apply3d({ ...props, animate: undefined } as Record<string, unknown>, anim.values);
   for (const [k, lo, hi] of [["shutterAngle", 0, 4], ["samples", 1, 32]] as const) {
