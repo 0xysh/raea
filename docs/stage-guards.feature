@@ -176,6 +176,10 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-io-av1         | io/av1/src/lib.rs             | +4    | rav1e's packets kept in Samples                                       |
         | raea-sys-mix        | systems/mix/src/offline.rs    | +4    | the bounce fills each channel as the frames come, sized once from the frame count |
         | raea-sys-share      | systems/share/src/lib.rs      | +43   | the mesh share (moved from runtime/scene3d) lets go of what no part holds |
+        | raea-sys-contact    | systems/contact/src/solid.rs  | +96   | Held: a shape's solid made at its part's first frame, let go after its last; occluders moved here |
+        | raea-sys-contact    | systems/contact/src/lib.rs    | 0     | the clipping check holds each part's solid over its frames only (Held), 3 lines shorter |
+        | raea-app-direction  | apps/direction/src/pure.rs    | +3    | frame purity's stills skip the clipping and staging checks it never reads |
+        | raea-runtime-export | runtime/export/src/scene.rs   | +1    | a memory mark after what's on screen                                  |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
       # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
       # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
@@ -219,6 +223,18 @@ Feature: Stage guards: a 3D render an agent can't break
       # off), pages the allocator holds while they're partly free (Malloc Small's dirty memory 440 to 825 MB while the
       # heap in use grew 150 MB: a mesh made and let go each frame for each part that changes size), the sound as it's
       # bounced (0.17 GB, the film's sound itself) and each frame's manifest entry kept as JSON values (6 KB a frame).
+      # Branch stage-guards-19: the end's peak was two things, each measured on the film (resident memory every 2 s
+      # beside the memory marks). The clipping check made every part's solid before its first frame and held them all to
+      # its end: 1,323 shape expressions' solids, 2.9 GB of cells and 4 GB of footprint, against 26 MB for its 4 models'
+      # (a part whose size or words change is a new expression). A shape's solid is made at its part's first frame now,
+      # shared while parts hold it and let go after the last of them, unless an overlap of it is still to be said: the
+      # footprint after the check fell from 6.4 GB to 3.2 GB, in the same 19 s. And frame purity's 44 stills, rendered by
+      # a second raea while the first still held its memory, ran their own clipping and staging checks (1.6 GB), though
+      # purity reads only their pictures and parts on screen; they run without them now, their pictures the same. The
+      # film with every check on: 2.4 GB at frame 1,000, 3.7 GB at 13,000, a 6.0 GB peak (8.5 before), the same 439
+      # errors, 705 warns and 47 notes. mimalloc in place of the system allocator was measured and dropped: no less
+      # growth over the frames (3.74 GB at 13,000 against 3.89), and 7.8 GB kept after the end checks (2.3) for a 10.4 GB
+      # peak. Still not met: memory grows by about 45% after the first minute, for the causes left above.
 
   Rule: The SDK stops allowing it
 

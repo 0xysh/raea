@@ -264,15 +264,9 @@ fn volume(a: &Solid, wa: &Mat4, b: &Solid, wb: &Mat4) -> Option<Hit> {
 pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec<Value> {
     // each part over the frames it's in (spans, not a slot per frame: SG4a); placed(i, k): part i's place on frame k
     let parts: Vec<(String, Span)> = spans_of(all, &["mesh", "model"]);
-    let solids: Vec<Option<Arc<Vec<Solid>>>> = parts.iter().map(|(_, tr)| solid_of(tr.items.iter().flatten().next()?).ok()).collect();
+    // each part's solid held over its frames only (Held, SG4a)
+    let mut held = Held::new(&parts, frames.len());
     let placed = |i: usize, k: usize| parts[i].1.at(k).map_or(Mat4::IDENTITY, |it| it.world);
-    // the pieces that hide others on frame k: every checked part there, see-through ones left out
-    let occluders = |k: usize| -> Vec<(&Solid, Mat4)> {
-        parts.iter().enumerate().filter_map(|(i, (_, tr))| Some((tr.at(k)?, solids[i].as_ref()?)))
-            .filter(|(it, _)| !excused(it) || it.props.get("allowOverlap").and_then(Value::as_bool) == Some(true))
-            .flat_map(|(it, ss)| ss.iter().map(move |s| (s, it.world)))
-            .collect()
-    };
     // frame by frame: the parts' world boxes swept along x for the pairs that meet, each pair's test reused while
     // neither part moves (the camera may still have)
     let mut last: HashMap<(usize, usize), (Mat4, Mat4, Option<Hit>)> = HashMap::new();
@@ -281,6 +275,8 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
     // overlaps no frame shows (off frame, behind something): first and last frame, and the first frame's hit
     let mut hidden: HashMap<(usize, usize), (usize, usize, Hit)> = HashMap::new();
     for k in 0..frames.len() {
+        held.at(&parts, k);
+        let solids = &held.solids;
         let mut boxes: Vec<(usize, Vec3, Vec3)> = Vec::new();
         for (i, (_, tr)) in parts.iter().enumerate() {
             let (Some(it), Some(ss)) = (tr.at(k), &solids[i]) else { continue };
@@ -330,7 +326,7 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
                 if let Some(mut hit) = r {
                     let (sa, sb) = (&a[hit.pieces.0], &b[hit.pieces.1]);
                     let skip = 3.0 * (sa.cell * scale_of(&wa)).max(sb.cell * scale_of(&wb));
-                    if shows(&all[k], &std::mem::take(&mut hit.seam), occ.get_or_insert_with(|| occluders(k)), skip, w as f32, h as f32) {
+                    if shows(&all[k], &std::mem::take(&mut hit.seam), occ.get_or_insert_with(|| occluders(&parts, solids, k)), skip, w as f32, h as f32) {
                         let runs = found.entry((i, j)).or_default();
                         match runs.last_mut() {
                             Some(run) if run.1 + 1 == k => {
@@ -346,6 +342,7 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
                 }
             }
         }
+        held.after(k, |i| found.keys().chain(hidden.keys()).any(|&(a, b)| a == i || b == i));
     }
     // unseen on every frame: still said, so a clip turned away from reads as hidden, not fixed (DR3, DR9's cheats)
     let mut unseen: Vec<_> = hidden.into_iter().filter(|(p, _)| !found.contains_key(p)).collect();
@@ -359,7 +356,7 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
     let mut out = Vec::new();
     // one overlap said, over frames f0 to f1 (`seen`: its seam on screen, else said as standing in the scene unseen)
     let mut say = |i: usize, j: usize, k: usize, hit: &Hit, f0: i64, f1: i64, seen: bool| {
-        let (pa, pb, sa, sb) = (parts[i].1.at(k).unwrap(), parts[j].1.at(k).unwrap(), solids[i].as_ref().unwrap(), solids[j].as_ref().unwrap());
+        let (pa, pb, sa, sb) = (parts[i].1.at(k).unwrap(), parts[j].1.at(k).unwrap(), held.solids[i].as_ref().unwrap(), held.solids[j].as_ref().unwrap());
         let (la, lb) = (label(pa, &sa[hit.pieces.0].name), label(pb, &sb[hit.pieces.1].name));
         let (small, big) = if hit.small_first { (la, lb) } else { (lb, la) };
         // out the shortest way: the smallest move along a world axis (not down) that leaves no piece in the other's

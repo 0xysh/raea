@@ -98,7 +98,10 @@ fn stills(file: &str, args: &[String], at: &[u64], dir: &Path) -> Result<Value, 
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let manifest = dir.join("stills.json");
     let (flag, out) = if at.len() == 1 { ("--frame", dir.join("frame-00000.png").display().to_string()) } else { ("--at", format!("{}/", dir.display())) };
-    let o = Command::new(me).arg("render").arg(file).args(kept(args)).args([flag, &list.join(","), "-o", &out, "--manifest"]).arg(&manifest).env("RAEA_RECORD", "off").env("RAEA_FRAME_PURE", "0").env("RAEA_DESPITE", "all: frame-pure's own stills").output().map_err(|e| e.to_string())?;
+    let o = Command::new(me).arg("render").arg(file).args(kept(args)).args([flag, &list.join(","), "-o", &out, "--manifest"]).arg(&manifest).env("RAEA_RECORD", "off").env("RAEA_FRAME_PURE", "0").env("RAEA_DESPITE", "all: frame-pure's own stills")
+        // nothing here reads the stills' clipping or staging, only their pictures and parts on screen: the checks cost
+        // the film's 44 stills 1.6 GB, beside the render that's still held (SG4a: its 8.6 GB peak)
+        .env("RAEA_CLIP_CHECK", "0").env("RAEA_STAGE_CHECK", "0").output().map_err(|e| e.to_string())?;
     let m = std::fs::read(&manifest).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok());
     m.ok_or_else(|| format!("the stills didn't render: {}", String::from_utf8_lossy(&o.stderr).lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("no message")))
 }

@@ -36,6 +36,7 @@ fn checked(frames: Vec<(i64, Vec<raea_core_scene::Item>)>, page: Option<&[serde_
     mark("end checks: each frame's parts made");
     let (nums, all): (Vec<i64>, Vec<_>) = frames.into_iter().unzip();
     *SEEN.lock().unwrap() = Some(raea_sys_stage::seen(&all, &nums, w, h));
+    mark("end checks: what's on screen");
     let mut found = if std::env::var("RAEA_CLIP_CHECK").as_deref() == Ok("0") { Vec::new() } else { raea_sys_contact::told(&all, &nums, w, h, fps) };
     mark("end checks: clipping");
     found.extend(raea_sys_stage::told(&all, &nums, &page.map_or_else(Vec::new, |p| raea_sys_stage::pages(p, &nums, w, h)), w, h, fps));
