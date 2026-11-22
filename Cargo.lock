@@ -16453,7 +16453,6 @@ dependencies = [
  "raea-core-facts",
  "raea-core-scene",
  "raea-core-shape",
- "raea-io-trace",
  "serde_json",
 ]
 

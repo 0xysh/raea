@@ -35,7 +35,7 @@ pub fn told(all: &[Vec<Item>], frames: &[i64], page: &[Page], w: u32, h: u32, fp
         eprintln!("raea: {}", f.line());
     }
     raea_core_facts::finding::said(&found);
-    if raea_io_trace::stat("RAEA_TIMES") {
+    if std::env::var_os("RAEA_TIMES").is_some() {
         eprintln!("raea times: the stage checks {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
     }
     found
