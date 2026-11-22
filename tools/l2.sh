@@ -63,6 +63,9 @@ while IFS= read -r -d '' p; do
 done < <(git -C "$ROOT" status --porcelain=v1 -z --ignored -- content sdk bench engine 2>/dev/null | tr '\0' '\n' | sed -n 's/^!! //p' | tr '\n' '\0')
 # the app's packages (apps/app is a submodule: its own ignored files aren't in ~/raea's status)
 [ -e "$T/apps/app/node_modules" ] || ln -s "$ROOT/apps/app/node_modules" "$T/apps/app/node_modules"
+# the app's host reads the private site's code (host/library/local.ts imports apps/site/api's fuse.ts); a public commit
+# has no apps/site, so conformance's app build would fail: linked from ~/raea's, as a release builds the app there
+[ -e "$T/apps/site" ] || [ ! -d "$ROOT/apps/site" ] || ln -s "$ROOT/apps/site" "$T/apps/site"
 # a tracked relative link that climbs out of ~/raea (media/assets/residential -> ../../../../../Assets) resolves
 # from the checkout's parent: give that parent the same folders
 for d in Assets; do [ -e "$(dirname "$T")/$d" ] || [ ! -e "$HOME/$d" ] || ln -s "$HOME/$d" "$(dirname "$T")/$d"; done
