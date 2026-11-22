@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use bevy::math::{Mat4, Vec3};
 use serde_json::{json, Value};
 
-use raea_core_scene::{Item, excused, filled, gltf_tris, label, src_path, tracks_of, vec3};
+use raea_core_scene::{Item, Span, excused, gltf_tris, label, spans_of, src_path, vec3};
 
 // what each part rests on, and the parts that float, sink or clip (`raea scene lint|explain`)
 pub mod lint;
@@ -262,15 +262,15 @@ fn volume(a: &Solid, wa: &Mat4, b: &Solid, wb: &Mat4) -> Option<Hit> {
 /// The overlaps a render shows: each with a sentence (for the agent) and its numbers (for the manifest). `all` is each
 /// frame's parts, `frames` the frames' numbers.
 pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec<Value> {
-    let parts: Vec<(String, Vec<Option<Item>>)> = tracks_of(&all, &["mesh", "model"]);
-    let solids: Vec<Option<Arc<Vec<Solid>>>> = parts.iter().map(|(_, tr)| solid_of(tr.iter().flatten().next()?).ok()).collect();
-    let placed: Vec<Vec<Item>> = parts.iter().map(|(_, tr)| filled(tr)).collect();
+    // each part over the frames it's in (spans, not a slot per frame: SG4a); placed(i, k): part i's place on frame k
+    let parts: Vec<(String, Span)> = spans_of(all, &["mesh", "model"]);
+    let solids: Vec<Option<Arc<Vec<Solid>>>> = parts.iter().map(|(_, tr)| solid_of(tr.items.iter().flatten().next()?).ok()).collect();
+    let placed = |i: usize, k: usize| parts[i].1.at(k).map_or(Mat4::IDENTITY, |it| it.world);
     // the pieces that hide others on frame k: every checked part there, see-through ones left out
-    let placed = &placed;
     let occluders = |k: usize| -> Vec<(&Solid, Mat4)> {
-        parts.iter().enumerate().filter_map(|(i, (_, tr))| Some((i, tr[k].as_ref()?, solids[i].as_ref()?)))
-            .filter(|(_, it, _)| !excused(it) || it.props.get("allowOverlap").and_then(Value::as_bool) == Some(true))
-            .flat_map(|(i, _, ss)| ss.iter().map(move |s| (s, placed[i][k].world)))
+        parts.iter().enumerate().filter_map(|(i, (_, tr))| Some((tr.at(k)?, solids[i].as_ref()?)))
+            .filter(|(it, _)| !excused(it) || it.props.get("allowOverlap").and_then(Value::as_bool) == Some(true))
+            .flat_map(|(it, ss)| ss.iter().map(move |s| (s, it.world)))
             .collect()
     };
     // frame by frame: the parts' world boxes swept along x for the pairs that meet, each pair's test reused while
@@ -282,11 +282,11 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
     for k in 0..frames.len() {
         let mut boxes: Vec<(usize, Vec3, Vec3)> = Vec::new();
         for (i, (_, tr)) in parts.iter().enumerate() {
-            let (Some(it), Some(ss)) = (&tr[k], &solids[i]) else { continue };
+            let (Some(it), Some(ss)) = (tr.at(k), &solids[i]) else { continue };
             if excused(it) {
                 continue;
             }
-            let w = placed[i][k].world;
+            let w = it.world;
             let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
             for s in ss.iter() {
                 let (l, h) = world_box(s, &w);
@@ -307,7 +307,7 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
                 }
                 let (i, j) = (i0.min(j0), i0.max(j0));
                 let (a, b) = (solids[i].as_ref().unwrap(), solids[j].as_ref().unwrap());
-                let (wa, wb) = (placed[i][k].world, placed[j][k].world);
+                let (wa, wb) = (placed(i, k), placed(j, k));
                 let r = match last.get(&(i, j)) {
                     Some((la, lb, r)) if *la == wa && *lb == wb => r.clone(),
                     _ => {
@@ -350,11 +350,11 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
     let mut out = Vec::new();
     // one overlap said, over frames f0 to f1 (`seen`: its seam on screen, else said as standing in the scene unseen)
     let mut say = |i: usize, j: usize, k: usize, hit: &Hit, f0: i64, f1: i64, seen: bool| {
-        let (pa, pb, sa, sb) = (parts[i].1[k].as_ref().unwrap(), parts[j].1[k].as_ref().unwrap(), solids[i].as_ref().unwrap(), solids[j].as_ref().unwrap());
+        let (pa, pb, sa, sb) = (parts[i].1.at(k).unwrap(), parts[j].1.at(k).unwrap(), solids[i].as_ref().unwrap(), solids[j].as_ref().unwrap());
         let (la, lb) = (label(pa, &sa[hit.pieces.0].name), label(pb, &sb[hit.pieces.1].name));
         let (small, big) = if hit.small_first { (la, lb) } else { (lb, la) };
         // out the shortest way: the smallest move along a world axis (not down) that leaves no piece in the other's
-        let (axis, step) = clear_move(&sa[..], &placed[i][k].world, &sb[..], &placed[j][k].world, hit.small_first);
+        let (axis, step) = clear_move(&sa[..], &pa.world, &sb[..], &pb.world, hit.small_first);
         let axis_name = ["x", "y", "z"][axis];
         let when = if f0 == f1 { clock(f0) } else { format!("{}–{}", clock(f0), clock(f1)) };
         let shows = if seen { "and the seam shows" } else { "where no frame shows it (off frame or behind something), so it stands in the scene unseen" };
