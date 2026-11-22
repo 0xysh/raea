@@ -1,0 +1,79 @@
+// Lenses (docs/story.feature ST3a): a framework as code. A lens reads a derived world: it maps its stages onto beats (a
+// beat's own `stage` label wins over inference), checks what its framework asks, and proposes beats for stages that are
+// missing. Every lens has the same shape, so a person's or an agency's own format is one more module.
+// The inference here is shared: the protagonist, the brand, the idea's value, the inciting event, the crisis, the
+// climax. It reads only derived data and the story's own fields, never prose.
+import type { World } from "./ecs.ts";
+import { analyze, type Finding, type Level } from "./checks.ts";
+import { beatsOf, eventsOf, infoOf, keysOf, type RAgent, type RBeat, type REvent } from "./load.ts";
+import type { AnyStory } from "./model.ts";
+
+export type StageMap = Record<string, string[]>;
+export type Proposal = { stage: string; after?: string; onScreen: string; feel?: string; why: string };
+export type Reading = { map: StageMap; findings: Finding[]; proposals: Proposal[] };
+export type Lens = { name: string; about: string; stages: string[]; read: (w: World, s: Structure) => Reading };
+export type LensResult = Reading & { lens: string; passes: boolean };
+
+export const lens = (l: Lens): Lens => l;
+
+/** What every lens reads: the structure inferred once per world. */
+export type Structure = {
+  beats: { key: string; beat: RBeat; index: number; turns: Record<string, number>; tension: number; linked: boolean }[];
+  events: { key: string; ev: REvent; order: number }[];
+  focus: string | undefined;
+  hero: string | undefined;
+  brand: string | undefined;
+  agents: Record<string, RAgent>;
+  inciting: string | undefined;
+  crisis: string | undefined;
+  climax: string | undefined;
+  /** the first beat showing an event, and the last */
+  firstShowing: (event: string | undefined) => string | undefined;
+  lastShowing: (event: string | undefined) => string | undefined;
+  focusTurn: (turns: Record<string, number>) => number;
+};
+
+const size = (t: Partial<Record<string, number>> | undefined) => Object.values(t ?? {}).reduce<number>((a, d) => a + Math.abs(d ?? 0), 0);
+
+export function structure(w: World): Structure {
+  const beats = beatsOf(w).map((b) => ({ key: b.key, beat: b.beat, index: b.index, turns: w.must<Record<string, number>>(b.e, "Turns"), tension: w.must<number>(b.e, "Tension"), linked: w.must<boolean>(b.e, "Linked") }));
+  const events = eventsOf(w).sort((a, b) => a.order - b.order).map(({ key, ev, order }) => ({ key, ev, order }));
+  const agents = Object.fromEntries(Object.entries(keysOf(w).agents).map(([k, e]) => [k, w.must<RAgent>(e, "Agent")]));
+  const hero = Object.keys(agents).find((a) => agents[a].role === "customer" || agents[a].mask === "hero") ?? events[0]?.ev.who;
+  const brand = Object.keys(agents).find((a) => agents[a].role === "brand" || agents[a].mask === "mentor" || agents[a].mask === "gift");
+  const focus = infoOf(w).idea?.value ?? Object.keys(keysOf(w).values)[0];
+  const focusTurn = (t: Record<string, number>) => (focus ? t[focus] ?? 0 : Object.values(t).reduce((a, b) => a + b, 0));
+  const inciting = events.find((x) => size(x.ev.turns) >= 2 && !x.ev.routine)?.key;
+  const incOrder = events.find((x) => x.key === inciting)?.order ?? 0;
+  const crisis = events.find((x) => x.order >= incOrder && (x.ev.dilemma?.length ?? 0) >= 2)?.key;
+  const crisisOrder = events.find((x) => x.key === crisis)?.order ?? incOrder;
+  const after = events.filter((x) => x.order > crisisOrder);
+  const climax = after.length ? after.reduce((best, x) => (Math.abs(focusTurn(x.ev.turns as Record<string, number> ?? {})) > Math.abs(focusTurn(best.ev.turns as Record<string, number> ?? {})) ? x : best)).key : undefined;
+  const firstShowing = (ev: string | undefined) => (ev ? beats.find((b) => b.beat.shows.includes(ev))?.key : undefined);
+  const lastShowing = (ev: string | undefined) => (ev ? [...beats].reverse().find((b) => b.beat.shows.includes(ev))?.key : undefined);
+  return { beats, events, focus, hero, brand, agents, inciting, crisis, climax, firstShowing, lastShowing, focusTurn };
+}
+
+/** A beat's own label for this lens's stage, when it has one. */
+export function labelled(s: Structure, lensName: string): StageMap {
+  const map: StageMap = {};
+  for (const b of s.beats) {
+    const st = b.beat.stage?.[lensName];
+    if (st) (map[st] ??= []).push(b.key);
+  }
+  return map;
+}
+
+export const finding = (check: string, level: Level, about: string, says: string, fix?: string): Finding => ({ check, level, about, says, fix });
+
+/** Read a story told one way through lenses (the story's own `lenses`, else all given). */
+export function readThrough(s: AnyStory, lenses: Lens[], telling?: string, seed = 0): LensResult[] {
+  const w = analyze(s, telling, seed);
+  const st = structure(w);
+  return lenses.map((l) => {
+    const r = l.read(w, st);
+    const own = labelled(st, l.name);
+    const map = { ...r.map, ...own };
+    return { lens: l.name, ...r, map, passes: !r.findings.some((f) => f.level === "error") };
+  });
+}

@@ -101,7 +101,9 @@ export type Beat<F extends string, A extends string, E extends string, S extends
   seconds?: number;
 };
 
-export type Telling<F extends string, A extends string, E extends string, S extends string> = Beat<F, A, E, S>[];
+/** A telling's beats. A beat may be a choice point over beats, `null` among the options meaning "leave it out", so a
+ *  telling can sample optional and alternative beats; a whole telling may be a choice too (alternative orders). */
+export type Telling<F extends string, A extends string, E extends string, S extends string> = (Beat<F, A, E, S> | Choice<Beat<F, A, E, S> | null>)[];
 
 export type StorySpec<
   V extends string, F extends string, A extends string, E extends string, S extends string, T extends string,
@@ -116,7 +118,7 @@ export type StorySpec<
   /** events in story order (the order things happen in the world) */
   world: Record<E, Event<V, F, A, E>>;
   /** each telling: one cut of the film, a trailer, a game's critical path */
-  tellings: Record<T, Telling<F, A, E, S>>;
+  tellings: Record<T, Telling<F, A, E, S> | Choice<Telling<F, A, E, S>>>;
   /** the lenses it's read and checked through by default (lens.ts) */
   lenses?: string[];
 };

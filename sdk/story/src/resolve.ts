@@ -27,7 +27,7 @@ export function pick<T>(options: readonly T[], weights: readonly number[] | unde
 
 function walk(x: unknown, r: () => number): unknown {
   if (isChoice(x)) return walk(pick(x.choice, x.weights, r), r);
-  if (Array.isArray(x)) return x.map((v) => walk(v, r));
+  if (Array.isArray(x)) return x.map((v) => walk(v, r)).filter((v) => v !== null); // a choice of null drops the item
   if (x && typeof x === "object") return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, walk(v, r)]));
   return x;
 }

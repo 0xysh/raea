@@ -91,6 +91,15 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
       When a story is read through each
       Then each says which beats play its stages, what's missing or out of order, and proposes beats for what's missing
       And a story read through every lens says which it passes
+      And the plan:
+        | crate | file                                | lines | job                                                        |
+        | sdk   | sdk/story/src/lens.ts               | 200   | the lens shape, the shared structure (hero, brand, inciting, crisis, climax), readThrough |
+        | sdk   | sdk/story/src/lenses/index.ts       | 40    | the shipped lenses by name                                 |
+        | sdk   | sdk/story/src/lenses/mckee.ts       | 120   | inciting, complications, crisis, climax, resolution        |
+        | sdk   | sdk/story/src/lenses/pixar.ts       | 120   | the story spine                                            |
+        | sdk   | sdk/story/src/lenses/storynomics.ts | 120   | the customer as hero, the brand as mentor or gift          |
+        | sdk   | sdk/story/src/lenses/pas.ts         | 120   | problem, agitate, solve                                    |
+        | sdk   | sdk/story/test/lenses.test.ts       | 150   | the launch story passes; a brand-hero fails; a crisis proposed |
 
     Scenario: ST3b. The rest of the frameworks
       Given campbell, vogler, harmon, save-the-cat, kishotenketsu, propp and bernays as lenses
@@ -104,6 +113,10 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
       When it's sampled with a seed
       Then the same seed gives the same story, a new seed may give another, and no sampled story fails an exact check
       And a theme matrix runs one story pattern across many premises and says where it breaks
+      And the plan:
+        | crate | file                          | lines | job                                          |
+        | sdk   | sdk/story/src/sample.ts       | 160   | sample, samples, matrix, judge               |
+        | sdk   | sdk/story/test/sample.test.ts | 150   | sampled stories pass; the matrix; compilers  |
 
   Rule: ST5. Into raea check, scripts and games
 
@@ -118,6 +131,9 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
       And compileStorylets gives preconditions and effects over facts, with a drama manager that picks the next storylet
         to keep a target tension curve
       And dialogue lines carry what's said, what's meant, and the value they turn
+      And the plan:
+        | crate | file                    | lines | job                                                         |
+        | sdk   | sdk/story/src/compile.ts | 200  | Script, storylets and a drama manager, Ink and Yarn          |
 
   Rule: ST6. Story models: small, on-device, schema-native
 

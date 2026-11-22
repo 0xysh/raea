@@ -3,24 +3,25 @@
 // breaks the exact checks find by construction (a dropped setup); others they can't (two beats swapped so the story
 // drags), and those are what a learned critic is for. `expect` names the check that should find it, when one should.
 import { listOf, type AnyStory } from "./model.ts";
-import { resolve, rng } from "./resolve.ts";
+import { rng } from "./resolve.ts";
+import { resolved, type RBeat, type REvent, type RStory } from "./load.ts";
 
 export type Kind =
   | "drop-setup" | "drop-payoff" | "drop-cause" | "early-need" | "flatten-beat" | "drop-proof" | "swap-beats" | "drop-cause-beat" | "orphan-event";
 export type Label = { kind: Kind; at: string; says: string; expect?: string };
 export type Mutant = { story: AnyStory; telling: string; label: Label };
 
-type Tell = AnyStory["tellings"][string];
-type Ev = AnyStory["world"][string];
+type Tell = RBeat[];
+type Ev = REvent;
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 
 /** Every way this story told this way can be broken, each as one mutant. */
 export function mutants(s: AnyStory, telling?: string, seed = 0): Mutant[] {
-  const base = resolve(s, seed);
+  const base: RStory = resolved(s, seed);
   const t = telling ?? Object.keys(base.tellings)[0];
   const out: Mutant[] = [];
-  const beats = (): Tell => out.length >= 0 ? (clone(base.tellings[t]) as Tell) : [];
-  const withTelling = (b: Tell, world = base.world): AnyStory => ({ ...clone(base), world: clone(world), tellings: { ...clone(base.tellings), [t]: b } });
+  const beats = (): Tell => clone(base.tellings[t]);
+  const withTelling = (b: Tell, world = base.world): AnyStory => ({ ...clone(base), world: clone(world), tellings: { ...clone(base.tellings), [t]: b } }) as unknown as AnyStory;
   const keys = Object.keys(base.world);
 
   base.tellings[t].forEach((beat, i) => {

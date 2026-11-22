@@ -12,13 +12,17 @@ export type Resolved<T> = T extends { choice: readonly (infer U)[] } ? U : T ext
 export type REvent = Resolved<Event<string, string, string, string>>;
 export type RBeat = Resolved<Beat<string, string, string, string>>;
 export type RAgent = Agent<string>;
+/** A story with every choice point picked: plain beats and events throughout. */
+export type RStory = Omit<AnyStory, "tellings" | "world"> & { tellings: Record<string, RBeat[]>; world: Record<string, REvent> };
+/** The story resolved for this seed, typed as plain data. */
+export const resolved = (s: AnyStory, seed = 0): RStory => resolve(s, seed) as unknown as RStory;
 
 export type Keys = { values: Record<string, Entity>; facts: Record<string, Entity>; agents: Record<string, Entity>; events: Record<string, Entity>; beats: Entity[] };
 export type StoryInfo = { title?: string; premise?: string; idea?: AnyStory["idea"]; lenses: string[]; telling: string };
 
 /** The world of a story told one way. `telling` defaults to the story's first. */
 export function load(s: AnyStory, telling?: string, seed = 0): World {
-  const r = resolve(s, seed);
+  const r = resolved(s, seed);
   const name = telling ?? Object.keys(r.tellings)[0];
   const beats = r.tellings[name];
   if (!beats) throw new Error(`the story has no telling named ${name} (it has ${Object.keys(r.tellings).join(", ")})`);
