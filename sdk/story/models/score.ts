@@ -75,8 +75,13 @@ function scoreCritic(row: J, pred: J | null): J {
 const files = readdirSync(join(ROWS, TASK)).filter((f) => f.startsWith("pred-") && f.endsWith(`-${SPLIT}.jsonl`));
 const results: J = {};
 for (const f of files) {
-  const who = f.slice(5, -(`-${SPLIT}.jsonl`.length));
-  const preds = read(join(ROWS, TASK, f));
+  const who0 = f.slice(5, -(`-${SPLIT}.jsonl`.length));
+  const all = read(join(ROWS, TASK, f));
+  // the extractor's scripts and its transcripts (lines only) are scored apart
+  const kinds = TASK === "extract" ? [...new Set(all.map((p) => p.kind ?? "script"))] : [undefined];
+  for (const kind of kinds) {
+  const who = kind ? `${who0}/${kind}` : who0;
+  const preds = kind ? all.filter((p) => (p.kind ?? "script") === kind) : all;
   const per: J[] = [];
   for (const p of preds) {
     const row = byKey.get(p.key);
@@ -97,6 +102,7 @@ for (const f of files) {
   const secs = preds.map((p) => p.secs).filter((x) => typeof x === "number");
   r.secsMedian = secs.sort((a, b) => a - b)[Math.floor(secs.length / 2)] ?? null;
   results[who] = r;
+  }
 }
 const fmt = (x: unknown) => (typeof x === "number" ? (Number.isInteger(x) ? String(x) : x.toFixed(3)) : String(x));
 const cols = [...new Set(Object.values(results).flatMap((r: J) => Object.keys(r)))];

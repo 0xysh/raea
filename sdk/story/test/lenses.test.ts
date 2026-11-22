@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { LENSES, readThrough, story, value } from "../src/index.ts";
+import { LENSES, checkStory, readThrough, story, value } from "../src/index.ts";
 import { launch } from "./fixture.ts";
 
 test("the launch story passes McKee, Pixar, Storynomics and PAS, mapped as expected", () => {
@@ -49,4 +49,24 @@ test("bernays refuses invented proof", () => {
   const r = readThrough(bad as typeof launch, [LENSES.bernays], "30s")[0];
   expect(r.findings.map((f) => f.check)).toContain("bernays:invented");
   expect(r.passes).toBe(false);
+});
+
+test("labels pin a lens's stages and hold the unlabelled ones in order", () => {
+  const t = launch.tellings["30s"] as any[];
+  const labelled = { ...launch, tellings: { "30s": [t[0], { ...t[1], stage: { campbell: "call" } }, t[2], { ...t[3], stage: { campbell: "boon" } }] } };
+  const r = readThrough(labelled as typeof launch, [LENSES.campbell, LENSES.mckee], "30s");
+  expect(r[0].map.call).toEqual(["b1"]);
+  expect(r[0].map.boon).toEqual(["b3"]);
+  // nothing inferred for a stage lands outside its labelled neighbours
+  for (const k of r[0].map.trials ?? []) expect(["b2"]).toContain(k);
+  // campbell's boon is campbell's: mckee still finds its own climax
+  expect(r[1].map.climax).toEqual(["b3"]);
+});
+
+test("shots of one event count its turn once", () => {
+  const t = launch.tellings["30s"] as any[];
+  const shots = { ...launch, tellings: { "30s": [t[0], t[1], { ...t[2], id: "tries-a" }, { ...t[2], id: "tries-b" }, { ...t[2], id: "tries-c" }, t[3]] } };
+  const found = checkStory(shots as typeof launch, "30s");
+  expect(found.filter((f) => f.check === "turns")).toEqual([]);
+  expect(found.filter((f) => f.check === "rhythm")).toEqual([]);
 });

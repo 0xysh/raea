@@ -13,16 +13,18 @@ export const campbell = lens({
   read: (_w, s) => {
     const f: Finding[] = [];
     const p: Proposal[] = [];
-    const call = s.firstShowing(s.inciting);
+    const L = (st: string) => s.label("campbell", st);
+    const call = L("call") ?? s.firstShowing(s.inciting);
     const mentor = mentorOf(s);
-    const aid = beatsWith(s, mentor).find((b) => b.index >= at(s, call))?.key ?? beatsWith(s, mentor)[0]?.key;
+    const aid = L("aid") ?? beatsWith(s, mentor).find((b) => b.index >= at(s, call))?.key ?? beatsWith(s, mentor)[0]?.key;
     const heroActs = beatsWith(s, s.hero).filter((b) => b.index > Math.max(at(s, call), at(s, aid)));
-    const threshold = heroActs.find((b) => b.linked)?.key;
-    const boon = s.lastShowing(s.climax);
+    const threshold = L("threshold") ?? heroActs.find((b) => b.linked)?.key;
+    const boon = L("boon") ?? s.lastShowing(s.climax);
     // the abyss: the lowest beat before the boon, from the threshold when it comes first, else from the call
     const from = threshold && at(s, threshold) < at(s, boon) ? threshold : call;
-    const ordeal = lowest(s, (from ? [from] : []).concat(s.between(from, boon)));
-    const refusal = s.between(call, aid ?? threshold).filter((k) => s.focusTurn(s.beats.find((b) => b.key === k)!.turns) < 0);
+    const ordeal = L("ordeal") ?? lowest(s, (from ? [from] : []).concat(s.between(from, boon)));
+    // a refusal: the hero turning down, or weighing a dilemma, between the call and the help
+    const refusal = s.between(call, aid ?? threshold).filter((k) => { const b = s.beats.find((x) => x.key === k)!; return s.focusTurn(b.turns) < 0 || b.beat.shows.some((e) => (s.events.find((x) => x.key === e)?.ev.dilemma?.length ?? 0) >= 2); });
     const map = {
       call: call ? [call] : [], refusal, aid: aid ? [aid] : [], threshold: threshold ? [threshold] : [],
       trials: s.between(threshold, ordeal), ordeal: ordeal && ordeal !== threshold && ordeal !== call ? [ordeal] : [], boon: boon ? [boon] : [],

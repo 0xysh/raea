@@ -12,14 +12,15 @@ export const vogler = lens({
   stages: ["ordinary-world", "call", "refusal", "mentor", "threshold", "tests", "approach", "ordeal", "reward", "road-back", "resurrection", "return"],
   read: (_w, s) => {
     const f: Finding[] = [];
-    const call = s.firstShowing(s.inciting);
+    const L = (st: string) => s.label("vogler", st);
+    const call = L("call") ?? s.firstShowing(s.inciting);
     const mentor = mentorOf(s);
-    const meet = beatsWith(s, mentor).find((b) => b.index >= at(s, call))?.key;
-    const threshold = beatsWith(s, s.hero).find((b) => b.index > Math.max(at(s, call), at(s, meet)) && b.linked)?.key;
-    const climax = s.lastShowing(s.climax);
+    const meet = L("mentor") ?? beatsWith(s, mentor).find((b) => b.index >= at(s, call))?.key;
+    const threshold = L("threshold") ?? beatsWith(s, s.hero).find((b) => b.index > Math.max(at(s, call), at(s, meet)) && b.linked)?.key;
+    const climax = L("resurrection") ?? s.lastShowing(s.climax);
     const from = threshold ?? call;
-    const ordeal = lowest(s, s.between(from, climax));
-    const reward = s.beats.find((b) => b.index > at(s, ordeal) && b.index < at(s, climax) && s.focusTurn(b.turns) > 0)?.key;
+    const ordeal = L("ordeal") ?? lowest(s, s.between(from, climax));
+    const reward = L("reward") ?? s.beats.find((b) => b.index > at(s, ordeal) && b.index < at(s, climax) && s.focusTurn(b.turns) > 0)?.key;
     const map = {
       "ordinary-world": s.between(undefined, call), call: call ? [call] : [],
       refusal: s.between(call, meet ?? threshold).filter((k) => s.focusTurn(s.beats.find((b) => b.key === k)!.turns) < 0),

@@ -5,6 +5,8 @@ The generator's schema is the story's own (data.ts beatSchema): it can't name an
   python story_models.py train   TASK [--rows ~/.vd/story/rows] [--iters N] [--base Qwen/Qwen3-0.6B]
   python story_models.py predict TASK --split test [--adapter DIR | --zero-shot] [--limit N]
   python story_models.py frontier TASK --split test --model anthropic/claude-sonnet-5.5 [--limit N]
+  python story_models.py export  TASK --adapter DIR            (LoRA fused, then ONNX int4 for ort: DIR/onnx)
+  python story_models.py onnx    TASK --split test --adapter DIR  (predictions from the ONNX model, under the schema)
 
 Predictions go to ROWS/TASK/pred-<who>-<split>.jsonl; models/score.ts scores them with raea/story's exact checks.
 """
@@ -265,9 +267,57 @@ def frontier(a):
     print(f"frontier {a.model}: {len(todo)} rows, ${spent:.3f} -> {out}", flush=True)
 
 
+def export(a):
+    import shutil
+    import subprocess
+
+    ad = Path(os.path.expanduser(a.adapter))
+    fused, out = ad / "fused", ad / "onnx"
+    py = sys.executable
+    subprocess.run([py, "-m", "mlx_lm", "fuse", "--model", a.base, "--adapter-path", str(ad), "--save-path", str(fused), "--dequantize"], check=True, capture_output=True)
+    subprocess.run([py, "-m", "onnxruntime_genai.models.builder", "-m", str(fused), "-o", str(out), "-p", "int4", "-e", "cpu"], check=True, capture_output=True)
+    shutil.rmtree(fused)  # the fused weights are 1.2 GB and rebuilt from the adapter in seconds
+    size = sum(f.stat().st_size for f in out.iterdir())
+    print(f"exported {a.task} -> {out} ({size / 1e6:.0f} MB, int4, CPU)", flush=True)
+
+
+def onnx_predict(a):
+    import onnxruntime_genai as og
+    from transformers import AutoTokenizer
+
+    rd = rows_dir(a)
+    schemas = json.load(open(rd / "schemas.json"))
+    rows = read_jsonl(rd / a.task / f"{a.split}.jsonl")[: a.limit or None]
+    d = Path(os.path.expanduser(a.adapter)) / "onnx"
+    tok = AutoTokenizer.from_pretrained(str(d))
+    model = og.Model(str(d))
+    otok = og.Tokenizer(model)
+    out = rd / a.task / f"pred-{Path(a.adapter).name}-onnx-{a.split}.jsonl"
+    done = {json.loads(l)["key"] for l in open(out)} if out.exists() else set()
+    with open(out, "a") as f:
+        for r in rows:
+            key = f"{r['i']}:{r.get('at', r.get('kind', ''))}"
+            if key in done:
+                continue
+            p = tok.apply_chat_template([{"role": "system", "content": SYSTEM[a.task]}, {"role": "user", "content": r["prompt"]}], tokenize=False, add_generation_prompt=True, enable_thinking=False)
+            ids = otok.encode(p)
+            params = og.GeneratorParams(model)
+            params.set_search_options(max_length=len(ids) + a.max_new, do_sample=False)
+            params.set_guidance("json_schema", json.dumps(schema_for(a.task, r, schemas)))
+            g = og.Generator(model, params)
+            g.append_tokens(ids)
+            toks, t = [], time.time()
+            while not g.is_done():
+                g.generate_next_token()
+                toks.append(g.get_next_tokens()[0])
+            f.write(json.dumps({"key": key, "i": r["i"], "at": r.get("at"), "kind": r.get("kind"), "pred": otok.decode(toks), "secs": round(time.time() - t, 2)}) + "\n")
+            f.flush()
+    print(f"onnx predictions -> {out}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["train", "predict", "frontier"])
+    ap.add_argument("cmd", choices=["train", "predict", "frontier", "export", "onnx"])
     ap.add_argument("task", choices=["extract", "generate", "critic"])
     ap.add_argument("--rows", default="~/.vd/story/rows")
     ap.add_argument("--base", default="Qwen/Qwen3-0.6B")
@@ -285,7 +335,7 @@ def main():
     ap.add_argument("--zero-shot", dest="zero_shot", action="store_true")
     ap.add_argument("--model", default="anthropic/claude-sonnet-5.5")
     a = ap.parse_args()
-    {"train": train, "predict": predict, "frontier": frontier}[a.cmd](a)
+    {"train": train, "predict": predict, "frontier": frontier, "export": export, "onnx": onnx_predict}[a.cmd](a)
 
 
 if __name__ == "__main__":

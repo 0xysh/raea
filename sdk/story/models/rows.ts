@@ -64,7 +64,10 @@ for (const { i, s } of stories) {
   if (!beats?.length) continue;
   const r = rng(i * 7919 + 17);
   const p = prose(beats);
-  push("extract", sp, { i, prompt: p, answer: JSON.stringify(bare(s)) });
+  push("extract", sp, { i, kind: "script", prompt: p, answer: JSON.stringify(bare(s)) });
+  // a transcript has the words alone: the same story from its lines, as a launch film's speech reads
+  const spoken = beats.flatMap((b) => (b.says ?? []).map((l: J) => `${name(l.who)}: ${l.says}`));
+  if (spoken.length >= 2) push("extract", sp, { i, kind: "lines", prompt: spoken.join("\n"), answer: JSON.stringify(bare(s)) });
 
   // generate: each beat cut in turn on test and val; one at random on train (keeps the set balanced by story)
   const cuts = sp === "train" ? [Math.floor(r() * beats.length)] : beats.map((_, k) => k);

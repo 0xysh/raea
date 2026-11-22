@@ -1,7 +1,7 @@
 // Value curves (docs/story.feature ST1a). In the world, each event moves the values it turns, in story order, so every
 // event has the world's level after it. In a telling, a beat's level is the world's level after the latest event it
 // shows (a flash-forward shows a later level, a flashback an earlier one), and its turn is the sum of what its events
-// turn. Beats get "Turns" and "Level"; the world gets "Curves", each value's levels over the telling and its shape.
+// turn. Beats get "Turns", "Level" and "Continues" (events the beat before showed too, counted once); the world gets "Curves", each value's levels over the telling and its shape.
 import type { World } from "../ecs.ts";
 import { beatsOf, eventsOf, keysOf, type REvent } from "../load.ts";
 
@@ -35,9 +35,15 @@ export function values(w: World): void {
   let last = start;
   const series: Record<string, number[]> = Object.fromEntries(names.map((n) => [n, [0]]));
   const order = Object.fromEntries(eventsOf(w).map((x) => [x.key, x.order]));
+  // a film tells one event over several shots: an event the beat before also showed continues there, and its turn
+  // counts once, at the first shot of the run (a hook that shows the ending and a return to it later both count)
+  let prev = new Set<string>();
   for (const { e, beat } of beatsOf(w)) {
     const turns: Record<string, number> = {};
-    for (const k of beat.shows) for (const [v, d] of Object.entries(eventsOf(w).find((x) => x.key === k)?.ev.turns ?? {})) turns[v] = (turns[v] ?? 0) + (d ?? 0);
+    const continued = beat.shows.filter((k) => prev.has(k));
+    prev = new Set(beat.shows);
+    w.insert(e, "Continues", continued);
+    for (const k of beat.shows.filter((x) => !continued.includes(x))) for (const [v, d] of Object.entries(eventsOf(w).find((x) => x.key === k)?.ev.turns ?? {})) turns[v] = (turns[v] ?? 0) + (d ?? 0);
     const latest = [...beat.shows].sort((a, b) => (order[b] ?? -1) - (order[a] ?? -1))[0];
     const lvl = latest !== undefined && after[latest] ? after[latest] : last;
     w.insert(e, "Turns", turns);

@@ -24,8 +24,10 @@ export function causes(w: World): void {
       if ((order[c] ?? -1) >= o) out.later.push({ event: key, cause: c });
     }
   }
-  const last = events[events.length - 1]?.key;
-  for (const { key, ev } of events) if (key !== last && !causesSomething.has(key) && !ev.routine) out.deadEnds.push(key);
+  // the resolution needn't cause anything: events after the last one that settles a want or need (else the last event)
+  const settles = events.filter((x) => Object.keys(x.ev.ends ?? {}).length).map((x) => order[x.key] ?? -1);
+  const resolved = settles.length ? Math.max(...settles) : (order[events[events.length - 1]?.key] ?? 0) - 1;
+  for (const { key, ev } of events) if ((order[key] ?? 0) <= resolved && !causesSomething.has(key) && !ev.routine && !Object.keys(ev.ends ?? {}).length) out.deadEnds.push(key);
   w.setResource<Causes>("Causes", out);
 
   const byKey = Object.fromEntries(events.map((x) => [x.key, x.ev]));

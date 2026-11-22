@@ -28,7 +28,8 @@ export function checkWorld(w: World): Finding[] {
 
   for (const { e, key, beat } of beats) {
     const turns = w.must<Record<string, number>>(e, "Turns");
-    if (beat.shows.length && !Object.values(turns).some((d) => d !== 0))
+    const continues = w.get<string[]>(e, "Continues") ?? [];
+    if (beat.shows.length && continues.length < beat.shows.length && !Object.values(turns).some((d) => d !== 0))
       add("turns", "warn", key, `${key} shows ${beat.shows.join(", ")} but turns no value: nothing changes`, "give a shown event a turn, or cut the beat");
     if (!w.must<boolean>(e, "Linked"))
       add("and-then", "warn", key, `${key} isn't caused by anything the audience has seen: an "and then", not a "therefore" or a "but"`, "show its cause earlier, or name a cause the audience saw");
@@ -57,7 +58,9 @@ export function checkWorld(w: World): Finding[] {
     add("belief", "error", b.event, `${b.who} acts on "${b.fact}" in ${b.event} without knowing it yet`, `let ${b.who} learn it earlier (an event that sets or learns it), or drop it from needs`);
 
   let run = 0, sign = 0;
-  beats.forEach(({ e, key }) => {
+  beats.forEach(({ e, key, beat }) => {
+    // a shot that only continues the event before it is part of that beat's turn, not a new one
+    if (beat.shows.length && (w.get<string[]>(e, "Continues") ?? []).length === beat.shows.length) return;
     const net = Object.values(w.must<Record<string, number>>(e, "Turns")).reduce((x, y) => x + y, 0);
     const s = Math.sign(net);
     run = s !== 0 && s === sign ? run + 1 : s !== 0 ? 1 : 0;

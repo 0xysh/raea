@@ -13,7 +13,7 @@ export const pixar = lens({
     const f: Finding[] = [];
     const p: Proposal[] = [];
     const idx = (k: string | undefined) => s.beats.find((b) => b.key === k)?.index ?? -1;
-    const one = s.firstShowing(s.inciting), fin = s.lastShowing(s.climax);
+    const one = s.label("pixar", "one-day") ?? s.firstShowing(s.inciting), fin = s.label("pixar", "finally") ?? s.lastShowing(s.climax);
     const routine = s.beats.filter((b) => b.beat.shows.some((e) => s.events.find((x) => x.key === e)?.ev.routine)).map((b) => b.key);
     const because = s.beats.filter((b) => b.index > idx(one) && (fin === undefined || b.index < idx(fin)) && b.linked).map((b) => b.key);
     const ever = fin ? s.beats.filter((b) => b.index > idx(fin)).map((b) => b.key) : [];
