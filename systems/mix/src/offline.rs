@@ -181,6 +181,9 @@ pub fn master_raw(raw: &raea_io_media::Audio, master: Option<(f64, f64)>) -> rae
     raea_io_media::Audio { rate: raw.rate, channels: vec![l, r] }
 }
 
+/// An encoder's round trip (AAC on Apple), for the overshoot it puts back
+pub type Encode<'a> = Option<&'a dyn Fn(&raea_io_media::Audio) -> Result<raea_io_media::Audio, String>>;
+
 /// What raea masters a piece to when it has no <Mix>: the major platforms' loudness (LUFS) and a -1 dBTP ceiling
 pub const MIX: (f64, f64) = (-14.0, -1.0);
 
@@ -189,7 +192,14 @@ pub const MIX: (f64, f64) = (-14.0, -1.0);
 /// the limiter at the ceiling, the ceiling lowered by any overshoot `encode` (an AAC round trip) puts back (twice at most);
 /// without one, MIX; the leveller (nodes::LEVEL) rounds the loud passages first, and the gain is made up for what it
 /// took. Returns the master it used and the mastered sound.
-pub fn master_mix(raw: &raea_io_media::Audio, mix: Option<(f64, f64)>, encode: Option<&dyn Fn(&raea_io_media::Audio) -> Result<raea_io_media::Audio, String>>) -> (Option<(f64, f64)>, raea_io_media::Audio) {
+pub fn master_mix(raw: &raea_io_media::Audio, mix: Option<(f64, f64)>, encode: Encode) -> (Option<(f64, f64)>, raea_io_media::Audio) {
+    let out = mastered(raw, mix, encode);
+    // its passes' copies of the whole sound, freed, handed back now (SG4a)
+    raea_io_trace::give_back();
+    out
+}
+
+fn mastered(raw: &raea_io_media::Audio, mix: Option<(f64, f64)>, encode: Encode) -> (Option<(f64, f64)>, raea_io_media::Audio) {
     // raea masters whatever it renders (11-19): without a <Mix>, to MIX's loudness and ceiling
     let Some((lufs, ceiling)) = mix.or(Some(MIX)).filter(|_| raea_io_media::audio::lufs(raw).is_finite()) else { return (None, master_raw(raw, None)) };
     let mut gain = raea_io_media::audio::master_gained(raw, lufs, ceiling).1;

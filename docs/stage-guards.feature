@@ -180,6 +180,19 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-sys-contact    | systems/contact/src/lib.rs    | 0     | the clipping check holds each part's solid over its frames only (Held), 3 lines shorter |
         | raea-app-direction  | apps/direction/src/pure.rs    | +3    | frame purity's stills skip the clipping and staging checks it never reads |
         | raea-runtime-export | runtime/export/src/scene.rs   | +1    | a memory mark after what's on screen                                  |
+        | raea-io-kept        | io/kept/src/lib.rs            | +245  | Kept: a live render's parts on disk as its frames come, each props map, string and material once by its content, a part's own place left out but a camera's; read back for the end checks |
+        | raea-runtime-export | runtime/export/src/fed.rs     | +7    | a live render keeps its parts in Kept, not its scenes; a memory mark after its sound and video |
+        | raea-runtime-export | runtime/export/src/scene.rs   | +1    | the end checks over the kept parts as read back (checked, for fed.rs); the parts' count in the mark |
+        | raea-core-shape     | core/shape/src/lib.rs         | +34   | Held: shapes in two generations of 16 MB, what's asked for again kept |
+        | muxide              | vendor/muxide/src/muxer/mp4.rs | +61  | Spill: the writer's samples in a temp file as they come, read back one at a time as the file is finished |
+        | raea-io-codec       | io/codec/src/resample.rs      | +55   | soft_resample_blocks: the resampled sound a block at a time, the same bits |
+        | raea-io-codec       | io/codec/src/audio.rs         | 0     | the true peak, its envelope and the loudness a block at a time, the same bits; the sound borrowed at 48 kHz (7 lines shorter) |
+        | raea-io-codec       | io/codec/src/audio/tests.rs   | +117  | audio.rs's tests, and the block-at-a-time ones against the whole     |
+        | raea-sys-mix-level  | systems/mix/level/src/joins.rs | +1   | filled: the sound itself when there's no gap, not a copy             |
+        | raea-sys-mix        | systems/mix/src/offline.rs    | +10   | master_mix hands back its passes' freed copies (give_back); Encode   |
+        | raea-io-trace       | io/trace/src/lib.rs           | +20   | give_back: the allocator's freed memory returned to the system now   |
+        | raea-io-home        | io/home/src/lib.rs            | +15   | scratch_file: a temp file gone when raea is (the encoder's samples, Kept's parts) |
+        | raea-io-codec       | io/codec/src/samples.rs       | 0     | Samples' temp file from scratch_file (8 lines shorter)                |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
       # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
       # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
@@ -235,6 +248,28 @@ Feature: Stage guards: a 3D render an agent can't break
       # errors, 705 warns and 47 notes. mimalloc in place of the system allocator was measured and dropped: no less
       # growth over the frames (3.74 GB at 13,000 against 3.89), and 7.8 GB kept after the end checks (2.3) for a 10.4 GB
       # peak. Still not met: memory grows by about 45% after the first minute, for the causes left above.
+      # Branch stage-guards-20: measured on the film and on a control (one scene for 13,200 frames, nothing added after
+      # its first: 48 parts that move, a bar whose size changes each frame, 3D words that count, the page's words), each
+      # with a memory mark after the frames, sound and video. Four things grew with the length. Each frame's scene was
+      # kept for the end checks: its parts go to a temp file as the frames come now (raea-io-kept), each props map,
+      # string and material written once by its content, and a part's own place left out of its props (the checks read
+      # it from its matrix, a camera's alone from its props), so a moving part's frames share one map: the control's
+      # parts read back fell from 1.35 GB to 0.19 GB. The MP4 writer (muxide) held every sample to the end, after the
+      # encoder had kept them on disk: 1.1 GB on the film, 0.55 GB on the control; they go to a temp file as they come.
+      # The sound's master oversampled the whole sound 4x three times (676 MB each on the film), weighted all of it in
+      # f64 for every loudness reading (about 0.8 GB a reading, up to a dozen), and copied it when it had no gap to fill:
+      # the true peak, its envelope and the loudness go a block at a time now, the same bits (each tested against the
+      # whole), and what the master freed is handed back. And the shape cache held 1 GB: two 16 MB generations now.
+      # The film with every check on: 1.56 GB at frame 1,000, 1.91 GB at 2,000, 2.43 GB at 13,000 (3.7 before), 2.73 GB
+      # after its sound and video (5.75 in the run before the mux and master fixes), 3.0 GB with its 2.04 million parts
+      # read back, a 4.8 GB peak (6.0), the same 439 errors, 705 warns and 47 notes, at 34.3 ms a frame. The control:
+      # 1.05 GB at frame 1,000, 1.27 GB at 13,000 (1.50, +44%, before), a 1.5 GB peak (2.85). Still not met: the
+      # control's frames grow 19% after its first minute: each frame's manifest entry kept as JSON values (3 KB a frame)
+      # and memory the system allocator keeps once the frames have freed it (Malloc Large's dirty pages grew 97 MB over
+      # 8,000 frames while the live heap grew 23 MB; handing memory back every 500 frames left it as it was). The film's
+      # frames grow 27%, most of it its later scenes' own (2.07 to 2.55 GB in the 1,000 frames from 5:33). The end
+      # checks hold every frame's parts and each part's solid over its frames (the clipping check's 4.7 GB resident
+      # peak); flat needs them to run as the frames come.
 
   Rule: The SDK stops allowing it
 

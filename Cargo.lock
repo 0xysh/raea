@@ -14606,6 +14606,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-io-kept"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-core-scene",
+ "raea-io-home",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-io-media"
 version = "0.1.0"
 dependencies = [
@@ -15257,6 +15268,7 @@ dependencies = [
  "raea-gpu-device",
  "raea-io-alpha",
  "raea-io-assets",
+ "raea-io-kept",
  "raea-io-media",
  "raea-io-net",
  "raea-page",
@@ -16185,6 +16197,7 @@ dependencies = [
  "cpal 0.15.3",
  "firewheel",
  "raea-io-media",
+ "raea-io-trace",
  "raea-sys-mix-level",
  "raea-sys-tone",
  "serde_json",

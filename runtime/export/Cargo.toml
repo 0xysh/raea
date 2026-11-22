@@ -29,6 +29,7 @@ raea-io-media = { path = "../../io/media", default-features = false, features = 
 raea-io-alpha = { path = "../../io/alpha" }
 raea-core-program = { path = "../../core/program" }
 raea-core-scene = { path = "../../core/scene" }
+raea-io-kept = { path = "../../io/kept" }
 raea-runtime-scene = { path = "../scene" }
 raea-sys-contact = { path = "../../systems/contact" }
 # the staging checks a render runs at its end (docs/stage-guards.feature SG10-SG14)

@@ -27,13 +27,13 @@ pub(crate) fn told_taking(frames: &mut [(i64, Frame)], page: Option<&[serde_json
     checked(frames.iter_mut().map(|(n, f)| (*n, raea_runtime_scene::items_of(&std::mem::take(&mut f.scene)))).collect(), page, w, h, fps)
 }
 
-fn checked(frames: Vec<(i64, Vec<raea_core_scene::Item>)>, page: Option<&[serde_json::Value]>, w: u32, h: u32, fps: f64) -> Vec<raea_core_facts::Finding> {
+pub(crate) fn checked(frames: Vec<(i64, Vec<raea_core_scene::Item>)>, page: Option<&[serde_json::Value]>, w: u32, h: u32, fps: f64) -> Vec<raea_core_facts::Finding> {
     if frames.iter().all(|(_, its)| its.is_empty()) {
         return Vec::new();
     }
     // RAEA_MEM_MARKS: the footprint after each end step (raea-render's mem_mark)
     let mark = raea_render::engine::mem_mark;
-    mark("end checks: each frame's parts made");
+    mark(&format!("end checks: each frame's parts made, {} in all", frames.iter().map(|(_, its)| its.len()).sum::<usize>()));
     let (nums, all): (Vec<i64>, Vec<_>) = frames.into_iter().unzip();
     *SEEN.lock().unwrap() = Some(raea_sys_stage::seen(&all, &nums, w, h));
     mark("end checks: what's on screen");

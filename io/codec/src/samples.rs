@@ -1,7 +1,7 @@
 //! A video encoder's samples kept on disk as they come out, not in memory, and read back one at a time for the mux
 //! (remux::annexb_mux_from). A 7-minute film's 1 GB of H.264 grew its render by that much and was copied again
-//! into the mux (docs/stage-guards.feature SG4a). The file is a temp file gone when raea is (unlinked once open on
-//! unix, delete-on-close on Windows), so a render that dies leaves nothing behind.
+//! into the mux (docs/stage-guards.feature SG4a). The file is a temp file gone when raea is (raea_io_home::scratch_file),
+//! so a render that dies leaves nothing behind.
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -16,15 +16,7 @@ pub struct Samples {
 
 impl Samples {
     pub fn new() -> R<Samples> {
-        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let p = std::env::temp_dir().join(format!("raea-samples-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-        let mut o = std::fs::OpenOptions::new();
-        o.read(true).write(true).create_new(true);
-        #[cfg(windows)]
-        std::os::windows::fs::OpenOptionsExt::custom_flags(&mut o, 0x0400_0000); // FILE_FLAG_DELETE_ON_CLOSE
-        let f = o.open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-        #[cfg(unix)]
-        let _ = std::fs::remove_file(&p);
+        let f = raea_io_home::scratch_file("samples")?;
         Ok(Samples { file: std::io::BufWriter::with_capacity(1 << 20, f), at: Vec::new(), end: 0 })
     }
 
