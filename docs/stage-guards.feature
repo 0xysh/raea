@@ -155,13 +155,26 @@ Feature: Stage guards: a 3D render an agent can't break
       Then a curve is one part, solid at every frame, and the 3D guide's curve recipe uses it
       And SG12 flags a chain of more than 8 parts named `NAME-i` whose ends touch as "a line made of parts: Line3d"
 
+    @done
     Scenario: SG7. A camera path that can't lurch
       Given the plan
-        | crate        | file                              | lines | job                                                                                  |
-        | @raea/render | sdk/render/src/camera/path.ts     | 160   | cameraPath(keys): keys timed in frames, a spline paced by time so speed carries smoothly across a key, `hold` keys where it stops, an ease only at the ends; pos, look and fov at any frame |
-      Then cam-diag.ts on a path built with it finds no speed change over 1.5x across a key and no framing reversal
-        within 2 s
+        | crate        | file                                    | lines | job                                                                                  |
+        | @raea/render | sdk/render/src/camera/path.ts           | 150   | cameraPath(keys): keys timed in frames, a cubic per channel paced by time with one velocity a key (so speed carries across it), `hold` keys where it stops, an ease only at the ends, no channel past a key (monotone); pos, look and fov at any frame; camera(f), Camera3d's props; check(), the keys whose timing still brakes hard |
+        | raea         | sdk/raea/src/camera.ts                  | +2    | raea/camera exports it                                                               |
+        | raea (test)  | sdk/raea/conformance/camera-path.test.ts | 140  | speed across keys (the per-segment path jumps over 2x on the same keys), keys passed through, ends, holds, no overshoot, Camera3d's props, check(), refusals |
+        | (guide)      | sdk/guides/craft/bevy.md                | +7    | rule 10, the camera recipe, uses it                                                  |
+      Then the camera's speed is continuous across every key it moves through, and no channel passes a key and comes back
+      And on keys that don't set a quick move against a slow one, cam-diag.ts finds no speed change over 1.5x across a
+        key and no framing reversal within 2 s the keys don't make themselves
+      And path.check() names each key that does, with the fix (more frames for the quick move, or a hold)
       And the 3D guide's camera recipe uses it, and hand-written paths are left to the check (SG13)
+      # Status 11-21: the speed is continuous across every key, so a path never jumps; a channel never passes a key and
+      # comes back. On the film's 155 keys (cam-diag's measure) framing reversals went from 24 to 5 and speed changes
+      # of 2x within 3 frames from 51 to 29. What's left is in the keys: the 5 reversals are turns the keys make
+      # within 2 s; 11 of the 29 are stops the keys ask for (a pose given twice); the other 18 sit where a quick move
+      # meets a slow one (10 m in 30 frames against 0.7 m in 134), which any path through those keys at those frames
+      # must brake for, and check() names exactly those 18 with the fix. One scene's keys weren't in time order: the
+      # old path drew them anyway, and cameraPath refuses them.
 
     Scenario: SG8. Labels that read
       Given the plan

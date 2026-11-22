@@ -88,9 +88,12 @@ the rest come from `raea`.
    kept clear of the parts they name. Words in the world (a sign, a page in a book) are RichText: at least 22 px tall
    (caps) at 1080 lines, turned within 35° of the camera, inside the title-safe area, held still for their reading time
    (words ÷ 3 a second, plus half a second) and fully revealed before they go.
-10. **A camera that settles.** Time a camera's keys by frames and pace the path by time, so its speed carries across
-   each key: a spline whose segments each run 0 to 1 whatever their length jumps speed at every key (11-21: 51 of 155
-   keys jumped 2x or more). Never push in and pull back, or pan one way then the other, within 1.5 s. A camera still
-   moving while words are up gives them their reading time first.
+10. **A camera that settles.** Build a moving camera with `cameraPath` from `raea/camera`: keys timed by frames, the
+   path paced by time so its speed carries across each key, `hold` where it stops, and `<Camera3d
+   {...path.camera(frame)} />`. A hand-written spline whose segments each run 0 to 1 whatever their length jumps speed
+   at every key (11-21: 51 of 155 keys jumped 2x or more). `path.check()` names a key whose timing still makes the
+   camera brake hard (a quick move against a slow one): give the quick move more frames or end the slow one in a hold.
+   Never push in and pull back, or pan one way then the other, within 1.5 s. A camera still moving while words are up
+   gives them their reading time first.
 11. **Render and look.** Render stills where things happen (`raea render edit.tsx --at A,B,C -o stills/`) and look at them. A 3D frame that renders
    black usually has no light or a camera inside or behind the subject.

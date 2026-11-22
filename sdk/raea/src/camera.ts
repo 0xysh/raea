@@ -6,3 +6,5 @@ export { Matchmove, useMatchmove, matchmoveView, matchmoveIndex, checkMatchmove,
 export { Camera3d, Hdr, type Camera3dProps, type CameraViewport, type ClearColorConfig, type Projection } from "@raea/render/bevy3d";
 // a Bevy texture (a camera's target) drawn in an element (B3 H7)
 export { TextureView } from "@raea/render/bevy3d";
+// a camera path paced by time, so it can't lurch at a key (docs/stage-guards.feature SG7)
+export { cameraPath, type CameraKey, type CameraPath, type CameraPose, type CameraVec3 } from "@raea/render/camera/path";

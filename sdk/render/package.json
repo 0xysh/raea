@@ -21,7 +21,8 @@
     "./plugin": "./src/plugin.ts",
     "./screen": "./src/screen.tsx",
     "./bevy-own": "./src/bevy-own.gen.tsx",
-    "./feathers": "./src/feathers.ts"
+    "./feathers": "./src/feathers.ts",
+    "./camera/path": "./src/camera/path.ts"
   },
   "raea": {
     "plugins": {
