@@ -195,10 +195,19 @@ pub(crate) fn grid(tris: &[[Vec3; 3]], lo: Vec3, hi: Vec3, cell: f32) -> Solid {
     Solid { name: String::new(), min, cell, n, depth, inside, surf: Vec::new(), fine: None, lo, hi }
 }
 
+/// Each file's or shape expression's solids, made once until [`crate::forget`]
+static CACHE: OnceLock<Mutex<HashMap<String, Result<Arc<Vec<Solid>>, String>>>> = OnceLock::new();
+
+/// Lets every made solid go (crate::forget).
+pub(crate) fn forget_solids() {
+    if let Some(c) = CACHE.get() {
+        c.lock().unwrap().clear();
+    }
+}
+
 /// A part's solids (one per mesh node of a model), made once per file or shape expression this process (an Err: not
 /// checked, and why).
 pub(crate) fn solid_of(it: &Item) -> Result<Arc<Vec<Solid>>, String> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Result<Arc<Vec<Solid>>, String>>>> = OnceLock::new();
     let key = match it.kind {
         "model" => format!("model:{}", src_path(it.props.get("src").and_then(Value::as_str).unwrap_or(""))),
         _ => format!("mesh:{}", it.shape.as_deref().unwrap_or("")),

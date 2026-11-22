@@ -8,9 +8,20 @@ use serde_json::{Value, json};
 
 use raea_core_scene::{gltf_tris, local};
 
-/// A glTF file's triangles in its own space (its node transforms applied), read once a process.
+/// Each glTF file's triangles, read once until [`forget`]
+static CACHE: OnceLock<Mutex<HashMap<String, Result<Arc<Vec<Vec3>>, String>>>> = OnceLock::new();
+
+/// Lets go of every file's triangles and every part's solids this process made, which a long render's clipping check
+/// held to its end: on a 7-minute film, gigabytes still held while frame purity rendered its stills (SG4a).
+pub fn forget() {
+    if let Some(c) = CACHE.get() {
+        c.lock().unwrap().clear();
+    }
+    crate::solid::forget_solids();
+}
+
+/// A glTF file's triangles in its own space (its node transforms applied), read once until [`forget`].
 pub fn file_tris(path: &str) -> Result<Arc<Vec<Vec3>>, String> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Result<Arc<Vec<Vec3>>, String>>>> = OnceLock::new();
     if let Some(t) = CACHE.get_or_init(Default::default).lock().unwrap().get(path) {
         return t.clone();
     }

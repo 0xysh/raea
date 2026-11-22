@@ -32,7 +32,7 @@ mod found;
 pub use found::{clip_findings, lint_findings};
 
 mod model;
-pub use model::{bounds, facing, seat_facing};
+pub use model::{bounds, facing, forget, seat_facing};
 
 mod solid;
 use solid::*;
@@ -276,7 +276,8 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
     // frame by frame: the parts' world boxes swept along x for the pairs that meet, each pair's test reused while
     // neither part moves (the camera may still have)
     let mut last: HashMap<(usize, usize), (Mat4, Mat4, Option<Hit>)> = HashMap::new();
-    let mut found: HashMap<(usize, usize), Vec<(usize, Hit)>> = HashMap::new();
+    // each pair's shown stretches (frames in a row) as they come: first, last, and the deepest hit (seam let go)
+    let mut found: HashMap<(usize, usize), Vec<(usize, usize, (usize, Hit))>> = HashMap::new();
     // overlaps no frame shows (off frame, behind something): first and last frame, and the first frame's hit
     let mut hidden: HashMap<(usize, usize), (usize, usize, Hit)> = HashMap::new();
     for k in 0..frames.len() {
@@ -326,11 +327,19 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
                     }
                 };
                 last.insert((i, j), (wa, wb, r.clone()));
-                if let Some(hit) = r {
+                if let Some(mut hit) = r {
                     let (sa, sb) = (&a[hit.pieces.0], &b[hit.pieces.1]);
                     let skip = 3.0 * (sa.cell * scale_of(&wa)).max(sb.cell * scale_of(&wb));
-                    if shows(&all[k], &hit.seam, occ.get_or_insert_with(|| occluders(k)), skip, w as f32, h as f32) {
-                        found.entry((i, j)).or_default().push((k, hit));
+                    if shows(&all[k], &std::mem::take(&mut hit.seam), occ.get_or_insert_with(|| occluders(k)), skip, w as f32, h as f32) {
+                        let runs = found.entry((i, j)).or_default();
+                        match runs.last_mut() {
+                            Some(run) if run.1 + 1 == k => {
+                                run.1 = k;
+                                // the deepest, the last of equals (as max_by took it)
+                                if hit.depth >= run.2.1.depth { run.2 = (k, hit) }
+                            }
+                            _ => runs.push((k, k, (k, hit))),
+                        }
                     } else {
                         hidden.entry((i, j)).or_insert((k, k, hit)).1 = k;
                     }
@@ -341,7 +350,7 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
     // unseen on every frame: still said, so a clip turned away from reads as hidden, not fixed (DR3, DR9's cheats)
     let mut unseen: Vec<_> = hidden.into_iter().filter(|(p, _)| !found.contains_key(p)).collect();
     unseen.sort_by_key(|(p, (k, _, _))| (*k, *p));
-    let mut spans: Vec<((usize, usize), Vec<(usize, Hit)>)> = found.into_iter().collect();
+    let mut spans: Vec<_> = found.into_iter().collect();
     spans.sort_by_key(|(p, g)| (g[0].0, *p));
     let clock = |f: i64| {
         let s = f as f64 / fps;
@@ -364,18 +373,9 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec
         );
         out.push(json!({"from": f0, "to": f1, "part": small, "into": big, "depth": (hit.depth * 1000.0).round() / 1000.0, "share": (hit.share * 1000.0).round() / 1000.0, "move": {"axis": axis_name, "by": (step * 1000.0).round() / 1000.0}, "seen": seen, "says": says}));
     };
-    for ((i, j), got) in spans {
-        // a stretch is rendered frames in a row
-        let mut runs: Vec<Vec<&(usize, Hit)>> = Vec::new();
-        for g in &got {
-            match runs.last_mut() {
-                Some(r) if r.last().unwrap().0 + 1 == g.0 => r.push(g),
-                _ => runs.push(vec![g]),
-            }
-        }
-        for run in runs {
-            let &&(k, ref hit) = run.iter().max_by(|x, y| x.1.depth.total_cmp(&y.1.depth)).unwrap();
-            say(i, j, k, hit, frames[run.first().unwrap().0], frames[run.last().unwrap().0], true);
+    for ((i, j), runs) in spans {
+        for (first, last, (k, hit)) in runs {
+            say(i, j, k, &hit, frames[first], frames[last], true);
         }
     }
     for ((i, j), (k0, k1, hit)) in unseen {

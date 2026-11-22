@@ -159,7 +159,9 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-runtime-export | runtime/export/src/render.rs  | +12   | a still past frame 3,600 made live (LIVE_PAST); stills keep their scenes for the end checks |
         | raea-sys-stage      | systems/stage/src/manifest.rs | +8    | the remounts counted as the frames go, not all at once                |
         | raea-core-scene     | core/scene/src/lib.rs         | +30   | spans_of: each part over the frames it's in; tracks_of built on it    |
-        | raea-sys-contact    | systems/contact/src/lib.rs    | 0     | the clipping check over spans                                         |
+        | raea-sys-contact    | systems/contact/src/lib.rs    | 0     | the clipping check over spans; each pair's stretches kept as they come |
+        | raea-sys-contact    | systems/contact/src/model.rs  | +12   | forget: the files' triangles and the parts' solids let go             |
+        | raea-runtime-export | runtime/export/src/scene.rs   | +18   | told_taking: each frame's scene let go as its parts are made; forget and the memory marks after each end step |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
       # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
       # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
@@ -174,6 +176,14 @@ Feature: Stage guards: a 3D render an agent can't break
       # out, on either route (the live route ran none before: a game's stills were never staged). Not met: memory
       # still grows with the frames (about 2 GB at the first minute, 5.7 GB at the last frame), because each frame's
       # scene is kept for the end checks. Flat needs the checks to run over a window as the frames come.
+      # Branch stage-guards-13: RAEA_MEM_MARKS=1 prints the footprint every RAEA_MEM_MARKS_EVERY frames of a live render
+      # and after each end step. On the film: 1.2 GB at frame 0, 3.5 GB at 2000, 5.0 GB at 13000; 3.9 GB with each
+      # frame's parts made (each scene let go as its parts are: about 1 GB); 7.6 GB after the clipping check, whose
+      # solids (one per model file or shape expression, kept for the process) were still held while frame purity
+      # rendered its stills; 3.3 GB once the end checks let them and the parts go. The render's peak fell from 10.5-10.9
+      # GB to 9.3 GB, its 435 errors, 699 warns and 47 notes the same (the clipping check's in order; it keeps each
+      # pair's stretches as they come, not every frame's hit). Still not met: memory grows by about 40% after the first
+      # minute (the kept scenes), and the solids of every part are made at once, 3.8 GB on the film.
 
   Rule: The SDK stops allowing it
 
@@ -344,9 +354,10 @@ Feature: Stage guards: a 3D render an agent can't break
       # data-allow-overlap may sit on any part (the manifest marks them allowOverlap): a headline across a card is an
       # error, the same words under data-allow-overlap pass. Stay (approved), rendered whole with its page known: two
       # errors, both meant, 'turn' drawn over the plant at 0:49 and the end title 'JUST THAT.' across the screen at
-      # 1:20; each takes data-allow-overlap (Stay already fails on its dolly reversal at 1:12, SG13). Left: `raea scene
-      # stage` doesn't know the page, since it draws none; the 3D guide's rule 9 doesn't name type-over-part yet (the
-      # guide's copy in the skills goes with a raea-skills change).
+      # 1:20; each takes data-allow-overlap (Stay already fails on its dolly reversal at 1:12, SG13). Branch
+      # stage-guards-12: the 3D guide's rule 9 and the skill's 3D router name type-over-part and data-allow-overlap
+      # (raea-skills #112). Branch stage-guards-13: the findings are said in the order they start (a HashMap's order
+      # changed from run to run). Left: `raea scene stage` doesn't know the page, since it draws none.
 
     Scenario: SG12. Nothing snaps
       Given the plan

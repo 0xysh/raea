@@ -288,6 +288,9 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
             }
             notes.borrow_mut().push(tone);
             frames.borrow_mut().push((f, fr));
+            if f as usize % raea_render::engine::mark_every() == 0 {
+                raea_render::engine::mem_mark(&format!("frame {f}"));
+            }
             Ok(page.clone())
         },
         || {
@@ -326,7 +329,7 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
     let n = frames.borrow().len();
     // 3D parts passing through each other on screen: on stderr, and in the manifest for the legacy app's checks
     let found = FED_CLIPPING.lock().unwrap().take().and_then(|t| t.join().ok());
-    let clipping = found.unwrap_or_else(|| scene::told(&frames.borrow(), cx.manifest.as_deref(), w, h, fps));
+    let clipping = found.unwrap_or_else(|| scene::told_taking(&mut frames.borrow_mut(), cx.manifest.as_deref(), w, h, fps));
     write_manifest(cx, (w, h, fps, total), clipping, |cx| heard(&frames.borrow(), &notes.borrow(), cx, fps))?;
     let ms = t0.elapsed().as_secs_f64() * 1e3 / n.max(1) as f64;
     Ok(format!("APPLIED  {n} frames rendered to {} ({ms:.1} ms a frame, pages handed to raea-render on the GPU)", out.display()))

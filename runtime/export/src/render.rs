@@ -352,7 +352,7 @@ pub(crate) fn render_bundle_with(js: &Path, dir: &Path, out: &Path, wanted: Opti
         }
         // with --manifest, its file as a 2D render writes it (it wrote none, and an older one stayed looking current, #28)
         drop(FED_CLIPPING.lock().unwrap().take());
-        let clipping = scene::told(&kept, cx.manifest.as_deref(), w, h, fps);
+        let clipping = scene::told_taking(&mut kept, cx.manifest.as_deref(), w, h, fps);
         write_manifest(&mut cx, (w, h, fps, total), clipping, |_| json!([]))?;
         return Ok(if folder {
             format!("APPLIED  {} frames rendered to {} (bevy_ui, the page over its 3D)", wanted.len(), out.display())

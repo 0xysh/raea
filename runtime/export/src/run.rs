@@ -110,8 +110,8 @@ pub(crate) fn scene_program_checked(js: &Path, dir: &Path, upto: i64, wanted: Op
     unsafe impl Send for Prepassed {}
     let owned = Prepassed(frames);
     *FED_CLIPPING.lock().unwrap() = Some(std::thread::spawn(move || {
-        let o = owned;
-        scene::told(&o.0, None, w, h, fps)
+        let mut o = owned;
+        scene::told_taking(&mut o.0, None, w, h, fps)
     }));
     Ok(Some(p))
 }

@@ -69,6 +69,9 @@ pub(crate) fn check(st: &Stage, page: &[Page]) -> Vec<Finding> {
             }
         }
     }
+    // said in the order they start (a HashMap's order changed from run to run)
+    let mut over: Vec<_> = over.into_iter().collect();
+    over.sort_by_key(|(text, at)| (at.keys().min().copied(), text.clone()));
     let mut out = Vec::new();
     for (text, at) in over {
         for (a, b) in runs(st, st.all.len(), |k| at.contains_key(&k)) {
