@@ -88,13 +88,16 @@ the rest come from `raea`.
    a prop to time a part: RichText's `at` and `exitAt` count in its Sequence's frames, and one past its last frame is
    refused (SG5). Render a piece whole, one frame after another; a piece rendered in parts is a workaround, never the
    plan.
-9. **Type that reads.** Words that name or point at a part are a `Label` (`raea/camera`): page type over the 3D,
-   placed where the part lands through the shot's own camera, sized in pixels of the frame, inside title-safe, with a
-   line to the point: `<Label at={partTop} camera={path.camera(frame)}>Reviews</Label>` (SG8). Words in the world (a sign, a page in a book) are RichText: at least 22 px tall
-   (caps) at 1080 lines, turned within 35° of the camera, inside the title-safe area, held still for their reading time
-   (words ÷ 3 a second, plus half a second) and fully revealed before they go. `raea render` fails on world type it
-   can't read (`type-small`, `type-angle` past 50°, `type-reveal`) and warns on the rest (`type-safe`, `type-time`, an
-   angle past 35°): SG10. A sign nobody is meant to read takes `read={false}`.
+9. **Type that reads.** Words that name or point at a part are a `Label` (`raea/camera`): page type over the 3D, placed
+   where the part lands through the shot's own camera, sized in pixels of the frame, inside title-safe, with a line to
+   the point: `<Label at={partTop} camera={path.camera(frame)}>Reviews</Label>` (SG8). Page type stays off the parts:
+   words in the page over a tenth of a part for a quarter second fail the render (`type-over-part`, SG11), and words
+   meant to sit on the scene (a title across it) go in an element with `data-allow-overlap`. Words in the world (a sign,
+   a page in a book) are RichText: at least 22 px tall (caps) at 1080 lines, turned within 35° of the camera, inside the
+   title-safe area, held still for their reading time (words ÷ 3 a second, plus half a second) and fully revealed before
+   they go. `raea render` fails on world type it can't read (`type-small`, `type-angle` past 50°, `type-reveal`) and
+   warns on the rest (`type-safe`, `type-time`, an angle past 35°): SG10. A sign nobody is meant to read takes
+   `read={false}`.
 10. **A camera that settles.** Build a moving camera with `cameraPath` from `raea/camera`: keys timed by frames, the
    path paced by time so its speed carries across each key, `hold` where it stops, and `<Camera3d
    {...path.camera(frame)} />`. A hand-written spline whose segments each run 0 to 1 whatever their length jumps speed
