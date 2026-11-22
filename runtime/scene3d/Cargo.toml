@@ -15,6 +15,8 @@ raea-sys-sampler = { path = "../../systems/sampler" }
 raea-sys-shader = { path = "../../systems/shader" }
 # an <Instances>' copies: a mesh's or a model's parts at each placement, sharing their material handles
 raea-sys-copies = { path = "../../systems/copies" }
+# equal parts share one mesh and material, let go once no part holds them
+raea-sys-share = { path = "../../systems/share" }
 raea-sys-fog = { path = "../../systems/fog" }
 raea-sys-fog-half = { path = "../../systems/fog-half" }
 raea-sys-post = { path = "../../systems/post" }

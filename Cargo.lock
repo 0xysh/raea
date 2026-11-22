@@ -15516,6 +15516,7 @@ dependencies = [
  "raea-sys-post",
  "raea-sys-sampler",
  "raea-sys-shader",
+ "raea-sys-share",
  "serde_json",
 ]
 
@@ -16387,6 +16388,13 @@ dependencies = [
  "bevy",
  "raea-sys-material",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-share"
+version = "0.1.0"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]

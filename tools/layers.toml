@@ -146,6 +146,8 @@ raea-sys-sampler = "systems"
 raea-sys-shader = "systems"
 raea-sys-shader-wgsl = "systems"
 raea-sys-copies = "systems"
+# equal parts share one mesh and material, let go once no part holds them (runtime/scene3d re-exports it)
+raea-sys-share = "systems"
 raea-sys-three-shader = "systems"
 raea-sys-post = "systems"
 raea-sys-fog = "systems"

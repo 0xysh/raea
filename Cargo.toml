@@ -129,6 +129,7 @@ members = [
     "runtime/gpuframe",
     "runtime/scene3d",
     "systems/copies",
+    "systems/share",
     "systems/screen",
     "systems/matchmove",
     "systems/grid",
