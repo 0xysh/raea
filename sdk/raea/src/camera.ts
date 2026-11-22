@@ -8,3 +8,5 @@ export { Camera3d, Hdr, type Camera3dProps, type CameraViewport, type ClearColor
 export { TextureView } from "@raea/render/bevy3d";
 // a camera path paced by time, so it can't lurch at a key (docs/stage-guards.feature SG7)
 export { cameraPath, type CameraKey, type CameraPath, type CameraPose, type CameraVec3 } from "@raea/render/camera/path";
+// page type that names a 3D part, placed through the shot's camera (docs/stage-guards.feature SG8)
+export { Label, LABEL_MIN, type LabelProps, type LabelCamera } from "@raea/render/3d/label";

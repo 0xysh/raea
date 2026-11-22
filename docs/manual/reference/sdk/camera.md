@@ -22,7 +22,7 @@ const Shot = () => <Camera3d transform={Transform.fromXyz(-2, 2.5, 5).lookingAt(
 import { Camera3d, cameraPath, Canvas3D, checkMatchmove } from "raea/camera"
 ```
 
-`raea/camera` exports 5 components, 1 hook, 4 functions, 13 types. Bevy's counterpart: `bevy_camera`. Source: [sdk/raea/src/camera.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/camera.ts).
+`raea/camera` exports 6 components, 1 hook, 4 functions, 1 value, 15 types. Bevy's counterpart: `bevy_camera`. Source: [sdk/raea/src/camera.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/camera.ts).
 
 ## Components
 
@@ -65,6 +65,26 @@ is (a Skybox's or an emissive's light above 1 then rolls off in the tone mapping
 Bevy: `bevy_camera::components::Hdr`.
 
 Used in: [3d/rotate_environment_map](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/bench/bevy-parity/3d/rotate_environment_map.tsx).
+
+### `Label`
+
+Page type that names a 3D part: drawn over the frame where the part's point lands through the shot's camera, at a
+size in pixels of the frame, inside title-safe, with a line to the point. Hidden while the point is behind the camera
+or out of frame. Put it beside the 3D, in the page, and give it the props the shot's Camera3d gets:
+
+`<Label at={[0, 1.2, 0]} camera={path.camera(frame)}>Reviews</Label>`
+
+| Prop | Type | What it does |
+| --- | --- | --- |
+| `at` (required) | `Vec3` | the point it names, in metres in the world: give the part's top, so the words stand clear above it |
+| `camera` (required) | `LabelCamera` | the shot's camera: the props its Camera3d is given (`path.camera(frame)`), so the label follows it exactly |
+| `children` (required) | `ReactNode` | its words |
+| `size` | `number` | capital height in px at 1080 lines, scaled to the frame (32; at least 22, so it reads) |
+| `side` | `"above" \| "below"` | which way the words stand from the point ("above") |
+| `gap` | `number` | the words' distance from the point, in px at 1080 lines (40) |
+| `leader` | `boolean` | a line from the words to a dot on the point (true) |
+| `color` | `string` | the words' and the line's colour (white) |
+| `style` | `CSSProperties` | more style for the words: font, weight, a background, padding |
 
 ### `Matchmove`
 
@@ -140,6 +160,12 @@ zoom) and the frame's window in it, in frame pixels.
 function matchmoveView(footage: { width: number; height: number; }, frame: { width: number; height: number; }, crop?: number | [number, number], zoom?: number): { width: number; height: number; x: number; y: number; }
 ```
 
+## Values
+
+### `LABEL_MIN`
+
+The least capital height a Label takes, in px at 1080 lines (SG10's floor for words that read).
+
 ## Types
 
 ### `Camera3dProps`
@@ -202,6 +228,21 @@ Bevy: `bevy_camera::clear_color::ClearColorConfig`.
 ```ts
 type ClearColorConfig = "Default" | "None" | { Custom: Srgba | LinearRgba }
 ```
+
+### `LabelCamera`
+
+The camera a Label projects through: the props its Camera3d is given.
+
+| Field | Type | What it is |
+| --- | --- | --- |
+| `transform` | `TransformValue` | where the camera stands and faces, as its Camera3d has it |
+| `projection` | `Projection` | its perspective (fov in radians, Bevy's default π/4) or orthographic view, as its Camera3d has it |
+
+### `LabelProps`
+
+Label's props: page type that points at a 3D part.
+
+The props of [`Label`](#label), tabled there.
 
 ### `MatchmoveCamera`
 

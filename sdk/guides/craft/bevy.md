@@ -64,11 +64,15 @@ the rest come from `raea`.
    that takes degrees.
 3. **Colours are hex** (`"#ff7a00"`), from the brand kit in a branded piece. CSS variables don't reach the 3D.
 4. **Name what comes and goes.** Parts are matched across frames by `name`, else by kind and shape in tree order.
-   A Mesh that appears, disappears or swaps places with one of the same shape needs a `name`.
+   A Mesh that appears, disappears or swaps places with one of the same shape needs a `name`, and so does a Fire or a
+   fog volume that comes and goes (a plate, a splat and a sequence are known by their file): SG2.
 5. **Grow by scale; a changed shape is a new mesh.** Animate position, rotation, scale, colour, opacity, glow,
    roughness and metalness. A part whose `shape`, `args` or words change is built again on each frame they change
    (docs/stage-guards.feature SG1), which is right but costs a mesh a frame: a bar that grows is a fixed box scaled, and
-   a counter's words change only when its number does.
+   a counter's words change only when its number does. A line that draws on is one `Line3d` or `Tube` cut at `p`
+   (`bevy/meshes`), never a chain of boxes: a chain of more than 8 parts named `NAME-i` that grows is the render's
+   `line-of-parts` warning, and a part whose size on screen jumps over 25% in a frame with no cut is its `part-snap`
+   (SG6, SG12).
 6. **One camera a frame; each frame's own effects.** The first active camera in the tree is the piece's: give each
    shot its own `<Camera3d>` and switch them with `is_active={...}`, so a cut between cameras is one render, not one
    render a camera joined after (the frame another camera becomes active is drawn as a shot rendered alone starts,
@@ -84,16 +88,24 @@ the rest come from `raea`.
    a prop to time a part: RichText's `at` and `exitAt` count in its Sequence's frames, and one past its last frame is
    refused (SG5). Render a piece whole, one frame after another; a piece rendered in parts is a workaround, never the
    plan.
-9. **Type that reads.** Words that name or point at a part go in the page over the 3D, sized in pixels of the frame,
-   kept clear of the parts they name. Words in the world (a sign, a page in a book) are RichText: at least 22 px tall
+9. **Type that reads.** Words that name or point at a part are a `Label` (`raea/camera`): page type over the 3D,
+   placed where the part lands through the shot's own camera, sized in pixels of the frame, inside title-safe, with a
+   line to the point: `<Label at={partTop} camera={path.camera(frame)}>Reviews</Label>` (SG8). Words in the world (a sign, a page in a book) are RichText: at least 22 px tall
    (caps) at 1080 lines, turned within 35° of the camera, inside the title-safe area, held still for their reading time
-   (words ÷ 3 a second, plus half a second) and fully revealed before they go.
+   (words ÷ 3 a second, plus half a second) and fully revealed before they go. `raea render` fails on world type it
+   can't read (`type-small`, `type-angle` past 50°, `type-reveal`) and warns on the rest (`type-safe`, `type-time`, an
+   angle past 35°): SG10. A sign nobody is meant to read takes `read={false}`.
 10. **A camera that settles.** Build a moving camera with `cameraPath` from `raea/camera`: keys timed by frames, the
    path paced by time so its speed carries across each key, `hold` where it stops, and `<Camera3d
    {...path.camera(frame)} />`. A hand-written spline whose segments each run 0 to 1 whatever their length jumps speed
    at every key (11-21: 51 of 155 keys jumped 2x or more). `path.check()` names a key whose timing still makes the
    camera brake hard (a quick move against a slow one): give the quick move more frames or end the slow one in a hold.
    Never push in and pull back, or pan one way then the other, within 1.5 s. A camera still moving while words are up
-   gives them their reading time first.
-11. **Render and look.** Render stills where things happen (`raea render edit.tsx --at A,B,C -o stills/`) and look at them. A 3D frame that renders
-   black usually has no light or a camera inside or behind the subject.
+   gives them their reading time first. `raea render` fails on a speed that changes over 2x within 3 frames
+   (`camera-lurch`) and on a dolly in and back out (`camera-reverse`): SG13.
+11. **Render and look.** Before a render, `raea scene stage edit.tsx` steps every frame without drawing and runs the
+   checks above, and the render runs them again at its end, beside clipping: it warns when almost nothing is on screen
+   for a second (`frame-empty`) or the shot's part is cut by the edge (`subject-cut`), SG14. Render stills where things
+   happen (`raea render edit.tsx --at A,B,C -o stills/`) and look at them. A 3D frame that renders black usually has no
+   light or a camera inside or behind the subject. `raea show` refuses a render that still holds an error, naming each:
+   fix it, or say why it goes anyway with `--despite CHECK "why"`, which the person reads (SG15).

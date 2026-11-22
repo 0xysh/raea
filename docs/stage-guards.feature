@@ -214,9 +214,17 @@ Feature: Stage guards: a 3D render an agent can't break
     Scenario: SG8. Labels that read
       Given the plan
         | crate        | file                              | lines | job                                                                                  |
-        | @raea/render | sdk/render/src/3d/label.tsx       | 120   | Label: type drawn in the page at a part's projected point, from the engine's own camera; sized in pixels of the frame (at least 22 at 1080); kept clear of the parts' projected boxes |
+        | @raea/render | sdk/render/src/3d/label.tsx       | 112   | Label: type drawn in the page at a part's projected point, from the engine's own camera; sized in pixels of the frame (at least 22 at 1080); kept clear of the parts' projected boxes |
+        | raea         | sdk/raea/src/camera.ts            | +2    | raea/camera exports Label                                                            |
+        | @raea/render | sdk/render/package.json           | +1    | the ./3d/label subpath                                                               |
+        | raea (test)  | sdk/raea/conformance/label.test.tsx | 60  | the point through a camera and a cameraPath, ortho, title-safe, px of the frame, refused under 22 |
       Then type that points at a part is never at an angle, never tiny and never on top of the part
       And RichText stays for type that is itself part of the scene (a sign, a page in a book)
+      # Status 11-21 (branch stage-guards-7): Label (raea/camera) projects its point through the props the shot's
+      # Camera3d gets (a cameraPath's camera(frame), perspective or orthographic) and draws flat page type there: its
+      # capitals 32 px at 1080 by default and refused under 22, its box inside title-safe and growing away from the
+      # nearer edge, a line and a dot to the point, nothing while the point is behind the camera or out of frame
+      # (sdk/raea/conformance/label.test.tsx). It stands `gap` px off the point you give it: give the part's top.
 
   Rule: The render fails when a frame would look broken
     Each check below reads the frame's scene (as systems/contact does) and the page's layout, runs in `raea render`
@@ -350,4 +358,7 @@ Feature: Stage guards: a 3D render an agent can't break
         | render frame-pure: SG9 runs on every render; a chunked render is a workaround, never the plan         |
       And each rule names the check that enforces it
       # Status 11-21 (branch stage-guards): sdk/guides/craft/bevy.md's rules 5 and 8-10 say these (grow by scale, one
-      # clock, type that reads, a camera that settles). Left: the checks they name, Line3d, cameraPath and Label.
+      # clock, type that reads, a camera that settles). Branch stage-guards-7: rules 4, 5, 9, 10 and 11 name the check
+      # that holds each (SG2's names, line-of-parts and part-snap, the type checks and read={false}, camera-lurch and
+      # camera-reverse, raea scene stage, frame-empty and subject-cut, raea show --despite), Line3d and cameraPath are
+      # the recipes, and craft/floor.md refuses labels written into the 3D, naming Label (SG8). Left: SG9's re-render.
