@@ -61,14 +61,21 @@ Feature: Stage guards: a 3D render an agent can't break
 
   Rule: SG0. The bar first, before any fix
 
+    @done
     Scenario: SG0. The repros become tests, and they fail today
       Given the plan
         | crate              | file                                    | lines | job                                                                                  |
-        | raea-render (test) | engine/render/tests/frame_pure_3d.rs    | 160   | each repro rendered as one sequence and frame by frame alone; frame N of both compared (SSIM, per part); fails while any part differs |
-        | raea-render (test) | engine/render/tests/diag/*.tsx          | 160   | kept-props, kept-props2, kept-props3, glyph-atlas-probe moved in from the project, with what each shows |
+        | (script)           | tools/frame-pure-3d.sh                  | 50    | each repro rendered as one sequence (PNGs, one process) and four frames alone (--frame N); frame N of both compared, SSIM 0.999 or more, lossless; fails naming the repro and frame |
+        | raea-render (test) | engine/render/tests/diag/*.tsx          | 110   | kept-props, kept-props2 (its brand-logo picture row left out), kept-props3 moved in from the project, with what each shows |
+        | (L1)               | tools/agents/check                      | +4    | the "3d frame purity" step, when core/scene, runtime/scene(3d), runtime/live, engine/render's engine, systems/text3d or sdk/render/src/3d changes |
       Then the test fails on main today on radius, half_size, Text3D letters, RichText words, colour and size, the row
         taken over, and the atlas's cut glyph, and passes on transform scale, material colour, pictures and the reveal
       And every scenario below that the engine fixes turns one of its failures green
+      # Status 11-21: built and green on main after SG1 and SG2 (f4b524f896): every sampled frame of the three repros
+      # matches at SSIM 0.9998 or more. The bar is tight enough: a sequence's frame 28 against frame 29 alone scores
+      # 0.986, so a part held since its first frame can't pass. Before SG1 the same repros showed frame 0's sphere,
+      # box, words, colour and size in a sequence. The atlas's cut glyph is one frame, not a sequence: its repro and
+      # test come with SG3.
 
   Rule: The engine stops doing it
 
