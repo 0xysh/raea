@@ -111,24 +111,36 @@ pub fn spans_of(all: &[Vec<Item>], kinds: &[&str]) -> Vec<(String, Span)> {
     let mut order: Vec<String> = Vec::new();
     let mut by: BTreeMap<String, Span> = BTreeMap::new();
     for (i, its) in all.iter().enumerate() {
-        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
-        for it in its.iter().filter(|it| kinds.contains(&it.kind)).cloned() {
-            let base = format!("{}|{}{}", it.kind, base_ident(&it), surface_ident(&it));
-            let k = seen.entry(base.clone()).or_insert(0);
-            let id = format!("{base}#{k}");
-            *k += 1;
+        for (id, it) in ids_of(its, kinds) {
             let span = by.entry(id.clone()).or_insert_with(|| {
                 order.push(id.clone());
                 Span { first: i, items: Vec::new() }
             });
             span.items.resize(i - span.first, None);
-            span.items.push(Some(it));
+            span.items.push(Some(it.clone()));
         }
     }
     order.into_iter().map(|id| {
         let s = by.remove(&id).unwrap();
         (id, s)
     }).collect()
+}
+
+/// A frame's parts of these kinds, each with its id as spans_of names it across frames: its kind, what it is and draws,
+/// and which of the frame's parts alike it is (#0, #1, ...). A check taking frames as they come (raea-sys-contact's
+/// Clipping) follows a part from frame to frame by it.
+pub fn ids_of<'a>(its: &'a [Item], kinds: &[&str]) -> Vec<(String, &'a Item)> {
+    let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+    its.iter()
+        .filter(|it| kinds.contains(&it.kind))
+        .map(|it| {
+            let base = format!("{}|{}{}", it.kind, base_ident(it), surface_ident(it));
+            let k = seen.entry(base.clone()).or_insert(0);
+            let id = format!("{base}#{k}");
+            *k += 1;
+            (id, it)
+        })
+        .collect()
 }
 
 /// `tracks` over items already walked: only the parts of these kinds are copied, a slot for every frame

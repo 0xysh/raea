@@ -14604,17 +14604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "raea-io-kept"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "raea-core-scene",
- "raea-io-home",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "raea-io-media"
 version = "0.1.0"
 dependencies = [
@@ -15267,6 +15256,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-runtime-endchecks"
+version = "0.1.0"
+dependencies = [
+ "raea-core-facts",
+ "raea-core-scene",
+ "raea-sys-contact",
+ "raea-sys-stage",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-runtime-export"
 version = "0.1.0"
 dependencies = [
@@ -15280,7 +15280,6 @@ dependencies = [
  "raea-gpu-device",
  "raea-io-alpha",
  "raea-io-assets",
- "raea-io-kept",
  "raea-io-media",
  "raea-io-net",
  "raea-io-trace",
@@ -15288,6 +15287,7 @@ dependencies = [
  "raea-render",
  "raea-runtime-bake",
  "raea-runtime-encode",
+ "raea-runtime-endchecks",
  "raea-runtime-page",
  "raea-runtime-pagestore",
  "raea-runtime-react",

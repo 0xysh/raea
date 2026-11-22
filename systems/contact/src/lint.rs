@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 use raea_core_scene::{Item, Part, base_ident, label, parts_of, ray_tri};
 
-use super::{solid_of, test};
+use super::solid_of;
 
 /// A gap under this (metres) is contact: a part sitting on its surface.
 const TOUCH: f32 = 0.002;
@@ -398,18 +398,7 @@ pub fn lint(now: &[Item], next: &[Item]) -> (Vec<Value>, usize) {
                 continue;
             }
             let (Some(a), Some(b)) = (&solids[i], &solids[j]) else { continue };
-            let mut best: Option<super::Hit> = None;
-            for (pa, sa) in a.iter().enumerate() {
-                for (pb, sb) in b.iter().enumerate() {
-                    if let Some(mut h) = test(sa, &items[i].world, sb, &items[j].world) {
-                        if best.as_ref().is_none_or(|b| h.depth > b.depth) {
-                            h.pieces = (pa, pb);
-                            best = Some(h);
-                        }
-                    }
-                }
-            }
-            if let Some(h) = best {
+            if let Some(h) = super::deepest(a, &items[i].world, b, &items[j].world) {
                 let (la, lb) = (label(&items[i], &a[h.pieces.0].name), label(&items[j], &b[h.pieces.1].name));
                 let (small, big) = if h.small_first { (la, lb) } else { (lb, la) };
                 errors += 1;

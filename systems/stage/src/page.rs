@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use raea_core_facts::{Finding, Level};
 use serde_json::Value;
 
-use super::{Stage, called, runs};
+use super::{Item, Stage, called, runs};
 use crate::framing::{backdrop, own_box};
-use crate::view::corners;
+use crate::view::{View, corners};
 
 /// Words in the page on one frame: what they say, their box on screen ([x0, y0, x1, y1] in px), and whether they
 /// may sit on a part (an element they're in says data-allow-overlap).
@@ -44,19 +44,25 @@ fn short(t: &str) -> String {
     s
 }
 
-pub(crate) fn check(st: &Stage, page: &[Page]) -> Vec<Finding> {
-    let mut boxes = HashMap::new();
-    // each words' frames over a part past SHARE, and on each the parts it covers with their shares
-    let mut over: HashMap<String, HashMap<usize, Vec<(String, f32)>>> = HashMap::new();
-    for (k, its) in st.all.iter().enumerate() {
-        let (Some(v), Some(words)) = (st.views[k], page.get(k).map(|p| &p.words).filter(|w| !w.is_empty())) else { continue };
+/// Each words' frames over a part past SHARE as the frames come, and on each the parts it covers with their shares.
+#[derive(Default)]
+pub(crate) struct Over {
+    boxes: HashMap<String, Option<(bevy::math::Vec3, bevy::math::Vec3)>>,
+    over: HashMap<String, HashMap<usize, Vec<(String, f32)>>>,
+}
+
+impl Over {
+    /// Frame k's parts through its camera `v`, and its page's words over them, on a w x h frame.
+    pub(crate) fn push(&mut self, k: usize, its: &[Item], v: Option<View>, page: Option<&Page>, w: f32, h: f32) {
+        let (Some(v), Some(words)) = (v, page.map(|p| &p.words).filter(|w| !w.is_empty())) else { return };
+        let (boxes, over) = (&mut self.boxes, &mut self.over);
         for it in its {
             if it.props.get("allowOverlap").and_then(Value::as_bool) == Some(true) {
                 continue;
             }
-            let Some((lo, hi)) = own_box(it, &mut boxes).filter(|(lo, hi)| !backdrop(it, *lo, *hi)) else { continue };
+            let Some((lo, hi)) = own_box(it, boxes).filter(|(lo, hi)| !backdrop(it, *lo, *hi)) else { continue };
             let Some(b) = v.bounds(corners(&it.world, lo, hi)) else { continue };
-            let b = [b[0].max(0.0), b[1].max(0.0), b[2].min(st.w), b[3].min(st.h)];
+            let b = [b[0].max(0.0), b[1].max(0.0), b[2].min(w), b[3].min(h)];
             let area = (b[2] - b[0]) * (b[3] - b[1]);
             if !(area > 1.0) {
                 continue;
@@ -69,31 +75,35 @@ pub(crate) fn check(st: &Stage, page: &[Page]) -> Vec<Finding> {
             }
         }
     }
-    // said in the order they start (a HashMap's order changed from run to run)
-    let mut over: Vec<_> = over.into_iter().collect();
-    over.sort_by_key(|(text, at)| (at.keys().min().copied(), text.clone()));
-    let mut out = Vec::new();
-    for (text, at) in over {
-        for (a, b) in runs(st, st.all.len(), |k| at.contains_key(&k)) {
-            if st.secs(a, b) < SECS && !st.alone(a) {
-                continue;
-            }
-            // the parts it covers over the run, the most covered first: one fault, however many parts are under it
-            let mut most: Vec<(String, f32)> = Vec::new();
-            for (name, share) in (a..=b).filter_map(|k| at.get(&k)).flatten() {
-                match most.iter_mut().find(|m| m.0 == *name) {
-                    Some(m) => m.1 = m.1.max(*share),
-                    None => most.push((name.clone(), *share)),
+
+    /// SG11 over the frames given.
+    pub(crate) fn check(self, st: &Stage) -> Vec<Finding> {
+        // said in the order they start (a HashMap's order changed from run to run)
+        let mut over: Vec<_> = self.over.into_iter().collect();
+        over.sort_by_key(|(text, at)| (at.keys().min().copied(), text.clone()));
+        let mut out = Vec::new();
+        for (text, at) in over {
+            for (a, b) in runs(st, st.len(), |k| at.contains_key(&k)) {
+                if st.secs(a, b) < SECS && !st.alone(a) {
+                    continue;
                 }
+                // the parts it covers over the run, the most covered first: one fault, however many parts are under it
+                let mut most: Vec<(String, f32)> = Vec::new();
+                for (name, share) in (a..=b).filter_map(|k| at.get(&k)).flatten() {
+                    match most.iter_mut().find(|m| m.0 == *name) {
+                        Some(m) => m.1 = m.1.max(*share),
+                        None => most.push((name.clone(), *share)),
+                    }
+                }
+                most.sort_by(|x, y| y.1.total_cmp(&x.1));
+                let named: Vec<String> = most.iter().take(3).map(|(n, s)| format!("'{n}' ({:.0}%)", s * 100.0)).collect();
+                let more = if most.len() > 3 { format!(" and {} more", most.len() - 3) } else { String::new() };
+                let says = format!("'{}' in the page covers {}{more} from {} to {}", short(&text), named.join(", "), st.at(a), st.at(b));
+                out.push(st.finding("type-over-part", Level::Error, a, b, says).fix("move the words off it, or beside it with a Label (raea/camera) that points at it; words meant to sit on it go in an element with data-allow-overlap"));
             }
-            most.sort_by(|x, y| y.1.total_cmp(&x.1));
-            let named: Vec<String> = most.iter().take(3).map(|(n, s)| format!("'{n}' ({:.0}%)", s * 100.0)).collect();
-            let more = if most.len() > 3 { format!(" and {} more", most.len() - 3) } else { String::new() };
-            let says = format!("'{}' in the page covers {}{more} from {} to {}", short(&text), named.join(", "), st.at(a), st.at(b));
-            out.push(st.finding("type-over-part", Level::Error, a, b, says).fix("move the words off it, or beside it with a Label (raea/camera) that points at it; words meant to sit on it go in an element with data-allow-overlap"));
         }
+        out
     }
-    out
 }
 
 #[cfg(test)]

@@ -2,7 +2,9 @@
 //! that can't be read, parts that snap, a camera that lurches or reverses, and frames with nothing composed in them.
 //! Each reads the parts every frame holds (raea_core_scene's items, as raea-sys-contact does) through the frame's
 //! camera, and reports the part, the frames and the fix. They read the scene, not the pixels, so they run without
-//! drawing (`raea scene stage`) as well as at the end of every render.
+//! drawing (`raea scene stage`) as well as at the end of every render. A render hands them its frames as they come
+//! (Staging): each frame is read into what the checks keep of it (its camera, its words' sizes, its named parts' places,
+//! how much of it is covered) and let go, so a long render's checks never hold its frames' parts (SG4a).
 
 use bevy::math::Vec3;
 use raea_core_facts::{Finding, Level};
@@ -16,7 +18,7 @@ mod page;
 mod text;
 mod view;
 pub use framing::on_screen;
-pub use manifest::{pages, seen};
+pub use manifest::{Mounts, pages, seen};
 pub use page::{Page, Words};
 pub use view::View;
 
@@ -26,19 +28,7 @@ pub const BY: &str = "raea render";
 /// The checks on a render's frames, said on stderr and kept with its findings (RAEA_STAGE_CHECK=0 skips them). `page` is
 /// what each frame's page draws over its 3D (SG11, SG14), none when it isn't known.
 pub fn told(all: &[Vec<Item>], frames: &[i64], page: &[Page], w: u32, h: u32, fps: f64) -> Vec<Finding> {
-    if std::env::var("RAEA_STAGE_CHECK").as_deref() == Ok("0") || all.iter().all(|its| its.is_empty()) {
-        return Vec::new();
-    }
-    let t = std::time::Instant::now();
-    let found = check_with(all, frames, page, w, h, fps, BY);
-    for f in &found {
-        eprintln!("raea: {}", f.line());
-    }
-    raea_core_facts::finding::said(&found);
-    if std::env::var_os("RAEA_TIMES").is_some() {
-        eprintln!("raea times: the stage checks {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
-    }
-    found
+    pushed(all, frames, page, w, h, fps).told()
 }
 
 /// Every stage check on the frames (`all[k]` is frame `frames[k]`'s parts), worst first.
@@ -49,13 +39,76 @@ pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64, by: &s
 /// check, with what each frame's page draws (`page[k]`, frame `frames[k]`'s): its words held off the parts (SG11),
 /// and its words and videos filling the frame (SG14).
 pub fn check_with(all: &[Vec<Item>], frames: &[i64], page: &[Page], w: u32, h: u32, fps: f64, by: &str) -> Vec<Finding> {
-    let st = Stage::new(all, frames, w, h, fps, by);
-    let mut out = text::check(&st);
-    out.extend(motion::camera(&st));
-    out.extend(motion::snaps(&st));
-    out.extend(framing::check(&st, page));
-    out.extend(page::check(&st, page));
-    raea_core_facts::finding::ranked(merged(out))
+    pushed(all, frames, page, w, h, fps).findings(by)
+}
+
+fn pushed(all: &[Vec<Item>], frames: &[i64], page: &[Page], w: u32, h: u32, fps: f64) -> Staging {
+    let mut s = Staging::new(w, h, fps);
+    for (k, its) in all.iter().enumerate() {
+        s.push(frames[k], its, page.get(k));
+    }
+    s
+}
+
+/// The stage checks as a render's frames come: each frame read into what the checks keep of it, then let go (SG4a).
+pub struct Staging {
+    frames: Vec<i64>,
+    views: Vec<Option<View>>,
+    w: u32,
+    h: u32,
+    fps: f64,
+    any: bool,
+    texts: text::Texts,
+    snaps: motion::Snaps,
+    framing: framing::Framing,
+    over: page::Over,
+}
+
+impl Staging {
+    pub fn new(w: u32, h: u32, fps: f64) -> Staging {
+        Staging { frames: Vec::new(), views: Vec::new(), w, h, fps, any: false, texts: Default::default(), snaps: Default::default(), framing: Default::default(), over: Default::default() }
+    }
+
+    /// The next frame (its number, `frame`): its parts, and what its page draws over them where that's known.
+    pub fn push(&mut self, frame: i64, its: &[Item], page: Option<&Page>) {
+        let (k, v, w, h) = (self.frames.len(), View::of(its, self.w, self.h), self.w as f32, self.h as f32);
+        self.any |= !its.is_empty();
+        self.texts.push(k, its, v);
+        self.snaps.push(k, its, v, w, h);
+        self.framing.push(k, its, v, page, w, h);
+        self.over.push(k, its, v, page, w, h);
+        self.frames.push(frame);
+        self.views.push(v);
+    }
+
+    /// The findings, said on stderr and kept with the render's (RAEA_STAGE_CHECK=0 skips them).
+    pub fn told(self) -> Vec<Finding> {
+        if std::env::var("RAEA_STAGE_CHECK").as_deref() == Ok("0") || !self.any {
+            return Vec::new();
+        }
+        let t = std::time::Instant::now();
+        let found = self.findings(BY);
+        for f in &found {
+            eprintln!("raea: {}", f.line());
+        }
+        raea_core_facts::finding::said(&found);
+        if std::env::var_os("RAEA_TIMES").is_some() {
+            eprintln!("raea times: the stage checks {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
+        }
+        found
+    }
+
+    /// Every stage check on the frames given, worst first.
+    pub fn findings(self, by: &str) -> Vec<Finding> {
+        let cut = motion::cuts(&self.views, &self.frames);
+        let st = Stage { frames: self.frames, views: self.views, cut, w: self.w as f32, h: self.h as f32, fps: self.fps.max(1.0), by };
+        let mut out = self.texts.check(&st);
+        out.extend(motion::camera(&st));
+        out.extend(self.snaps.check(&st));
+        out.extend(self.framing.check(&st));
+        out.extend(self.over.check(&st));
+        raea_core_facts::finding::ranked(merged(out))
+    }
 }
 
 /// Findings of one check over the same frames as one, the others named after it: a code listing's twenty lines too
@@ -78,10 +131,9 @@ fn merged(fs: Vec<Finding>) -> Vec<Finding> {
     out
 }
 
-/// The frames as the checks read them: each one's parts and camera, and where the shots cut.
+/// The frames as the checks read them once all have come: each one's number and camera, and where the shots cut.
 pub(crate) struct Stage<'a> {
-    pub all: &'a [Vec<Item>],
-    pub frames: &'a [i64],
+    pub frames: Vec<i64>,
     pub views: Vec<Option<View>>,
     /// cut[k]: frame k starts a new shot (the first frame, a gap in the frames, a camera jump or a new camera)
     pub cut: Vec<bool>,
@@ -91,11 +143,10 @@ pub(crate) struct Stage<'a> {
     pub by: &'a str,
 }
 
-impl<'a> Stage<'a> {
-    fn new(all: &'a [Vec<Item>], frames: &'a [i64], w: u32, h: u32, fps: f64, by: &'a str) -> Stage<'a> {
-        let views: Vec<Option<View>> = all.iter().map(|its| View::of(its, w, h)).collect();
-        let cut = motion::cuts(&views, frames);
-        Stage { all, frames, views, cut, w: w as f32, h: h as f32, fps: fps.max(1.0), by }
+impl Stage<'_> {
+    /// How many frames.
+    pub fn len(&self) -> usize {
+        self.frames.len()
     }
 
     /// A finding about frames `a..=b` (indices into the frames), at `level`.

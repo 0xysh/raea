@@ -9,8 +9,8 @@ use bevy::math::Vec3;
 use raea_core_facts::{Finding, Level};
 use serde_json::Value;
 
-use super::{Stage, called, num, origin, runs};
-use crate::view::corners;
+use super::{Item, Stage, called, num, origin, runs};
+use crate::view::{View, corners};
 
 /// A capital's height, as a share of the em (Inter's is 0.727; most text faces 0.66 to 0.75)
 const CAP: f32 = 0.7;
@@ -49,12 +49,17 @@ struct Seen {
     whole: bool,
 }
 
-pub(crate) fn check(st: &Stage) -> Vec<Finding> {
-    let min_cap = MIN_CAP * st.h / 1080.0;
-    // each block's frames, by what it's called, in frame order
-    let mut by: BTreeMap<String, (Vec<Seen>, usize, bool)> = BTreeMap::new();
-    for (k, its) in st.all.iter().enumerate() {
-        let Some(v) = st.views[k] else { continue };
+/// Each block's frames as they come, by what it's called, in frame order (and its words' count, and whether it reveals).
+#[derive(Default)]
+pub(crate) struct Texts {
+    by: BTreeMap<String, (Vec<Seen>, usize, bool)>,
+}
+
+impl Texts {
+    /// Frame k's blocks of words, through its camera `v`.
+    pub(crate) fn push(&mut self, k: usize, its: &[Item], v: Option<View>) {
+        let Some(v) = v else { return };
+        let by = &mut self.by;
         for it in its.iter().filter(|i| i.kind == "text") {
             if it.props.get("read").and_then(Value::as_bool) == Some(false) {
                 continue;
@@ -84,57 +89,61 @@ pub(crate) fn check(st: &Stage) -> Vec<Finding> {
             e.0.push(Seen { k, cap, turn, b, c: [cx, cy], shown, whole });
         }
     }
-    let mut out = Vec::new();
-    for (name, (seen, words, has_at)) in &by {
-        // the frames it's up and in frame
-        let up: Vec<&Seen> = seen.iter().filter(|s| s.shown && in_frame(st, s.c)).collect();
-        // the frames of a run (up is in frame order)
-        let during = |a: usize, b: usize| up.iter().skip_while(move |s| s.k < a).take_while(move |s| s.k <= b);
-        let lasting = |bad: &dyn Fn(&Seen) -> bool| -> Vec<(usize, usize)> {
-            let flagged: std::collections::HashSet<usize> = up.iter().filter(|s| bad(s)).map(|s| s.k).collect();
-            runs(st, st.all.len(), |k| flagged.contains(&k)).into_iter().filter(|(a, b)| st.secs(*a, *b) >= LASTS || (a == b && st.alone(*a))).collect()
-        };
-        for (a, b) in lasting(&|s| s.cap < min_cap) {
-            let least = during(a, b).map(|s| s.cap).fold(f32::MAX, f32::min);
-            let f = st.finding("type-small", Level::Error, a, b, format!("the words '{name}' stand {least:.0} px high on screen from {} to {} (capitals at least {min_cap:.0} px at this frame size)", st.at(a), st.at(b)));
-            out.push(fix(f, "bring the camera nearer, or make its size larger: a label that points at a part reads better as page type laid over the frame; scenery nobody is meant to read takes read={false}", least, min_cap, "px"));
-        }
-        for (a, b) in lasting(&|s| s.turn > MAX_TURN) {
-            let most = during(a, b).map(|s| s.turn).fold(0.0, f32::max);
-            let says = if most > 90.0 { format!("the words '{name}' are seen from behind (turned {most:.0}°) from {} to {}", st.at(a), st.at(b)) } else { format!("the words '{name}' are turned {most:.0}° from the camera from {} to {} (at most {MAX_TURN:.0}°), so they read squashed", st.at(a), st.at(b)) };
-            let level = if most > TURN_ERROR { Level::Error } else { Level::Warn };
-            out.push(fix(st.finding("type-angle", level, a, b, says), "turn the words to face the camera (their rotation), or move the camera round to face them", most, MAX_TURN, "°"));
-        }
-        let (mx, my) = (SAFE * st.w, SAFE * st.h);
-        for (a, b) in lasting(&|s| s.whole && s.b.is_some_and(|b| b[0] < mx || b[1] < my || b[2] > st.w - mx || b[3] > st.h - my)) {
-            let f = st.finding("type-safe", Level::Warn, a, b, format!("the words '{name}' run outside the title-safe area from {} to {}", st.at(a), st.at(b)));
-            out.push(f.fix("move them in, or the camera back, so the whole block sits inside 5% of each edge"));
-        }
-        // its reveal: never started while it's in frame, or never finished before it goes (out of view with frames still
-        // stepped after: a still's few frames end, the words don't go); only over frames all stepped (stills far apart
-        // say nothing of what came between)
-        let in_view: Vec<&Seen> = seen.iter().filter(|s| in_frame(st, s.c)).collect();
-        if let (Some(f), Some(l)) = (in_view.first(), in_view.last()) && st.stepped(f.k, l.k) {
-            let long = st.secs(f.k, l.k) >= 1.0;
-            if *has_at && long && in_view.iter().all(|s| !s.shown) {
-                let f = st.finding("type-reveal", Level::Error, f.k, l.k, format!("the words '{name}' are never shown: their reveal (`at`) never starts while they're up, {} to {}", st.at(f.k), st.at(l.k)));
-                out.push(f.fix("give `at` in the frames of the Sequence they play in (useCurrentFrame), never a frame of another clock"));
-            } else if l.k + 1 < st.all.len() && in_view.iter().any(|s| s.shown) && !in_view.iter().any(|s| s.whole) {
-                let f = st.finding("type-reveal", Level::Error, f.k, l.k, format!("the words '{name}' never finish their reveal before they go ({} to {})", st.at(f.k), st.at(l.k)));
-                out.push(f.fix("start the reveal earlier, make it quicker (`each`), or keep the words up longer"));
+
+    pub(crate) fn check(self, st: &Stage) -> Vec<Finding> {
+        let min_cap = MIN_CAP * st.h / 1080.0;
+        let mut out = Vec::new();
+        for (name, (seen, words, has_at)) in &self.by {
+            // the frames it's up and in frame
+            let up: Vec<&Seen> = seen.iter().filter(|s| s.shown && in_frame(st, s.c)).collect();
+            // the frames of a run (up is in frame order)
+            let during = |a: usize, b: usize| up.iter().skip_while(move |s| s.k < a).take_while(move |s| s.k <= b);
+            let lasting = |bad: &dyn Fn(&Seen) -> bool| -> Vec<(usize, usize)> {
+                let flagged: std::collections::HashSet<usize> = up.iter().filter(|s| bad(s)).map(|s| s.k).collect();
+                runs(st, st.len(), |k| flagged.contains(&k)).into_iter().filter(|(a, b)| st.secs(*a, *b) >= LASTS || (a == b && st.alone(*a))).collect()
+            };
+            for (a, b) in lasting(&|s| s.cap < min_cap) {
+                let least = during(a, b).map(|s| s.cap).fold(f32::MAX, f32::min);
+                let f = st.finding("type-small", Level::Error, a, b, format!("the words '{name}' stand {least:.0} px high on screen from {} to {} (capitals at least {min_cap:.0} px at this frame size)", st.at(a), st.at(b)));
+                out.push(fix(f, "bring the camera nearer, or make its size larger: a label that points at a part reads better as page type laid over the frame; scenery nobody is meant to read takes read={false}", least, min_cap, "px"));
+            }
+            for (a, b) in lasting(&|s| s.turn > MAX_TURN) {
+                let most = during(a, b).map(|s| s.turn).fold(0.0, f32::max);
+                let says = if most > 90.0 { format!("the words '{name}' are seen from behind (turned {most:.0}°) from {} to {}", st.at(a), st.at(b)) } else { format!("the words '{name}' are turned {most:.0}° from the camera from {} to {} (at most {MAX_TURN:.0}°), so they read squashed", st.at(a), st.at(b)) };
+                let level = if most > TURN_ERROR { Level::Error } else { Level::Warn };
+                out.push(fix(st.finding("type-angle", level, a, b, says), "turn the words to face the camera (their rotation), or move the camera round to face them", most, MAX_TURN, "°"));
+            }
+            let (mx, my) = (SAFE * st.w, SAFE * st.h);
+            for (a, b) in lasting(&|s| s.whole && s.b.is_some_and(|b| b[0] < mx || b[1] < my || b[2] > st.w - mx || b[3] > st.h - my)) {
+                let f = st.finding("type-safe", Level::Warn, a, b, format!("the words '{name}' run outside the title-safe area from {} to {}", st.at(a), st.at(b)));
+                out.push(f.fix("move them in, or the camera back, so the whole block sits inside 5% of each edge"));
+            }
+            // its reveal: never started while it's in frame, or never finished before it goes (out of view with frames still
+            // stepped after: a still's few frames end, the words don't go); only over frames all stepped (stills far apart
+            // say nothing of what came between)
+            let in_view: Vec<&Seen> = seen.iter().filter(|s| in_frame(st, s.c)).collect();
+            if let (Some(f), Some(l)) = (in_view.first(), in_view.last()) && st.stepped(f.k, l.k) {
+                let long = st.secs(f.k, l.k) >= 1.0;
+                if *has_at && long && in_view.iter().all(|s| !s.shown) {
+                    let f = st.finding("type-reveal", Level::Error, f.k, l.k, format!("the words '{name}' are never shown: their reveal (`at`) never starts while they're up, {} to {}", st.at(f.k), st.at(l.k)));
+                    out.push(f.fix("give `at` in the frames of the Sequence they play in (useCurrentFrame), never a frame of another clock"));
+                } else if l.k + 1 < st.len() && in_view.iter().any(|s| s.shown) && !in_view.iter().any(|s| s.whole) {
+                    let f = st.finding("type-reveal", Level::Error, f.k, l.k, format!("the words '{name}' never finish their reveal before they go ({} to {})", st.at(f.k), st.at(l.k)));
+                    out.push(f.fix("start the reveal earlier, make it quicker (`each`), or keep the words up longer"));
+                }
+            }
+            // read: still, whole, big enough and facing the camera for their reading time, all told
+            let need = *words as f64 / 3.0 + 0.5;
+            let readable = up.windows(2).filter(|w| w[0].k + 1 == w[1].k && !st.cut[w[1].k] && readable(st, w[0], w[1], min_cap)).count() as f64 / st.fps;
+            if let (Some(f), Some(l)) = (up.first(), up.last()) && st.stepped(f.k, l.k) {
+                if readable + 1e-9 < need && up.iter().any(|s| s.whole) {
+                    let f = st.finding("type-time", Level::Warn, f.k, l.k, format!("the words '{name}' can be read for {readable:.1} s; their {words} words need {need:.1} s (words ÷ 3 a second, plus 0.5 s)"));
+                    out.push(fix(f, "hold them still, whole and facing the camera longer before they or the camera move", readable as f32, need as f32, "s"));
+                }
             }
         }
-        // read: still, whole, big enough and facing the camera for their reading time, all told
-        let need = *words as f64 / 3.0 + 0.5;
-        let readable = up.windows(2).filter(|w| w[0].k + 1 == w[1].k && !st.cut[w[1].k] && readable(st, w[0], w[1], min_cap)).count() as f64 / st.fps;
-        if let (Some(f), Some(l)) = (up.first(), up.last()) && st.stepped(f.k, l.k) {
-            if readable + 1e-9 < need && up.iter().any(|s| s.whole) {
-                let f = st.finding("type-time", Level::Warn, f.k, l.k, format!("the words '{name}' can be read for {readable:.1} s; their {words} words need {need:.1} s (words ÷ 3 a second, plus 0.5 s)"));
-                out.push(fix(f, "hold them still, whole and facing the camera longer before they or the camera move", readable as f32, need as f32, "s"));
-            }
-        }
+        out
     }
-    out
 }
 
 fn in_frame(st: &Stage, c: [f32; 2]) -> bool {

@@ -220,8 +220,8 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
     let dir = cx.dir.to_path_buf();
     // the sound bounced as the frames come, on its own thread (it was mixed after the last frame: 3 s on the export)
     let streamer = std::cell::RefCell::new(Some(raea_sys_mix::offline::Streamer::start(fps, total.max(0) as usize)));
-    // a video's 3D made live keeps each frame's parts for its end checks on disk, not its scene in memory (SG4a)
-    let kept = std::cell::RefCell::new(LIVE_CLIPS.load(std::sync::atomic::Ordering::Relaxed).then(raea_io_kept::Kept::new).transpose()?);
+    // a video's 3D made live is checked as its frames come, each frame's parts let go once read (SG4a)
+    let ends = std::cell::RefCell::new(LIVE_CLIPS.load(std::sync::atomic::Ordering::Relaxed).then(|| raea_runtime_endchecks::EndChecks::new(w, h, fps)));
     let t0 = std::time::Instant::now();
     let pic = raea_core_program::ir::Program { fps, width: w, height: h, frames: total, ..Default::default() };
     let frame_log = std::env::var_os("RAEA_FRAME_LOG").map(PathBuf::from);
@@ -279,8 +279,11 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
             fr = raea_gpu_device::check::fed_checked(f, fr, raea_sys_page::wait_drawn, raea_sys_page::redraw_full, || { cx.manifest.as_mut().map(|m| m.pop()); bevy_fed(app.world_mut(), bevy, cx, &page, fps) })?;
             // a shot starts here (an outermost Sequence, a camera cut): the video's next segment does too (RR3)
             cuts.find(f, raea_runtime_page::shot_starts(app.world_mut()), matches!(&cx.scene3d, Some(e) if raea_sys_frame::shots::Cut::at(e.world(), f)));
-            // a video's 3D made live keeps each frame's parts (`kept`) for the checks at its end
-            if let Some(k) = kept.borrow_mut().as_mut() { k.put(&raea_runtime_scene::items_of(&scene_of(app.world_mut())))?; }
+            // a video's 3D made live: this frame's parts to the end checks (`ends`), with its page (the manifest's newest)
+            if let Some(e) = ends.borrow_mut().as_mut() {
+                let page = cx.manifest.as_deref().map(|m| raea_sys_stage::pages(&m[m.len().saturating_sub(4)..], &[f], w, h).remove(0));
+                e.push(f, &raea_runtime_scene::items_of(&scene_of(app.world_mut())), page.as_ref());
+            }
             if cx.scene3d.is_none() && cx.live3d.is_none() && !cx.scene.is_empty() && BEVY_3D_PROBE.load(std::sync::atomic::Ordering::Relaxed) {
                 return Err(FED_3D.into());
             }
@@ -338,9 +341,9 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
     let n = frames.borrow().len();
     // 3D parts passing through each other on screen: on stderr, and in the manifest for the legacy app's checks
     let found = FED_CLIPPING.lock().unwrap().take().and_then(|t| t.join().ok());
-    let clipping = match (found, kept.into_inner()) {
+    let clipping = match (found, ends.into_inner()) {
         (Some(found), _) => found,
-        (None, Some(k)) => scene::checked(frames.borrow().iter().map(|(f, _)| *f).zip(k.read()?).collect(), cx.manifest.as_deref(), w, h, fps),
+        (None, Some(e)) => scene::ended(e),
         (None, None) => scene::told_taking(&mut frames.borrow_mut(), cx.manifest.as_deref(), w, h, fps),
     };
     write_manifest(cx, (w, h, fps, total), clipping, |cx| heard(&frames.borrow(), &notes.borrow(), cx, fps))?;

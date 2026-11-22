@@ -17,9 +17,9 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use bevy::math::{Mat4, Vec3};
-use serde_json::{json, Value};
+use serde_json::Value;
 
-use raea_core_scene::{Item, Span, excused, gltf_tris, label, spans_of, src_path, vec3};
+use raea_core_scene::{Item, excused, gltf_tris, src_path, vec3};
 
 // what each part rests on, and the parts that float, sink or clip (`raea scene lint|explain`)
 pub mod lint;
@@ -31,12 +31,17 @@ pub use assets::assets;
 mod found;
 pub use found::{clip_findings, lint_findings};
 
+// the check a frame at a time, as a render's frames come (SG4a)
+mod clip;
+pub use clip::Clipping;
+
 mod model;
 pub use model::{bounds, facing, forget, seat_facing};
 
 mod solid;
 use solid::*;
 mod seen;
+#[cfg(test)]
 use seen::*;
 
 /// Cells along a part's longest side.
@@ -259,126 +264,20 @@ fn volume(a: &Solid, wa: &Mat4, b: &Solid, wb: &Mat4) -> Option<Hit> {
     Some(Hit { depth, share, small_first, pieces: (0, 0), seam })
 }
 
-/// The overlaps a render shows: each with a sentence (for the agent) and its numbers (for the manifest). `all` is each
-/// frame's parts, `frames` the frames' numbers.
-pub fn check(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec<Value> {
-    // each part over the frames it's in (spans, not a slot per frame: SG4a); placed(i, k): part i's place on frame k
-    let parts: Vec<(String, Span)> = spans_of(all, &["mesh", "model"]);
-    // each part's solid held over its frames only (Held, SG4a)
-    let mut held = Held::new(&parts, frames.len());
-    let placed = |i: usize, k: usize| parts[i].1.at(k).map_or(Mat4::IDENTITY, |it| it.world);
-    // frame by frame: the parts' world boxes swept along x for the pairs that meet, each pair's test reused while
-    // neither part moves (the camera may still have)
-    let mut last: HashMap<(usize, usize), (Mat4, Mat4, Option<Hit>)> = HashMap::new();
-    // each pair's shown stretches (frames in a row) as they come: first, last, and the deepest hit (seam let go)
-    let mut found: HashMap<(usize, usize), Vec<(usize, usize, (usize, Hit))>> = HashMap::new();
-    // overlaps no frame shows (off frame, behind something): first and last frame, and the first frame's hit
-    let mut hidden: HashMap<(usize, usize), (usize, usize, Hit)> = HashMap::new();
-    for k in 0..frames.len() {
-        held.at(&parts, k);
-        let solids = &held.solids;
-        let mut boxes: Vec<(usize, Vec3, Vec3)> = Vec::new();
-        for (i, (_, tr)) in parts.iter().enumerate() {
-            let (Some(it), Some(ss)) = (tr.at(k), &solids[i]) else { continue };
-            if excused(it) {
-                continue;
-            }
-            let w = it.world;
-            let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-            for s in ss.iter() {
-                let (l, h) = world_box(s, &w);
-                lo = lo.min(l);
-                hi = hi.max(h);
-            }
-            boxes.push((i, lo, hi));
-        }
-        boxes.sort_by(|x, y| x.1.x.total_cmp(&y.1.x));
-        let mut occ: Option<Vec<(&Solid, Mat4)>> = None;
-        for (n, &(i0, lo0, hi0)) in boxes.iter().enumerate() {
-            for &(j0, lo1, hi1) in &boxes[n + 1..] {
-                if lo1.x > hi0.x {
-                    break;
-                }
-                if lo0.cmpgt(hi1).any() || lo1.cmpgt(hi0).any() {
-                    continue;
-                }
-                let (i, j) = (i0.min(j0), i0.max(j0));
-                let (a, b) = (solids[i].as_ref().unwrap(), solids[j].as_ref().unwrap());
-                let (wa, wb) = (placed(i, k), placed(j, k));
-                let r = match last.get(&(i, j)) {
-                    Some((la, lb, r)) if *la == wa && *lb == wb => r.clone(),
-                    _ => {
-                        let mut best: Option<Hit> = None;
-                        for (pa, sa) in a.iter().enumerate() {
-                            for (pb, sb) in b.iter().enumerate() {
-                                if let Some(mut hit) = test(sa, &wa, sb, &wb) {
-                                    if best.as_ref().is_none_or(|b| hit.depth > b.depth) {
-                                        hit.pieces = (pa, pb);
-                                        best = Some(hit);
-                                    }
-                                }
-                            }
-                        }
-                        best
-                    }
-                };
-                last.insert((i, j), (wa, wb, r.clone()));
-                if let Some(mut hit) = r {
-                    let (sa, sb) = (&a[hit.pieces.0], &b[hit.pieces.1]);
-                    let skip = 3.0 * (sa.cell * scale_of(&wa)).max(sb.cell * scale_of(&wb));
-                    if shows(&all[k], &std::mem::take(&mut hit.seam), occ.get_or_insert_with(|| occluders(&parts, solids, k)), skip, w as f32, h as f32) {
-                        let runs = found.entry((i, j)).or_default();
-                        match runs.last_mut() {
-                            Some(run) if run.1 + 1 == k => {
-                                run.1 = k;
-                                // the deepest, the last of equals (as max_by took it)
-                                if hit.depth >= run.2.1.depth { run.2 = (k, hit) }
-                            }
-                            _ => runs.push((k, k, (k, hit))),
-                        }
-                    } else {
-                        hidden.entry((i, j)).or_insert((k, k, hit)).1 = k;
-                    }
-                }
+/// The deepest overlap of any piece of one part (`a`, its solids at `wa`) in any of the other's, and which two pieces.
+fn deepest(a: &[Solid], wa: &Mat4, b: &[Solid], wb: &Mat4) -> Option<Hit> {
+    let mut best: Option<Hit> = None;
+    for (na, sa) in a.iter().enumerate() {
+        for (nb, sb) in b.iter().enumerate() {
+            if let Some(mut hit) = test(sa, wa, sb, wb)
+                && best.as_ref().is_none_or(|b| hit.depth > b.depth)
+            {
+                hit.pieces = (na, nb);
+                best = Some(hit);
             }
         }
-        held.after(k, |i| found.keys().chain(hidden.keys()).any(|&(a, b)| a == i || b == i));
     }
-    // unseen on every frame: still said, so a clip turned away from reads as hidden, not fixed (DR3, DR9's cheats)
-    let mut unseen: Vec<_> = hidden.into_iter().filter(|(p, _)| !found.contains_key(p)).collect();
-    unseen.sort_by_key(|(p, (k, _, _))| (*k, *p));
-    let mut spans: Vec<_> = found.into_iter().collect();
-    spans.sort_by_key(|(p, g)| (g[0].0, *p));
-    let clock = |f: i64| {
-        let s = f as f64 / fps;
-        format!("{}:{:04.1}", (s / 60.0) as i64, s % 60.0)
-    };
-    let mut out = Vec::new();
-    // one overlap said, over frames f0 to f1 (`seen`: its seam on screen, else said as standing in the scene unseen)
-    let mut say = |i: usize, j: usize, k: usize, hit: &Hit, f0: i64, f1: i64, seen: bool| {
-        let (pa, pb, sa, sb) = (parts[i].1.at(k).unwrap(), parts[j].1.at(k).unwrap(), held.solids[i].as_ref().unwrap(), held.solids[j].as_ref().unwrap());
-        let (la, lb) = (label(pa, &sa[hit.pieces.0].name), label(pb, &sb[hit.pieces.1].name));
-        let (small, big) = if hit.small_first { (la, lb) } else { (lb, la) };
-        // out the shortest way: the smallest move along a world axis (not down) that leaves no piece in the other's
-        let (axis, step) = clear_move(&sa[..], &pa.world, &sb[..], &pb.world, hit.small_first);
-        let axis_name = ["x", "y", "z"][axis];
-        let when = if f0 == f1 { clock(f0) } else { format!("{}–{}", clock(f0), clock(f1)) };
-        let shows = if seen { "and the seam shows" } else { "where no frame shows it (off frame or behind something), so it stands in the scene unseen" };
-        let says = format!(
-            "{when} {small} passes {:.2} m into {big} ({:.0}% of it inside), {shows}: move {small} {step:+.2} along world {axis_name} (or move {big}), or give it allowOverlap if it's meant to",
-            hit.depth, hit.share * 100.0
-        );
-        out.push(json!({"from": f0, "to": f1, "part": small, "into": big, "depth": (hit.depth * 1000.0).round() / 1000.0, "share": (hit.share * 1000.0).round() / 1000.0, "move": {"axis": axis_name, "by": (step * 1000.0).round() / 1000.0}, "seen": seen, "says": says}));
-    };
-    for ((i, j), runs) in spans {
-        for (first, last, (k, hit)) in runs {
-            say(i, j, k, &hit, frames[first], frames[last], true);
-        }
-    }
-    for ((i, j), (k0, k1, hit)) in unseen {
-        say(i, j, k0, &hit, frames[k0], frames[k1], false);
-    }
-    out
+    best
 }
 
 /// The shortest move of one part (the first if `move_a`) along a world axis (+x, -x, +y, +z, -z) that leaves no piece
@@ -403,21 +302,6 @@ fn clear_move(a: &[Solid], wa: &Mat4, b: &[Solid], wb: &Mat4, move_a: bool) -> (
         }
     }
     if best.1 == f32::MAX { (1, reach) } else { best }
-}
-
-/// `check`'s overlaps as Findings (DR3), each said on stderr (what an agent driving raea reads) as it's returned for
-/// the manifest.
-pub fn told(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64) -> Vec<raea_core_facts::Finding> {
-    let t = std::time::Instant::now();
-    let found = clip_findings(&check(all, frames, w, h, fps), "raea render");
-    for f in &found {
-        eprintln!("raea: {}", f.line());
-    }
-    raea_core_facts::finding::said(&found);
-    if raea_io_trace::stat("RAEA_TIMES") {
-        eprintln!("raea times: the clipping check {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
-    }
-    found
 }
 
 #[cfg(test)]

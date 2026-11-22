@@ -14,37 +14,35 @@ pub fn all_items(frames: &[(i64, Frame)]) -> Vec<Vec<raea_core_scene::Item>> {
     frames.iter().map(|(_, f)| items(f)).collect()
 }
 
-/// raea_sys_contact::told on a render's frames, the parts that clip where the camera sees them (RAEA_CLIP_CHECK=0 skips
-/// it), and raea_sys_stage::told, the staging (RAEA_STAGE_CHECK=0), each said on stderr. `page` is the manifest's
-/// frames (each one's words in the page, which the staging holds off the parts: SG11), None where they aren't known.
+/// The end checks (raea-runtime-endchecks) on a render's frames, each said on stderr: the parts that clip where the
+/// camera sees them and the staging. `page` is the manifest's frames (each one's words in the page, which the staging
+/// holds off the parts: SG11), None where they aren't known.
 pub(crate) fn told(frames: &[(i64, Frame)], page: Option<&[serde_json::Value]>, w: u32, h: u32, fps: f64) -> Vec<raea_core_facts::Finding> {
-    checked(frames.iter().map(|(n, f)| (*n, raea_runtime_scene::items_of(&f.scene))).collect(), page, w, h, fps)
+    let nums = frames.iter().map(|f| f.0).collect();
+    checked(nums, frames.iter().map(|f| raea_runtime_scene::items_of(&f.1.scene)), page, w, h, fps)
 }
 
-/// told for frames nothing reads the 3D of after: each frame's scene let go as its parts are made, so the end checks
-/// don't hold every frame's scene and every frame's parts at once (SG4a)
+/// told for frames nothing reads the 3D of after: each frame's scene let go as its parts are checked (SG4a)
 pub(crate) fn told_taking(frames: &mut [(i64, Frame)], page: Option<&[serde_json::Value]>, w: u32, h: u32, fps: f64) -> Vec<raea_core_facts::Finding> {
-    checked(frames.iter_mut().map(|(n, f)| (*n, raea_runtime_scene::items_of(&std::mem::take(&mut f.scene)))).collect(), page, w, h, fps)
+    let nums = frames.iter().map(|f| f.0).collect();
+    checked(nums, frames.iter_mut().map(|(_, f)| raea_runtime_scene::items_of(&std::mem::take(&mut f.scene))), page, w, h, fps)
 }
 
-pub(crate) fn checked(frames: Vec<(i64, Vec<raea_core_scene::Item>)>, page: Option<&[serde_json::Value]>, w: u32, h: u32, fps: f64) -> Vec<raea_core_facts::Finding> {
-    if frames.iter().all(|(_, its)| its.is_empty()) {
-        return Vec::new();
+fn checked(nums: Vec<i64>, items: impl Iterator<Item = Vec<raea_core_scene::Item>>, page: Option<&[serde_json::Value]>, w: u32, h: u32, fps: f64) -> Vec<raea_core_facts::Finding> {
+    let pages = page.map(|p| raea_sys_stage::pages(p, &nums, w, h));
+    let mut e = raea_runtime_endchecks::EndChecks::new(w, h, fps);
+    for (k, its) in items.enumerate() {
+        e.push(nums[k], &its, pages.as_ref().and_then(|p| p.get(k)));
     }
-    // RAEA_MEM_MARKS: the footprint after each end step (raea-render's mem_mark)
-    let mark = raea_render::engine::mem_mark;
-    mark(&format!("end checks: each frame's parts made, {} in all", frames.iter().map(|(_, its)| its.len()).sum::<usize>()));
-    let (nums, all): (Vec<i64>, Vec<_>) = frames.into_iter().unzip();
-    *SEEN.lock().unwrap() = Some(raea_sys_stage::seen(&all, &nums, w, h));
-    mark("end checks: what's on screen");
-    let mut found = if std::env::var("RAEA_CLIP_CHECK").as_deref() == Ok("0") { Vec::new() } else { raea_sys_contact::told(&all, &nums, w, h, fps) };
-    mark("end checks: clipping");
-    found.extend(raea_sys_stage::told(&all, &nums, &page.map_or_else(Vec::new, |p| raea_sys_stage::pages(p, &nums, w, h)), w, h, fps));
-    mark("end checks: staging");
-    // the clipping check's solids, kept for the process, aren't needed again by a render
-    raea_sys_contact::forget();
-    drop(all);
-    mark("end checks: done, their parts and solids let go");
+    ended(e)
+}
+
+/// The end checks' findings, a memory mark after each step; what they say of the parts, in SEEN.
+pub(crate) fn ended(e: raea_runtime_endchecks::EndChecks) -> Vec<raea_core_facts::Finding> {
+    let (found, seen) = e.told(raea_render::engine::mem_mark);
+    if seen.is_some() {
+        *SEEN.lock().unwrap() = seen;
+    }
     found
 }
 

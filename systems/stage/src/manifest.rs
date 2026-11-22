@@ -46,29 +46,57 @@ pub fn pages(frames: &[Value], nums: &[i64], w: u32, h: u32) -> Vec<Page> {
 /// a longer render, the frames where more than REMOUNT parts mount or unmount (`remounts`). SG9 re-renders the frame
 /// after each remount alone and names the parts under a patch that differs.
 pub fn seen(all: &[Vec<Item>], nums: &[i64], w: u32, h: u32) -> Value {
-    if all.len() <= STILLS {
-        let parts: Vec<_> = all.iter().zip(nums).map(|(its, f)| json!({"frame": f, "parts": crate::on_screen(its, w, h)})).collect();
-        return json!({"parts": parts});
-    }
-    // each frame's count against the one before, one count held at a time (a film's 13,175 at once were a GB)
-    let (mut before, mut remounts) = (None, Vec::new());
+    let mut m = Mounts::new(w, h);
     for (its, f) in all.iter().zip(nums) {
-        let now = counted(its);
-        if before.as_ref().is_some_and(|b| changed(&now, b) > REMOUNT) {
-            remounts.push(*f);
-        }
-        before = Some(now);
+        m.push(*f, its);
     }
-    json!({"remounts": remounts})
+    m.value()
 }
 
-type Counted<'a> = HashMap<(&'a str, &'a str, u64), i64>;
+/// seen as a render's frames come: each frame's count against the one before, one count held at a time (a film's
+/// 13,175 at once were a GB), and each frame's parts on screen while it may still be stills.
+pub struct Mounts {
+    w: u32,
+    h: u32,
+    n: usize,
+    stills: Vec<Value>,
+    before: Option<Counted>,
+    remounts: Vec<i64>,
+}
+
+impl Mounts {
+    pub fn new(w: u32, h: u32) -> Mounts {
+        Mounts { w, h, n: 0, stills: Vec::new(), before: None, remounts: Vec::new() }
+    }
+
+    /// The next frame (its number, `frame`) and its parts.
+    pub fn push(&mut self, frame: i64, its: &[Item]) {
+        if self.n < STILLS {
+            self.stills.push(json!({"frame": frame, "parts": crate::on_screen(its, self.w, self.h)}));
+        } else {
+            self.stills.clear();
+        }
+        let now = counted(its);
+        if self.before.as_ref().is_some_and(|b| changed(&now, b) > REMOUNT) {
+            self.remounts.push(frame);
+        }
+        self.before = Some(now);
+        self.n += 1;
+    }
+
+    /// What the manifest says: stills' parts on screen, a longer render's remounts.
+    pub fn value(self) -> Value {
+        if self.n <= STILLS { json!({"parts": self.stills}) } else { json!({"remounts": self.remounts}) }
+    }
+}
+
+type Counted = HashMap<(&'static str, String, u64), i64>;
 
 /// A frame's parts as a count by what they are: kind, name, what they draw.
-fn counted(its: &[Item]) -> Counted<'_> {
+fn counted(its: &[Item]) -> Counted {
     let mut m = Counted::new();
     for it in its {
-        *m.entry((it.kind, base_ident(it), spawn_sig(it))).or_default() += 1;
+        *m.entry((it.kind, base_ident(it).to_string(), spawn_sig(it))).or_default() += 1;
     }
     m
 }

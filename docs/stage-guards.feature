@@ -193,6 +193,19 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-io-trace       | io/trace/src/lib.rs           | +20   | give_back: the allocator's freed memory returned to the system now   |
         | raea-io-home        | io/home/src/lib.rs            | +15   | scratch_file: a temp file gone when raea is (the encoder's samples, Kept's parts) |
         | raea-io-codec       | io/codec/src/samples.rs       | 0     | Samples' temp file from scratch_file (8 lines shorter)                |
+        | raea-core-scene     | core/scene/src/lib.rs         | +12   | ids_of: a frame's parts with the ids spans_of follows them by; spans_of built on it |
+        | raea-sys-stage      | systems/stage/src/lib.rs      | +51   | Staging: the staging checks fed a frame at a time (push), their findings at the end; told and check_with feed it |
+        | raea-sys-stage      | systems/stage/src/text.rs     | +9    | Texts: each block of words' frames kept as they come                  |
+        | raea-sys-stage      | systems/stage/src/motion.rs   | +12   | Snaps: each named part's size and place on screen kept as they come   |
+        | raea-sys-stage      | systems/stage/src/framing.rs  | +14   | Framing: each frame's share covered, whether it can be judged, and its subject, as they come |
+        | raea-sys-stage      | systems/stage/src/page.rs     | +10   | Over: the page's words over the parts, as the frames come             |
+        | raea-sys-stage      | systems/stage/src/manifest.rs | +28   | Mounts: what the manifest says of the parts, a frame at a time         |
+        | raea-sys-contact    | systems/contact/src/clip.rs   | +175  | Clipping: each frame's pairs tested as it comes; an overlap's two parts and solids kept for its sentence |
+        | raea-sys-contact    | systems/contact/src/solid.rs  | +27   | Held: a part's solid made as it first shows, let go once it's been gone 120 frames (made again if it comes back) |
+        | raea-sys-contact    | systems/contact/src/lib.rs    | 0     | deepest, shared by the clipping check and the lint; the slice check and told gone (116 lines shorter) |
+        | raea-runtime-endchecks | runtime/endchecks/src/lib.rs | +55 | EndChecks: the clipping check, the staging and the parts on screen fed each frame's parts as it's drawn |
+        | raea-runtime-export | runtime/export/src/fed.rs     | +3    | a live render's frames go to EndChecks as they're drawn               |
+        | raea-runtime-export | runtime/export/src/scene.rs   | 0     | a still's frames go to EndChecks one at a time, its parts made and let go (3 lines shorter) |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
       # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
       # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
@@ -270,6 +283,17 @@ Feature: Stage guards: a 3D render an agent can't break
       # frames grow 27%, most of it its later scenes' own (2.07 to 2.55 GB in the 1,000 frames from 5:33). The end
       # checks hold every frame's parts and each part's solid over its frames (the clipping check's 4.7 GB resident
       # peak); flat needs them to run as the frames come.
+      # Branch stage-guards-21: the end checks run as the frames come. raea-sys-stage's Staging and raea-sys-contact's
+      # Clipping take each frame's parts as it's drawn (raea-runtime-endchecks hands them in) and keep only what their
+      # verdicts read: each frame's camera, each block of words' and each named part's place on screen, each frame's
+      # cover and subject, the words over parts, and the solids of the parts on screen (a part's let go once it's been
+      # gone 120 frames, an overlap's kept until it's said; the pair tests reused are the last frame's alone). Nothing
+      # keeps a render's parts now: raea-io-kept is gone. The film: the same 439 errors, 705 warns and 47 notes, in the
+      # same order; the end checks take 0.6 s (22.7 s: their work is done as the frames come); a 4.06 GB resident peak
+      # (4.76). The control: its end checks add nothing, 1.32 GB after its last frame and after them (they rose to 1.52
+      # GB before). Still not met: the frames grow. The control's 1.06 GB at frame 1,000 is 1.32 GB at 13,000 (+25%;
+      # +20% over frame 2,000), as before; the film's frames now carry the clipping check's solids for the parts on
+      # screen, 2.31 GB at frame 1,000 and 2.91 GB at 13,000 (+26%), 4.13 GB in its densest minute (frame 5,000).
 
   Rule: The SDK stops allowing it
 

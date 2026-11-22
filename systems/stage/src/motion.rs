@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use bevy::math::Vec3;
 use raea_core_facts::{Finding, Level};
 
-use super::{Stage, View, called, num, origin, scale_of};
+use super::{Item, Stage, View, called, num, origin, scale_of};
 
 /// A cut: the eye jumps or the view turns this many times its neighbours' step in one frame (and past a floor)
 const CUT_RATIO: f32 = 8.0;
@@ -216,13 +216,20 @@ fn reach(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<f32>>) -
 
 /// SG12: a named part whose size or place on screen jumps in one frame, alone (no cut, no steady move either side),
 /// and a line drawn as a growing chain of parts named NAME-i.
-pub(crate) fn snaps(st: &Stage) -> Vec<Finding> {
-    let mut boxes = HashMap::new();
-    // each named part's screen size (px) and centre, by frame, a run for each of what it is: new words or a new shape
-    // is the part spawned again (SG1), new content and no snap (a counter's words growing as its number does)
-    let mut by: BTreeMap<(String, u64), Vec<(usize, f32, [f32; 2])>> = BTreeMap::new();
-    let mut chains: BTreeMap<String, (usize, usize, usize)> = BTreeMap::new();
-    for (k, its) in st.all.iter().enumerate() {
+#[derive(Default)]
+pub(crate) struct Snaps {
+    boxes: HashMap<String, Option<f32>>,
+    /// each named part's screen size (px) and centre, by frame, a run for each of what it is: new words or a new shape
+    /// is the part spawned again (SG1), new content and no snap (a counter's words growing as its number does)
+    by: BTreeMap<(String, u64), Vec<(usize, f32, [f32; 2])>>,
+    /// each chain's first frame, and its fewest and most links
+    chains: BTreeMap<String, (usize, usize, usize)>,
+}
+
+impl Snaps {
+    /// Frame k's named parts, through its camera `v`, on a w x h frame.
+    pub(crate) fn push(&mut self, k: usize, its: &[Item], v: Option<View>, w: f32, h: f32) {
+        let (boxes, by, chains) = (&mut self.boxes, &mut self.by, &mut self.chains);
         let mut links: HashMap<String, usize> = HashMap::new();
         for it in its.iter() {
             let Some(name) = it.props.get("name").and_then(serde_json::Value::as_str) else { continue };
@@ -231,9 +238,9 @@ pub(crate) fn snaps(st: &Stage) -> Vec<Finding> {
                     *links.entry(stem.to_string()).or_default() += 1;
                 }
             }
-            let (Some(v), Some(r)) = (st.views[k], reach(it, &mut boxes).filter(|r| *r <= BIG_REACH)) else { continue };
+            let (Some(v), Some(r)) = (v, reach(it, boxes).filter(|r| *r <= BIG_REACH)) else { continue };
             let Some([x, y, depth]) = v.project(origin(it)) else { continue };
-            if x < 0.0 || x > st.w || y < 0.0 || y > st.h {
+            if x < 0.0 || x > w || y < 0.0 || y > h {
                 continue;
             }
             by.entry((called(it), raea_core_scene::spawn_sig(it))).or_default().push((k, r * v.focal / depth, [x, y]));
@@ -244,44 +251,49 @@ pub(crate) fn snaps(st: &Stage) -> Vec<Finding> {
             c.2 = c.2.max(n);
         }
     }
-    let mut out: Vec<(usize, Finding)> = Vec::new();
-    for ((name, _), seen) in &by {
-        // a name several items carry in one frame has no one size to follow
-        let frames: std::collections::HashSet<usize> = seen.iter().map(|s| s.0).collect();
-        if frames.len() < seen.len() {
-            continue;
-        }
-        // a step's size change (log ratio) and travel (share of the width), for consecutive frames in one shot
-        let step = |i: usize| -> Option<(f32, f32)> {
-            let (a, b) = (seen.get(i.checked_sub(1)?)?, seen.get(i)?);
-            (b.0 == a.0 + 1 && !st.cut[b.0]).then(|| ((b.1 / a.1.max(1e-3)).ln().abs(), ((b.2[0] - a.2[0]).powi(2) + (b.2[1] - a.2[1]).powi(2)).sqrt() / st.w))
-        };
-        for i in 1..seen.len() {
-            // steady frames on both sides: a part coming in (a pop, a fade up) has none before it
-            let (Some((ds, dm)), Some(before), Some(after)) = (step(i), step(i - 1), step(i + 1)) else { continue };
-            let side = |f: fn((f32, f32)) -> f32| f(before).max(f(after));
-            let k = seen[i].0;
-            if ds > SNAP_SIZE.ln() && ds > 3.0 * side(|s| s.0) && seen[i].1.max(seen[i - 1].1) > 4.0 {
-                let says = format!("'{name}' snaps from {:.0} px to {:.0} px on screen at {} with no cut", seen[i - 1].1, seen[i].1, st.at(k));
-                out.push((k, st.finding("part-snap", Level::Error, k - 1, k, says).fix("animate the change over frames, or cut to it; a part that comes in a frame late or at another's place is drawn from a stale frame (raea render's frame purity)")));
-            } else if dm > SNAP_MOVE && dm > 3.0 * side(|s| s.1) {
-                let says = format!("'{name}' jumps {:.0}% of the frame's width at {} with no cut", dm * 100.0, st.at(k));
-                out.push((k, st.finding("part-snap", Level::Warn, k - 1, k, says).fix("move it over frames, or cut; check it isn't placed from another part's frame")));
+
+    /// SG12 over the frames given.
+    pub(crate) fn check(self, st: &Stage) -> Vec<Finding> {
+        let (by, chains) = (self.by, self.chains);
+        let mut out: Vec<(usize, Finding)> = Vec::new();
+        for ((name, _), seen) in &by {
+            // a name several items carry in one frame has no one size to follow
+            let frames: std::collections::HashSet<usize> = seen.iter().map(|s| s.0).collect();
+            if frames.len() < seen.len() {
+                continue;
+            }
+            // a step's size change (log ratio) and travel (share of the width), for consecutive frames in one shot
+            let step = |i: usize| -> Option<(f32, f32)> {
+                let (a, b) = (seen.get(i.checked_sub(1)?)?, seen.get(i)?);
+                (b.0 == a.0 + 1 && !st.cut[b.0]).then(|| ((b.1 / a.1.max(1e-3)).ln().abs(), ((b.2[0] - a.2[0]).powi(2) + (b.2[1] - a.2[1]).powi(2)).sqrt() / st.w))
+            };
+            for i in 1..seen.len() {
+                // steady frames on both sides: a part coming in (a pop, a fade up) has none before it
+                let (Some((ds, dm)), Some(before), Some(after)) = (step(i), step(i - 1), step(i + 1)) else { continue };
+                let side = |f: fn((f32, f32)) -> f32| f(before).max(f(after));
+                let k = seen[i].0;
+                if ds > SNAP_SIZE.ln() && ds > 3.0 * side(|s| s.0) && seen[i].1.max(seen[i - 1].1) > 4.0 {
+                    let says = format!("'{name}' snaps from {:.0} px to {:.0} px on screen at {} with no cut", seen[i - 1].1, seen[i].1, st.at(k));
+                    out.push((k, st.finding("part-snap", Level::Error, k - 1, k, says).fix("animate the change over frames, or cut to it; a part that comes in a frame late or at another's place is drawn from a stale frame (raea render's frame purity)")));
+                } else if dm > SNAP_MOVE && dm > 3.0 * side(|s| s.1) {
+                    let says = format!("'{name}' jumps {:.0}% of the frame's width at {} with no cut", dm * 100.0, st.at(k));
+                    out.push((k, st.finding("part-snap", Level::Warn, k - 1, k, says).fix("move it over frames, or cut; check it isn't placed from another part's frame")));
+                }
             }
         }
-    }
-    let mut at: HashMap<usize, usize> = HashMap::new();
-    for (k, _) in &out {
-        *at.entry(*k).or_default() += 1;
-    }
-    let mut out: Vec<Finding> = out.into_iter().filter(|(k, _)| at[k] < EDIT_PARTS).map(|(_, f)| f).collect();
-    for (stem, (k, least, most)) in chains {
-        if most > CHAIN && most > least {
-            let says = format!("a line made of {most} parts ('{stem}-0' to '{stem}-{}'), mounted a part at a time as it grows", most - 1);
-            out.push(st.finding("line-of-parts", Level::Warn, k, k, says).fix("draw it as one Line3d or Tube (raea/mesh) and animate its `p`"));
+        let mut at: HashMap<usize, usize> = HashMap::new();
+        for (k, _) in &out {
+            *at.entry(*k).or_default() += 1;
         }
+        let mut out: Vec<Finding> = out.into_iter().filter(|(k, _)| at[k] < EDIT_PARTS).map(|(_, f)| f).collect();
+        for (stem, (k, least, most)) in chains {
+            if most > CHAIN && most > least {
+                let says = format!("a line made of {most} parts ('{stem}-0' to '{stem}-{}'), mounted a part at a time as it grows", most - 1);
+                out.push(st.finding("line-of-parts", Level::Warn, k, k, says).fix("draw it as one Line3d or Tube (raea/mesh) and animate its `p`"));
+            }
+        }
+        out
     }
-    out
 }
 
 #[cfg(test)]

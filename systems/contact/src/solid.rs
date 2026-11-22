@@ -253,32 +253,42 @@ fn make(it: &Item, key: &str) -> Result<Arc<Vec<Solid>>, String> {
     if solids.is_empty() { Err("it has no volume".to_string()) } else { Ok(Arc::new(solids)) }
 }
 
-/// The parts' solids over a check's frames (`check`): a shape's made at its part's first frame, shared by the parts
-/// holding it, and let go after the last of them; a model's from the process's cache (its file, a few at most). A
-/// film's shapes change as its words and parts do: a 13,175-frame film's 1,323 shapes held at once were 2.9 GB of cells
-/// at its end, its render's peak (docs/stage-guards.feature SG4a).
+/// The parts' solids as a render's frames come (Clipping): a shape's made when its part first shows, shared by the parts
+/// holding it, and let go once its part has been gone GONE frames (made again from the part's first frame if it comes
+/// back: the same cells); a model's from the process's cache (its file, a few at most). A film's shapes change as its
+/// words and parts do: a 13,175-frame film's 1,323 shapes held at once were 2.9 GB of cells at its end, its render's
+/// peak (docs/stage-guards.feature SG4a).
+#[derive(Default)]
 pub(crate) struct Held {
     pub(crate) solids: Vec<Option<Arc<Vec<Solid>>>>,
-    /// the parts that start on each frame, and those whose last frame it is
-    starts: Vec<Vec<usize>>,
-    ends: Vec<Vec<usize>>,
+    /// each part's first item (what its solid is made from), whether that failed, and the last frame it was in
+    first: Vec<Item>,
+    failed: Vec<bool>,
+    seen: Vec<usize>,
+    /// the parts holding a solid
+    holding: Vec<usize>,
     shared: HashMap<String, Result<std::sync::Weak<Vec<Solid>>, String>>,
 }
 
-impl Held {
-    pub(crate) fn new(parts: &[(String, Span)], frames: usize) -> Held {
-        let (mut starts, mut ends) = (vec![Vec::new(); frames], vec![Vec::new(); frames]);
-        for (i, (_, s)) in parts.iter().enumerate() {
-            starts[s.first].push(i);
-            ends[s.first + s.items.len() - 1].push(i);
-        }
-        Held { solids: vec![None; parts.len()], starts, ends, shared: HashMap::new() }
-    }
+/// A part gone this many frames lets its solid go.
+pub(crate) const GONE: usize = 120;
 
-    /// Frame k's new parts' solids.
-    pub(crate) fn at(&mut self, parts: &[(String, Span)], k: usize) {
-        for &i in &self.starts[k] {
-            let Some(it) = parts[i].1.items.iter().flatten().next() else { continue };
+impl Held {
+    /// Frame k's parts (each part's index, numbered as they first show, and its item there): their solids made where
+    /// they have none.
+    pub(crate) fn at(&mut self, k: usize, here: &[(usize, &Item)]) {
+        for &(i, it) in here {
+            if i == self.solids.len() {
+                self.solids.push(None);
+                self.first.push(it.clone());
+                self.failed.push(false);
+                self.seen.push(k);
+            }
+            self.seen[i] = k;
+            if self.solids[i].is_some() || self.failed[i] {
+                continue;
+            }
+            let it = &self.first[i];
             let key = key_of(it);
             let had = match self.shared.get(&key) {
                 Some(Ok(w)) => w.upgrade().map(Ok),
@@ -290,24 +300,32 @@ impl Held {
                 self.shared.insert(key, s.as_ref().map(Arc::downgrade).map_err(Clone::clone));
                 s
             });
+            self.failed[i] = s.is_err();
             self.solids[i] = s.ok();
-        }
-    }
-
-    /// After frame k: the solids of the parts it was the last frame of let go, but those `keep` names (an overlap still
-    /// to be said with their pieces' names).
-    pub(crate) fn after(&mut self, k: usize, keep: impl Fn(usize) -> bool) {
-        for &i in &self.ends[k] {
-            if !keep(i) {
-                self.solids[i] = None;
+            if self.solids[i].is_some() {
+                self.holding.push(i);
             }
         }
     }
+
+    /// After frame k: the solids of the parts gone GONE frames let go, but those `keep` names (an overlap still to be
+    /// said with their pieces' names).
+    pub(crate) fn after(&mut self, k: usize, keep: impl Fn(usize) -> bool) {
+        let (solids, seen) = (&mut self.solids, &self.seen);
+        self.holding.retain(|&i| {
+            let gone = k >= seen[i] + GONE && !keep(i);
+            if gone {
+                solids[i] = None;
+            }
+            !gone
+        });
+    }
 }
 
-/// The pieces that hide others on frame k: every checked part there, see-through ones left out.
-pub(crate) fn occluders<'a>(parts: &'a [(String, Span)], solids: &'a [Option<Arc<Vec<Solid>>>], k: usize) -> Vec<(&'a Solid, Mat4)> {
-    parts.iter().enumerate().filter_map(|(i, (_, tr))| Some((tr.at(k)?, solids[i].as_ref()?)))
+/// The pieces that hide others on a frame: every checked part in it (`here`: each part's index and item), see-through
+/// ones left out.
+pub(crate) fn occluders<'a>(here: &[(usize, &'a Item)], solids: &'a [Option<Arc<Vec<Solid>>>]) -> Vec<(&'a Solid, Mat4)> {
+    here.iter().filter_map(|&(i, it)| Some((it, solids[i].as_ref()?)))
         .filter(|(it, _)| !excused(it) || it.props.get("allowOverlap").and_then(Value::as_bool) == Some(true))
         .flat_map(|(it, ss)| ss.iter().map(move |s| (s, it.world)))
         .collect()
@@ -322,22 +340,28 @@ mod tests {
     }
 
     #[test]
-    fn a_shape_is_held_over_its_parts_frames_only() {
-        let (a, b) = ("box(1, 1, 1)", "box(2, 1, 1)");
-        // parts: a#0 on frames 0-1, a#1 on frame 0, b#0 on frames 1-2
-        let all = vec![vec![mesh(a), mesh(a)], vec![mesh(a), mesh(b)], vec![mesh(b)]];
-        let parts = spans_of(&all, &["mesh"]);
-        let mut held = Held::new(&parts, all.len());
-        held.at(&parts, 0);
+    fn a_shape_is_held_while_its_parts_show() {
+        let (a, b) = (mesh("box(1, 1, 1)"), mesh("box(2, 1, 1)"));
+        let mut held = Held::default();
+        held.at(0, &[(0, &a), (1, &a)]);
         assert!(Arc::ptr_eq(held.solids[0].as_ref().unwrap(), held.solids[1].as_ref().unwrap()), "one shape's parts share its solid");
         held.after(0, |_| false);
-        assert!(held.solids[0].is_some() && held.solids[1].is_none(), "a#1's last frame was 0");
-        held.at(&parts, 1);
-        held.after(1, |_| false);
-        assert!(held.solids[0].is_none() && held.solids[2].is_some());
-        assert!(held.shared["mesh:box(1, 1, 1)"].as_ref().is_ok_and(|w| w.upgrade().is_none()), "let go once no part holds it");
-        held.at(&parts, 2);
-        held.after(2, |i| i == 2);
+        assert!(held.solids[1].is_some(), "held while its part may come back");
+        // part 1 gone GONE frames: let go; part 0, still showing, keeps the shape
+        for k in 1..=GONE {
+            held.at(k, &[(0, &a), (2, &b)]);
+            held.after(k, |_| false);
+        }
+        assert!(held.solids[1].is_none() && held.solids[0].is_some() && held.solids[2].is_some());
+        // back: the shape's solid again, the one part 0 holds
+        held.at(GONE + 1, &[(1, &a)]);
+        assert!(Arc::ptr_eq(held.solids[1].as_ref().unwrap(), held.solids[0].as_ref().unwrap()));
+        for k in GONE + 2..=3 * GONE {
+            held.at(k, &[]);
+            held.after(k, |i| i == 2);
+        }
         assert!(held.solids[2].is_some(), "kept for an overlap still to be said");
+        assert!(held.solids[0].is_none() && held.solids[1].is_none());
+        assert!(held.shared["mesh:box(1, 1, 1)"].as_ref().is_ok_and(|w| w.upgrade().is_none()), "let go once no part holds it");
     }
 }

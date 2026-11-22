@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use bevy::math::Vec3;
 use raea_core_facts::{Finding, Level};
 
-use super::{Stage, called, num, runs, scale_of};
-use crate::view::corners;
+use super::{Item, Stage, called, num, runs, scale_of};
+use crate::view::{View, corners};
 
 /// Under this share of the frame showing any part is an empty frame
 const EMPTY: f32 = 0.08;
@@ -117,16 +117,27 @@ fn mark(grid: &mut [bool], b: [f32; 4], w: f32, h: f32) {
     }
 }
 
-pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
-    let n = st.all.len();
-    let mut boxes = HashMap::new();
-    // each frame: the share covered, whether it can be judged (no part of unknown size in view, no footage or 2D
-    // over the 3D), and its subject: (name, its box on screen, the share of its box outside the frame)
-    let mut covered = vec![1.0f32; n];
-    let mut judged = vec![false; n];
-    let mut subject: Vec<Option<(String, f32, bool)>> = vec![None; n];
-    for (k, its) in st.all.iter().enumerate() {
-        let Some(v) = st.views[k] else { continue };
+/// Each frame as it comes: the share covered, whether it can be judged (no part of unknown size in view, no footage or
+/// 2D over the 3D), and its subject: (name, the share of its box outside the frame, whether it could fit).
+#[derive(Default)]
+pub(crate) struct Framing {
+    boxes: HashMap<String, Option<(Vec3, Vec3)>>,
+    covered: Vec<f32>,
+    judged: Vec<bool>,
+    subject: Vec<Option<(String, f32, bool)>>,
+}
+
+impl Framing {
+    /// A frame's parts through its camera `v`, and what its page draws over them, on a w x h frame.
+    pub(crate) fn push(&mut self, _k: usize, its: &[Item], v: Option<View>, page: Option<&crate::Page>, w: f32, h: f32) {
+        let (c, j, s) = v.map_or((1.0, false, None), |v| self.frame(its, v, page, w, h));
+        self.covered.push(c);
+        self.judged.push(j);
+        self.subject.push(s);
+    }
+
+    fn frame(&mut self, its: &[Item], v: View, page: Option<&crate::Page>, w: f32, h: f32) -> (f32, bool, Option<(String, f32, bool)>) {
+        let boxes = &mut self.boxes;
         let mut grid = vec![false; GX * GY];
         let mut sure = true;
         let mut best: Option<(String, f32, f32, bool)> = None;
@@ -136,21 +147,21 @@ pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
                 sure = false;
                 continue;
             }
-            let Some((lo, hi)) = own_box(it, &mut boxes) else {
+            let Some((lo, hi)) = own_box(it, boxes) else {
                 // a model or other part of unknown size: judged only when its origin is well out of view
                 if matches!(it.kind, "model" | "entity" | "fire") {
                     if let Some([x, y, _]) = v.project(super::origin(it)) {
-                        if x > -0.5 * st.w && x < 1.5 * st.w && y > -0.5 * st.h && y < 1.5 * st.h {
+                        if x > -0.5 * w && x < 1.5 * w && y > -0.5 * h && y < 1.5 * h {
                             sure = false;
                         }
                     }
                 }
                 // its file's box fills what it shows, a floor's or terrain's left out as a slab mesh's is; across the
                 // camera's plane (a room model round it: Stay's pool) it may fill the view
-                let model = (it.kind == "model").then(|| model_box(it, &mut boxes)).flatten();
+                let model = (it.kind == "model").then(|| model_box(it, boxes)).flatten();
                 if let Some((lo, hi)) = model.filter(|(lo, hi)| !backdrop(it, *lo, *hi) || standing(it, *lo, *hi)) {
                     match v.bounds(corners(&it.world, lo, hi)) {
-                        Some(b) if v.share(b) > 0.0 => mark(&mut grid, b, st.w, st.h),
+                        Some(b) if v.share(b) > 0.0 => mark(&mut grid, b, w, h),
                         Some(_) => {}
                         None => sure &= corners(&it.world, lo, hi).into_iter().all(|p| v.project(p).is_none()),
                     }
@@ -169,9 +180,9 @@ pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
                 continue;
             };
             let inside = v.share(b);
-            let whole = ((b[2] - b[0]) * (b[3] - b[1]) / (st.w * st.h)).max(1e-9);
+            let whole = ((b[2] - b[0]) * (b[3] - b[1]) / (w * h)).max(1e-9);
             if inside > 0.0 {
-                mark(&mut grid, b, st.w, st.h);
+                mark(&mut grid, b, w, h);
             }
             // a wall fills the frame but isn't its subject
             if wall {
@@ -179,36 +190,39 @@ pub(crate) fn check(st: &Stage, page: &[crate::Page]) -> Vec<Finding> {
             }
             // the subject: the named part showing most, when it could fit in the frame
             if it.props.get("name").is_some() && inside > 0.0 && best.as_ref().is_none_or(|s| inside > s.1) {
-                let fits = b[2] - b[0] < 0.9 * st.w && b[3] - b[1] < 0.9 * st.h;
+                let fits = b[2] - b[0] < 0.9 * w && b[3] - b[1] < 0.9 * h;
                 best = Some((called(it), inside, 1.0 - inside / whole, fits && scale_of(it) > 0.0));
             }
         }
         // the page's words and videos fill the frame too: a headline over an empty 3D isn't an empty frame
-        for b in page.get(k).into_iter().flat_map(|p| p.words.iter().map(|w| w.bx).chain(p.videos.iter().copied()).chain(p.pictures.iter().copied())) {
-            mark(&mut grid, b, st.w, st.h);
+        for b in page.into_iter().flat_map(|p| p.words.iter().map(|w| w.bx).chain(p.videos.iter().copied()).chain(p.pictures.iter().copied())) {
+            mark(&mut grid, b, w, h);
         }
-        covered[k] = grid.iter().filter(|c| **c).count() as f32 / (GX * GY) as f32;
-        judged[k] = sure;
-        subject[k] = best.map(|(name, _, out, fits)| (name, out, fits));
+        (grid.iter().filter(|c| **c).count() as f32 / (GX * GY) as f32, sure, best.map(|(name, _, out, fits)| (name, out, fits)))
     }
-    let mut out = Vec::new();
-    let total = st.secs(0, n.saturating_sub(1).max(0));
-    for (a, b) in runs(st, n, |k| judged[k] && covered[k] < EMPTY) {
-        let (t0, t1) = ((st.frames[a] - st.frames[0]) as f64 / st.fps, (st.frames[b] - st.frames[0] + 1) as f64 / st.fps);
-        if st.secs(a, b) >= EMPTY_SECS && t0 > FADE_SECS && t1 < total - FADE_SECS {
-            let least = covered[a..=b].iter().copied().fold(1.0, f32::min);
-            let says = format!("almost nothing is on screen from {} to {} ({:.0}% of the frame shows any part)", st.at(a), st.at(b), least * 100.0);
-            out.push(st.finding("frame-empty", Level::Error, a, b, says).fix("aim the camera at what the shot is about, or bring it into the frame"));
+
+    /// SG14 over the frames given.
+    pub(crate) fn check(self, st: &Stage) -> Vec<Finding> {
+        let (n, covered, judged, subject) = (st.len(), self.covered, self.judged, self.subject);
+        let mut out = Vec::new();
+        let total = st.secs(0, n.saturating_sub(1).max(0));
+        for (a, b) in runs(st, n, |k| judged[k] && covered[k] < EMPTY) {
+            let (t0, t1) = ((st.frames[a] - st.frames[0]) as f64 / st.fps, (st.frames[b] - st.frames[0] + 1) as f64 / st.fps);
+            if st.secs(a, b) >= EMPTY_SECS && t0 > FADE_SECS && t1 < total - FADE_SECS {
+                let least = covered[a..=b].iter().copied().fold(1.0, f32::min);
+                let says = format!("almost nothing is on screen from {} to {} ({:.0}% of the frame shows any part)", st.at(a), st.at(b), least * 100.0);
+                out.push(st.finding("frame-empty", Level::Error, a, b, says).fix("aim the camera at what the shot is about, or bring it into the frame"));
+            }
         }
-    }
-    for (a, b) in runs(st, n, |k| subject[k].as_ref().is_some_and(|(_, out, fits)| *fits && *out > CUT_LO && *out < CUT_HI)) {
-        let names: Vec<&str> = subject[a..=b].iter().filter_map(|s| s.as_ref().map(|s| s.0.as_str())).collect();
-        if b + 1 - a > CUT_FRAMES && names.windows(2).all(|w| w[0] == w[1]) {
-            let says = format!("'{}', the part the shot shows most, is cut by the frame's edge from {} to {}", names[0], st.at(a), st.at(b));
-            out.push(st.finding("subject-cut", Level::Warn, a, b, says).fix("frame it whole (move the camera back or aim it), or move in until the cut is plainly meant"));
+        for (a, b) in runs(st, n, |k| subject[k].as_ref().is_some_and(|(_, out, fits)| *fits && *out > CUT_LO && *out < CUT_HI)) {
+            let names: Vec<&str> = subject[a..=b].iter().filter_map(|s| s.as_ref().map(|s| s.0.as_str())).collect();
+            if b + 1 - a > CUT_FRAMES && names.windows(2).all(|w| w[0] == w[1]) {
+                let says = format!("'{}', the part the shot shows most, is cut by the frame's edge from {} to {}", names[0], st.at(a), st.at(b));
+                out.push(st.finding("subject-cut", Level::Warn, a, b, says).fix("frame it whole (move the camera back or aim it), or move in until the cut is plainly meant"));
+            }
         }
+        out
     }
-    out
 }
 
 #[cfg(test)]
