@@ -9,14 +9,45 @@ set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 R=${RAEA_BIN:-$ROOT/target/release/raea}
 BAR=${FRAME_PURE_BAR:-0.999}
+PX=${FRAME_PURE_PX:-16}
 [ -x "$R" ] || { echo "frame-pure-3d: no raea at $R (cargo build --release -p raea-cli)" >&2; exit 2; }
 command -v ffmpeg >/dev/null || { echo "frame-pure-3d: needs ffmpeg on PATH" >&2; exit 2; }
 W=$(mktemp -d "${TMPDIR:-/tmp}/frame-pure-3d.XXXX")
 trap 'rm -rf "$W"' EXIT
 [ $# -gt 0 ] || set -- "$ROOT"/engine/render/tests/diag/*.tsx
 fail=0
+ssim() {
+  ffmpeg -v info -i "$1" -i "$2" -lavfi "[0:v]format=rgb24[a];[1:v]format=rgb24[b];[a][b]ssim" -f null - 2>&1 | grep -oE 'All:[0-9.]+' | cut -d: -f2
+}
+# pixels that differ by more than 96 of 255 levels, in patches: SSIM over a whole frame hides one small part (a cut
+# letter scored 0.9996), and this doesn't. An erosion first drops lone pixels, the edge noise of a glyph drawn from
+# another place in the atlas (17 of them along two revealed words), and keeps a patch (a cut letter: 318)
+bad_px() {
+  ffmpeg -v error -i "$1" -i "$2" -filter_complex "[0:v]format=rgb24[a];[1:v]format=rgb24[b];[a][b]blend=all_mode=difference,format=gray,erosion" -f rawvideo - |
+    python3 -I -c 'import sys; d = sys.stdin.buffer.read(); print(len(d) - len(d.translate(None, bytes(range(97, 256))) ))'
+}
+# a pair matches when its SSIM is at the bar and no more than PX pixels differ by more than 96 levels
+differ() {
+  local s p
+  s=$(ssim "$1" "$2"); p=$(bad_px "$1" "$2")
+  echo "SSIM ${s:-none}, ${p:-?} pixels off"
+  [ -z "$s" ] || [ -z "$p" ] || awk -v s="$s" -v b="$BAR" -v p="$p" -v m="$PX" 'BEGIN { exit !(s < b || p > m) }'
+}
 for t in "$@"; do
   n=$(basename "$t" .tsx)
+  # a repro with a "cold" and a "warm" composition (the glyph atlas, SG3): what a cold atlas draws must match a warm one
+  if grep -q 'id="cold"' "$t" && grep -q 'id="warm"' "$t"; then
+    for c in cold warm; do
+      "$R" render "$t" --composition "$c" --frame 0 -o "$W/$n-$c.png" >"$W/$n-$c.log" 2>&1 || { echo "frame-pure-3d: $n: $c didn't render:"; tail -3 "$W/$n-$c.log"; fail=1; }
+    done
+    if m=$(differ "$W/$n-cold.png" "$W/$n-warm.png"); then
+      echo "frame-pure-3d: $n: drawn into a cold atlas it differs from a warm one ($m; bar SSIM $BAR, $PX pixels): a glyph allocated as the atlas grew is cut"
+      fail=1
+    else
+      echo "frame-pure-3d: $n: cold and warm atlas match ($m)"
+    fi
+    continue
+  fi
   len=$(grep -oE 'durationInFrames=\{[0-9]+\}' "$t" | head -1 | grep -oE '[0-9]+')
   [ "${len:-1}" -gt 1 ] || continue
   if ! "$R" render "$t" -o "$W/$n/" >"$W/$n.log" 2>&1; then
@@ -27,12 +58,11 @@ for t in "$@"; do
       echo "frame-pure-3d: $n: frame $f alone didn't render:"; tail -3 "$W/$n-$f.log"; fail=1; continue
     fi
     seq=$(printf '%s/%s/frame-%05d.png' "$W" "$n" "$f")
-    s=$(ffmpeg -v info -i "$seq" -i "$W/$n-alone-$f.png" -lavfi "[0:v]format=rgb24[a];[1:v]format=rgb24[b];[a][b]ssim" -f null - 2>&1 | grep -oE 'All:[0-9.]+' | cut -d: -f2)
-    if [ -z "$s" ] || awk -v s="$s" -v b="$BAR" 'BEGIN { exit !(s < b) }'; then
-      echo "frame-pure-3d: $n frame $f: the sequence's frame differs from the frame rendered alone (SSIM ${s:-none}, bar $BAR): a 3D part kept an earlier frame's inputs or took another's row"
+    if m=$(differ "$seq" "$W/$n-alone-$f.png"); then
+      echo "frame-pure-3d: $n frame $f: the sequence's frame differs from the frame rendered alone ($m; bar SSIM $BAR, $PX pixels): a 3D part kept an earlier frame's inputs or took another's row"
       fail=1
     else
-      echo "frame-pure-3d: $n frame $f: SSIM $s"
+      echo "frame-pure-3d: $n frame $f: $m"
     fi
   done
 done

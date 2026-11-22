@@ -74,8 +74,10 @@ Feature: Stage guards: a 3D render an agent can't break
       # Status 11-21: built and green on main after SG1 and SG2 (f4b524f896): every sampled frame of the three repros
       # matches at SSIM 0.9998 or more. The bar is tight enough: a sequence's frame 28 against frame 29 alone scores
       # 0.986, so a part held since its first frame can't pass. Before SG1 the same repros showed frame 0's sphere,
-      # box, words, colour and size in a sequence. The atlas's cut glyph is one frame, not a sequence: its repro and
-      # test come with SG3.
+      # box, words, colour and size in a sequence. The atlas's cut glyph is one frame, not a sequence: its repro
+      # (glyph-atlas-probe.tsx, a cold atlas against a warm one) came with SG3, and with it a second measure, since SSIM
+      # over a whole frame scored the cut letter 0.9996: no more than 16 pixels off by over 96 levels, after an erosion
+      # drops lone pixels (a revealed word's edge noise).
 
   Rule: The engine stops doing it
 
@@ -111,11 +113,20 @@ Feature: Stage guards: a 3D render an agent can't break
       # Status 11-21 (branch stage-guards): text blocks are rows by identity; a_new_text_never_takes_an_old_ones_row
       # passes. Fires, fog volumes, plates and the other kinds a live frame diffs whole still take their frame's id.
 
+    @done
     Scenario: SG3. The atlas allocates before it draws
       Given bevy_rich_text3d 0.8 reads the atlas's size before it allocates a glyph (tess_glyph)
       When raea patches it ([patch] in Cargo.toml, a vendored copy, with the upstream issue filed)
+      Given the plan
+        | crate              | file                                        | lines | job                                                                              |
+        | bevy_rich_text3d   | vendor/bevy_rich_text3d/src/tess.rs         | +5    | the atlas image's size read after the glyph is allocated, in both branches (stroked, filled) |
+        | (workspace)        | Cargo.toml, vendor/vendor.toml              | +8    | the [patch] and the vendor entry: why, and the exit (an upstream release that reads the size after allocating) |
+        | raea-render (test) | engine/render/tests/diag/glyph-atlas-probe.tsx | 35 | "cold" (the film's glyph set into a fresh atlas) and "warm" (six Inter weights first, out of shot) |
+        | (script)           | tools/frame-pure-3d.sh                      | +25   | a repro with cold and warm compositions: the two frames must match            |
       Then glyph-atlas-probe.tsx draws every glyph whole with no warm-up text
-      And projects/mobile-ads components/stage.tsx Warm() comes out
+      And projects/mobile-ads components/stage.tsx Warm() comes out once the project renders on a raea with SG3 (0.1.9)
+      # Status 11-21: on a build without the fix the cold probe cuts a Space Mono H (179 pixels off against warm); with
+      # it, 0 pixels off (SSIM 0.99996). The upstream issue is drafted, not filed: filing it is a public post.
 
     Scenario: SG4. A part that won't despawn fails the render
       # Status 11-21: a live scene now drops the rows under another first (a block's glyphs, a part's components), in a

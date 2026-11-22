@@ -172,6 +172,13 @@ kind = "patch"
 reason = "frame-pure particles (raea #52): a new particle seeded by its spawn index, not the dead slot it recycles (vfx_init.wesl), and blended effects sorted by view depth from the main camera, far first as Bevy sorts its transparent phase, through the ribbons' sort pass (mod.rs, sort.rs, vfx_sort_fill.wesl); examples and GPU tests dropped; and no colon in a shader module's label (mod.rs's utils, the contract tests'), which DX12's DXC takes as a file name that names no file on Windows (raea #196)"
 exit = "a hanabi with a deterministic mode (both changes offered upstream); then back to the git dependency and drop the copy"
 
+[bevy_rich_text3d]
+path = "vendor/bevy_rich_text3d"
+upstream = "crates.io:0.8.0"
+kind = "patch"
+reason = "a glyph that grows the atlas is drawn whole: tess_glyph read the atlas image's size before allocating, and the allocation that doubled the atlas's height left that glyph drawn into the old bounds, cut (raea docs/stage-guards.feature SG3); the examples left out"
+exit = "a bevy_rich_text3d release that reads the atlas's size after allocating; then back to the crates.io crate"
+
 [usvg]
 path = "vendor/usvg"
 upstream = "crates.io:0.48.1"
