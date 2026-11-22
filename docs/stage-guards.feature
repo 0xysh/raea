@@ -406,6 +406,13 @@ Feature: Stage guards: a 3D render an agent can't break
       # jumps there); on the clean scenes, 13 lurches on cameras locked to a walking body (sheet3d) or a first-person
       # walk starting with no ease, and two dolly reversals (soma_dressed's 0.15 m, Stay's 0.84 m in and 0.43 m out at
       # 1:12). Left: `raea fingerprint things`' lurch check, still its own.
+      # Branch stage-guards-16: folded in. That check (camera-speed, P2) read the picture's motion and compared each
+      # half second's mean speed with the one before, inside a move away from its eases; a speed that ramps up over a
+      # few frames passes the one-frame kink above and was caught only there, by hand. motion.rs `ramps` runs the same
+      # on the camera itself on every render, as a camera-lurch warning at 2x (none near a kink already said). On the
+      # 29 clean scenes: 3 warnings, all real (creatures' camera locked to the raccoon as it breaks from a walk to a
+      # run, 2.4x); the 13 errors are the same. On film2: 6 warnings beside its 41 errors. `raea fingerprint things`
+      # keeps its own for video with no 3D scene (footage).
 
     Scenario: SG14. The frame is composed
       Given the plan

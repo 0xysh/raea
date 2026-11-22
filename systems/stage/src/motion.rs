@@ -84,6 +84,7 @@ pub(crate) fn camera(st: &Stage) -> Vec<Finding> {
         let lin: Vec<f32> = (0..v.len()).map(|i| if i == 0 { 0.0 } else { (v[i].eye - v[i - 1].eye).length() }).collect();
         let ang: Vec<f32> = (0..v.len()).map(|i| if i == 0 { 0.0 } else { v[i - 1].turn(&v[i]) }).collect();
         for (what, s, seen) in [("travel", &lin, SEEN_TRAVEL), ("turn", &ang, SEEN_TURN)] {
+            let mut said = Vec::new();
             let top = s.iter().copied().fold(0.0, f32::max);
             if top <= 1e-5 {
                 continue;
@@ -103,14 +104,50 @@ pub(crate) fn camera(st: &Stage) -> Vec<Finding> {
                         let mut f = st.finding("camera-lurch", level, k - 1, k, says).fix("move the camera on one smooth path through its keys (raea/camera's cameraPath, and path.check() for keys that still brake), easing only where it starts and stops");
                         f.measure = Some(raea_core_facts::finding::Measure { name: "speed change".into(), value: r.min(99.0) as f64, unit: "x".into(), limit: Some(LURCH as f64) });
                         out.push(f);
+                        said.push(k);
                         i += 3;
                         continue;
                     }
                 }
                 i += 1;
             }
+            out.extend(ramps(st, a, what, s, (MOVING * top).max(seen), &said));
         }
         out.extend(reversals(st, a, &v));
+    }
+    out
+}
+
+/// `raea fingerprint things`' lurch (camera-speed, read from the picture's motion and run only by hand), folded in on
+/// the camera itself so every render runs it: inside a move, its eases (half a second each end) left out, a half
+/// second whose mean speed is LURCH times the one before's, or that fraction of it. A speed that ramps up over a few
+/// frames passes the one-frame kink above. A warning, as that check's was (P2); none near a kink already said.
+fn ramps(st: &Stage, a: usize, what: &str, s: &[f32], moving: f32, said: &[usize]) -> Vec<Finding> {
+    let half = ((st.fps * 0.5).round() as usize).max(2);
+    let mean = |r: std::ops::Range<usize>| s[r].iter().sum::<f32>() / half as f32;
+    let mut out = Vec::new();
+    let mut i = 1;
+    while i < s.len() {
+        let start = i;
+        while i < s.len() && s[i] > moving {
+            i += 1;
+        }
+        let (mut t, end) = (start + half, i.saturating_sub(half));
+        while t + 2 * half <= end {
+            let (m0, m1) = (mean(t..t + half), mean(t + half..t + 2 * half));
+            let (r, k) = (m0.max(m1) / m0.min(m1).max(1e-6), a + t + half);
+            if r >= LURCH && !said.iter().any(|x| x.abs_diff(k) <= 2 * half) {
+                let how = if m1 > m0 { "speeds up" } else { "slows" };
+                let says = format!("the camera's {what} {how} {r:.1}x within half a second at {}, mid-move", st.at(k));
+                let mut f = st.finding("camera-lurch", Level::Warn, k - half, k + half - 1, says).fix("ease the speed change over a second or more, or hold one speed through the move (raea/camera's cameraPath)");
+                f.measure = Some(raea_core_facts::finding::Measure { name: "speed change over half a second".into(), value: r.min(99.0) as f64, unit: "x".into(), limit: Some(LURCH as f64) });
+                out.push(f);
+                t += 2 * half;
+                continue;
+            }
+            t += half;
+        }
+        i += 1;
     }
     out
 }
@@ -271,6 +308,24 @@ mod tests {
         let kinked: Vec<Vec<Item>> = (0..60).map(|i| { let z = if i < 30 { 10.0 - 0.02 * i as f32 } else { 9.4 - 0.06 * (i - 30) as f32 }; vec![cam([0.0, 0.0, z], [0.0, 0.0, -100.0])] }).collect();
         let f = run(kinked);
         assert!(f.iter().any(|f| f.check == "camera-lurch" && f.level == Level::Error), "{f:?}");
+    }
+
+    #[test]
+    fn a_speed_that_ramps_up_over_a_few_frames_lurches_too() {
+        // 2 cm a frame (eased in), then 2 to 8 cm a frame over 8 frames, then 8 (eased out): no frame kinks alone, but
+        // its half seconds either side of the ramp differ 3x, as `raea fingerprint things` read it from the picture
+        let speed = |i: usize| match i {
+            0..15 => 0.02 * eased(i as f32 / 15.0),
+            15..50 => 0.02,
+            50..58 => 0.02 + 0.06 * (i - 50) as f32 / 8.0,
+            58..105 => 0.08,
+            _ => 0.08 * (1.0 - eased((i - 105) as f32 / 15.0)),
+        };
+        let mut z = 20.0;
+        let ramp: Vec<Vec<Item>> = (0..120).map(|i| { z -= speed(i); vec![cam([0.0, 0.0, z], [0.0, 0.0, -100.0])] }).collect();
+        let f: Vec<Finding> = run(ramp).into_iter().filter(|f| f.check == "camera-lurch").collect();
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].level == Level::Warn && f[0].says.contains("speeds up"), "{}", f[0].says);
     }
 
     #[test]
