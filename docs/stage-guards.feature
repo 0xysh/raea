@@ -169,6 +169,13 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-sys-contact    | systems/contact/src/model.rs  | +12   | forget: the files' triangles and the parts' solids let go             |
         | raea-runtime-export | runtime/export/src/scene.rs   | +18   | told_taking: each frame's scene let go as its parts are made; forget and the memory marks after each end step |
         | raea-core-shape     | core/shape/src/lib.rs         | +25   | cached: shapes held to 1 GB in memory, and only those that took 2 ms or more kept on disk |
+        | raea-io-codec       | io/codec/src/samples.rs       | +88   | Samples: an encoder's samples on disk as they come, read back one at a time |
+        | raea-io-codec       | io/codec/src/remux.rs         | +5    | annexb_mux_from: the mux reads each frame as it writes it             |
+        | raea-io-apple       | io/apple/src/vt.rs            | +7    | VideoToolbox's samples kept in Samples                                |
+        | raea-io-soft        | io/soft/src/h264.rs           | +6    | openh264's samples kept in Samples                                    |
+        | raea-io-av1         | io/av1/src/lib.rs             | +4    | rav1e's packets kept in Samples                                       |
+        | raea-sys-mix        | systems/mix/src/offline.rs    | +4    | the bounce fills each channel as the frames come, sized once from the frame count |
+        | raea-sys-share      | systems/share/src/lib.rs      | +43   | the mesh share (moved from runtime/scene3d) lets go of what no part holds |
       Then a 13,000-frame 3D render's memory stays within 10% of its first minute's
       # Status 11-21 (branch stage-guards-8): the film (13,175 frames, 7:19) renders whole with every end check on, at
       # a 9.4 to 13.6 GB peak. Before, memguard killed it past 24 GB (28 to 33 GB) after its last frame. Four causes,
@@ -197,6 +204,21 @@ Feature: Stage guards: a 3D render an agent can't break
       # (9.7 GB, 2.2 million of them boxes) in 12 hours of renders on 11-21, filling the disk to 1 GB free. Memory is
       # now held to 1 GB of triangles (let go past it, made or read again as asked), and only a shape that took 2 ms
       # or more to make is kept on disk (the boolean cuts it was for; a box takes microseconds).
+      # Branch stage-guards-18: the kept scenes were the smaller part of the growth. Found with stack logging
+      # (malloc_history's live call tree at frames 2,500 and 7,500, diffed by the raea function that made each
+      # allocation) and footprint's regions. Every encoder (VideoToolbox, openh264, rav1e) kept each frame's sample in
+      # memory to the end, 1.04 GB on the film, and the mux copied them all again: raea-io-codec's Samples keeps them
+      # in a temp file as they come, and the mux reads them back one at a time. The mesh share kept every shape it ever
+      # made, and a part whose size changes each frame is a new shape each frame: 234,945 meshes a minute in (450 MB of
+      # heap, and their GPU buffers), nearly all for shapes no part had any more; it lets go of what only it holds each
+      # time it doubles (raea-sys-share, out of runtime/scene3d, which is at 2,000 lines). The bounce held the whole
+      # sound twice at its end; it fills each channel as the frames come. The film with every check on: 2.4 GB at frame
+      # 1,000 (3.4 before), 3.7 GB at 13,000 (5.75), the clipping check's 5.5 GB (6.5), a 8.6 GB peak (9.5); the same
+      # findings and a video of 13,175 frames with its sound. Still not met: memory grows by about 45% after the first
+      # minute. Left: the kept scenes and the checks' per-frame data (0.48 GB over the film, measured by turning them
+      # off), pages the allocator holds while they're partly free (Malloc Small's dirty memory 440 to 825 MB while the
+      # heap in use grew 150 MB: a mesh made and let go each frame for each part that changes size), the sound as it's
+      # bounced (0.17 GB, the film's sound itself) and each frame's manifest entry kept as JSON values (6 KB a frame).
 
   Rule: The SDK stops allowing it
 
