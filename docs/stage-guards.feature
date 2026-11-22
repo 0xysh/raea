@@ -169,9 +169,15 @@ Feature: Stage guards: a 3D render an agent can't break
     Scenario: SG6. Lines are lines
       Given the plan
         | crate        | file                              | lines | job                                                                                  |
-        | @raea/render | sdk/render/src/3d/line.tsx        | 140   | Line3d: points, width, drawn up to p, round joins, one mesh (a swept outline); Tube for a round section |
+        | @raea/render | sdk/render/src/3d/line.tsx        | 160   | Line3d: points, width, drawn up to p, round joins, one mesh (a swept outline); Tube for a round section |
+        | raea         | sdk/raea/src/mesh.ts              | +2    | raea/mesh exports them                                                               |
+        | raea (test)  | sdk/raea/conformance/line3d.test.tsx | 80 | one part at every share drawn, the cut at p, the width and plane, the tube's radius and untwisted rings, caps, refusals |
+        | (guide)      | sdk/guides/craft/bevy/meshes.md   | +22   | the curve recipe, and a chain of parts as a common mistake                            |
       Then a curve is one part, solid at every frame, and the 3D guide's curve recipe uses it
       And SG12 flags a chain of more than 8 parts named `NAME-i` whose ends touch as "a line made of parts: Line3d"
+      # Status 11-21 (branch stage-guards-5): Line3d and Tube are built, one BufferMesh each, cut at p; renders of a
+      # 120-point Tube and an 80-point Line3d growing over 40 frames read smooth with round ends at every frame. The
+      # meshes guide's recipe uses them. The SG12 flag is SG12's.
 
     @done
     Scenario: SG7. A camera path that can't lurch

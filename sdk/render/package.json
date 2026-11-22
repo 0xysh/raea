@@ -23,7 +23,8 @@
     "./bevy-own": "./src/bevy-own.gen.tsx",
     "./feathers": "./src/feathers.ts",
     "./camera/path": "./src/camera/path.ts",
-    "./3d/clock": "./src/3d/clock.ts"
+    "./3d/clock": "./src/3d/clock.ts",
+    "./3d/line": "./src/3d/line.tsx"
   },
   "raea": {
     "plugins": {

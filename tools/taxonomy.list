@@ -71,6 +71,7 @@ raea RichText        3D text in runs (raea-render's text3d), as HTML's rich text
 raea Span            a run of a RichText (HTML's <span>, inside RichText only)
 raea Text3D          solid 3D letters as a mesh's geometry (Manifold's text3d)
 raea BufferMesh      a mesh from its own vertex buffers (Bevy's Mesh built from attributes, as JSX)
+raea Tube            a line through points with a round section, one mesh drawn on to a share of its length (SG6; Bevy has no swept shape)
 raea Instances       one mesh or glTF drawn at many placements (Bevy batches the copies; it has no component of its own)
 raea Grass           a field of grass the engine makes in tiles by distance from a few grids of the ground (no Bevy component)
 raea MeshSequence    a baked simulation, one mesh a frame
