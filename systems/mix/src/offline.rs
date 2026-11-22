@@ -159,7 +159,7 @@ pub fn bounce(frames: &[Cue], fps: f64, master: Option<(f64, f64)>) -> Result<ra
 /// master is then `master_raw` over it, the same limiter the live master node runs, sample for sample: one bounce, and
 /// mastering (or mastering again for AAC) is a pass over a buffer.
 pub fn bounce_raw(frames: &[Cue], fps: f64) -> Result<raea_io_media::Audio, String> {
-    let s = Streamer::start(fps);
+    let s = Streamer::start(fps, frames.len());
     for c in frames {
         s.push(c.clone());
     }
@@ -230,7 +230,8 @@ pub struct Streamer {
 }
 
 impl Streamer {
-    pub fn start(fps: f64) -> Streamer {
+    /// A bounce of `frames` frames at `fps` (the count sizes its buffers once; more frames than that still come out).
+    pub fn start(fps: f64, frames: usize) -> Streamer {
         let (tx, rx) = std::sync::mpsc::channel::<Cue>();
         let done = std::thread::Builder::new()
             .name("raea mixer bounce".into())
@@ -238,18 +239,21 @@ impl Streamer {
                 let mut e = Engine::new(fps, None)?;
                 e.cx.queue_event_for(e.master, event(crate::nodes::Master { pre: 1.0, ceiling: 1.0, bypass: true }));
                 e.cx.update().map_err(|x| format!("{x:?}"))?;
-                let mut out: Vec<f32> = Vec::new();
+                // each channel filled as the frames come, from one frame's interleaved samples at a time: an
+                // interleaved copy of the whole sound split at the end held it twice (340 MB on a 7-minute film, SG4a)
+                let size = e.score.t(frames as i64).max(0) as usize;
+                let (mut l, mut r, mut buf) = (Vec::with_capacity(size), Vec::with_capacity(size), Vec::new());
                 let mut f = 0i64;
                 for cue in rx {
                     e.feed(f, &cue, 0)?;
-                    let end = e.score.t(f + 1).max(0) as usize;
-                    let start = out.len() / 2;
-                    out.resize(end * 2, 0.0);
-                    e.pull(&mut out[start * 2..end * 2])?;
+                    let n = (e.score.t(f + 1).max(0) as usize).saturating_sub(l.len());
+                    buf.clear();
+                    buf.resize(n * 2, 0.0);
+                    e.pull(&mut buf)?;
+                    l.extend(buf.iter().step_by(2));
+                    r.extend(buf.iter().skip(1).step_by(2));
                     f += 1;
                 }
-                let l: Vec<f32> = out.iter().step_by(2).copied().collect();
-                let r: Vec<f32> = out.iter().skip(1).step_by(2).copied().collect();
                 Ok(raea_io_media::Audio { rate: RATE, channels: vec![l, r] })
             })
             .expect("bounce thread");

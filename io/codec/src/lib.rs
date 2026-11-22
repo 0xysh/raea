@@ -7,6 +7,7 @@ pub mod audio;
 pub mod mezz;
 #[cfg(feature = "mux")]
 pub mod remux;
+pub mod samples;
 mod resample;
 pub mod yuv;
 

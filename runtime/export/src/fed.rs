@@ -213,7 +213,7 @@ pub(crate) fn render_fed(app: &mut App, js: &Path, w: u32, h: u32, fps: f64, tot
     let notes: std::cell::RefCell<Vec<raea_sys_mix::ToneCue>> = std::cell::RefCell::new(Vec::new());
     let dir = cx.dir.to_path_buf();
     // the sound bounced as the frames come, on its own thread (it was mixed after the last frame: 3 s on the export)
-    let streamer = std::cell::RefCell::new(Some(raea_sys_mix::offline::Streamer::start(fps)));
+    let streamer = std::cell::RefCell::new(Some(raea_sys_mix::offline::Streamer::start(fps, total.max(0) as usize)));
     let t0 = std::time::Instant::now();
     let pic = raea_core_program::ir::Program { fps, width: w, height: h, frames: total, ..Default::default() };
     let frame_log = std::env::var_os("RAEA_FRAME_LOG").map(PathBuf::from);
