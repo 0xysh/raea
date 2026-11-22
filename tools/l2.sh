@@ -30,7 +30,9 @@ free() { df -g / | awk 'NR==2{print $4}'; }
 say() { echo "L2 $*"; }
 
 # the commit, and the app: in its tree since 11-16 (a clone of the old raea-feed app left in the checkout goes first);
-# before, the raea-feed commit at that commit's pointer, in a clone of its own
+# before, the raea-feed commit at that commit's pointer, in a clone of its own; a commit of the public repo records
+# neither (the app is raea-feed's, outside the export), so raea-feed's main, as L1 reads it (tools/agents/check),
+# fetched into the checkout's own clone, never into ~/raea's
 intree=; [ "$(git -C "$T" cat-file -t "$SHA:apps/app" 2>/dev/null)" = tree ] && intree=1
 [ -n "$intree" ] && [ -d "$T/apps/app/.git" ] && rm -rf "${T:?}/apps/app"
 git -C "$T" checkout -q -f "$SHA" || exit 2
@@ -38,7 +40,13 @@ git -C "$T" checkout -q -f "$SHA" || exit 2
 app=$(git -C "$T" ls-tree HEAD apps/app | awk '{print $3}')
 if [ -z "$intree" ]; then
   [ -d "$T/apps/app/.git" ] || { rmdir "$T/apps/app" 2>/dev/null; git clone -q "$ROOT/apps/app" "$T/apps/app" || exit 2; }
-  git -C "$T/apps/app" fetch -q "$ROOT/apps/app" && git -C "$T/apps/app" checkout -q -f "$app" || exit 2
+  if [ -n "$app" ]; then
+    git -C "$T/apps/app" fetch -q "$ROOT/apps/app" || exit 2
+  else
+    git -C "$T/apps/app" fetch -q "$(git -C "$ROOT/apps/app" remote get-url origin)" main || exit 2
+    app=$(git -C "$T/apps/app" rev-parse FETCH_HEAD) || exit 2
+  fi
+  git -C "$T/apps/app" checkout -q -f "$app" || exit 2
 fi
 say "commit: $(git -C "$T" log --oneline -1 | cut -c1-90) | app ${app:0:8}"
 
