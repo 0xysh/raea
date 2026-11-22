@@ -8,7 +8,7 @@ export { values, shapeOf, type Curve, type Shape } from "./systems/values.ts";
 export { knowledge, type Audience, type Break } from "./systems/know.ts";
 export { causes, type Causes } from "./systems/cause.ts";
 export { tension } from "./systems/tension.ts";
-export { analyze, derive, checkStory, checkWorld, type Finding, type Level } from "./checks.ts";
+export { analyze, derive, checkStory, checkWorld, unmeant, type Finding, type Level } from "./checks.ts";
 export { mutants, sampleMutants, type Mutant, type Label, type Kind } from "./mutate.ts";
 export { lens, readThrough, structure, labelled, type Lens, type LensResult, type Proposal, type Reading, type StageMap, type Structure } from "./lens.ts";
 export { LENSES, bernays, campbell, harmon, kishotenketsu, mckee, pas, pixar, propp, saveTheCat, storynomics, vogler } from "./lenses/index.ts";

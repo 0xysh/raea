@@ -4,7 +4,7 @@
 // The inference here is shared: the protagonist, the brand, the idea's value, the inciting event, the crisis, the
 // climax. It reads only derived data and the story's own fields, never prose.
 import type { World } from "./ecs.ts";
-import { analyze, type Finding, type Level } from "./checks.ts";
+import { analyze, unmeant, type Finding, type Level } from "./checks.ts";
 import { beatsOf, eventsOf, infoOf, keysOf, type RAgent, type RBeat, type REvent } from "./load.ts";
 import type { AnyStory } from "./model.ts";
 
@@ -110,7 +110,8 @@ export function readThrough(s: AnyStory, lenses: Lens[], telling?: string, seed 
   const w = analyze(s, telling, seed);
   const st = structure(w);
   return lenses.map((l) => {
-    const r = l.read(w, st);
+    const r0 = l.read(w, st);
+    const r = { ...r0, findings: unmeant(w, r0.findings) };
     const own = labelled(st, l.name);
     const map = ordered(l.stages, r.map, own, st);
     return { lens: l.name, ...r, map, passes: !r.findings.some((f) => f.level === "error") };

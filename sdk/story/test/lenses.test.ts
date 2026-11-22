@@ -70,3 +70,13 @@ test("shots of one event count its turn once", () => {
   expect(found.filter((f) => f.check === "turns")).toEqual([]);
   expect(found.filter((f) => f.check === "rhythm")).toEqual([]);
 });
+
+test("a beat can mean a finding: a breather the journey wants", () => {
+  const t = launch.tellings["30s"] as any[];
+  const world = { ...launch.world, tries: { ...launch.world.tries, turns: {} } };
+  const noisy = { ...launch, world };
+  const before = checkStory(noisy as typeof launch, "30s").filter((f) => f.about === "b2");
+  expect(before.length).toBeGreaterThan(0);
+  const meant = { ...launch, world, tellings: { "30s": [t[0], t[1], { ...t[2], meant: before.map((f) => f.check) }, t[3]] } };
+  expect(checkStory(meant as typeof launch, "30s").filter((f) => f.about === "b2")).toEqual([]);
+});

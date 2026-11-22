@@ -43,6 +43,7 @@ export function beatShape(k: { events?: string[]; facts?: string[]; agents?: str
       pays: oneOrMany(k.setups?.length ? enumOf(k.setups) : str),
       stage: { type: "object", additionalProperties: str },
       surprise: { type: "string", enum: ["meant"] },
+      meant: oneOrMany(str),
       says: listOf({ type: "object", additionalProperties: false, required: ["who", "says"], properties: { who, says: str, means: str, how: str } }),
       onScreen: str,
       seconds: { type: "number" },

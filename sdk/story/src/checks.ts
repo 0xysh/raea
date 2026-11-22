@@ -19,6 +19,12 @@ export const analyze = (s: AnyStory, telling?: string, seed = 0): World => deriv
 
 const RUN = 4; // beats in a row all turning one way before it's worth a note
 
+/** Findings left once every beat's `meant` is taken out: a check a beat says it means, about that beat. */
+export function unmeant(w: World, found: Finding[]): Finding[] {
+  const meant = new Map(beatsOf(w).map(({ key, beat }) => [key, new Set(listOf(beat.meant))]));
+  return found.filter((f) => !meant.get(f.about)?.has(f.check));
+}
+
 export function checkWorld(w: World): Finding[] {
   const out: Finding[] = [];
   const add = (check: string, level: Level, about: string, says: string, fix?: string) => out.push({ check, level, about, says, fix });
@@ -89,7 +95,7 @@ export function checkWorld(w: World): Finding[] {
   const focus = infoOf(w).idea?.value;
   const curves = w.resource<Record<string, Curve>>("Curves") ?? {};
   if (focus && curves[focus]?.shape === "flat") add("idea", "warn", focus, `the story is about ${focus}, and ${focus} never moves`, "turn it in the beats that matter");
-  return out;
+  return unmeant(w, out);
 }
 
 /** Check a story told one way: its findings, errors first. */

@@ -97,6 +97,9 @@ export type Beat<F extends string, A extends string, E extends string, S extends
   stage?: Record<string, string>;
   /** a surprise the story means (a reveal nothing set up) */
   surprise?: "meant";
+  /** findings about this beat the story means, by check (\"rhythm\", \"mckee:complications\" for a breather the
+   *  journey wants): they're left out of what checks and lenses report */
+  meant?: string | string[];
   says?: Line<A>[];
   /** what's on screen, when it says more than the events' `does` */
   onScreen?: Maybe<string>;

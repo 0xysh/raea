@@ -2,7 +2,7 @@
 // picks one. sample() walks seeds from the one given until a story passes (no finding at the level refused, in the
 // exact checks and in every lens given), so a sampled story is always one that holds together. samples() gives several
 // different ones. matrix() runs one story pattern across many premises and says, per premise, how often it holds.
-import { checkWorld, analyze, type Finding, type Level } from "./checks.ts";
+import { checkWorld, analyze, unmeant, type Finding, type Level } from "./checks.ts";
 import { structure, type Lens } from "./lens.ts";
 import type { AnyStory } from "./model.ts";
 import { resolve } from "./resolve.ts";
@@ -16,7 +16,7 @@ const ranks: Record<Level, number> = { error: 0, warn: 1, note: 2 };
 export function judge(s: AnyStory, seed: number, telling?: string, lenses: Lens[] = []): Finding[] {
   const w = analyze(s, telling, seed);
   const st = structure(w);
-  return [...checkWorld(w), ...lenses.flatMap((l) => l.read(w, st).findings)];
+  return [...checkWorld(w), ...unmeant(w, lenses.flatMap((l) => l.read(w, st).findings))];
 }
 
 /** One story from the space that passes, starting at `seed`; the best found when none passes in `tries`. */
