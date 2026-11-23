@@ -152,7 +152,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
       Then `raea make prep` fits each pick with `raea gen check -o` (front +z, real metres, bottom-centre) and writes a
         quarter-triangle ID_lod1.glb (blender/decimate.py), each with its .glb.json saying how it was made
 
-    @needs:MK12
+    @needs:MK12 @done
     Scenario: MK13. A kit is a component set
       Then `raea make kit` lands it in shared/components/<kit>/ (one component per object importing its model and LOD
         from beside it: compositions import .glb files as their path), with lineup.tsx (a 1 m bar, labels), cover.png,
