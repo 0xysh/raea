@@ -13669,6 +13669,7 @@ dependencies = [
  "raea-app-check-cause",
  "raea-app-check-flash",
  "raea-app-check-inbox",
+ "raea-app-check-make",
  "raea-app-check-read",
  "raea-app-check-text",
  "raea-core-brief",
@@ -13697,6 +13698,16 @@ version = "0.1.0"
 name = "raea-app-check-inbox"
 version = "0.1.0"
 dependencies = [
+ "raea-io-home",
+ "serde_json",
+]
+
+[[package]]
+name = "raea-app-check-make"
+version = "0.1.0"
+dependencies = [
+ "dunce",
+ "raea-core-facts",
  "raea-io-home",
  "serde_json",
 ]
@@ -13861,6 +13872,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-app-make"
+version = "0.1.0"
+dependencies = [
+ "dunce",
+ "raea-app-judge",
+ "raea-core-brief",
+ "raea-core-facts",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-app-media"
 version = "0.1.0"
 dependencies = [
@@ -13947,6 +13969,7 @@ dependencies = [
  "dunce",
  "raea-app-ask",
  "raea-app-judge",
+ "raea-app-make",
  "raea-core-facts",
  "raea-core-meshcheck",
  "raea-core-shape",
@@ -14229,6 +14252,7 @@ dependencies = [
  "raea-app-game",
  "raea-app-judge",
  "raea-app-layers",
+ "raea-app-make",
  "raea-app-media",
  "raea-app-notes",
  "raea-app-play",

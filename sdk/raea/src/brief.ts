@@ -7,7 +7,7 @@
 //
 // The types are generated from the Rust schemas (core/brief, raea-core-brief) into brief.gen.ts, so what tsc checks is
 // what raea reads: `raea context` evaluates the module and Rust validates its default export again.
-import type { Brief, Parts, Script, Taste } from "./brief.gen";
+import type { Brief, Make, Parts, Script, Taste } from "./brief.gen";
 
 export type * from "./brief.gen";
 export { fingerprint } from "./fingerprint";
@@ -25,3 +25,13 @@ export const script = (s: Script): Script => s;
 export const taste = (t: Taste): Taste => t;
 /** An object's parts (NAME.parts.ts), written before any geometry: each by name, its level, count and material. */
 export const parts = (p: Parts): Parts => p;
+
+/** A job made to a frozen plan and held to the review loop (docs/make.feature): `make: scene({...})` on brief.ts. Every
+ *  object has its real size and whether it came from the reference or was invented; `raea make status` decides when
+ *  it's done, and the agent's Stop hook holds it there. */
+export const scene = (m: Omit<Make, "kind">): Make => ({ kind: "scene", ...m });
+/** A kit: props in one style at real size (`style` is the paragraph every reference carries: era, palette, materials,
+ *  wear and one fictional maker). Done is a GLB, a LOD1 and a thumbnail per object, a lineup and kit.json. */
+export const kit = (m: Omit<Make, "kind">): Make => ({ kind: "kit", ...m });
+/** Shots of a built scene, each named for the file it lands as and described in a crew's words. */
+export const shot = (m: Omit<Make, "kind">): Make => ({ kind: "shot", ...m });

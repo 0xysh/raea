@@ -4,11 +4,13 @@
 //! types (`declarations`), so what tsc checks is exactly what this crate reads.
 
 pub mod brief;
+pub mod make;
 pub mod parts;
 pub mod script;
 pub mod taste;
 
 pub use brief::Brief;
+pub use make::Make;
 pub use parts::Parts;
 pub use script::Script;
 pub use taste::Taste;
@@ -36,6 +38,7 @@ pub fn declarations() -> String {
         script::Script, script::Scene, script::Beat, script::Line,
         taste::Taste, taste::TasteSection, taste::Rule, taste::RuleCheck, taste::RuleLevel, taste::Check,
         parts::Parts, parts::Concept, parts::Level, parts::Count, parts::Part,
+        make::Make, make::Kind, make::Source, make::DialValue, make::Dial, make::Route, make::Origin, make::Pick, make::Object, make::Shot,
     ));
     out.join("\n\n") + "\n"
 }
