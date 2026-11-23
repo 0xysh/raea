@@ -2,7 +2,8 @@
 // by story (a story's rows are all in one of train, val and test), so a held-out number is on stories never seen.
 //
 //   extract   script prose -> the story as data (no onScreen or lines in the answer: they're the input)
-//   generate  a story with one beat cut, and where -> that beat, as JSON under the story's own beat schema
+//   generate  the story's state before a cut beat and the beats around it (src/state.ts windowAt) -> that beat, as
+//             JSON under the story's own beat schema
 //   critic    script prose -> where it breaks: [{beat, check, level}], labelled exactly by checkStory on the structure
 //             behind the prose. Negatives are cuts a viewer could see: a beat cut, two beats swapped, a beat from
 //             another story spliced in. A cut that breaks nothing is labelled clean, so the critic must read, not count.
@@ -11,8 +12,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { beatSchema, rng, storySchema } from "../src/index.ts";
-import { bare, breaks, criticSchema, name, prose } from "./lib.ts";
+import { beatSchema, rng, storySchema, windowAt } from "../src/index.ts";
+import { bare, breaks, CHUNK, chunkSteps, criticSchema, name, prose, stepSchema } from "./lib.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const IN = arg("--in", join(homedir(), ".vd/story"));
@@ -25,7 +26,7 @@ const stories: { i: number; s: J; premise: J }[] = readFileSync(join(IN, "storie
 /** The split a story falls in, by its index. */
 export const split = (i: number) => { const h = (Math.imul(i + 1, 2654435761) >>> 0) % 10; return h === 0 ? "test" : h === 1 ? "val" : "train"; };
 
-const out: Record<string, Record<string, J[]>> = { extract: {}, generate: {}, critic: {} };
+const out: Record<string, Record<string, J[]>> = { extract: {}, steps: {}, generate: {}, critic: {} };
 const push = (task: string, sp: string, row: J) => ((out[task][sp] ??= []).push(row));
 let clean = 0, broken = 0;
 
@@ -38,14 +39,16 @@ for (const { i, s } of stories) {
   push("extract", sp, { i, kind: "script", prompt: p, answer: JSON.stringify(bare(s)) });
   // a transcript has the words alone: the same story from its lines, as a launch film's speech reads
   const spoken = beats.flatMap((b) => (b.says ?? []).map((l: J) => `${name(l.who)}: ${l.says}`));
+  // steps: the windowed extractor, a chunk at a time with what earlier chunks found (story_models.py chain runs it end to end)
+  for (const [j, st] of chunkSteps(s).entries()) push("steps", sp, { i, at: j, of: Math.ceil(beats.length / CHUNK), prompt: st.prompt, script: st.script, answer: JSON.stringify(st.answer), gold: j === 0 ? JSON.stringify(bare(s)) : undefined });
   if (spoken.length >= 2) push("extract", sp, { i, kind: "lines", prompt: spoken.join("\n"), answer: JSON.stringify(bare(s)) });
 
-  // generate: each beat cut in turn on test and val; one at random on train (keeps the set balanced by story)
-  const cuts = sp === "train" ? [Math.floor(r() * beats.length)] : beats.map((_, k) => k);
+  // generate, windowed: the story's state before the cut beat and the beats around it (windowAt), never the whole
+  // telling, so a step reads the same amount at beat 5 or beat 500. Every beat on test and val; three at random on train.
+  const cuts = sp === "train" ? [...new Set([0, 1, 2].map(() => Math.floor(r() * beats.length)))] : beats.map((_, k) => k);
   for (const k of cuts) {
-    const rest = beats.filter((_, n) => n !== k);
-    const partial = { ...s, tellings: { main: rest } };
-    push("generate", sp, { i, at: k, prompt: JSON.stringify({ story: partial, write: `the beat that goes at place ${k + 1} of ${beats.length}` }), answer: JSON.stringify(beats[k]), schema: beatSchema(s) });
+    const partial = { ...s, tellings: { main: beats.filter((_, n) => n !== k) } };
+    push("generate", sp, { i, at: k, prompt: windowAt(s, "main", k), story: partial, answer: JSON.stringify(beats[k]), schema: beatSchema(s) });
   }
 
   // critic: the story as written, then cuts a viewer could see
@@ -71,7 +74,7 @@ for (const { i, s } of stories) {
   }
 }
 
-writeFileSync(join(OUT, "schemas.json"), JSON.stringify({ extract: storySchema(), critic: criticSchema }, null, 1));
+writeFileSync(join(OUT, "schemas.json"), JSON.stringify({ extract: storySchema(), steps: stepSchema(storySchema()), critic: criticSchema }, null, 1));
 for (const [task, sps] of Object.entries(out)) {
   mkdirSync(join(OUT, task), { recursive: true });
   for (const [sp, rows] of Object.entries(sps)) writeFileSync(join(OUT, task, `${sp}.jsonl`), rows.map((x) => JSON.stringify(x)).join("\n") + "\n");

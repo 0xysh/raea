@@ -17,3 +17,4 @@ export { compileScript, compileStorylets, dramaManager, toInk, toYarn, onScreenO
 export { resolved, type RStory } from "./load.ts";
 export { toData, fromData, storySchema, beatSchema, beatShape, keysIn, type DataError } from "./data.ts";
 export { toLines, fromLines } from "./lines.ts";
+export { stateAt, stateIn, stateLines, windowAt, type State } from "./state.ts";

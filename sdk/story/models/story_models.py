@@ -16,6 +16,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
@@ -31,10 +32,21 @@ SYSTEM = {
         "routine; turns move values -3..3) and tellings.main (the beats in the script's order, each {shows: [event "
         "keys], feel, reveals, hides, asks, setup, pays}). Keys are short camelCase words. Answer with JSON only."
     ),
+    "steps": (
+        "You read a long film or game script a chunk at a time. You are given KNOWN, what earlier chunks found, in "
+        "story lines (VALUE key: neg / pos, FACT key: text, AGENT key: want | need | lie | mask, EVENT key: who -- does "
+        "| because | sets | turns), and the next SCRIPT chunk. Answer as raea/story JSON with only what's new in this "
+        "chunk: values, facts, agents, world (events first met here, in the order they happen, each {who, does, because, "
+        "sets, turns ...}; a cause can be a KNOWN event), and beats (this chunk's beats in order, each {shows: [event "
+        "keys, KNOWN or new], feel, reveals, hides, asks, setup, pays}). Never repeat a KNOWN key. Keys are short "
+        "camelCase words. Answer with JSON only."
+    ),
     "generate": (
-        "You are given a story as raea/story JSON with one beat missing from tellings.main, and where it goes. Write "
-        "that beat as JSON: {shows: [event keys], feel, reveals, hides, asks, setup, pays, onScreen, says}. It must "
-        "follow from what's shown before it, turn a value or reveal something, and pay off what's still open. "
+        "You are given a story in story lines: its values, facts, agents and the events it can still show; its STATE "
+        "before the missing beat (value LEVELS, what the audience KNOWS, OPEN questions, SUSPENSE, UNPAID setups, "
+        "UNSETTLED wants and needs, events AHEAD); the beats BEFORE it and AFTER it. Write the missing beat as JSON: "
+        "{shows: [event keys], feel, reveals, hides, asks, setup, pays, onScreen, says}. It must follow from the beats "
+        "before, lead into the beats after, turn a value or reveal something, and pay off what's still open. "
         "onScreen is what the viewer sees; says are the lines [{who, says}]. Answer with JSON only."
     ),
     "critic": (
@@ -230,6 +242,63 @@ def predict(a):
     print(f"predicted {n} -> {out}", flush=True)
 
 
+def chain(a):
+    """The windowed extractor end to end: each story's chunks in order, each step handed what the earlier steps found
+    (as story lines, written by models/known.ts), then merged; written as extract predictions, scored by score.ts."""
+    from mlx_lm import load, stream_generate
+    from mlx_lm.sample_utils import make_sampler
+
+    rd = rows_dir(a)
+    schemas = json.load(open(rd / "schemas.json"))
+    steps = read_jsonl(rd / "steps" / f"{a.split}.jsonl")
+    stories = {}
+    for r in steps:
+        stories.setdefault(r["i"], []).append(r)
+    ids = sorted(stories)[: a.limit or None]
+    who = ("zero" if a.zero_shot else Path(a.adapter).name) + "-chain"
+    model, tok = load(a.base, adapter_path=None if a.zero_shot else a.adapter)
+    helper = subprocess.Popen(["bun", str(Path(__file__).parent / "known.ts")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+
+    def ask(q):
+        helper.stdin.write(json.dumps(q) + "\n")
+        helper.stdin.flush()
+        return json.loads(helper.stdout.readline())
+
+    out = rd / "extract" / f"pred-{who}-{a.split}.jsonl"
+    done = {json.loads(l)["key"] for l in open(out)} if out.exists() else set()
+    sampler = make_sampler(temp=0.0)
+    t0 = time.time()
+    with open(out, "a") as f:
+        for n, i in enumerate(ids):
+            key = f"{i}:script"
+            if key in done:
+                continue
+            answers, t, bad = [], time.time(), 0
+            for r in sorted(stories[i], key=lambda r: r["at"]):
+                user = ask({"prompt": {"answers": answers, "script": r["script"]}})["prompt"]
+                row = dict(r, prompt=user)
+                if a.zero_shot:
+                    user = zero_shot_user("steps", row, schemas)
+                proc = Constrained(tok, schema_for("steps", row, schemas))
+                text = ""
+                for resp in stream_generate(model, tok, prompt_text(tok, "steps", user), max_tokens=a.max_new, sampler=sampler, logits_processors=[proc]):
+                    text += resp.text
+                    if proc.m.is_stopped():
+                        break
+                try:
+                    answers.append(json.loads(text))
+                except json.JSONDecodeError:
+                    bad += 1
+                    answers.append({})
+            story = ask({"merge": answers})["story"]
+            f.write(json.dumps({"key": key, "i": i, "kind": "script", "pred": json.dumps(story), "steps": len(answers), "unparsed": bad, "secs": round(time.time() - t, 2)}) + "\n")
+            f.flush()
+            if (n + 1) % 5 == 0:
+                print(f"{n + 1}/{len(ids)} stories in {time.time() - t0:.0f}s", flush=True)
+    helper.stdin.close()
+    print(f"chained {len(ids)} -> {out}", flush=True)
+
+
 def frontier(a):
     rd = rows_dir(a)
     schemas = json.load(open(rd / "schemas.json"))
@@ -269,7 +338,7 @@ def frontier(a):
 
 def export(a):
     import shutil
-    import subprocess
+
 
     ad = Path(os.path.expanduser(a.adapter))
     fused, out = ad / "fused", ad / "onnx"
@@ -317,8 +386,8 @@ def onnx_predict(a):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["train", "predict", "frontier", "export", "onnx"])
-    ap.add_argument("task", choices=["extract", "generate", "critic"])
+    ap.add_argument("cmd", choices=["train", "predict", "chain", "frontier", "export", "onnx"])
+    ap.add_argument("task", choices=["extract", "steps", "generate", "critic"])
     ap.add_argument("--rows", default="~/.vd/story/rows")
     ap.add_argument("--base", default="Qwen/Qwen3-0.6B")
     ap.add_argument("--name", default="q06")
@@ -335,7 +404,7 @@ def main():
     ap.add_argument("--zero-shot", dest="zero_shot", action="store_true")
     ap.add_argument("--model", default="anthropic/claude-sonnet-5.5")
     a = ap.parse_args()
-    {"train": train, "predict": predict, "frontier": frontier, "export": export, "onnx": onnx_predict}[a.cmd](a)
+    {"train": train, "predict": predict, "chain": chain, "frontier": frontier, "export": export, "onnx": onnx_predict}[a.cmd](a)
 
 
 if __name__ == "__main__":

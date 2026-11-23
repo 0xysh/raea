@@ -11,8 +11,8 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { beatSchema, checkStory, LENSES, readThrough, toData, type AnyStory } from "../src/index.ts";
-import { bare, breaks, prose } from "./lib.ts";
+import { beatSchema, checkStory, LENSES, readThrough, toData, windowAt, type AnyStory } from "../src/index.ts";
+import { bare, breaks, CHUNK, chunkSteps, prose } from "./lib.ts";
 
 type J = Record<string, any>;
 const arg = (k: string, d?: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
@@ -42,8 +42,10 @@ const rowsDir = join(homedir(), ".vd/story/rows");
 if (existsSync(join(rowsDir, "schemas.json"))) copyFileSync(join(rowsDir, "schemas.json"), join(OUT, "schemas.json"));
 const write = (task: string, rows: J[]) => writeFileSync(join(OUT, task, `${NAME}.jsonl`), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
 
+for (const t of ["steps"]) mkdirSync(join(OUT, t), { recursive: true });
+write("steps", chunkSteps(s).map((st, j) => ({ i: 0, at: j, of: Math.ceil(beats.length / CHUNK), prompt: st.prompt, script: st.script, answer: JSON.stringify(st.answer), gold: j === 0 ? JSON.stringify(bare(s)) : undefined })));
 write("extract", [{ i: 0, kind: "script", prompt: prose(beats), answer: JSON.stringify(bare(s)) }]);
-write("generate", beats.map((b, k) => ({ i: 0, at: k, prompt: JSON.stringify({ story: { ...s, tellings: { main: beats.filter((_, n) => n !== k) } }, write: `the beat that goes at place ${k + 1} of ${beats.length}` }), answer: JSON.stringify(b), schema: beatSchema(s) })));
+write("generate", beats.map((b, k) => ({ i: 0, at: k, prompt: windowAt(s, "main", k), story: { ...s, tellings: { main: beats.filter((_, n) => n !== k) } }, answer: JSON.stringify(b), schema: beatSchema(s) })));
 const critic: J[] = [{ i: 0, kind: "clean", prompt: prose(beats), answer: JSON.stringify({ breaks: breaks(s, beats) }) }];
 beats.forEach((_, k) => { const b2 = beats.filter((_, n) => n !== k); critic.push({ i: 0, kind: `cut${k + 1}`, prompt: prose(b2), answer: JSON.stringify({ breaks: breaks(s, b2) }) }); });
 beats.slice(0, -1).forEach((_, k) => { const b2 = [...beats]; [b2[k], b2[k + 1]] = [b2[k + 1], b2[k]]; critic.push({ i: 0, kind: `swap${k + 1}`, prompt: prose(b2), answer: JSON.stringify({ breaks: breaks(s, b2) }) }); });

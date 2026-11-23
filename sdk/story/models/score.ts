@@ -49,7 +49,7 @@ function scoreExtract(gold: J, pred: J | null): J {
 
 function scoreGenerate(row: J, pred: J | null): J {
   if (!pred) return { valid: 0, holds: 0, clean: 0, shows: 0 };
-  const { story: partial, write } = JSON.parse(row.prompt);
+  const partial = row.story ?? JSON.parse(row.prompt).story;
   const at = row.at as number;
   const beats = [...partial.tellings.main.slice(0, at), pred, ...partial.tellings.main.slice(at)];
   const full = { ...partial, tellings: { main: beats } };
@@ -59,7 +59,6 @@ function scoreGenerate(row: J, pred: J | null): J {
   const goldStory = fromData({ ...partial, tellings: { main: [...partial.tellings.main.slice(0, at), gold, ...partial.tellings.main.slice(at)] } }).story!;
   const holds = valid ? (errorsOf(story!).length ? 0 : 1) : 0;
   const warns = valid ? errorsOf(story!, "warn").length : 99, goldWarns = errorsOf(goldStory, "warn").length;
-  void write;
   return { valid, holds, clean: valid && warns <= goldWarns ? 1 : 0, shows: jac(new Set(pred.shows ?? []), new Set(gold.shows ?? [])) };
 }
 
