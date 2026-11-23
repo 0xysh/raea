@@ -132,7 +132,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
   Rule: kits (MK10-MK13)
 
-    @needs:MK1
+    @needs:MK1 @done
     Scenario: MK10. References made in one style, checked on one sheet
       Then `raea make refs` makes each object's reference with `raea gen image` with the style images as input, the
         plan's style paragraph and the scan template (`--dry` quotes it), and writes review/refs.png (`raea make sheet
