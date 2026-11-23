@@ -23,7 +23,7 @@ fn rewrite_into_points_imports_and_re_exports_at_the_copies() {
 fn an_import_written_in_a_string_template_or_comment_is_left_as_text() {
     // a code chip's text (a launch film types `import { RigidBody } from "raea/plugins/avian"`) isn't an import
     let m = &raea_io_home::home().join("sdk/raea/src");
-    let src = "import { a } from \"raea\";\nconst chip = `import { b } from \"raea/clock\"; ${ {x: `import c from \"raea\"`}.x }`;\n// import d from \"raea\";\n/* import e from \"raea\"; */\nconst s = 'import f from \"raea\"';\nconst r = /import g from \"raea\"/;\nimport { h } from \"raea/clock\";\n";
+    let src = "import { a } from \"raea\";\nconst chip = `import { b } from \"raea/clock\"; ${ {x: `import c from \"raea\"`}.x }`;\n// import d from \"raea\";\n/* import e from \"raea\"; */\nconst s = 'import f from \"raea\"';\nconst r = /import g from \"raea\"/;\n// its @import and nesting\nimport { h } from \"raea/clock\";\n";
     let out = rewrite_into(src, Path::new("/nowhere/app"), m, "../motion", None).unwrap();
     assert!(out.starts_with("import { a } from \"../motion/prelude\""), "{out}");
     assert!(out.ends_with("import { h } from \"../app/clock\";\n"), "{out}");
