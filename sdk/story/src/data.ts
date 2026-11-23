@@ -47,6 +47,7 @@ export function beatShape(k: { events?: string[]; facts?: string[]; agents?: str
       says: listOf({ type: "object", additionalProperties: false, required: ["who", "says"], properties: { who, says: str, means: str, how: str } }),
       onScreen: str,
       seconds: { type: "number" },
+      scene: str,
     },
   };
 }
@@ -145,6 +146,7 @@ export function fromData(j: unknown): { story: AnyStory | null; errors: DataErro
       });
     });
   }
+  if (s.lenses !== undefined && (!Array.isArray(s.lenses) || s.lenses.some((l) => typeof l !== "string"))) err("lenses", "lenses are names (\"mckee\", \"pas\" ...)");
   if (s.idea && (s.idea as Json).value !== undefined) has("values", "idea.value", (s.idea as Json).value);
   return { story: { ...(s as object), kind: "story" } as AnyStory, errors };
 }

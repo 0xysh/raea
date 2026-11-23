@@ -104,6 +104,8 @@ export type Beat<F extends string, A extends string, E extends string, S extends
   /** what's on screen, when it says more than the events' `does` */
   onScreen?: Maybe<string>;
   seconds?: number;
+  /** the scene it belongs to: consecutive beats with one scene are its shots (a feature's telling is scenes of shots) */
+  scene?: string;
 };
 
 /** A telling's beats. A beat may be a choice point over beats, `null` among the options meaning "leave it out", so a

@@ -16,3 +16,4 @@ export { sample, samples, matrix, judge, type Sampled, type SampleOptions, type 
 export { compileScript, compileStorylets, dramaManager, toInk, toYarn, onScreenOf, type Storylet } from "./compile.ts";
 export { resolved, type RStory } from "./load.ts";
 export { toData, fromData, storySchema, beatSchema, beatShape, keysIn, type DataError } from "./data.ts";
+export { toLines, fromLines } from "./lines.ts";
