@@ -194,3 +194,30 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
         | guides   | sdk/guides/craft/story/write.md       | 90    | the three layers, into the project          |
         | guides   | sdk/guides/craft/story/check.md       | 60    | each finding and its fix                    |
         | guides   | sdk/guides/craft/story/score.md       | 50    | lenses, the critic, a real shape            |
+
+  Rule: ST9. Any length
+
+    Scenario: ST9a. Story lines
+      Then a story reads and writes as one keyword-led line per value, fact, agent, event and beat (toLines, fromLines)
+      And every valid corpus story reads back from its lines exactly, and a broken line names where
+      And the plan:
+        | crate | file                       | lines | job                                     |
+        | sdk   | sdk/story/src/lines.ts     | 160   | to and from story lines                 |
+        | sdk   | sdk/story/test/lines.test.ts | 80  | the round trip, broken lines, the corpus |
+
+    Scenario: ST9b. Windows, not whole stories
+      Given the state at a beat (what the audience knows, open questions, suspense, levels, tension, unpaid setups,
+        unsettled wants, events ahead) stays about the same size at any length
+      Then the generator writes a beat from its state and the beats around it, and the extractor reads a script a
+        chunk at a time with what earlier chunks found, merged
+      And on Birds the chained extractor beats the whole-story extractor, and the windowed generator beats its zero-shot
+      And the plan:
+        | crate | file                         | lines | job                                     |
+        | sdk   | sdk/story/src/state.ts       | 120   | stateAt, windowAt                       |
+        | sdk   | sdk/story/models/lib.ts      | 180   | chunkSteps, mergeSteps, stepSchema      |
+        | sdk   | sdk/story/models/known.ts    | 30    | prompts for the chain, from raea/story  |
+
+    Scenario: ST9c. A feature-length story
+      Given a public-domain feature film told shot by shot, its scenes grouped
+      Then the extractor chains through it and the checks and lenses run on what it reads
+      And the generator writes scenes top-down from premise to world to scenes to shots, each level checked

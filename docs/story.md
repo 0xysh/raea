@@ -240,6 +240,39 @@ export default story({
 - **The audience's feeling** per beat (curiosity, concern, relief, delight) is a target, so a story can be checked
   against the curve it means to draw.
 
+## Any length
+
+A story has no length cap. The checks and lenses are ordinary code over the whole telling, so they run on 55 beats
+or 2,000 alike in milliseconds. Only the models have a context window, so no model call ever holds the whole story.
+Each one reads the story's state at a beat plus a window around it. Length becomes a number of steps, like a game
+tick, never a bigger prompt.
+
+- **State** (`src/state.ts`, `stateAt`): what the systems hold just before beat k. That is what the audience knows,
+  the open questions, suspense, each value's level, tension, setups planted but not paid, each agent's unsettled
+  want, need or lie, and the events not yet shown. It is about the same size at minute 3 or minute 100. It carries
+  what the earlier text would have carried.
+- **Story lines** (`src/lines.ts`, `toLines` / `fromLines`): one keyword-led line per value, fact, agent, event and
+  beat, the way Fountain writes a screenplay. They read back exactly: every valid corpus story round-trips. The
+  TypeScript data stays the story; lines are what people skim and models read and write a line at a time. They save
+  only about 22% against JSON (Birds: 2,924 tokens to 2,294), so the format is not what solves length; windows are.
+- **The generator** reads `windowAt`: the world's values, facts and agents, the events it can still use (unshown,
+  or shown by a neighbour), the state, three beats before and two after, and writes the beat between, as JSON
+  under that story's beat schema. On Birds the window shrinks from 7,300 characters at beat 3 to 2,900 at beat 55
+  as events get shown.
+- **The extractor** reads a script six beats at a time (`models/lib.ts` `chunkSteps`). Each step gets KNOWN (the
+  keys earlier steps found, as story lines) and its chunk of script, and answers only what's new plus the chunk's
+  beats. `story_models.py chain` runs the steps in order and merges them. On gold answers the merge is exact for all
+  1,571 corpus stories. The whole-story extractor stays as the baseline the chained one has to beat on Birds.
+- **The critic**: for structure, the exact checks are the critic at any length, on the extractor's reading. The
+  learned critic earns its place on what code can't see: prose read a window at a time, and taste learned from the
+  launch pairs.
+- **Hierarchy, next**: a feature is about 200 world events (that fits in a window) but 1,500 or more shots (that
+  doesn't and needn't). A beat's `scene` groups its shots. Work goes top-down: premise, then world, then scenes,
+  then shots a scene at a time, each level checked before the next. KNOWN and the generator's event list grow with
+  the world, not the telling; past a few hundred events they'll be cut to the current act's.
+- **Proof at length**: Birds (55 shots, by another author) now. Next is a public-domain feature (Keaton's
+  *Sherlock Jr.*, 1924) to prove the loop at real length.
+
 ## Lenses: the frameworks
 
 A lens is a module with the same shape for every framework:
