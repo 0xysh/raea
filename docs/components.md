@@ -59,6 +59,7 @@ The mapping:
   "contracts": { "size": [0.24, 0.26, 0.18], "stands": true, "band": null, "sound": "own" },
   "controls": { "tint": { "kind": "color" }, "grain": { "kind": "number", "min": 0, "max": 1 } },
   "pipelines": { "forward": "checked", "solari": "checked" },   // or "unchecked"; a shader or material says this
+  "backends": { "metal": "checked", "vulkan": "checked", "dx12": "unchecked" },  // where its fixture was drawn (wgpu)
   "plugins": [],                 // Bevy plugin catalog entries it needs (sdk/raea/bench/bevy-plugins/package.json)
   "fixture": "~/components/kettle/fixture.tsx",
   "checks": ["stands-on", "~/checks/kettle-steam.ts"],
@@ -82,6 +83,10 @@ Why each field exists:
   Controls panel can read them without running the code.
 - **pipelines**: a shader or extended material may draw wrong or not at all under Solari (sdk/guides/craft/bevy/solari.md);
   an item says which pipelines its fixture was checked on.
+- **backends**: raea draws through wgpu on Metal (Mac), Vulkan (Linux, and Mesa's lavapipe in the release's checks)
+  and DX12 (Windows). WESL that one backend's compiler accepts can be refused or drawn differently by another (a
+  reserved word, a precision difference, a binding limit), so a shader or material item says where its fixture was
+  drawn, and `raea component check` on a machine adds its own backend.
 - **fixture, checks, stills**: an item is published with the composition that renders it alone, the checks that pass
   there, and the stills it drew, so `raea component check NAME` can tell a consumer's install drew the same.
 - **build**: an asset made in Blender or by a generator carries the script that makes it again, so the asset isn't a
