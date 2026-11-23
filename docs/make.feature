@@ -87,7 +87,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
   Rule: the three tiers of gate (MK4-MK6)
 
-    @needs:MK1
+    @needs:MK1 @done
     Scenario: MK4. Defects as calibrated ask questions
       Given the judge's yes/no defects (apps/judge rubric.rs: floating, intersecting, blobby, stand_in, clones,
         flat_colour, plastic, ...) and the loop's own (a cohesion outlier on a reference sheet, a real brand, garbled
