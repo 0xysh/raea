@@ -96,7 +96,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
       And it gates once `raea ask calibrate` passes it on the person's labels (16 problem, 16 clean, held-out AUC 0.8);
         until then its answer shows in the status as advice
 
-    @needs:MK1
+    @needs:MK1 @done
     Scenario: MK5. A rubric per kind for the fresh critic
       Then `raea judge --kind scene|kit|shot` asks the kind's categories (scene: layout, props, screens and signage,
         materials, light, atmosphere, plausibility, composition; kit: cohesion, reference fidelity, brief, mesh,
