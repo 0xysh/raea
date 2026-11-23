@@ -147,7 +147,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         one light (review/picks.png), and `raea make pick ID tripo|meshy "why"` records the pick and its one-line why (the earlier ~150 props: Meshy ~70%, small items and printed labels; Tripo the big
         hard-surface heroes)
 
-    @needs:MK11
+    @needs:MK11 @done
     Scenario: MK12. Prep and LOD
       Then `raea make prep` fits each pick with `raea gen check -o` (front +z, real metres, bottom-centre) and writes a
         quarter-triangle ID_lod1.glb (blender/decimate.py), each with its .glb.json saying how it was made
