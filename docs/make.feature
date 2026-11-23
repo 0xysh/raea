@@ -111,6 +111,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
   Rule: measured placement (MK7-MK9)
 
+    @done
     Scenario: MK7. Grounding at contact points
       Given a part whose box bottom isn't where it touches down (splayed feet, a handle, an origin offset)
       Then `raea scene lint` casts rays down from its lowest vertices (its feet), ignoring itself, volumes and decals,
