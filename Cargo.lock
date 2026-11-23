@@ -14258,6 +14258,7 @@ dependencies = [
  "raea-runtime-react",
  "raea-runtime-sound",
  "raea-runtime-wear",
+ "raea-sys-fixes",
  "raea-sys-index",
  "regex",
  "serde",
@@ -15922,6 +15923,14 @@ dependencies = [
  "raea-sys-fingerprint",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "raea-sys-fixes"
+version = "0.1.0"
+dependencies = [
+ "raea-io-home",
+ "rusqlite",
 ]
 
 [[package]]

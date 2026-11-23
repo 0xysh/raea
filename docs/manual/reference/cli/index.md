@@ -123,6 +123,7 @@ What an agent reads and shows the person, and the tools raea installs.
 | Verb | What it does |
 | --- | --- |
 | [`raea guide`](guide.md) | Print raea's craft guides: the floor read before any edit, the modes, the notes and the 3D guides. |
+| [`raea fix`](fix.md) | A problem looked up before you guess: what you see or the error text, "quoted" for an exact phrase. |
 | [`raea context`](context.md) | Print what to read before working on a project: its taste, brief and look, the floor and its modes' guides. |
 | [`raea notes`](notes.md) | A person's notes as files the work is held to: each taken word for word, then restated as asks before anything changes. |
 | [`raea show`](show.md) | Show the person something in the raea app, as an item they can use and answer: stills, a video, a sound, a script, an interactive .tsx or a question. |

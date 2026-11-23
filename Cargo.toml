@@ -91,6 +91,7 @@ members = [
     "systems/vision",
     "systems/columns",
     "systems/index",
+    "systems/fixes",
     "systems/fingerprint",
     "systems/fingerprint-use",
     "systems/fingerprint-things",

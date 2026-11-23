@@ -171,7 +171,7 @@ done
 # (@raea/ui, the page's DOM every render goes through, isn't an @raea/<name> path, so it's named here)
 git archive "$ref" sdk/tsconfig.base.json sdk/ui/src sdk/ui/package.json sdk/ui/bevy sdk/raea/src sdk/raea/library sdk/raea/package.json sdk/react/js/src sdk/react/js/lite sdk/react/js/shims sdk/react/js/package.json sdk/react/js/tsconfig.json sdk/shell/src \
   "${pkgs[@]}" \
-  tools/tokensynth tools/sao tools/goo tools/splat tools/matchmove tools/local_setup.py tools/clothes tools/garments tools/ensure.sh sdk/guides/craft docs/sdk-coverage.md engine/cli/template/theme.css ':(glob)engine/cli/src/*.ts' \
+  tools/tokensynth tools/sao tools/goo tools/splat tools/matchmove tools/local_setup.py tools/clothes tools/garments tools/ensure.sh sdk/guides/craft sdk/guides/fixes docs/sdk-coverage.md engine/cli/template/theme.css ':(glob)engine/cli/src/*.ts' \
   | tar -x -C "$stage/share/raea"
 # a folder copied as it is here (links kept, as rsync -a; tar, since Git's bash on Windows has no rsync)
 copy() { mkdir -p "$2" && tar -C "$(dirname "$1")" --exclude .cache -cf - "$(basename "$1")" | tar -C "$2" -xf -; }
@@ -181,6 +181,9 @@ copy sdk/react/tw/node_modules/tailwindcss "$stage/share/raea/sdk/react/tw/node_
 # (raea_io_home::models: ~/.local/share/raea-models, %LOCALAPPDATA%\raea\models on Windows); every platform since #43
 mkdir -p "$stage/share/raea/models/beat-this"
 cp ~/.local/share/raea-models/beat-this/beat_this_small0.onnx "$stage/share/raea/models/beat-this/"
+# `raea fix`'s library (systems/fixes reads it here, read-only): pinned in tools/release/models.tsv like the models
+mkdir -p "$stage/share/raea/models/fixes"
+cp ~/.local/share/raea-models/fixes/fixes-library.db "$stage/share/raea/models/fixes/"
 # the agent skill (raea: raea-skills at the commit REF pins), which the installer copies into
 # ~/.claude/skills; raea-work (sdk/skills, work.raea.io's showcase pages) is internal and stays out. Only the skill
 # folders (each with its SKILL.md) ship: raea-skills' skills/ is also its Claude plugin, whose manifest, hooks, README
