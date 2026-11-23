@@ -178,7 +178,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         (a box first, a model's triangles when its box comes close; inside a part said so), leaving out volumes,
         particles, decals, see-through parts (glass) and anything under 5 cm
 
-    @needs:MK14
+    @needs:MK14 @done
     Scenario: MK17. Shots from words and from a floor plan
       Then the shot-language guide (bevy/shots) maps a crew's words to moves (push in, truck, reveal, rack focus,
         walkthrough at 0.4-0.6 m/s and 1.5-1.7 m); a path drawn on `raea make plan`'s floor plan (its metres, x right,
