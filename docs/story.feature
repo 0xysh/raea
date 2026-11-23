@@ -178,6 +178,7 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
 
   Rule: ST7. The launch corpus
 
+    @done
     Scenario: ST7a. What the better launch of a pair does
       Given 158 same-account pairs of launch films, measured and transcribed
       Then the paired comparison and a blind read of 30 pairs say whether craft shows at all, with numbers
@@ -185,6 +186,7 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
 
   Rule: ST8. The skill tree
 
+    @done
     Scenario: ST8a. craft/story in the raea skill
       Then craft/story/ holds a router and a page per framework in our own words with sources, and how to write, check,
         sample and score a story with raea/story
@@ -198,6 +200,7 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
 
   Rule: ST9. Any length
 
+    @done
     Scenario: ST9a. Story lines
       Then a story reads and writes as one keyword-led line per value, fact, agent, event and beat (toLines, fromLines)
       And every valid corpus story reads back from its lines exactly, and a broken line names where
@@ -225,6 +228,7 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
 
   Rule: ST10. Proven against plain prompts
 
+    @done
     Scenario: ST10a. Edge cases and fuzzing
       Given 29 odd and broken stories, each with what should happen, and valid stories with one field made the wrong type
       Then anything fromData accepts, every reader reads without crashing (fromData holds a story to storySchema)
@@ -236,6 +240,7 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
         | sdk   | sdk/story/bench/fuzz.ts    | 80    | wrong-typed fields through every reader    |
         | sdk   | sdk/story/src/data.ts      | 40    | shapeErrors: the schema as the reader's gate |
 
+    @done
     Scenario: ST10b. The same prompts with and without it
       Given eight prompts written five ways by one writer (plain; plain and an editor; plain and raea/story as the
         editor; written as story data; story data then a screenwriter), judged blind by two models of other families
