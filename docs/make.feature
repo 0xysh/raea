@@ -70,7 +70,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
       And `done` is true when nothing is missing and every gate is clear, and also when the job is capped (its rounds
         reached the cap) or stalled; a capped or stalled job is delivered short, with what's missing listed
 
-    @needs:MK1
+    @needs:MK1 @done
     Scenario: MK2. The Stop hook: the agent can't end a job that isn't done
       Given an agent session (Claude Code, codex, gemini, kimi) with raea's hooks, in a project whose brief has `make`
       When its turn is about to end and `raea make status` isn't done
