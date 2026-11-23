@@ -29,13 +29,6 @@ const STOP: &[&str] = &[
     "before", "while", "from", "into", "at", "as", "have", "has", "had", "was", "were", "will", "would", "should", "could", "any", "some", "all",
     "just", "also", "so", "then", "than", "there", "their", "them", "they", "which",
 ];
-/// query words that name a domain, and the domain tag they rank
-const DOMAINS: &[(&str, &str)] = &[
-    ("three", "threejs"), ("three.js", "threejs"), ("threejs", "threejs"), ("r3f", "r3f"), ("fiber", "r3f"), ("bevy", "bevy"), ("blender", "blender"), ("godot", "godot"),
-    ("unity", "unity"), ("unreal", "unreal"), ("webgpu", "webgpu"), ("ffmpeg", "ffmpeg"), ("shaders", "shaders"),
-    ("shader", "shaders"), ("glsl", "shaders"), ("wgsl", "shaders"), ("video", "video"), ("audio", "audio"), ("motion", "motion"),
-    ("solari", "solari"), ("raea", "raea"),
-];
 
 /// A query: its quoted phrases and its other words, lowercased, stopwords out
 #[derive(Debug, Default)]
@@ -64,8 +57,26 @@ pub fn parse(q: &str) -> Query {
     out
 }
 
+/// The domain tag a query word names, which ranks that domain's entries first
 fn domain_of(w: &str) -> Option<&'static str> {
-    DOMAINS.iter().find(|(k, _)| *k == w).map(|(_, d)| *d)
+    Some(match w {
+        "three" | "three.js" | "threejs" => "threejs",
+        "r3f" | "fiber" => "r3f",
+        "shader" | "shaders" | "glsl" | "wgsl" => "shaders",
+        "bevy" => "bevy",
+        "blender" => "blender",
+        "godot" => "godot",
+        "unity" => "unity",
+        "unreal" => "unreal",
+        "webgpu" => "webgpu",
+        "ffmpeg" => "ffmpeg",
+        "video" => "video",
+        "audio" => "audio",
+        "motion" => "motion",
+        "solari" => "solari",
+        "raea" => "raea",
+        _ => return None,
+    })
 }
 
 /// The words that match: domain words only rank, unless they're all there is
@@ -136,7 +147,7 @@ pub fn search_library(db: &Connection, q: &Query, domain: Option<&str>, n: usize
     if terms.is_empty() {
         return Ok(Vec::new());
     }
-    // the boosts name only domains from DOMAINS, so they're written into the SQL; the rest are parameters
+    // the boosts name only domains domain_of returns, so they're written into the SQL; the rest are parameters
     let boost: String = q.words.iter().filter_map(|w| domain_of(w)).map(|d| format!(" * (CASE WHEN (' ' || f.domains || ' ') LIKE '% {d} %' THEN 2.5 ELSE 1.0 END)")).collect();
     let sql = format!(
         "SELECT f.support, f.problem, coalesce(f.cause, ''), f.fix, coalesce(f.also, ''), coalesce(f.domains, ''), coalesce(f.sources, '')
