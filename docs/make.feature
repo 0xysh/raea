@@ -160,6 +160,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
   Rule: shots (MK14-MK17)
 
+    @done
     Scenario: MK14. Camera moves, focus and the handheld walk
       Then raea/camera has static, dolly, truck, pedestal, crane, pan, tilt, orbit, dollyZoom (the lens solved per
         frame to hold the subject) and path (Catmull-Rom), focus track, point and rack with holds, and
