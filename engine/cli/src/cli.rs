@@ -142,8 +142,7 @@ pub fn run(args: &[String]) -> R<String> {
         let usage = format!("{usage}\n       {}   ({})", tools::motion::USAGE, tools::motion::ABOUT);
         // an agent's report of a bug in raea itself, to raea's server (engine/cli/src/bug.ts; Shane 11-16)
         let usage = format!("{usage}\n       raea bug TITLE... --text TEXT [--command CMD] [--error TEXT] [--agent NAME] [--dry-run]   (a bug in raea itself, not in your own composition, sent to raea's server with raea's version and the OS, no account needed: words only, paths, emails and keys taken out before it goes; five a day from a machine, the same bug again counted on the first report; --dry-run prints what would go and sends nothing)");
-        // a problem looked up before it's guessed at (systems/fixes)
-        let usage = format!("{usage}\n       {}   ({})", raea_sys_fixes::USAGE, raea_sys_fixes::ABOUT);
+        let usage = format!("{usage}\n       {}   ({})", raea_sys_fixes::USAGE, raea_sys_fixes::ABOUT); // a problem looked up before it's guessed at (systems/fixes)
         // a workspace's files and specs (docs/projects.feature), listed under render's usage like library
         let usage = format!("{usage}\n       raea spec FILE.ts [--as brief|script|taste|parts]   (a spec's default export as JSON, checked against its schema: brief.ts, script.ts, taste.ts, NAME.parts.ts)\n       raea workspace init [NAME] [--layout LAYOUT] | raea workspace adopt DIR [--name NAME] | raea workspace [--json]   (a workspace: a git repo of projects under raea.root, ~/Documents/raea unless git config says)\n       raea project new NAME [--storage inline|submodule] | raea project split NAME [--remote URL] | raea project join NAME | raea project [--json]   (a project in the workspace: its folder, brief.ts, media/, out/; split and join keep its history)\n       raea check EDIT.tsx --quick [--shape S] [--platform P] [--taste T] [-o check.json]   (three stills of a composition checked for text: clipped, cramped, safe areas, sizes; about a second)\n       raea hook [claude|codex|gemini|kimi]   (every agent's tool hooks, which raea skills install adds: before a shell command, media opened in the Mac's viewer while the raea app is installed is stopped once for raea show (the same command again goes through); after a save, the quick check on a composition)\n       raea next [DIR]   (the two or three useful next steps for the project, from its brief, compositions, renders and checks)\n       raea doctor [--fix] [DIR]   (what doesn't match this raea: old brief files, an older workspace format, an agent's skill from another version)\n       raea app run|check|bundle APP.tsx [--target web|native] [--size WxH] [--script steps.json] [--png DIR] [-o App.app]   (a TSX app on @raea/ui: its window, the headless check, a Mac app; web is Blitz on Bevy, native is Rune; the app's `export const app` sets the target, web when it doesn't; raea rune ... is --target native)\n       {}\n       {}\n       {}   ({})\n       {}\n       {}\n       {}", skill::USAGE, tools::blender::USAGE, tools::motion::SETUP_USAGE, tools::motion::SETUP_ABOUT, raea_app_engines::godot::USAGE, raea_app_engines::shot::USAGE, raea_app_engines::round::USAGE);
         let (export_game, capcut, layers, xml, scene, physics, splat, wear) = (raea_app_game::USAGE, raea_app_capcut::USAGE, raea_app_layers::USAGE, raea_app_layers::USAGE_XML, raea_app_scene::USAGE, motion::physics::USAGE, tools::splat::USAGE, raea_runtime_wear::USAGE);
@@ -165,10 +164,7 @@ pub fn run(args: &[String]) -> R<String> {
     if matches!(args[0].as_str(), "guide" | "craft") {
         return guide(args.get(1).map(String::as_str));
     }
-    // `fix SYMPTOM...`: a problem looked up in raea's own fixes, then the library of community ones (systems/fixes)
-    if args[0] == "fix" {
-        return raea_sys_fixes::cli(&args[1..]);
-    }
+    if args[0] == "fix" { return raea_sys_fixes::cli(&args[1..]); } // a problem looked up: raea's own fixes, then the community library (systems/fixes)
     // `context PROJECT`: what an agent reads before any work on a project (docs/craft-system.md, A)
     if args[0] == "context" {
         return context(args.get(1).map(String::as_str));
@@ -192,12 +188,8 @@ pub fn run(args: &[String]) -> R<String> {
         return skill::install(&args[1..]);
     }
     // `next [DIR]` and `doctor [--fix] [DIR]`: the project's next steps, and its drift from this raea (SK10)
-    if args[0] == "next" {
-        return next(&args[1..]);
-    }
-    if args[0] == "doctor" {
-        return skill::doctor(&args[1..]);
-    }
+    if args[0] == "next" { return next(&args[1..]); }
+    if args[0] == "doctor" { return skill::doctor(&args[1..]); }
     // `setup motion [--check]`: what `raea motion` runs on here, made or checked: MLX's models on a Mac, the PyTorch
     // environment and its weights elsewhere (apps/tools motion.rs)
     if args[0] == "setup" && args.get(1).map(String::as_str) == Some("motion") {
