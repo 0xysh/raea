@@ -53,7 +53,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
       And `doctor` names what the plan still lacks: no objects, an object with no size or no route, a dial outside its
         kind's set, a generated object with no prompt
 
-    @needs:MK0
+    @needs:MK0 @done
     Scenario: MK1. `raea make status`: what's missing, decided in code
       Given a project whose brief has `make`
       When `raea make status [DIR] [--json]` runs
