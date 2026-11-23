@@ -1,4 +1,5 @@
 //! A glTF model's own geometry for the scene.* native calls: its box turned and scaled, and which way a seat faces.
+//! raea-sys-contact reads its triangles from here, and its `forget` lets these go with its solids.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -11,13 +12,11 @@ use raea_core_scene::{gltf_tris, local};
 /// Each glTF file's triangles, read once until [`forget`]
 static CACHE: OnceLock<Mutex<HashMap<String, Result<Arc<Vec<Vec3>>, String>>>> = OnceLock::new();
 
-/// Lets go of every file's triangles and every part's solids this process made, which a long render's clipping check
-/// held to its end: on a 7-minute film, gigabytes still held while frame purity rendered its stills (SG4a).
+/// Lets go of every file's triangles this process read (raea-sys-contact's `forget` calls it with its solids).
 pub fn forget() {
     if let Some(c) = CACHE.get() {
         c.lock().unwrap().clear();
     }
-    crate::solid::forget_solids();
 }
 
 /// A glTF file's triangles in its own space (its node transforms applied), read once until [`forget`].

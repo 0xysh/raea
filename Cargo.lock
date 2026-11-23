@@ -14379,6 +14379,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-core-modelbox"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "raea-core-scene",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-core-place"
 version = "0.1.0"
 dependencies = [
@@ -15859,6 +15868,7 @@ dependencies = [
  "bevy",
  "raea-core-facts",
  "raea-core-meshcheck",
+ "raea-core-modelbox",
  "raea-core-scene",
  "raea-core-shape",
  "raea-core-zfight",

@@ -35,8 +35,14 @@ pub use found::{clip_findings, lint_findings};
 mod clip;
 pub use clip::Clipping;
 
-mod model;
-pub use model::{bounds, facing, forget, seat_facing};
+pub use raea_core_modelbox::{bounds, facing, seat_facing};
+
+/// Lets go of every file's triangles and every part's solids this process made, which a long render's clipping check
+/// held to its end: on a 7-minute film, gigabytes still held while frame purity rendered its stills (SG4a).
+pub fn forget() {
+    raea_core_modelbox::forget();
+    solid::forget_solids();
+}
 
 mod solid;
 use solid::*;
