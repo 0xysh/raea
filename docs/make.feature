@@ -79,7 +79,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         says so), as PL7's keeper stops after asks that change nothing
       And a project without `make` is never blocked, and a brief that doesn't load blocks nothing (the hook says why)
 
-    @needs:MK2
+    @needs:MK2 @done
     Scenario: MK3. Gates in plan.org
       Given the project's plan.org (docs/plan.feature)
       Then `raea make status --plan` writes each gate as a check line under the job's task (sdk/task `setCheck`), so
