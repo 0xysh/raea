@@ -4,6 +4,7 @@
 //! them. Errors fail it, as they fail a render, so it's the cheap look before one. It lays out no page, so what the
 //! page holds waits for a render: its words over the parts (type-over-part), a Label's part as the shot's subject, and
 //! a frame its words or pictures fill, which reads empty here and is said as a warning, not failed (SG11).
+//! `--clearance M` holds the camera M metres off every solid part on every frame (0.45 for a carried camera, MK16).
 
 use serde_json::json;
 
@@ -12,7 +13,7 @@ use raea_runtime_bundle::{bundle_composition, comp_opts, flag};
 use raea_runtime_export::{all_items, scene_frames_to};
 
 pub(crate) fn cli(args: &[String]) -> Result<String, String> {
-    let usage = "raea scene stage EDIT.tsx [--composition ID] [--from N] [--to N] [--json]";
+    let usage = "raea scene stage EDIT.tsx [--composition ID] [--from N] [--to N] [--clearance M] [--json]";
     let Some(edit) = args.get(2) else { return Err(usage.into()) };
     let tsx = dunce::canonicalize(&std::path::PathBuf::from(edit)).map_err(|e| format!("{edit}: {e}"))?;
     let dir = tsx.parent().unwrap().to_path_buf();
@@ -26,7 +27,15 @@ pub(crate) fn cli(args: &[String]) -> Result<String, String> {
     let frames: Vec<_> = frames.into_iter().filter(|(f, _)| *f >= from && to.is_none_or(|t| *f <= t)).collect();
     let (Some(first), Some(last)) = (frames.first().map(|f| f.0), frames.last().map(|f| f.0)) else { return Err(format!("no frames from {from}")) };
     let nums: Vec<i64> = frames.iter().map(|(f, _)| *f).collect();
-    let mut fs = raea_sys_stage::check(&all_items(&frames), &nums, w, h, fps, "raea scene stage");
+    let items = all_items(&frames);
+    let mut fs = raea_sys_stage::check(&items, &nums, w, h, fps, "raea scene stage");
+    // the camera held off every solid part, when asked: the number after the flag, else a carried camera's 0.45 m
+    if let Some(v) = flag(args, "--clearance") {
+        let min = v.parse::<f32>().ok().filter(|m| *m >= 0.0).ok_or_else(|| format!("--clearance takes metres (0.45 for a carried camera), got {v:?}"))?;
+        let mut c = raea_sys_stage::clearance(&items, &nums, w, h, fps, min, "raea scene stage");
+        c.append(&mut fs);
+        fs = c;
+    }
     for f in fs.iter_mut().filter(|f| f.check == "frame-empty" && f.level == Level::Error) {
         f.level = Level::Warn;
         f.says.push_str(" (no page is laid out here: if its words or pictures fill these frames, a render passes them)");

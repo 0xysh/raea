@@ -10,7 +10,7 @@ use raea_runtime_export::{frame_of, items};
 mod light;
 mod stage;
 
-pub const USAGE: &str = "raea scene lint|explain|light|stage EDIT.tsx [--composition ID] [--frame N] [--part NAME] [--from N] [--to N] [--json]";
+pub const USAGE: &str = "raea scene lint|explain|light|stage EDIT.tsx [--composition ID] [--frame N] [--part NAME] [--from N] [--to N] [--clearance M] [--json]";
 
 /// `raea scene lint|explain EDIT.tsx [--composition ID] [--frame N] [--json]`: the frame's parts measured
 /// (frame 0 by default). `lint` says the faults (errors fail it: floating, sunk, clipping; warnings: in the air,

@@ -35,7 +35,9 @@ pub fn drop_tsconfigs(dir: &Path, depth: usize) {
     }
 }
 
-pub const MEDIA_EXTS: [&str; 10] = ["mp4", "mov", "m4v", "mp3", "wav", "m4a", "png", "jpg", "webp", "gif"];
+/// Files a composition imports as their path (`import chair from "./chair.glb"`): media, and models, so a component
+/// carries its own (a kit's, `raea make kit`) wherever it's imported from.
+pub const MEDIA_EXTS: [&str; 12] = ["mp4", "mov", "m4v", "mp3", "wav", "m4a", "png", "jpg", "webp", "gif", "glb", "gltf"];
 
 /// The edit's source with its imports pointed at the bundle's copy of the SDK (its package name, a subpath such as /3d,
 /// or a relative path into raea/motion/src), and media imported as modules turned into their paths (spec: "Media

@@ -22,7 +22,7 @@ const Shot = () => <Camera3d transform={Transform.fromXyz(-2, 2.5, 5).lookingAt(
 import { Camera3d, cameraPath, Canvas3D, checkMatchmove } from "raea/camera"
 ```
 
-`raea/camera` exports 6 components, 1 hook, 4 functions, 1 value, 15 types. Bevy's counterpart: `bevy_camera`. Source: [sdk/raea/src/camera.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/camera.ts).
+`raea/camera` exports 6 components, 1 hook, 9 functions, 4 values, 19 types. Bevy's counterpart: `bevy_camera`. Source: [sdk/raea/src/camera.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/camera.ts).
 
 ## Components
 
@@ -143,6 +143,36 @@ Checks a Matchmove's props; throws a TypeError or RangeError naming the prop.
 function checkMatchmove(p: MatchmoveProps): void
 ```
 
+### `focusAt`
+
+The focal distance (metres from the camera) at a frame: a DepthOfField's focal_distance.
+
+```ts
+function focusAt(f: Focus, path: CameraPath, frame: number): number
+```
+
+### `handheld`
+
+A walking operator's motion on a path: the camera bobs with each step (1.8 Hz) and sways with each stride (0.9 Hz),
+rolls a little with the sway, reframes slowly, and its aim follows the path's on a spring, so it lags a turn and
+settles after it. Deterministic: the same path, fps and seed give the same frames. Nothing moves faster than 1.9 Hz.
+
+```tsx
+const walk = handheld(shotMove({ kind: "dolly", from: [0, 1.6, 6], look: [0, 1.5, 0], by: 4, frames: 300 }), { fps: 30 });
+```
+
+```ts
+function handheld(path: CameraPath, o?: { profile?: HandheldProfile; fps?: number; seed?: number; amount?: number; }): CameraPath
+```
+
+### `lens`
+
+The vertical field of view (degrees) of a focal length on a full-frame (36 x 24 mm) sensor.
+
+```ts
+function lens(mm: number): number
+```
+
 ### `matchmoveIndex`
 
 The solve's frame at a time in the clip: the latest at or before it, clamped to the solve.
@@ -160,11 +190,47 @@ zoom) and the frame's window in it, in frame pixels.
 function matchmoveView(footage: { width: number; height: number; }, frame: { width: number; height: number; }, crop?: number | [number, number], zoom?: number): { width: number; height: number; x: number; y: number; }
 ```
 
+### `shotMove`
+
+A crew's move as a camera path. Each eases out of its start and into its end, and never lurches.
+
+```tsx
+const push = shotMove({ kind: "dolly", from: [0, 1.6, 4], look: [0, 1.2, 0], by: 1.5, frames: 120, fov: lens(35) });
+<Camera3d {...push.camera(useCurrentFrame())} />
+```
+
+```ts
+function shotMove(m: ShotMove): CameraPath
+```
+
+### `walkPath`
+
+A path drawn on the floor plan (`raea make plan`'s floor-plan.png: x right, z away from the entrance, metres) as a
+camera walking it: at eye height, at an even walking pace (0.4-0.6 m/s reads as a person; 0.5 by default), easing
+only where it starts and stops, its corners rounded (`turn` metres either side) so it turns as a walker does rather
+than stopping; looking `ahead` metres along the way, or at `look` throughout. Give it to `handheld` for the step.
+
+```ts
+function walkPath(points: readonly [number, number][], o?: { speed?: number; eye?: number; fps?: number; ahead?: number; look?: CameraVec3; start?: number; fov?: number; turn?: number; }): CameraPath
+```
+
 ## Values
 
 ### `LABEL_MIN`
 
 The least capital height a Label takes, in px at 1080 lines (SG10's floor for words that read).
+
+### `LENSES`
+
+The focal lengths a lens chart shows.
+
+### `STEP_HZ`
+
+A walker's steps, and the sway at half of it (one foot then the other). Every motion here is at or under STEP.
+
+### `WALK`
+
+A walkthrough's pace and eye height, as AnyShot's shot language keeps them: a person walking a set slowly.
 
 ## Types
 
@@ -227,6 +293,20 @@ Bevy: `bevy_camera::clear_color::ClearColorConfig`.
 
 ```ts
 type ClearColorConfig = "Default" | "None" | { Custom: Srgba | LinearRgba }
+```
+
+### `Focus`
+
+Where the lens is focused.
+
+```ts
+type Focus = | { kind: "point"; at: CameraVec3 } | { kind: "track"; target: (frame: number) => CameraVec3 } /** from one subject to the other over `over` frames starting at `at`, held on each before and after */ | { kind: "rack"; from: CameraVec3; to: CameraVec3; at: number; over: number }
+```
+
+### `HandheldProfile`
+
+```ts
+type HandheldProfile = "walk" | "subtle"
 ```
 
 ### `LabelCamera`
@@ -308,12 +388,26 @@ Each frame's state under a <Matchmove>, for the 3D inside it.
 | `camera` (required) | `MatchmoveCamera` | the solve's camera for this frame |
 | `project` (required) | `(p: Vec3) => [number, number, number]` | where a point of the solved world lands in the composition, in pixels ([x, y], and its distance in front of the camera; behind it when that's 0 or less) |
 
+### `MoveKind`
+
+```ts
+type MoveKind = "static" | "dolly" | "truck" | "pedestal" | "crane" | "pan" | "tilt" | "orbit" | "dollyZoom" | "path"
+```
+
 ### `Projection`
 
 Bevy's Projection enum, as it reflects: fov in radians (Bevy's default PI/4).
 
 ```ts
 type Projection = | { Perspective: { fov?: number; near?: number; far?: number } } | { Orthographic: { near?: number; far?: number; scaling_mode?: { FixedVertical: { viewport_height: number } } } }
+```
+
+### `ShotMove`
+
+A move: where the camera starts, what it looks at, and how it moves over `frames` from frame `at`.
+
+```ts
+type ShotMove = { kind: MoveKind; /** The camera's start. */ from: CameraVec3; /** What it looks at (the subject). */ look: CameraVec3; /** The frame it starts moving (0 if left out). */ at?: number; /** How many frames it moves for. */ frames: number; /** Metres: dolly in (negative: out), truck right (negative:…
 ```
 
 <!-- generated:end -->

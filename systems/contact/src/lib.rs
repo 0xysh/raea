@@ -23,6 +23,7 @@ use raea_core_scene::{Item, excused, gltf_tris, src_path, vec3};
 
 // what each part rests on, and the parts that float, sink or clip (`raea scene lint|explain`)
 pub mod lint;
+mod zfight;
 pub use lint::lint;
 // a model's box and a seat's facing (scene.bounds, scene.facing)
 mod assets;

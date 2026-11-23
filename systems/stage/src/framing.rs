@@ -58,7 +58,7 @@ pub(crate) fn backdrop(it: &raea_core_scene::Item, lo: Vec3, hi: Vec3) -> bool {
 /// animates or can't be read. Coverage only, never sure: raea may pose its joints (a person walks off its rest box), and
 /// a box is mostly air round a tree, so it never makes a frame judged, nor judges words over it (SG11); but a frame
 /// its box fills isn't empty (Stay's pool room of wall models read empty with their origins out of view: SG14).
-fn model_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<(Vec3, Vec3)>>) -> Option<(Vec3, Vec3)> {
+pub(crate) fn model_box(it: &raea_core_scene::Item, boxes: &mut HashMap<String, Option<(Vec3, Vec3)>>) -> Option<(Vec3, Vec3)> {
     let src = raea_core_scene::src_path(it.props.get("src").and_then(serde_json::Value::as_str)?);
     *boxes.entry(format!("model:{src}")).or_insert_with(|| {
         let (groups, moves) = raea_core_scene::gltf_tris(&src).ok()?;

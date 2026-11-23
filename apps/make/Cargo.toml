@@ -13,6 +13,13 @@ raea-core-brief = { path = "../../core/brief" }
 raea-core-facts = { path = "../../core/facts" }
 # the judge's rounds, passes and blocking defects, read as it keeps them
 raea-app-judge = { path = "../judge" }
+# the make questions, their calibrations and a sheet's ident, as raea ask keeps them (MK4)
+raea-core-ask = { path = "../../core/ask" }
+# raea ask's ledger folder
+raea-io-home = { path = "../../io/home" }
+# the contact sheets: tiles composited, labels drawn in the system's fonts
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+resvg = { version = "=0.48.1", default-features = false, features = ["text", "system-fonts"] }
 dunce = "1"
 serde_json = "1"
 

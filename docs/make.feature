@@ -112,43 +112,47 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
     Scenario: MK7. Grounding at contact points
       Given a part whose box bottom isn't where it touches down (splayed feet, a handle, an origin offset)
-      Then `raea scene lint` casts rays down from its lowest vertices, ignoring itself, volumes and decals, and reports
-        `floating_contact` with the gap and its `{dy}` fix; hanging kinds (signs, pendants, lamps on cords) only with
-        --all; a fix only ever settles a part down
+      Then `raea scene lint` casts rays down from its lowest vertices (its feet), ignoring itself, volumes and decals,
+        and reports `floats` (the gap, and a `{y, dy}` fix that settles it down) or `sunk` (a fix that raises it);
+        a part whose feet reach nothing reads as mounted (a wall or ceiling holds it) or as a warning in the air, so
+        signs, pendants and lamps on cords aren't errors; a stool whose box clips a table's edge rests by its feet
 
     Scenario: MK8. The clip check, for every level
-      Then the triangle check FLOOR3 used (projects/floor3 tools/clips.ts) is `raea scene lint --clips`: intersections
-        with depth, z-fighting faces, flicker inside one model, and nothing within 3 mm (floating)
+      Then `raea scene lint` (raea-sys-contact) reports clips with their depth and the move that clears them
+        (`{part, axis, by}`), and faces z-fighting: two parts' faces in one plane over each other (an error from
+        1 cm², a warning under), and doubled faces inside one model (a warning), on every lint, no flag needed
 
     Scenario: MK9. Re-drop after every move
-      Then a part moved sideways by a fix is settled onto what's under its new place in the same pass, and stools drop
-        from below the table top, so nothing hovers at table height
+      Then a part moved sideways by a clip's fix is settled onto what's under its new place in the same pass (the fix
+        carries its `dy`), and a stool under a table rests on the floor by its feet, so nothing hovers at table height
 
   Rule: kits (MK10-MK13)
 
     @needs:MK1
     Scenario: MK10. References made in one style, checked on one sheet
-      Then each object's reference is `raea gen image --edit` with the style images as input, the plan's style
-        paragraph and the scan template, and `raea make sheet refs` puts them all on one sheet before any 3D
+      Then `raea make refs` makes each object's reference with `raea gen image` with the style images as input, the
+        plan's style paragraph and the scan template (`--dry` quotes it), and writes review/refs.png (`raea make sheet
+        refs` again): the style images, then every reference labelled with its size, before any 3D
       And outliers (another style, a real brand, cropped, two objects) are regenerated first: the cheapest place to fix
         cohesion
 
     @needs:MK10
     Scenario: MK11. Both generators, picked on clay
-      Then every reference goes to Tripo H3.1 (face limit 150k heroes, 60k small) and Meshy, and `raea gen pick ID...`
-        renders reference | Tripo beauty | Tripo clay | Meshy beauty | Meshy clay under one light, and records the
-        pick and a one-line why (the earlier ~150 props: Meshy ~70%, small items and printed labels; Tripo the big
+      Then `raea make gen` sends every reference to Tripo H3.1 (face limit 150k heroes, 60k small) and Meshy (fal),
+        `raea make pick-sheet` fits both to size and renders reference | Tripo | Tripo clay | Meshy | Meshy clay under
+        one light (review/picks.png), and `raea make pick ID tripo|meshy "why"` records the pick and its one-line why (the earlier ~150 props: Meshy ~70%, small items and printed labels; Tripo the big
         hard-surface heroes)
 
     @needs:MK11
     Scenario: MK12. Prep and LOD
-      Then `raea gen check -o` fits each pick (front -Y, real metres, bottom-centre, textures at 2K or less) and
-        `--lod1` writes a quarter-triangle copy, each with its .glb.json saying how it was made
+      Then `raea make prep` fits each pick with `raea gen check -o` (front +z, real metres, bottom-centre) and writes a
+        quarter-triangle ID_lod1.glb (blender/decimate.py), each with its .glb.json saying how it was made
 
     @needs:MK12
     Scenario: MK13. A kit is a component set
-      Then a finished kit is shared/components/<kit>/ (one component per object with its fixture), with a `<Lineup>`
-        composition (scale bar, labels), thumbnails and kit.json, so `raea component add` puts it in any scene
+      Then `raea make kit` lands it in shared/components/<kit>/ (one component per object importing its model and LOD
+        from beside it: compositions import .glb files as their path), with lineup.tsx (a 1 m bar, labels), cover.png,
+        thumbnails and kit.json, and the job's own out/kit/ record that `raea make status` counts
 
   Rule: shots (MK14-MK17)
 
@@ -159,39 +163,46 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
     @needs:MK14
     Scenario: MK15. Blocking: framing sheets and a lens chart
-      Then `raea render --framing` stamps each shot at t = 0, 0.5 and 1 on one sheet, and `--lenschart SHOT` its first
-        frame at 18, 24, 35, 50, 85 and 135 mm
+      Then `raea make framing` renders each shot's first, middle and last frame (`raea render --at`) onto
+        review/framing.png, a row a shot stamped with its name and time, and `raea make lenschart SHOT` its first frame
+        at 18, 24, 35, 50, 85 and 135 mm (RAEA_LENS keeps the scene's camera and sets its lens)
 
     @needs:MK14
     Scenario: MK16. Clearance on every frame
-      Then `raea scene stage --clearance 0.45` finds every frame where the camera is nearer a solid than that, leaving
-        out volumes, particles, decals, glass panes meant to be passed and anything under 5 cm
+      Then `raea scene stage --clearance 0.45` finds every run of frames where the camera is nearer a solid than that
+        (a box first, a model's triangles when its box comes close; inside a part said so), leaving out volumes,
+        particles, decals, see-through parts (glass) and anything under 5 cm
 
     @needs:MK14
     Scenario: MK17. Shots from words and from a floor plan
-      Then the shot-language guide maps a crew's words to moves (push in, truck, reveal, rack focus, walkthrough at
-        0.4-0.6 m/s and 1.5-1.7 m), and a floor plan with a drawn path is registered to an ortho top render and its
-        path becomes `path` keys; grade looks (clean, cinematic, gritty, vintage) are raea/post presets
+      Then the shot-language guide (bevy/shots) maps a crew's words to moves (push in, truck, reveal, rack focus,
+        walkthrough at 0.4-0.6 m/s and 1.5-1.7 m); a path drawn on `raea make plan`'s floor plan (its metres, x right,
+        z away from the entrance) is `walkPath(points)`: an even walking pace at eye height, corners rounded; grade looks
+        (clean, cinematic, gritty, vintage) are `gradeLook()` presets in raea/post_process
 
   Rule: the plan, drawn (MK18)
 
     @needs:MK0
     Scenario: MK18. `raea make plan`: a floor plan, a grey box and a comparison
-      Then it draws floor-plan.png (labelled footprints, invented ones dashed, lights, the reference camera's cone),
-        renders a grey box of the plan from the reference camera (raea/room and boxes, `raea render --review`) and
-        puts the reference beside it, for the person to approve before anything is generated
+      Then it draws review/plan/floor-plan.png (every placed object's footprint turned by its rot and labelled with its
+        height, invented ones dashed, a metre grid, the entrance the camera looks in from), renders a grey box of the
+        plan from the entrance (blockout.tsx, and `raea render --review` sheets of it) and puts the reference, the
+        blockout and the floor plan on comparison.png, for the person to approve before anything is generated
 
   Rule: raea cloud (MK19-MK20)
 
     @needs:MK2
     Scenario: MK19. Three skills on raea cloud
-      Then raea cloud has "Scene from references" (stops: plan, spend, picks, finals), "Kit from style" (plan,
-        reference sheet, spend, lineup) and "Shots of a scene" (shot list, framing, finals), each stop's checks calling
-        `raea make status --json` on the box
+      Then raea cloud has "Scene from references" (plan, spend, first cut, deliver), "Kit from style" (reference
+        sheet, spend, deliver) and "Shots of a scene" (framing, deliver) as skill templates (GET|POST
+        /v1/skills/templates), each with a workflow whose agent steps are checked by a `raea make status` line: run as
+        `raea make status --json` on the box in the project's folder, "says done" holding on its done and "raea make
+        status: critic, review/refs.png" on each named gate and file
 
     @needs:MK19
     Scenario: MK20. Retry-safe jobs and a live view
-      Then a project is keyed by a hash of its inputs: the same ask returns the finished project, attaches to the
-        running one or resumes it without paying again for what's already generated
-      And every picture the agent opens goes to the live watch with a preview, and a heartbeat every 20 s repeats the
-        milestones so far for anyone who joins late
+      Then a project is keyed by a hash of its inputs (or the caller's Idempotency-Key; plan.org's :INPUTS:): the same
+        ask from the API, the studio, a form or a webhook returns the finished project, attaches to the running one or
+        resumes a failed one without paying again; one a person stopped doesn't hold the ask
+      And every picture the agent opens goes to the live watch as a raea.seen event (its path, and a preview when the
+        bytes are under 600 KB), and a raea.heartbeat every 20 s repeats the milestones so far for anyone who joins late

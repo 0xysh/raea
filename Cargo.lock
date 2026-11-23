@@ -13876,9 +13876,13 @@ name = "raea-app-make"
 version = "0.1.0"
 dependencies = [
  "dunce",
+ "image",
  "raea-app-judge",
+ "raea-core-ask",
  "raea-core-brief",
  "raea-core-facts",
+ "raea-io-home",
+ "resvg 0.48.1",
  "serde_json",
 ]
 
@@ -14310,6 +14314,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "ts-rs",
 ]
 

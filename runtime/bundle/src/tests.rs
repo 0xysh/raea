@@ -114,3 +114,18 @@ fn an_edit_s_sources_leave_out_hidden_folders_and_packages() {
     assert_eq!(got, vec![PathBuf::from("a.tsx"), PathBuf::from("parts/b.ts")]);
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// MK13: a component imports its own model beside it, as media is imported: the path, wherever it's imported from
+#[test]
+fn a_model_imports_as_its_path() {
+    let d = std::env::temp_dir().join(format!("raea-bundle-glb-{}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(d.join("phone.glb"), b"glTF").unwrap();
+    let m = &raea_io_home::home().join("sdk/raea/src");
+    let out = rewrite_into("import model from \"./phone.glb\";\n", &d, m, "../motion", None).unwrap();
+    let abs = dunce::canonicalize(d.join("phone.glb")).unwrap();
+    assert!(out.contains(&format!("const model = {:?}", abs.display().to_string())), "{out}");
+    let err = rewrite_into("import gone from \"./gone.glb\";\n", &d, m, "../motion", None).unwrap_err();
+    assert!(err.contains("gone.glb doesn't exist"), "{err}");
+    let _ = std::fs::remove_dir_all(&d);
+}

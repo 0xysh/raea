@@ -176,6 +176,10 @@ pub struct Shot {
     pub handheld: Option<String>,
     /// a still rather than a move
     pub still: Option<bool>,
+    /// the composition that renders it (relative to the brief): `raea make framing` and `lenschart` draw it
+    pub composition: Option<String>,
+    /// its frame rate, for the frames `seconds` spans (30 when left out)
+    pub fps: Option<f64>,
 }
 
 /// Each kind's dials: what may be set, and what an unset one is read from the references as.
@@ -204,7 +208,8 @@ pub fn deliverables(m: &Make) -> Vec<String> {
                 .iter()
                 .flat_map(|o| [format!("out/kit/{0}/{0}.glb", o.id), format!("out/kit/{0}/{0}_lod1.glb", o.id), format!("out/kit/thumbs/{}.png", o.id)])
                 .collect();
-            v.extend(["out/kit/lineup.png".into(), "out/kit/kit.json".into()]);
+            // the reference sheet every reference was checked on before any 3D (MK10)
+            v.extend(["out/kit/lineup.png".into(), "out/kit/kit.json".into(), "review/refs.png".into()]);
             v
         }
         // a shot is a still or a move, so either file answers; apps/make reads `a|b`
@@ -251,6 +256,9 @@ pub fn doctor(m: &Make) -> Vec<String> {
         }
         if !s.name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
             out.push(format!("shot `{}`: names are [a-z0-9_], the file it lands as", s.name));
+        }
+        if s.composition.is_none() {
+            out.push(format!("shot `{}` has no composition: the .tsx that renders it, for its framing sheet and lens chart", s.name));
         }
     }
     out

@@ -11,6 +11,7 @@ use raea_core_facts::{Finding, Level};
 use raea_core_scene::{Item, base_ident};
 use serde_json::Value;
 
+pub mod clearance;
 mod cover;
 mod framing;
 mod manifest;
@@ -18,6 +19,7 @@ mod motion;
 mod page;
 mod text;
 mod view;
+pub use clearance::clearance;
 pub use framing::on_screen;
 pub use manifest::{Mounts, pages, seen};
 pub use page::{Page, Words};

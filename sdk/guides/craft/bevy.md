@@ -22,6 +22,8 @@ pieces; then write the file. Each file's example is a complete composition you c
 | people: bodies posed by goals (a hand on the mouse, sat, looking at the screen), motion capture, walking round the furniture to a spot | `bevy/characters` |
 | interiors: rooms, cabinets along walls, windows and bays, chairs turned to tables, layout checks, wall decor, the garden outside, daylight, sounds placed in the scene | `bevy/rooms` |
 | a whole scene to build and make believable: the brief, which tool makes which object, build order, review sheets, the judge, when to stop | `bevy/scenes` |
+| a kit of props in one style: references from style images, a reference sheet, Tripo and Meshy picked on clay, LODs, landed as components with a lineup | `bevy/kits` |
+| shots of a built set from a crew's words: moves, walkthroughs from the floor plan, handheld, focus pulls, lens charts, framing sheets, camera clearance, grade looks | `bevy/shots` |
 | the words to paste for a whole scene: the brief template, the builder prompt, the judge prompt | `bevy/prompts` |
 | a Godot project: its scenes and resources scripted from TypeScript, run headless, recorded as frames to use as footage | `bevy/godot` |
 | shapes: boxes to modelled solids, blended organic bodies (`sdf`), trees, terrain, rocks and plants (`grow`), 3D letters, lines and curves drawn on (`Line3d`, `Tube`) | `bevy/meshes` |

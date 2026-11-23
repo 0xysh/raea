@@ -29,7 +29,7 @@ const Glow = () => (
 import { AntiAliasing, Bloom, Compute, DepthOfField } from "raea/post_process"
 ```
 
-`raea/post_process` exports 12 components, 14 types. Bevy's counterpart: `bevy_post_process, bevy_anti_alias`. Source: [sdk/raea/src/post_process.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/post_process.ts).
+`raea/post_process` exports 12 components, 1 function, 1 value, 15 types. Bevy's counterpart: `bevy_post_process, bevy_anti_alias`. Source: [sdk/raea/src/post_process.ts](https://github.com/shinyobjectz/raea/blob/main/sdk/raea/src/post_process.ts).
 
 ## Components
 
@@ -134,6 +134,20 @@ Bevy: `bevy_render::view::Tonemapping`, `bevy_camera::camera::Exposure`.
 
 Takes [`ToneMappingProps`](3d.md#tonemappingprops)'s props.
 
+## Functions
+
+### `gradeLook`
+
+A grade look's props, with your changes over it: `<Grade {...gradeLook("cinematic", { vignette: 0.1 })} />`.
+
+```ts
+function gradeLook(look: GradeLook, over?: GradeProps): GradeProps
+```
+
+## Values
+
+### `GRADES`
+
 ## Types
 
 ### `AntiAliasingProps`
@@ -213,6 +227,12 @@ A shader over the whole frame. Its source defines
 | `defs` | `ShaderDefs` | shader defs, as a surface shader's |
 | `at` | `"before-tonemap" \| "after-tonemap"` | "after-tonemap" (display colours; the default) or "before-tonemap" (the HDR frame, after bloom) |
 | `prepass` | `boolean \| { depth?: boolean; normal?: boolean }` | the camera's depth and normal prepasses, for depth(uv) and normal(uv) (turns its multisampling off) |
+
+### `GradeLook`
+
+```ts
+type GradeLook = "clean" | "cinematic" | "gritty" | "vintage"
+```
 
 ### `GradeProps`
 

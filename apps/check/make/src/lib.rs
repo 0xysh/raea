@@ -48,11 +48,12 @@ pub fn may_block(guard: &Path, items: &str) -> bool {
 
 /// What the agent is told when its turn may not end, or None to let it end: no job here, the job is done, the job
 /// didn't load (never block on raea's own failure), or the same items have blocked it three times already.
+/// Each turn's status also brings the job's task in plan.org up to date (`--plan`, docs/make.feature MK3).
 pub fn stop(v: &Value) -> Option<String> {
     let cwd = PathBuf::from(v["cwd"].as_str()?);
     let brief = brief_with_job(&cwd)?;
     let exe = std::env::current_exe().ok()?;
-    let out = std::process::Command::new(exe).args(["make", "status"]).arg(brief.parent()?).arg("--json").env("RAEA_RECORD", "off").output().ok()?;
+    let out = std::process::Command::new(exe).args(["make", "status"]).arg(brief.parent()?).args(["--json", "--plan"]).env("RAEA_RECORD", "off").output().ok()?;
     let s: Value = serde_json::from_slice(&out.stdout).ok()?;
     let home = raea_io_home::user_home()?;
     let session = v["session_id"].as_str().unwrap_or("");

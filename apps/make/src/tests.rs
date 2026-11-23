@@ -5,6 +5,7 @@ use raea_core_brief::{make::Make, read};
 use raea_core_facts::record::Entry;
 use serde_json::{Value, json};
 
+use crate::asked::Ledger;
 use crate::status::{Job, status, stalled};
 
 fn dir(name: &str) -> PathBuf {
@@ -25,18 +26,22 @@ fn kit() -> Make {
 }
 
 fn delivered(d: &PathBuf) {
-    for f in ["out/kit/phone/phone.glb", "out/kit/phone/phone_lod1.glb", "out/kit/thumbs/phone.png", "out/kit/lineup.png", "out/kit/kit.json"] {
+    for f in ["out/kit/phone/phone.glb", "out/kit/phone/phone_lod1.glb", "out/kit/thumbs/phone.png", "out/kit/lineup.png", "out/kit/kit.json", "review/refs.png"] {
         put(d, f, "x");
     }
     put(d, "NOTES.md", "# Notes\n\n## What the skill got wrong\n- nothing yet\n");
 }
 
 fn round(pass: bool, mean: f64, defects: Value) -> Value {
-    json!({"dir": "review/r1", "pass": pass, "mean": mean, "defects": defects})
+    json!({"dir": "review/r1", "kind": "kit", "pass": pass, "mean": mean, "defects": defects})
 }
 
 fn run(make: &Make, d: &PathBuf, record: &[Entry], rounds: &[Value], judged_at: Option<SystemTime>) -> Value {
-    status(&Job { make, dir: d, project: None, record, rounds, verdict: None, judged_at })
+    run_with(make, d, record, rounds, judged_at, &Ledger::default())
+}
+
+fn run_with(make: &Make, d: &PathBuf, record: &[Entry], rounds: &[Value], judged_at: Option<SystemTime>, ledger: &Ledger) -> Value {
+    status(&Job { make, dir: d, project: None, record, rounds, verdict: None, judged_at, ledger, score_gates: false })
 }
 
 fn later() -> Option<SystemTime> {
@@ -80,8 +85,13 @@ fn a_blocking_defect_must_be_fixed_or_answered_in_the_notes() {
     assert_eq!(s["done"], false);
     assert!(s["gates"].to_string().contains("floating"));
     put(&d, "NOTES.md", "## What the skill got wrong\n- floating: the handset rests in its cradle; the judge read its shadow as a gap\n");
-    let s = run(&kit(), &d, &[], &[round(false, 6.0, defects)], later());
+    let s = run(&kit(), &d, &[], &[round(false, 6.0, defects.clone())], later());
     assert_eq!(s["done"], true, "{s:#}");
+    // once the judge is calibrated for kits, its score gates too: two passes in a row (MK6)
+    let (rounds, ledger) = ([round(false, 6.0, defects)], Ledger::default());
+    let s = status(&Job { make: &kit(), dir: &d, project: None, record: &[], rounds: &rounds, verdict: None, judged_at: later(), ledger: &ledger, score_gates: true });
+    assert_eq!(s["done"], false, "{s:#}");
+    assert!(s["gates"].to_string().contains("two needed"), "{s:#}");
 }
 
 #[test]
@@ -131,4 +141,82 @@ fn a_scene_wants_three_stills() {
     put(&d, "out/stills/a.png", "x");
     let s = run(&make, &d, &[], &[], None);
     assert!(s["missing"].to_string().contains("holds 1 picture"), "{s:#}");
+}
+
+#[test]
+fn a_round_judged_on_another_kinds_rubric_does_not_count() {
+    // docs/make.feature MK5: a kit is judged on the kit's rubric
+    let d = dir("rubric");
+    delivered(&d);
+    let old = json!({"dir": "review/r1", "pass": true, "mean": 8.0, "defects": []});
+    let s = run(&kit(), &d, &[], &[old], later());
+    assert_eq!(s["done"], false);
+    assert!(s["gates"].to_string().contains("--kind kit"), "{s:#}");
+}
+
+#[test]
+fn a_calibrated_ask_question_gates_and_an_uncalibrated_one_advises() {
+    // docs/make.feature MK4
+    let d = dir("ask");
+    delivered(&d);
+    put(&d, "review/r1/clay.png", "clay sheet bytes");
+    put(&d, "review/r1/colour.png", "colour sheet bytes");
+    let rounds = [round(true, 7.5, json!([]))];
+    let floating = raea_core_ask::library::find("make.clay.floating", None).unwrap();
+    let mut ledger = Ledger::default();
+    // nothing calibrated: every question is advice, and the job is done
+    let s = run_with(&kit(), &d, &[], &rounds, later(), &ledger);
+    assert_eq!(s["done"], true, "{s:#}");
+    assert!(s["gates"].to_string().contains("advice only"), "{s:#}");
+    // floating calibrated on the person's labels: it must be asked of this exact clay sheet
+    ledger.calibrations.insert(floating.version(), serde_json::from_value(json!({"auc": 0.9, "n": 40, "positives": 16, "threshold": 0.4, "date": "2026-11-23", "by": "you"})).unwrap());
+    let s = run_with(&kit(), &d, &[], &rounds, later(), &ledger);
+    assert_eq!(s["done"], false);
+    let gates = s["gates"].to_string();
+    assert!(gates.contains("not asked of this clay sheet") && gates.contains("--std make.clay.floating"), "{gates}");
+    // asked, and it flagged: open until fixed or answered by its id in NOTES.md
+    let ident = raea_core_ask::ident::ident(&d.join("review/r1/clay.png")).unwrap();
+    ledger.idents.insert("c-1".into(), ident);
+    ledger.answers.push(json!({"id": "a-1", "at": "100", "call": "c-1", "question": "make.clay.floating", "flagged": true, "problem": 0.8}));
+    let s = run_with(&kit(), &d, &[], &rounds, later(), &ledger);
+    assert_eq!(s["done"], false);
+    assert!(s["gates"].to_string().contains("make.clay.floating flagged (p 0.80)"), "{s:#}");
+    put(&d, "NOTES.md", "## What the skill got wrong\n- make.clay.floating: the handset's shadow, not a gap; checked on the low tile\n");
+    let s = run_with(&kit(), &d, &[], &rounds, later(), &ledger);
+    assert_eq!(s["done"], true, "{s:#}");
+    // the sheet rendered again: the old answer was about other bytes, so it's asked again
+    put(&d, "review/r1/clay.png", "a new clay sheet");
+    let s = run_with(&kit(), &d, &[], &rounds, later(), &ledger);
+    assert!(s["gates"].to_string().contains("not asked of this clay sheet"), "{s:#}");
+    // an uncalibrated question that flags is said as advice, holding nothing
+    let ident = raea_core_ask::ident::ident(&d.join("review/r1/colour.png")).unwrap();
+    ledger.idents.insert("c-2".into(), ident);
+    ledger.answers.push(json!({"id": "a-2", "at": "101", "call": "c-2", "question": "make.colour.plastic", "flagged": true, "problem": 0.7}));
+    let s = run_with(&kit(), &d, &[], &rounds, later(), &ledger);
+    assert!(s["advice"].to_string().contains("make.colour.plastic says yes"), "{s:#}");
+}
+
+#[test]
+fn the_gates_are_check_lines_under_the_jobs_task_in_plan_org() {
+    // docs/make.feature MK3
+    let not_done = json!({"done": false, "missing": ["out/kit/lineup.png"], "gates": [{"gate": "critic", "clear": false, "says": "no round yet"}, {"gate": "checks", "of": "kit.tsx", "clear": true, "says": "clean"}]});
+    let t = crate::plan::update("", "desk", "brief.ts", "kit", &not_done);
+    let id = crate::plan::task_id("brief.ts");
+    assert!(id.len() == 10 && id.starts_with("t-") && id[2..].chars().all(|c| c.is_ascii_alphanumeric()), "{id}");
+    assert!(t.starts_with("#+TITLE: desk\n#+TODO: TODO MAKING REVIEW | DONE DROPPED\n"), "{t}");
+    assert!(t.contains("* MAKING make: kit (brief.ts) [1/3]") && t.contains(&format!(":ID: {id}")), "{t}");
+    assert!(t.contains("- [ ] missing: out/kit/lineup.png") && t.contains("- [X] checks kit.tsx: clean"), "{t}");
+    // the person's own line under it stays; the checks are brought up to date; done is REVIEW
+    let mut mine = t.replace("- [X] checks kit.tsx: clean\n", "- [X] checks kit.tsx: clean\nShane: keep the phone's cord\n");
+    mine = format!("{mine}* TODO another task\n");
+    let done = json!({"done": true, "missing": [], "gates": [{"gate": "critic", "clear": true, "says": "round 2 judged"}]});
+    let t2 = crate::plan::update(&mine, "desk", "brief.ts", "kit", &done);
+    assert!(t2.contains("* REVIEW make: kit (brief.ts) [1/1]") && t2.contains("Shane: keep the phone's cord") && t2.contains("* TODO another task"), "{t2}");
+    assert!(!t2.contains("missing:"), "{t2}");
+    assert_eq!(t2.matches(":ID: ").count(), 1);
+    // a task the person closed keeps their mark
+    let closed = t2.replace("* REVIEW make", "* DONE make");
+    assert!(crate::plan::update(&closed, "desk", "brief.ts", "kit", &not_done).contains("* DONE make: kit (brief.ts) [1/3]"));
+    // once written, writing the same again changes nothing
+    assert_eq!(crate::plan::update(&t2, "desk", "brief.ts", "kit", &done), t2);
 }

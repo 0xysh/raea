@@ -305,4 +305,12 @@ handheld?: string,
 /**
  * a still rather than a move
  */
-still?: boolean, };
+still?: boolean, 
+/**
+ * the composition that renders it (relative to the brief): `raea make framing` and `lenschart` draw it
+ */
+composition?: string, 
+/**
+ * its frame rate, for the frames `seconds` spans (30 when left out)
+ */
+fps?: number, };

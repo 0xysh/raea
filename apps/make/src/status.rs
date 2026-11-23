@@ -25,6 +25,46 @@ pub struct Job<'a> {
     pub verdict: Option<&'a Value>,
     /// when the judge last wrote its log
     pub judged_at: Option<SystemTime>,
+    /// `raea ask`'s ledger, for the make questions' gate (asked.rs)
+    pub ledger: &'a crate::asked::Ledger,
+    /// `raea judge calibrate --kind KIND` agreed with the person's eye for this kind: its score gates too (MK6)
+    pub score_gates: bool,
+}
+
+/// A round's folder: as the judge wrote it when absolute, else the folder of that name beside the log (review/), since
+/// `raea judge DIR` keeps its log in DIR's parent and DIR was written relative to wherever it ran.
+pub fn round_dir(dir: &Path, round: &Value) -> Option<PathBuf> {
+    let d = Path::new(round["dir"].as_str()?);
+    if d.is_absolute() {
+        return Some(d.to_path_buf());
+    }
+    Some(dir.join("review").join(d.file_name()?))
+}
+
+/// The sheets the make questions are asked of: the newest round's (its framing sheet for a shot list, its colour and
+/// clay sheets otherwise) and a kit's reference sheet.
+pub fn sheets(job: &Job) -> Vec<(&'static str, PathBuf)> {
+    let mut out = Vec::new();
+    if let Some(r) = job.rounds.last().and_then(|r| round_dir(job.dir, r)) {
+        if job.make.kind == make::Kind::Shot {
+            out.push(("framing", r.join("framing.png")));
+        } else {
+            out.push(("clay", r.join("clay.png")));
+            out.push(("colour", r.join("colour.png")));
+        }
+    }
+    if job.make.kind == make::Kind::Kit {
+        out.push(("refs", job.dir.join("review/refs.png")));
+    }
+    out.into_iter().filter(|(_, f)| f.is_file()).collect()
+}
+
+pub(crate) fn kind_name(k: make::Kind) -> &'static str {
+    match k {
+        make::Kind::Scene => "scene",
+        make::Kind::Kit => "kit",
+        make::Kind::Shot => "shot",
+    }
 }
 
 fn mtime(p: &Path) -> Option<SystemTime> {
@@ -96,7 +136,13 @@ fn checks(job: &Job) -> Vec<Value> {
 /// fixed (the round passed) or answered in NOTES.md by its name. Its score gates once the judge is calibrated.
 fn critic(job: &Job, newest: Option<SystemTime>, notes: &str) -> Vec<Value> {
     let Some(last) = job.rounds.last() else {
-        return vec![gate("critic", None, false, "no round yet: raea render EDIT.tsx --review review/r1, then raea judge review/r1 --by claude".into())];
+        let kind = kind_name(job.make.kind);
+        let what = match job.make.kind {
+            make::Kind::Kit => "raea render shared/components/KIT/lineup.tsx --review review/r1",
+            make::Kind::Shot => "raea make framing --out review/r1",
+            make::Kind::Scene => "raea render EDIT.tsx --review review/r1",
+        };
+        return vec![gate("critic", None, false, format!("no round yet: {what}, then raea judge review/r1 --kind {kind} --by claude --brief brief.ts"))];
     };
     let mut out = Vec::new();
     let fresh = match (job.judged_at, newest) {
@@ -105,10 +151,17 @@ fn critic(job: &Job, newest: Option<SystemTime>, notes: &str) -> Vec<Value> {
         _ => false,
     };
     out.push(gate("critic", None, fresh, if fresh { format!("round {} judged after the newest deliverable", job.rounds.len()) } else { "the newest deliverable came after the last round: review and judge it again".into() }));
+    // the kind's own rubric (MK5): a round judged on another's doesn't count
+    let kind = kind_name(job.make.kind);
+    if last["kind"].as_str() != Some(kind) {
+        let dir = last["dir"].as_str().unwrap_or("review/rN");
+        out.push(gate("rubric", None, false, format!("the last round wasn't judged on the {kind} rubric: raea judge {dir} --kind {kind} --by claude")));
+    }
     let blocking: Vec<&str> = raea_app_judge::rubric::blocking(last["defects"].as_array().map(Vec::as_slice).unwrap_or_default());
     let open: Vec<&str> = if last["pass"] == true { Vec::new() } else { blocking.into_iter().filter(|d| !notes.contains(d)).collect() };
     out.push(gate("defects", None, open.is_empty(), if open.is_empty() { "no blocking defect left unanswered".into() } else { format!("blocking, neither fixed nor answered in NOTES.md: {}", open.join(", ")) }));
-    if job.verdict.is_some_and(|v| v["gating"] == true) {
+    // the score gates once the judge is calibrated for this kind; before that, fixed-or-answered is enough (MK6)
+    if job.score_gates {
         let p = raea_app_judge::progress(job.rounds);
         let done = p["done"] == true;
         out.push(gate("score", None, done, format!("the calibrated judge: {} passes in a row, two needed", p["passesInARow"])));
@@ -132,6 +185,8 @@ pub fn status(job: &Job) -> Value {
     }
     let mut gates = checks(job);
     gates.extend(critic(job, newest, &notes));
+    let (asks, said) = crate::asked::gates(&sheets(job), job.ledger, &notes);
+    gates.extend(asks);
     let cap = job.make.rounds.unwrap_or(make::ROUNDS) as usize;
     let capped = job.rounds.len() >= cap;
     let stalled = stalled(job.rounds);
@@ -152,6 +207,7 @@ pub fn status(job: &Job) -> Value {
         "gates": gates,
         "judge": {"rounds": job.rounds.len(), "cap": cap, "passesInARow": advice["passesInARow"], "changeApproach": advice["stall"], "again": advice["again"]},
         "plan": make::doctor(job.make),
+        "advice": said,
         "why": why,
     })
 }
@@ -170,6 +226,10 @@ pub fn text(s: &Value) -> String {
     if !list("missing").is_empty() {
         t.push("missing:".into());
         t.extend(list("missing").iter().map(|m| format!("  {}", m.as_str().unwrap_or(""))));
+    }
+    if !list("advice").is_empty() {
+        t.push("advice (raea ask, not calibrated yet):".into());
+        t.extend(list("advice").iter().map(|m| format!("  {}", m.as_str().unwrap_or(""))));
     }
     t.push("gates:".into());
     for g in list("gates") {
