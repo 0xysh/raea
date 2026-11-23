@@ -38,6 +38,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
   Rule: the plan and done (MK0-MK3)
 
 
+    @done
     Scenario: MK0. The contract: `make` on brief.ts
       Given a brief.ts whose default export has `make: kit({...})`, `scene({...})` or `shot({...})` (raea/brief)
       Then core/brief reads it as `Make`: its kind, references, style (one paragraph: era, palette, materials, wear and
