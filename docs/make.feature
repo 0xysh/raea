@@ -196,7 +196,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
   Rule: raea cloud (MK19-MK20)
 
-    @needs:MK2
+    @needs:MK2 @done
     Scenario: MK19. Three skills on raea cloud
       Then raea cloud has "Scene from references" (plan, spend, first cut, deliver), "Kit from style" (reference
         sheet, spend, deliver) and "Shots of a scene" (framing, deliver) as skill templates (GET|POST
