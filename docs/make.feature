@@ -119,6 +119,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         a part whose feet reach nothing reads as mounted (a wall or ceiling holds it) or as a warning in the air, so
         signs, pendants and lamps on cords aren't errors; a stool whose box clips a table's edge rests by its feet
 
+    @done
     Scenario: MK8. The clip check, for every level
       Then `raea scene lint` (raea-sys-contact) reports clips with their depth and the move that clears them
         (`{part, axis, by}`), and faces z-fighting: two parts' faces in one plane over each other (an error from
