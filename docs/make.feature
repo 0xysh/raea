@@ -140,7 +140,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
       And outliers (another style, a real brand, cropped, two objects) are regenerated first: the cheapest place to fix
         cohesion
 
-    @needs:MK10
+    @needs:MK10 @done
     Scenario: MK11. Both generators, picked on clay
       Then `raea make gen` sends every reference to Tripo H3.1 (face limit 150k heroes, 60k small) and Meshy (fal),
         `raea make pick-sheet` fits both to size and renders reference | Tripo | Tripo clay | Meshy | Meshy clay under
