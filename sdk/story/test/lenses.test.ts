@@ -80,3 +80,10 @@ test("a beat can mean a finding: a breather the journey wants", () => {
   const meant = { ...launch, world, tellings: { "30s": [t[0], t[1], { ...t[2], meant: before.map((f) => f.check) }, t[3]] } };
   expect(checkStory(meant as typeof launch, "30s").filter((f) => f.about === "b2")).toEqual([]);
 });
+
+test("the launch lens reads the launch fixture and says its priors as notes", () => {
+  const [r] = readThrough(launch, [LENSES.launch], "30s");
+  expect(r.passes).toBe(true);
+  expect(r.map.trouble.length + r.map.works.length).toBeGreaterThan(0);
+  expect(r.findings.every((f) => f.level !== "error")).toBe(true);
+});
