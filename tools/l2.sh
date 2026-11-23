@@ -15,8 +15,8 @@
 #   made once. A link is never made through a linked folder, so nothing is written into ~/raea.
 # - Before building, it sweeps ~/raea's stale debug caches if disk is short, and refuses under 8 GB.
 #
-# Output: one line per step ("L2 <step>: ..."), then "L2 <sha>: P26 a/b, ui-parity c/d, conformance e/f" and
-# $OUT/summary.json. Run it under antsy with a stall of 20 minutes or more (a heavy composition prints after
+# Output: one line per step ("L2 <step>: ..."), then "L2 <sha>: P26 a/b, ui-parity c/d, conformance e/f, ..., bench
+# checks g/h" (bench/l2-checks.txt) and $OUT/summary.json. Run it under antsy with a stall of 20 minutes or more (a heavy composition prints after
 # rendering all its frames).
 set -uo pipefail
 ROOT=$HOME/raea
@@ -138,5 +138,16 @@ RAEA_FEED_AGENT=echo "$OUT/bin/conformance" --bin "$OUT/bin/raea-page-host" --su
 conf=$(jq -r '"\(.pass)/\(.cases)"' "$OUT/conformance/summary.json" 2>/dev/null || echo "no results")
 say "conformance: $conf"
 
-jq -n --arg sha "$SHA" --arg p26 "$p26" --arg parity "$parity" --arg conf "$conf" --arg bindings "$bindings" '{sha: $sha, p26: $p26, ui_parity: $parity, conformance: $conf, plugin_bindings: $bindings}' > "$OUT/summary.json"
-echo "L2 $SHA: P26 $p26, ui-parity $parity, conformance $conf, plugin bindings $bindings"
+# the bench checks in bench/l2-checks.txt, each run with this commit's raea: they test what is right (a frame drawn alone
+# or out of order agrees with the render), where P26 only compares with its baseline, which can carry the same fault
+ok=0; total=0
+while read -r c; do
+  case $c in '' | '#'*) continue ;; esac
+  total=$((total + 1)); log="$OUT/bench-$(echo "$c" | tr / -).log"
+  if RAEA_BIN="$OUT/bin/raea" bash "$c" </dev/null > "$log" 2>&1; then ok=$((ok + 1)); else say "bench miss: $c ($(tail -1 "$log" | cut -c1-140))"; fi
+done < bench/l2-checks.txt
+benches="$ok/$total"
+say "bench checks: $benches"
+
+jq -n --arg sha "$SHA" --arg p26 "$p26" --arg parity "$parity" --arg conf "$conf" --arg bindings "$bindings" --arg benches "$benches" '{sha: $sha, p26: $p26, ui_parity: $parity, conformance: $conf, plugin_bindings: $bindings, bench_checks: $benches}' > "$OUT/summary.json"
+echo "L2 $SHA: P26 $p26, ui-parity $parity, conformance $conf, plugin bindings $bindings, bench checks $benches"

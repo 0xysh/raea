@@ -682,3 +682,24 @@ Feature: Stage guards: a 3D render an agent can't break
       # the sun's strength follows, kept-light), and says to render a film whole. The skill carries both on its main
       # (raea-skills #116, 74ab897); raea's pin takes it with the next pin after the story branch's (ST8a pins 4a77a0b,
       # not yet landed: pinning past it here would ship that branch's skill pages before its code).
+
+  Rule: SG17. A frame alone is the render's frame, on a page too
+    @done
+    Scenario: SG17. A CSS animation in a frame rendered alone is where the render has it
+      Given a page composition with CSS animations: one outside any <Sequence>, one inside <Sequence from={10}>
+        (sdk/react/bench/css/anim.tsx)
+      When frame 15 and frame 25 are rendered alone (`render --frame N`) and in a render of every frame
+      Then each animation is at the same place in both: from the composition's start outside a Sequence, from the
+        Sequence's start inside one
+      And L2 runs it on every release candidate with the other frame-order benches (bench/l2-checks.txt: at-0, at-time,
+        at-3d, compute-frames, css), each held to what is right, since P26's baseline carries a fault its raea had
+      # Status 11-22: 0.1.9 drew anim.tsx's A at x 100, not 300, at frame 15 alone: a frame alone mounts every element in
+      # one pass, and the page resolved them all at the earliest <Sequence> start (B's, frame 10), so A began there. On
+      # a page with no <Sequence>, every animation began on the frame itself. engine/page motion.rs now resolves at the
+      # earliest start, with an element outside any Sequence starting at 0, and moves each later element's animations
+      # to its own start (blitz-dom delay_animations). P26 was blind to it: it renders `--at` from frame 0, where every
+      # element mounts on its own frame, and its baseline is 0.1.9's. SG9 still samples only 3D renders: a CSS
+      # transition begun by a style change depends on the frames before it by design, so a page's sample would flag
+      # every one; the engine's side is held here instead. Measured on the fix: css/check.sh's animations PASS (A at
+      # 300 and 500 alone, B at 100 and 300); a page with no <Sequence>, frame 15 alone: x 300 (0.1.9: x 0); the five
+      # L2 bench checks 5/5.
