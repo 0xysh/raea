@@ -396,6 +396,39 @@ chooses (Shane's notes are the training data that matter most).
   - its first text-axis training pairs;
   - a check on whether story structure predicts outcomes at all, apart from distribution.
 
+### What it found (11-22)
+
+The question was whether craft shows in the films, or whether distribution and the news explain the gap.
+Within an account, the audience is the same, so distribution is held as far as this data allows.
+
+- **Paired comparison** (`tools/compare.py`, 156 of 158 pairs measured, sign tests with ties dropped, 23 features):
+  - **Length is the one finding that holds.** The better launch is the longer film in 104 of 155 pairs (67%, p < 0.001).
+    The medians are 50.5 s against 33.1 s.
+  - **A voice speaking:** the better film has one in 40 of 63 pairs where they differ (63%, p = 0.043).
+  - **A weaker beat:** p = 0.026, a tiny difference (strength 0.29 against 0.31).
+  - Neither of those two survives a correction for testing 23 features (Bonferroni: p < 0.002).
+  - Nothing measured about the cut shows any difference: cuts a second, shot length, first cut, motion, sync to the
+    music, colour, loudness, brightness.
+- **Blind read** (30 pairs drawn at random from those measured; a strip of eight frames a film, the length and the
+  transcript, with no engagement shown; each guess and its reason written down before the key was read):
+  - **23 of 30 right** (77%, one-sided sign test p = 0.003).
+  - **But always picking the longer film gets 25 of 30.** The guesses agreed with "the longer one" on 24 of 30, beat it
+    on 2 pairs, and lost to it on 4.
+  - Where the engagement gap is large (1.5 or more in `own`, each film's engagement against its own account's, the gap a pair is ranked by), the read was right on 18 of 19; where
+    it is small, 5 of 11, a coin.
+  - The reasons given for right guesses were the size of the news (a flagship release against a variant, a raise, a
+    famous face), not the cut.
+- **Plainly:** craft, as anything we can measure or a reader can see in the film, doesn't separate the better launch
+  from the worse one here. What does is how big the news is, and the film's length, which goes with it: a flagship
+  launch gets a longer film, a voice and a founder. Length is a marker, not a lever, so these pairs give no reason to
+  pad a film.
+- **What carries into the stack:**
+  - The launch lens's priors are the shape of the films that won, as norms, not as causes: 40 to 60 s, a voice, the
+    problem in the viewer's words, a named proof (a number, a benchmark, a raise), how to start.
+  - `raea fingerprint` gets a launch profile (the measured medians) and the pair evidence, with these limits written
+    beside it.
+  - Taste for the decision model comes from Shane's notes, not from engagement, which mostly measures the news.
+
 ## Build order
 
 | step | what | confidence |
