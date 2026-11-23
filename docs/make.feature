@@ -166,7 +166,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         frame to hold the subject) and path (Catmull-Rom), focus track, point and rack with holds, and
         `handheld({ profile: "walk" })`: steps at 1.8 Hz, an aim on a spring, small reframes, nothing above 1.9 Hz
 
-    @needs:MK14
+    @needs:MK14 @done
     Scenario: MK15. Blocking: framing sheets and a lens chart
       Then `raea make framing` renders each shot's first, middle and last frame (`raea render --at`) onto
         review/framing.png, a row a shot stamped with its name and time, and `raea make lenschart SHOT` its first frame
