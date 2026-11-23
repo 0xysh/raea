@@ -51,6 +51,7 @@ for (let i = 0; i < N; i++) {
   ];
   for (const [name, fn] of readers) {
     try { fn(); } catch (e) {
+      if (e instanceof RangeError) continue; // a clear refusal (asking about a beat that isn't there), not a crash
       const where = p.map((k) => (typeof k === "number" ? "[]" : k)).join(".").replace(/world\.\w+/, "world.E").replace(/agents\.\w+/, "agents.A").replace(/tellings\.\w+/, "tellings.T");
       const key = `${where} = ${JSON.stringify(v)} | ${name} | ${String((e as Error).message).slice(0, 60)}`;
       const c = crashes.get(key);

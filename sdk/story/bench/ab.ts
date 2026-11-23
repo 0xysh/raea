@@ -194,7 +194,7 @@ async function checkedEdit(p: Prompt, a: Arm): Promise<Arm> {
   const msgs = [{ role: "system", content: PLAIN }, { role: "user", content: p.brief }, { role: "assistant", content: JSON.stringify(a.final) },
     { role: "user", content: `A story checker read your script back as story data, from the screen and the lines alone, and found:\n${list}\nEach is what a viewer can't see on screen: a beat with no shown reason, a turn nothing set up, a setup never paid, an arc never settled. Fix each one so the screen shows it (or leave it where it's a choice you mean), then rewrite. Answer with one JSON object {"title": string, "beats": [...same shape as before]}.` }];
   const r = await ask(WRITER, msgs);
-  return { arm: "D", final: parse(r.text), calls: 2, usd: a.usd + r.usd + ex.usd, ms: a.ms + r.ms, log: [{ found: found.map((f) => `${f.level} ${f.check}`), finish: r.finish }] };
+  return { arm: "D", final: parse(r.text), calls: 2, usd: a.usd + r.usd + ex.usd, ms: a.ms + r.ms, log: [{ found: found.map((f) => `${f.level} ${f.check}`), said: list, finish: r.finish }] };
 }
 async function written(p: Prompt, b: Arm): Promise<Arm> {
   const data = b.final?.data;
@@ -207,21 +207,43 @@ async function written(p: Prompt, b: Arm): Promise<Arm> {
 }
 
 // ---- scoring ----
+/**
+ * The extractor's mechanical slips, tidied before fromData reads it (never a story's content): null fields dropped, a
+ * lone key where a list goes wrapped, a fact used but not declared declared with its own words, and a narrator who acts
+ * made an agent. What's left wrong goes back to the extractor.
+ */
+const LISTS = { ev: ["with", "needs", "sets", "unsets", "learns", "proof", "dilemma"], beat: ["shows", "reveals", "hides", "asks"], agent: ["believes"] };
+function tidy(j: J): J {
+  const drop = (o: J) => { for (const k of Object.keys(o)) if (o[k] === null) delete o[k]; };
+  const wrap = (o: J, ks: string[]) => { for (const k of ks) if (typeof o[k] === "string") o[k] = [o[k]]; };
+  j.facts ??= {};
+  for (const a of Object.values((j.agents ?? {}) as J)) if (a && typeof a === "object") { drop(a); wrap(a, LISTS.agent); }
+  const facts = (xs: unknown) => { if (Array.isArray(xs)) for (const f of xs) if (typeof f === "string" && !(f in j.facts)) j.facts[f] = f; };
+  for (const e of Object.values((j.world ?? {}) as J)) if (e && typeof e === "object") {
+    drop(e); wrap(e, LISTS.ev);
+    if (e.who === "narrator" && !j.agents?.narrator) (j.agents ??= {}).narrator = {};
+    for (const k of ["needs", "sets", "unsets", "learns", "proof"]) facts(e[k]);
+  }
+  for (const t of Object.values((j.tellings ?? {}) as J)) if (Array.isArray(t)) for (const b of t) if (b && typeof b === "object") {
+    drop(b); wrap(b, LISTS.beat); for (const k of ["reveals", "hides", "asks"]) facts(b[k]);
+  }
+  return j;
+}
 type Extracted = { checks: J[] | null; errors: string[]; usd: number; beats: number; data?: J };
 async function extract(s: string): Promise<Extracted> {
   let usd = 0;
   const msgs: J[] = [{ role: "system", content: EXTRACT }, { role: "user", content: s }];
-  for (let t = 0; t < 2; t++) {
+  for (let t = 0; t < 3; t++) {
     const r = await ask(EXTRACTOR, msgs, { tokens: 30000 });
     usd += r.usd;
-    const j = parse(r.text);
+    const raw = parse(r.text), j = raw ? tidy(raw) : null;
     const d = j ? fromData(j) : { story: null, errors: [{ at: "", says: "not JSON" }] };
     if (d.story && !d.errors.length) {
       try { return { checks: checkStory(d.story, "main").map((f) => ({ check: f.check, level: f.level, about: f.about, says: f.says })), errors: [], usd, beats: (j!.tellings?.main ?? []).length, data: j! }; }
       catch (e) { writeFileSync(join(OUT, `crash-extract-${Date.now()}.json`), JSON.stringify({ story: j, stack: String((e as Error).stack) })); return { checks: null, errors: [`crash: ${(e as Error).message}`], usd, beats: 0 }; }
     }
     msgs.push({ role: "assistant", content: r.text }, { role: "user", content: `Fix these and answer with the whole JSON object:\n${d.errors.slice(0, 20).map((e) => `- ${e.at}: ${e.says}`).join("\n")}` });
-    if (t === 1) return { checks: null, errors: d.errors.slice(0, 5).map((e) => `${e.at}: ${e.says}`), usd, beats: 0 };
+    if (t === 2) return { checks: null, errors: d.errors.slice(0, 5).map((e) => `${e.at}: ${e.says}`), usd, beats: 0 };
   }
   return { checks: null, errors: ["unreachable"], usd, beats: 0 };
 }
@@ -249,8 +271,8 @@ await pool(units, JOBS, async ({ p, s }) => {
     const [a, b] = await Promise.all([reused(p.id, s, "A") ?? plain(p), reused(p.id, s, "B") ?? sdk(p)]);
     const [c, d, e] = await Promise.all([
       ARMS.includes("C") ? reused(p.id, s, "C") ?? edited(p, a) : null,
-      ARMS.includes("D") ? checkedEdit(p, a) : null,
-      ARMS.includes("E") ? written(p, b) : null,
+      ARMS.includes("D") ? reused(p.id, s, "D") ?? checkedEdit(p, a) : null,
+      ARMS.includes("E") ? reused(p.id, s, "E") ?? written(p, b) : null,
     ]);
     const arms = [a, c, b, d, e].filter((x): x is Arm => !!x && ARMS.includes(x.arm));
     const scored = await Promise.all(arms.map(async (x) => {

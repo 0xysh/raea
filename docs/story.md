@@ -15,7 +15,9 @@ seeded sampling, the mutations, story as data and as story lines, the state at a
 typed questions about a beat (story as decisions), and checks in `raea check`. The skill carries it as
 `craft/story/`. Shane paused the small story models the same day ("screw the model, just finish and wrap the sdk"):
 the code that built their data and trained them stays in `sdk/story/models/` with its corpus in `~/.vd/story`, not
-part of the package, for whenever they're picked up again.
+part of the package, for whenever they're picked up again. Measured the same day against plain prompts (see "Measured: the same
+prompts with and without it"), it makes a script better as the editor of a draft (read back, checked, fixed by beat:
+tied with a strong editing prompt, both well over plain) and worse as the language a script is drafted in.
 
 ## In one paragraph
 
@@ -435,6 +437,86 @@ Within an account, the audience is the same, so distribution is held as far as t
   - `raea fingerprint` gets a launch profile (the measured medians) and the pair evidence, with these limits written
     beside it.
   - Taste for the decision model comes from Shane's notes, not from engagement, which mostly measures the news.
+
+## Measured: the same prompts with and without it (11-22)
+
+`sdk/story/bench/` holds three benches: `edges.ts` (29 odd and broken stories, each with what should happen), `fuzz.ts`
+(valid stories with one field made the wrong type, run through every reader) and `ab.ts` with `ab-report.ts` (the
+same prompts written five ways, judged blind). Run data is in `~/.vd/story/ab/run1` to `run3`; run3 is the complete
+one; the three runs and their smoke tests cost about $14.70 together.
+
+### What the edges and the fuzzer found, and what changed
+
+The fuzzer found 21 places where `fromData` accepted something a reader then crashed on, and a test story found that
+`unsets` did nothing. All are fixed (ST10a):
+
+- **`fromData` holds a story to `storySchema()`** (`shapeErrors`): a field of the wrong type, or a field in the wrong
+  place, is refused with where it is. 270 of the 1,572 corpus stories carried one that used to be dropped silently:
+  `turns` on a beat (103, so the writer thought a beat moved a value and it didn't), `believes` as text (97), a
+  `dilemma`, `claim` or `ends` on a beat, a `setup`, `asks` or `reveals` on an event.
+- **`unsets`** takes a fact back from the event's agents and from the audience, and a claim can't rest on a fact that
+  has since been undone.
+- **Two beats with one id** are an error, both in `fromData` and in the checks: a composition finds its Sequence by id.
+- **`seconds`** can't be negative, a telling that shows no event is a finding, and `asker` says when it's asked about a
+  beat that isn't there.
+
+What held without a change: cause cycles and self-causes are refused; a mystery's detective acting on an unseen clue is
+a belief error that a fair-play clue removes; a flashback hook passes when its fact is hidden then paid; a negative arc
+needs no settled need; Japanese keys and text round-trip through story lines; 20 seeds of a story with choice points
+give 20 distinct stories; every mutant raises a finding. Scale: checks, the McKee lens and a window over 2,000 events
+and 2,000 beats take about 0.4 s each, and one beat's 20 typed questions take 8 ms after a 1.2 s setup.
+
+### The A/B: five ways to write the same prompt
+
+Eight prompts (a 30 s tent launch, a 45 s coffee brand film, a 3 minute whodunit with fair play, a wordless
+kishotenketsu, a 40-shot short film, an RPG quest with a lying quest giver, a tragedy, a 15 s sunscreen ad; made-up
+brands), two samples each, one writer (Claude Sonnet 5.5) for every arm:
+
+- **A, plain**: the prompt, a beat script back (what's on screen, who says what, seconds), one call.
+- **C, plain + an editor**: A, then one round where the writer critiques its own script against the same things the
+  checks and the prompt's lenses hold (said in words: therefore or but, never and then; setups paid; no acting on
+  what a character can't know; the arc settled; proof shown; the framework's stages), and rewrites.
+- **D, plain + raea/story as the editor**: A's script read back blind into story data by another model (Gemini 3.7
+  Flash), `checkStory` and the prompt's lenses run on it, the findings handed to the writer by beat number, and one
+  rewrite. C's round with the editor's eye replaced by the exact checks.
+- **B, written as story data**: the writer writes the story itself in the data, under the guide; the checks and
+  lenses find what's wrong and the writer repairs it, up to two rounds; its beats become the beat script.
+- **E, story data, then a screenwriter**: B's checked story handed to the writer as story lines, to write the beat
+  script from.
+
+Every arm ends as the same numbered beat script. Two judges of other families (GPT-5.4, Gemini 3.1 Pro) ranked all five
+for each prompt, letters shuffled, and scored each 1 to 10 on cause, setups, clarity, the brief, feeling and overall.
+
+| arm | mean rank (of 5) | ranked first | overall | over plain |
+|---|---|---|---|---|
+| D, plain + raea/story as the editor | **1.91** | 47% | **8.44** | 26 of 32 (p = 0.001) |
+| C, plain + an editor | 1.97 | 44% | 8.22 | 26 of 32 (p = 0.001) |
+| A, plain | 3.22 | 3% | 7.31 | |
+| E, story data, then a screenwriter | 3.59 | 6% | 7.03 | 12 of 32 (p = 0.22) |
+| B, written as story data | 4.31 | 0% | 6.38 | 7 of 32 (p = 0.002) |
+
+D and C tie (16 of 32). D came first on both the long film and the whodunit, where there's most to track (40 shots;
+clues the detective may only act on once shown), and on the tent launch; C came first on the coffee film,
+the kishotenketsu, the quest and the tragedy. Their cost was alike ($0.12 a story against $0.12).
+
+**What it means.** raea/story makes a script better as the editor of a draft, not as the language it's drafted in.
+Written straight into the data, a story passes its checks (13 of 16 by the last round) and reads worst: fewer, more
+abstract beats, a narrator saying what the screen should show ("You want to go. The tent is what stops you."), causes
+that hold in the data and don't show on screen. The judges scored B's cause and setups lower than plain's (6.4 against
+7.2), although its data has every cause. Handing that story to a screenwriter (E) recovers most of the loss but not
+all of it. Read back from a draft instead, the checks name holes by beat (on one tent launch: four events with no cause
+the viewer saw, four beats that only follow the one before, the hero's arc never settled, the brand never in the
+mentor's place), and the rewrite fixes what a viewer can see.
+
+So the way to use it, for a person or an agent: **write the script, read it back as story data, check it, fix by beat,
+and keep the story file for what the checks hold from then on** (the composition's beats, `raea check`, the cuts). The
+data is the checker's language, and the script is the viewer's.
+
+**How far to trust it.** 16 prompt samples and two LLM judges, who agreed on the best of five 9 times in 16; one writer
+model; the extraction is noisy (a B story that passed its own checks still reads back with 1.3 findings a beat, about
+the level of every arm), so it's a guide to the rewrite, not a score. D's own extraction score is the lowest (1.44 a
+beat) partly because it was fixed against the same kind of reading. The edits that won are the ones a human editor
+would also make; the checks don't know whether a line lands.
 
 ## Build order
 

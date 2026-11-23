@@ -222,3 +222,27 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
       Given a public-domain feature film told shot by shot, its scenes grouped
       Then the extractor chains through it and the checks and lenses run on what it reads
       And the generator writes scenes top-down from premise to world to scenes to shots, each level checked
+
+  Rule: ST10. Proven against plain prompts
+
+    Scenario: ST10a. Edge cases and fuzzing
+      Given 29 odd and broken stories, each with what should happen, and valid stories with one field made the wrong type
+      Then anything fromData accepts, every reader reads without crashing (fromData holds a story to storySchema)
+      And unsets takes a fact back, two beats never share an id, seconds is never negative, a telling that shows
+        nothing is a finding
+      And the plan:
+        | crate | file                       | lines | job                                        |
+        | sdk   | sdk/story/bench/edges.ts   | 230   | the edge cases, run and reported           |
+        | sdk   | sdk/story/bench/fuzz.ts    | 80    | wrong-typed fields through every reader    |
+        | sdk   | sdk/story/src/data.ts      | 40    | shapeErrors: the schema as the reader's gate |
+
+    Scenario: ST10b. The same prompts with and without it
+      Given eight prompts written five ways by one writer (plain; plain and an editor; plain and raea/story as the
+        editor; written as story data; story data then a screenwriter), judged blind by two models of other families
+      Then raea/story as the editor of a draft ties a strong editing prompt and beats plain (26 of 32, p = 0.001)
+      And written straight into story data a script reads worst (7 of 32 over plain), so the guides say: write the
+        script, read it back as data, check it, fix by beat
+      And the plan:
+        | crate | file                         | lines | job                                     |
+        | sdk   | sdk/story/bench/ab.ts        | 330   | the five arms, extraction, the judges   |
+        | sdk   | sdk/story/bench/ab-report.ts | 140   | ranks, pairs, extraction, cost          |
