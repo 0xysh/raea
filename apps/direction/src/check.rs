@@ -271,10 +271,11 @@ fn check_one(tsx: &Path, id: Option<String>, rules: &[Rule], args: &[String], wh
 
 /// Where `f` is in `files`, added at the end when it isn't yet: the one run's checks, each file once.
 fn file_index(files: &mut Vec<PathBuf>, f: &Path) -> usize {
-    files.iter().position(|x| x == f).unwrap_or_else(|| {
-        files.push(f.to_path_buf());
-        files.len() - 1
-    })
+    if let Some(at) = files.iter().position(|x| x == f) {
+        return at;
+    }
+    files.push(f.to_path_buf());
+    files.len() - 1
 }
 
 /// Whether `r` runs on the composition `tsx` (`id` where its file registers several) of `project`: a rule a note's ask

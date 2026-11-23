@@ -26,6 +26,7 @@ export function knowledge(w: World): void {
     for (const f of ev.needs ?? []) if (!known[ev.who]?.has(f)) breaks.push({ event: key, who: ev.who, fact: f });
     for (const who of [ev.who, ...(ev.with ?? [])]) for (const f of ev.sets ?? []) known[who]?.add(f);
     for (const f of ev.learns ?? []) known[ev.who]?.add(f);
+    for (const who of [ev.who, ...(ev.with ?? [])]) for (const f of ev.unsets ?? []) known[who]?.delete(f);
     w.insert(e, "KnowsBefore", knowsBefore[key]);
   }
   w.setResource<Break[]>("BeliefBreaks", breaks);
@@ -39,6 +40,8 @@ export function knowledge(w: World): void {
     for (const s of beat.shows) for (const f of byKey[s]?.ev.sets ?? []) if (!(beat.hides ?? []).includes(f)) learned.add(f);
     for (const f of beat.reveals ?? []) learned.add(f);
     for (const f of learned) audience.add(f);
+    // an event the audience sees undo a fact takes it back (a lie exposed, an alibi broken), unless the beat hides that
+    for (const s of beat.shows) for (const f of byKey[s]?.ev.unsets ?? []) if (!(beat.hides ?? []).includes(f)) audience.delete(f);
     const answered = [...open].filter((f) => audience.has(f));
     for (const f of answered) open.delete(f);
     for (const f of beat.asks ?? []) if (!audience.has(f)) open.add(f);

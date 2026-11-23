@@ -86,6 +86,7 @@ export function asker(s: AnyStory | Record<string, any>, telling: string, o: Ask
   const events = eventsOf(w).sort((a, b) => a.order - b.order);
 
   return (k: number, as: "lines" | "script" = o.as ?? "lines"): Asked => {
+    if (!Number.isInteger(k) || k < 0 || k >= beats.length) throw new RangeError(`no beat ${k + 1} in telling "${telling}": it has ${beats.length}`);
     const before = o.before ?? 3, after = o.after ?? 2;
     const from = Math.max(0, k - before), near = raw.slice(from, k + after + 1);
     const st = stateIn(w, k);

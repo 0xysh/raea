@@ -36,7 +36,7 @@ test("the launch story reads back from its lines exactly", () => {
 
 test("a broken line says where", () => {
   const { errors } = fromLines("VALUE v: low / high\nEVENT a: no arrow here\nBEAT b0: shows a");
-  expect(errors.map((e) => e.at)).toEqual(["line 2", "line 3"]);
+  expect(errors.map((e) => e.at)).toEqual(["line 2", "line 3", "tellings"]);
 });
 
 const corpus = `${homedir()}/.vd/story/stories.jsonl`;

@@ -15,7 +15,7 @@ export { LENSES, LAUNCH_PRIORS, bernays, campbell, harmon, kishotenketsu, launch
 export { sample, samples, matrix, judge, type Sampled, type SampleOptions, type MatrixResult, type MatrixRow } from "./sample.ts";
 export { compileScript, compileStorylets, dramaManager, toInk, toYarn, onScreenOf, type Storylet } from "./compile.ts";
 export { resolved, type RStory } from "./load.ts";
-export { toData, fromData, storySchema, beatSchema, beatShape, keysIn, type DataError } from "./data.ts";
+export { toData, fromData, shapeErrors, storySchema, beatSchema, beatShape, keysIn, type DataError } from "./data.ts";
 export { toLines, fromLines, scriptOf } from "./lines.ts";
 export { stateAt, stateIn, stateLines, windowAt, type State } from "./state.ts";
 export { asker, questionsAt, findingsByBeat, CHECK_QUESTIONS, type Question, type Answer, type Asked, type AskOptions } from "./questions.ts";

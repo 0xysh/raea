@@ -74,7 +74,11 @@ export function checkWorld(w: World): Finding[] {
     if (run === RUN) add("rhythm", "note", key, `${RUN} beats in a row all turn ${s > 0 ? "up" : "down"}, ending at ${key}`, "break the run with a turn the other way");
   });
 
+  const ids = new Map<string, number>();
+  for (const { beat } of beats) if (beat.id !== undefined) ids.set(beat.id, (ids.get(beat.id) ?? 0) + 1);
+  for (const [id, n] of ids) if (n > 1) add("id", "error", id, `${n} beats share the id "${id}", so a composition can't name its Sequence`, "give each beat its own id");
   const shown = new Set(beats.flatMap((b) => b.beat.shows));
+  if (beats.length && !shown.size) add("turns", "warn", "story", "no beat shows an event: the telling is all narration", "show the events the beats are about");
   for (const [a, ent] of Object.entries(keysOf(w).agents)) {
     const ag = w.must<RAgent>(ent, "Agent");
     if (!ag.want && !ag.need) continue;
@@ -90,6 +94,7 @@ export function checkWorld(w: World): Finding[] {
       if (!proof.length) add("claim", "error", x.key, `${x.key} claims "${x.ev.claim}" with no fact behind it`, "name the facts that prove it (proof), set by events the story shows");
       for (const f of proof) if (!set.has(f)) add("claim", "error", x.key, `${x.key}'s claim rests on "${f}", which nothing in the world makes true by then`, "show the event that makes it true first");
     }
+    for (const f of x.ev.unsets ?? []) set.delete(f);
   }
 
   const focus = infoOf(w).idea?.value;
