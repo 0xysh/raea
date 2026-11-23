@@ -172,7 +172,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         review/framing.png, a row a shot stamped with its name and time, and `raea make lenschart SHOT` its first frame
         at 18, 24, 35, 50, 85 and 135 mm (RAEA_LENS keeps the scene's camera and sets its lens)
 
-    @needs:MK14
+    @needs:MK14 @done
     Scenario: MK16. Clearance on every frame
       Then `raea scene stage --clearance 0.45` finds every run of frames where the camera is nearer a solid than that
         (a box first, a model's triangles when its box comes close; inside a part said so), leaving out volumes,
