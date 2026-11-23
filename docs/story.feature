@@ -169,6 +169,7 @@ Feature: Story: a story as ECS data, read through many frameworks, generated wit
         | sdk   | sdk/story/src/mutate.ts       | 300   | every way a story told one way can be broken, labelled |
         | sdk   | sdk/story/test/mutate.test.ts | 120   | every mutant with an expected check is found by it  |
 
+    # Paused 11-22 (Shane: "screw the model, just finish and wrap the sdk"); models/ keeps the code and ~/.vd/story the data.
     Scenario: ST6b. The extractor, the generator and the critic
       Given small bases (about 2B parameters or less), trained with MLX on this Mac and exported to ONNX for ort
       Then the extractor turns a transcript into story data, the generator proposes what a brief wants as data that

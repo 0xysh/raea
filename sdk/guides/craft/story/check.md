@@ -36,5 +36,9 @@ beat's line isn't spoken inside its shot.
 | `rhythm` | note | four beats in a row turn the same way | break the run with a reversal |
 | `dead-end` | note | an event causes nothing | let something follow from it, or cut it |
 
+A beat can say it means a finding: `meant: ["mckee:complications"]` (or one string, `meant: "rhythm"`) takes those
+findings about that beat out of what checks and lenses report, for a breather the journey wants or a run of losses
+that's the point. `surprise: "meant"` is the same for a surprise. Write it where you decided, not to quiet a check.
+
 A lens adds its own (`mckee:crisis`, `bernays:invented`, ...), each explained on its page. A lens error is as real as an
 exact one when the brief names that lens.

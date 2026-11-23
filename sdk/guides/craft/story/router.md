@@ -9,7 +9,8 @@ causes, the tension) and checks it before anything is drawn. Read this page firs
 | writing a story for a film, an ad, a game or dialogue | [write](write.md) (`raea guide story/write`) |
 | finding out why it doesn't hold, or making `raea check` hold it | [check](check.md) |
 | making several versions, or one pattern across many premises | [sample](sample.md) |
-| judging a story: lenses, the critic, the launch shape | [score](score.md) |
+| judging a story: lenses, typed questions, the launch shape | [score](score.md) |
+| telling a long story (a feature, a game): windows, scenes, story lines | [write](write.md), "Any length" |
 | shaping it after a framework | the framework's page, below |
 
 ## The frameworks, as lenses
@@ -30,6 +31,7 @@ says where it breaks and proposes what's missing. Pick by what you're making, no
 | `kishotenketsu` | a piece with no villain: a turn of perspective, not a fight | [kishotenketsu](kishotenketsu.md) |
 | `propp` | a folk tale, a quest, a game's mission | [propp](propp.md) |
 | `bernays` | any piece that makes a claim: proof shown, never invented | [bernays](bernays.md) |
+| `launch` | a product's launch film: trouble, name, it works, proof, start; priors measured on 156 pairs | [launch](launch.md) |
 
 Two or three lenses at most. A story that passes every framework is usually a story no one remembers: the lenses find
 holes, they don't write the film.

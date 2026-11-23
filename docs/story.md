@@ -8,7 +8,14 @@ beats in the code or across themes, ideas, etc. ill look to you to see how SOTA 
 
 This is the one plan for `raea/story`: what it is, how it sits on `script.ts`, the frameworks it reads stories
 through, how a story is generated without being fixed, how it's tested, what's state of the art and what's new
-here, and the build order, with a confidence for each step. No code exists yet.
+here, and the build order, with a confidence for each step.
+
+**Where it stands (11-22):** `sdk/story` is built: the ECS, the systems, 12 lenses (the launch lens's priors measured),
+seeded sampling, the mutations, story as data and as story lines, the state at a beat and windows (any length),
+typed questions about a beat (story as decisions), and checks in `raea check`. The skill carries it as
+`craft/story/`. Shane paused the small story models the same day ("screw the model, just finish and wrap the sdk"):
+the code that built their data and trained them stays in `sdk/story/models/` with its corpus in `~/.vd/story`, not
+part of the package, for whenever they're picked up again.
 
 ## In one paragraph
 

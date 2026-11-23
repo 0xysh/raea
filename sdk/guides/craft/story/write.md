@@ -55,3 +55,32 @@ The brief imports the story explicitly: `brief({ ..., story })` (raea keeps it a
 - A value is a pair of poles ("buried", "free"), not a topic. The `idea.value` is the one the story is about.
 - Facts are keys, not sentences: `believes`, `needs`, `sets`, `proof`, `asks` all name declared facts.
 - A claim (`claim`) names its `proof`, facts an event makes true. Never write proof nothing shows.
+
+## Any length
+
+A story has no length cap: the checks and lenses run over 55 beats or 2,000 alike. For a feature or a game, give each
+beat a `scene` (consecutive beats with one scene are its shots) and write top-down: the world, then the scenes, then
+the shots a scene at a time, checking each level before the next.
+
+- `stateAt(story, telling, k)` is everything the story holds just before beat k: what the audience knows, open
+  questions, suspense, each value's level, tension, setups not yet paid, wants and needs not yet settled, events not
+  yet shown. It's about the same size at minute 3 or minute 100, so a step that writes or judges beat k (a person, an
+  agent, a model) reads that and the beats around it, never the whole telling.
+- `windowAt(story, telling, k)` is that state plus the events still usable and three beats before and two after, as
+  story lines: what to hand an agent writing the beat between.
+
+## Story lines
+
+`toLines(story)` writes a story as one keyword-led line per value, fact, agent, event and beat, the way Fountain
+writes a screenplay, and `fromLines(text)` reads it back exactly (a broken line says which):
+
+```
+VALUE nerve: afraid / bold
+EVENT pitch: june with tent -- pulls the tent up in one go | because dusk | sets pitched | turns nerve+3 | ends june:need
+BEAT pull: shows pitch | reveals pitched | pays how | feel delight
+  SAYS june (quietly): Okay. // she's talking herself into it
+```
+
+It's for skimming a long story whole, diffing two versions, and anything that writes a story a line at a time. The
+TypeScript stays the story; `toData` / `fromData` are the same story as JSON, with `storySchema()` and a story's own
+`beatSchema(story)` for anything that must answer in that shape.
