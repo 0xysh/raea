@@ -204,7 +204,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         `raea make status --json` on the box in the project's folder, "says done" holding on its done and "raea make
         status: critic, review/refs.png" on each named gate and file
 
-    @needs:MK19
+    @needs:MK19 @done
     Scenario: MK20. Retry-safe jobs and a live view
       Then a project is keyed by a hash of its inputs (or the caller's Idempotency-Key; plan.org's :INPUTS:): the same
         ask from the API, the studio, a form or a webhook returns the finished project, attaches to the running one or
