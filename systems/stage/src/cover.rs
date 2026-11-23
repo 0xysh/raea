@@ -68,10 +68,17 @@ pub(crate) fn behind(its: &[Item], parts: &[Part], me: usize, world: &Mat4, x: (
     by.into_iter().max_by_key(|(j, n)| (*n, std::cmp::Reverse(*j))).map(|(j, _)| called(&its[j]))
 }
 
-/// Whether a part lets the words through: its material's opacity under SEE_THROUGH.
+/// Whether a part lets the words through: its material's opacity (else its own) under SEE_THROUGH.
 fn see_through(it: &Item) -> bool {
-    let o = |p: &serde_json::Map<String, Value>| p.get("opacity").and_then(Value::as_f64);
-    it.material.as_ref().and_then(|m| o(&m.props)).or_else(|| o(&it.props)).is_some_and(|o| o < SEE_THROUGH)
+    let material = match &it.material {
+        Some(m) => opacity(&m.props),
+        None => None,
+    };
+    material.or(opacity(&it.props)).is_some_and(|o| o < SEE_THROUGH)
+}
+
+fn opacity(props: &serde_json::Map<String, Value>) -> Option<f64> {
+    props.get("opacity")?.as_f64()
 }
 
 /// Where the segment o to q first enters the box [lo, hi], as a share of its length, if it does before q.
