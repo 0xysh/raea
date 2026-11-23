@@ -125,6 +125,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
         (`{part, axis, by}`), and faces z-fighting: two parts' faces in one plane over each other (an error from
         1 cm², a warning under), and doubled faces inside one model (a warning), on every lint, no flag needed
 
+    @done
     Scenario: MK9. Re-drop after every move
       Then a part moved sideways by a clip's fix is settled onto what's under its new place in the same pass (the fix
         carries its `dy`), and a stool under a table rests on the floor by its feet, so nothing hovers at table height
