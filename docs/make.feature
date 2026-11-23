@@ -187,7 +187,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
 
   Rule: the plan, drawn (MK18)
 
-    @needs:MK0
+    @needs:MK0 @done
     Scenario: MK18. `raea make plan`: a floor plan, a grey box and a comparison
       Then it draws review/plan/floor-plan.png (every placed object's footprint turned by its rot and labelled with its
         height, invented ones dashed, a metre grid, the entrance the camera looks in from), renders a grey box of the
