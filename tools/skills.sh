@@ -45,6 +45,8 @@ copies() {
   printf '%s\tmotion.md\n' sdk/guides/craft/motion.md
   for g in sdk/guides/craft/motion/*.md; do printf '%s\tmotion/%s\n' "$g" "${g##*/}"; done
   for g in ROUTER.md floor.md rubric.md NOTICE; do printf '%s\tcraft/%s\n' "sdk/guides/craft/$g" "$g"; done
+  # building anything as components (raea guide components; docs/components.md): at the skill's root, beside its routers
+  printf '%s\tcomponents.md\n' sdk/guides/craft/components.md
   for g in sdk/guides/craft/modes/*.md; do printf '%s\tcraft/modes/%s\n' "$g" "${g##*/}"; done
   for g in sdk/guides/craft/verbs/*.md; do printf '%s\tcraft/verbs/%s\n' "$g" "${g##*/}"; done
   # stories as data (raea/story): the router, how to write, check, sample and score, and a page per framework
