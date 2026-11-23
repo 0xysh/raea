@@ -71,8 +71,8 @@ pub struct SolariSettings {
     /// the jitter's cycle at the full size, in frames: a view drawn at s of its size a side cycles through
     /// `jitter_frames / s²` offsets (DLSS's 8), and emit_taa lets a twig glimpsed through it stay away that long
     pub jitter_frames: f32,
-    /// the traced scene follows what moves: a skinned mesh's traced twin posed each frame, a hidden part taken out
-    /// (RT5, a trial; RAEA_SOLARI_DYNAMIC)
+    /// the traced scene follows what moves: a skinned mesh's traced twin posed each frame (RT5, a trial;
+    /// RAEA_SOLARI_DYNAMIC). A hidden part leaves the traced scene with or without it (SG9)
     pub dynamic: bool,
 }
 

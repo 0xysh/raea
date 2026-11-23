@@ -8,7 +8,8 @@
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 R=${RAEA_BIN:-$ROOT/target/release/raea}
-BAR=${FRAME_PURE_BAR:-0.999}
+BAR0=${FRAME_PURE_BAR:-0.999}
+BAR=$BAR0
 PX=${FRAME_PURE_PX:-16}
 [ -x "$R" ] || { echo "frame-pure-3d: no raea at $R (cargo build --release -p raea-cli)" >&2; exit 2; }
 command -v ffmpeg >/dev/null || { echo "frame-pure-3d: needs ffmpeg on PATH" >&2; exit 2; }
@@ -35,6 +36,7 @@ differ() {
 }
 for t in "$@"; do
   n=$(basename "$t" .tsx)
+  BAR=$BAR0
   # a repro with a "cold" and a "warm" composition (the glyph atlas, SG3): what a cold atlas draws must match a warm one
   if grep -q 'id="cold"' "$t" && grep -q 'id="warm"' "$t"; then
     for c in cold warm; do
@@ -48,22 +50,33 @@ for t in "$@"; do
     fi
     continue
   fi
-  len=$(grep -oE 'durationInFrames=\{[0-9]+\}' "$t" | head -1 | grep -oE '[0-9]+')
-  [ "${len:-1}" -gt 1 ] || continue
-  if ! "$R" render "$t" -o "$W/$n/" >"$W/$n.log" 2>&1; then
-    echo "frame-pure-3d: $n: the sequence didn't render:"; tail -5 "$W/$n.log"; fail=1; continue
-  fi
-  for f in 0 $((len / 3)) $((2 * len / 3)) $((len - 1)); do
-    if ! "$R" render "$t" --frame "$f" -o "$W/$n-alone-$f.png" >"$W/$n-$f.log" 2>&1; then
-      echo "frame-pure-3d: $n: frame $f alone didn't render:"; tail -3 "$W/$n-$f.log"; fail=1; continue
+  # the compositions a repro names (`// frame-pure: compositions A B`), else its first; each held to the bar a
+  # `// frame-pure: bar X [A B]` line gives it (none named: every one), else BAR. Under Solari two renders of one frame
+  # differ by their noise (0.9975 SSIM on kept-light's solari-none), so a Solari repro names 0.99: a part kept in the
+  # traced scene scores 0.94 to 0.987 (SG9)
+  comps=$(sed -nE 's#^// frame-pure: compositions (.*)#\1#p' "$t" | head -1)
+  for c in ${comps:-.}; do
+    [ "$c" = . ] && c=
+    k=$n${c:+-$c}
+    bar=$(awk -v c="$c" '/^\/\/ frame-pure: bar / { for (i = 5; i <= NF; i++) if ($i == c) { print $4; exit } if (NF == 4) any = $4 } END { if (any != "") print any }' "$t" | head -1)
+    BAR=${bar:-$BAR0}
+    if ! "$R" render "$t" ${c:+--composition "$c"} -o "$W/$k/" >"$W/$k.log" 2>&1; then
+      echo "frame-pure-3d: $k: the sequence didn't render:"; grep -v WARN "$W/$k.log" | tail -5; fail=1; continue
     fi
-    seq=$(printf '%s/%s/frame-%05d.png' "$W" "$n" "$f")
-    if m=$(differ "$seq" "$W/$n-alone-$f.png"); then
-      echo "frame-pure-3d: $n frame $f: the sequence's frame differs from the frame rendered alone ($m; bar SSIM $BAR, $PX pixels): a 3D part kept an earlier frame's inputs or took another's row"
-      fail=1
-    else
-      echo "frame-pure-3d: $n frame $f: $m"
-    fi
+    len=$(find "$W/$k" -name 'frame-*.png' | wc -l | tr -d ' ')
+    [ "${len:-1}" -gt 1 ] || continue
+    for f in 0 $((len / 3)) $((2 * len / 3)) $((len - 1)); do
+      if ! "$R" render "$t" ${c:+--composition "$c"} --frame "$f" -o "$W/$k-alone-$f.png" >"$W/$k-$f.log" 2>&1; then
+        echo "frame-pure-3d: $k: frame $f alone didn't render:"; tail -3 "$W/$k-$f.log"; fail=1; continue
+      fi
+      seq=$(printf '%s/%s/frame-%05d.png' "$W" "$k" "$f")
+      if m=$(differ "$seq" "$W/$k-alone-$f.png"); then
+        echo "frame-pure-3d: $k frame $f: the sequence's frame differs from the frame rendered alone ($m; bar SSIM $BAR, $PX pixels): a 3D part kept an earlier frame's inputs, took another's row, or stayed in the traced scene once hidden"
+        fail=1
+      else
+        echo "frame-pure-3d: $k frame $f: $m"
+      fi
+    done
   done
 done
 exit $fail

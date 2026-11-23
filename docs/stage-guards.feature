@@ -413,7 +413,23 @@ Feature: Stage guards: a 3D render an agent can't break
       # Stay rendered whole (11-22, the release build of the 0.1.9 stack): 12 frame-pure errors from frame 230 on, each
       # a shot after the black open drawn far darker than the same frame rendered alone (the pool, the canyon, the
       # montage, the paint, the sea), the fault Stay's own code works round by rendering a shot a process
-      # (tools/film.sh). Its 35 chunks on that route: 0 errors. Left: why a whole render's later shots lose their light.
+      # (tools/film.sh). Its 35 chunks on that route: 0 errors.
+      # Status 11-22 (branch stage-guards-22): why. A part a scene leaves is hidden, not despawned (its row stays, from
+      # the first frame the render holds to its last), and Solari traced hidden parts unless <SolariLighting dynamic>, a
+      # trial, was on (raea-render-raytrace solari.rs `hidden` ran only under it). So every place's parts, the ones a
+      # film had left and the ones still to come, stayed in the traced scene unseen and shaded whatever was on screen.
+      # A render's rows are every part any of its frames has; a frame rendered alone holds only its own, so it had
+      # none of them. kept-scenes.tsx (a black open, a yard, a room): on 0.1.9 the yard at frame 30 0.923 SSIM to the
+      # frame alone (the room's parts, hidden, shading it), the room at 60 and 89 0.933 (2,478 pixels past the bar);
+      # kept-light.tsx solari-gone (a box unmounted at 15) left its shade on the floor 44 frames on (0.987). Every single
+      # change of a light or the look follows the frame (SSIM 1.0, and 0.9975 under Solari, its noise). Fix: `hidden`
+      # runs on every traced render, on the parts whose visibility changed or that were just traced; kept-scenes
+      # 0.996-0.997, solari-gone 0.997-0.998 (measured on 0.1.9 with RAEA_SOLARI_DYNAMIC=1, which ran the same system).
+      # And a reset (a cut) now empties Solari's world cache whole, as a render's first frame finds it: it reset only
+      # the cells it picked to update that frame, the rest keeping the last place's light at that place's exposure
+      # (an exposure cut 0.992 to its still 25 frames on, 0.996 with it). tools/frame-pure-3d.sh holds both repros,
+      # each composition a repro names at the bar it names (Solari's 0.99), and L1 runs it on Solari's and the traced
+      # scene's code too.
       Given the plan
         | crate               | file                         | lines | job                                                                    |
         | raea-app-direction  | apps/direction/src/pure.rs   | 234   | the sample, the stills and the alone frame, the patch, the parts under it, the findings |

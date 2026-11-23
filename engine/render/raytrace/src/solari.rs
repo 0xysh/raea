@@ -21,22 +21,20 @@ pub fn add(app: &mut App) {
         .add_systems(PostUpdate, (cameras, meshes, deferred, shadow_maps).before(bevy::camera::CameraUpdateSystems))
         .add_systems(PostUpdate, dynamic.before(meshes));
     // a twin posed after its joints are placed and before this frame's asset events go out, so the traced scene gets
-    // the pose with the frame that draws it; a part's visibility read once it is propagated
+    // the pose with the frame that draws it
     app.add_systems(
         PostUpdate,
-        (
-            skin_twins.after(bevy::transform::TransformSystems::Propagate).before(bevy::asset::AssetEventSystems),
-            hidden.after(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
-        )
-            .run_if(|d: Res<Dynamic>| d.0),
+        skin_twins.after(bevy::transform::TransformSystems::Propagate).before(bevy::asset::AssetEventSystems).run_if(|d: Res<Dynamic>| d.0),
     );
+    // a part's visibility read once it is propagated, on every traced render (it was RT5's trial alone: SG9)
+    app.add_systems(PostUpdate, hidden.after(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate));
 }
 
 /// Whether the traced scene follows what moves (RT5, a trial: <SolariLighting dynamic>, or RAEA_SOLARI_DYNAMIC on every
 /// camera; off, everything is as before): a skinned mesh gets a traced twin, posed on the CPU each frame as the GPU
-/// skins the drawn one (it casts traced shadows, stops and bounces light), and a hidden part leaves the traced scene
-/// until it is shown again (hidden, it still shadowed). On while any traced camera asks for it; a mesh is decided the
-/// first frame it is traced, so ask from the first frame.
+/// skins the drawn one (it casts traced shadows, stops and bounces light). (A hidden part leaving the traced scene was
+/// part of this trial until SG9; it is on for every traced render now: `hidden`.) On while any traced camera asks for
+/// it; a mesh is decided the first frame it is traced, so ask from the first frame.
 #[derive(Resource, Default)]
 struct Dynamic(bool);
 
@@ -144,10 +142,14 @@ struct Untraced(Handle<Mesh>);
 
 /// Solari traces every RaytracingMesh3d, shown or not: a hidden part (one a frame leaves out, a `visible={false}`)
 /// kept shadowing and bouncing light where it last stood. Hidden, it gives its traced mesh up; shown, it has it back.
+/// A part a scene leaves is hidden, not despawned (its row stays), so until 0.1.10 (SG9) every part a film had left
+/// stayed in the traced scene unseen: a whole render's later places drew in the shade of all the earlier ones' parts
+/// (Stay, far darker than each shot rendered alone; kept-scenes.tsx, the room 0.943 SSIM to its still, 0.997 after).
+/// Only a part whose visibility changed, or just traced, is looked at.
 fn hidden(
     mut cmd: Commands,
-    shown: Query<(Entity, &InheritedVisibility, &RaytracingMesh3d)>,
-    parked: Query<(Entity, &InheritedVisibility, &Untraced), Without<RaytracingMesh3d>>,
+    shown: Query<(Entity, &InheritedVisibility, &RaytracingMesh3d), Or<(Changed<InheritedVisibility>, Added<RaytracingMesh3d>)>>,
+    parked: Query<(Entity, &InheritedVisibility, &Untraced), (Without<RaytracingMesh3d>, Or<(Changed<InheritedVisibility>, Added<Untraced>)>)>,
 ) {
     for (e, v, rt) in &shown {
         if !v.get() {

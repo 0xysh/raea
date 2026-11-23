@@ -73,8 +73,8 @@ export interface SolariLightingProps {
    * jitterFrames / s² offsets, and an emissive twig glimpsed through it may stay away that long. Default 8 (DLSS's) */
   jitterFrames?: number;
   /** the traced scene follows what moves (a trial, false by default): a skinned character's traced twin is posed each
-   * frame, so it casts traced shadows and bounces light, and a hidden part leaves the traced scene. Decided as each
-   * mesh is first traced, so set it from the first frame */
+   * frame, so it casts traced shadows and bounces light. Decided as each mesh is first traced, so set it from the first
+   * frame. (A hidden part, or one a frame leaves out, leaves the traced scene with or without it.) */
   dynamic?: boolean;
   /** constants in Solari's and the denoiser's shaders, compiled in when the scene loads (a value changed later in the
    * composition isn't drawn); each left out keeps the shader's own, given in brackets. <ShaderConstants> reaches the
