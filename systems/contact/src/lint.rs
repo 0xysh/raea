@@ -434,7 +434,7 @@ pub fn lint(now: &[Item], next: &[Item]) -> (Vec<Value>, usize) {
             if parts[j].excused || parts[j].moving || !near(&parts[i], &parts[j]) {
                 continue;
             }
-            if let Some((n, area, at)) = super::zfight::overlaps(&parts[i].tris, Some(&parts[j].tris)) {
+            if let Some((n, area, at)) = raea_core_zfight::overlaps(&parts[i].tris, Some(&parts[j].tris)) {
                 let level = if area >= 1e-4 { "error" } else { "warning" };
                 if level == "error" {
                     errors += 1;
@@ -443,7 +443,7 @@ pub fn lint(now: &[Item], next: &[Item]) -> (Vec<Value>, usize) {
                     "says": format!("{} and {} have faces in one plane over each other ({n} pair{}, up to {:.1} cm² at [{:.3}, {:.3}, {:.3}]): they flicker as the camera moves; lift one by a millimetre or cut the overlap", parts[i].label, parts[j].label, if n == 1 { "" } else { "s" }, area * 1e4, at.x, at.y, at.z)}));
             }
         }
-        if let Some((n, area, at)) = super::zfight::overlaps(&parts[i].tris, None) {
+        if let Some((n, area, at)) = raea_core_zfight::overlaps(&parts[i].tris, None) {
             out.push(json!({"part": parts[i].label, "check": "zfight", "level": "warning", "faces": n, "area": (area * 1e6).round() / 1e6, "at": [at.x, at.y, at.z],
                 "says": format!("{} has faces doubled in one plane inside it ({n} pair{}, up to {:.1} cm²): they flicker where they show; delete the doubles (raea gen check -o)", parts[i].label, if n == 1 { "" } else { "s" }, area * 1e4)}));
         }

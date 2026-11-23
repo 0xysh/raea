@@ -59,7 +59,10 @@ fn overlap(a: &Face, b: &Face) -> bool {
             if axis == Vec2::ZERO {
                 continue;
             }
-            let span = |t: &[Vec2; 3]| t.iter().map(|x| x.dot(axis)).fold((f32::MAX, f32::MIN), |(lo, hi), s| (lo.min(s), hi.max(s)));
+            let span = |t: &[Vec2; 3]| {
+                let d = t.map(|x| x.dot(axis));
+                (d[0].min(d[1]).min(d[2]), d[0].max(d[1]).max(d[2]))
+            };
             let (a0, a1) = span(&p);
             let (b0, b1) = span(&q);
             if a1.min(b1) - a0.max(b0) < INSIDE {

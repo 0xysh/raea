@@ -9,8 +9,8 @@ use crate::sheet::{Tile, sheet};
 
 fn dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("raea-make-steps-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+    std::fs::remove_dir_all(&d).ok();
+    std::fs::create_dir_all(&d).expect("a scratch folder");
     d
 }
 
@@ -144,7 +144,7 @@ fn a_shot_frames_its_start_middle_and_end() {
     assert_eq!(crate::shots::frames_of(&m.shots[0]), vec![0, 59, 119]);
     assert_eq!(crate::shots::frames_of(&m.shots[1]), vec![0]);
     assert_eq!(crate::shots::frames_of(&m.shots[2]), vec![0, 23, 47]);
-    assert!((crate::shots::fov_of(50.0) - 26.99).abs() < 0.01);
+    assert!((raea_core_review::fov_of_lens(50.0) - 26.99).abs() < 0.01);
     // a shot with no composition can't be framed, and says what's needed
     let d = dir("framing");
     assert!(crate::shots::framing(&d, &m, &["hold".to_string()], &d).unwrap_err().contains("no composition"));

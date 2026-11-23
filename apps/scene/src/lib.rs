@@ -7,6 +7,8 @@ use serde_json::json;
 use raea_runtime_bundle::{bundle_composition, comp_opts};
 use raea_runtime_export::{frame_of, items};
 
+// how near the camera passes to each solid part, every frame (`--clearance M`, MK16)
+pub mod clearance;
 mod light;
 mod stage;
 

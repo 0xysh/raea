@@ -13881,6 +13881,7 @@ dependencies = [
  "raea-core-ask",
  "raea-core-brief",
  "raea-core-facts",
+ "raea-core-review",
  "raea-io-home",
  "resvg 0.48.1",
  "serde_json",
@@ -13956,8 +13957,10 @@ dependencies = [
 name = "raea-app-scene"
 version = "0.1.0"
 dependencies = [
+ "bevy",
  "dunce",
  "raea-core-facts",
+ "raea-core-scene",
  "raea-runtime-bundle",
  "raea-runtime-export",
  "raea-sys-contact",
@@ -14436,6 +14439,13 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "raea-core-zfight"
+version = "0.1.0"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
@@ -15851,6 +15861,7 @@ dependencies = [
  "raea-core-meshcheck",
  "raea-core-scene",
  "raea-core-shape",
+ "raea-core-zfight",
  "raea-io-trace",
  "serde_json",
 ]

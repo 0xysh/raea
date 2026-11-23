@@ -43,7 +43,10 @@ pub fn questions(ledger: &Ledger) -> Vec<Question> {
 
 /// The sheet a question is asked of: its id's second word (make.clay.floating is asked of a clay sheet).
 pub fn sheet_of(q: &Question) -> &str {
-    q.id.split('.').nth(1).unwrap_or("")
+    match q.id.split('.').nth(1) {
+        Some(sheet) => sheet,
+        None => "",
+    }
 }
 
 /// The command that asks a sheet its questions.

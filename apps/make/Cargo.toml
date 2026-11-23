@@ -15,6 +15,8 @@ raea-core-facts = { path = "../../core/facts" }
 raea-app-judge = { path = "../judge" }
 # the make questions, their calibrations and a sheet's ident, as raea ask keeps them (MK4)
 raea-core-ask = { path = "../../core/ask" }
+# a lens's field of view (MK15's lens chart), as the review sheets work it out
+raea-core-review = { path = "../../core/review" }
 # raea ask's ledger folder
 raea-io-home = { path = "../../io/home" }
 # the contact sheets: tiles composited, labels drawn in the system's fonts

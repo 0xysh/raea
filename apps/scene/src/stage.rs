@@ -32,7 +32,7 @@ pub(crate) fn cli(args: &[String]) -> Result<String, String> {
     // the camera held off every solid part, when asked: the number after the flag, else a carried camera's 0.45 m
     if let Some(v) = flag(args, "--clearance") {
         let min = v.parse::<f32>().ok().filter(|m| *m >= 0.0).ok_or_else(|| format!("--clearance takes metres (0.45 for a carried camera), got {v:?}"))?;
-        let mut c = raea_sys_stage::clearance(&items, &nums, w, h, fps, min, "raea scene stage");
+        let mut c = crate::clearance::clearance(&items, &nums, w, h, fps, min, "raea scene stage");
         c.append(&mut fs);
         fs = c;
     }

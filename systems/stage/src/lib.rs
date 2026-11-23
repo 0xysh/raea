@@ -11,7 +11,6 @@ use raea_core_facts::{Finding, Level};
 use raea_core_scene::{Item, base_ident};
 use serde_json::Value;
 
-pub mod clearance;
 mod cover;
 mod framing;
 mod manifest;
@@ -19,8 +18,7 @@ mod motion;
 mod page;
 mod text;
 mod view;
-pub use clearance::clearance;
-pub use framing::on_screen;
+pub use framing::{model_box, on_screen, own_box};
 pub use manifest::{Mounts, pages, seen};
 pub use page::{Page, Words};
 pub use view::View;
@@ -184,7 +182,7 @@ impl Stage<'_> {
 }
 
 /// What a part is called in a finding: its name, else what it draws, cut short.
-pub(crate) fn called(it: &Item) -> String {
+pub fn called(it: &Item) -> String {
     let s = base_ident(it);
     let s = if s.is_empty() { it.kind } else { s };
     let mut out: String = s.chars().take(40).collect();

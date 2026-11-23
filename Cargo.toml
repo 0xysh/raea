@@ -6,6 +6,7 @@ members = [
     "core/animate",
     "core/ask",
     "core/brief",
+    "core/zfight",
     "core/facts",
     "core/ease",
     "core/fonts",

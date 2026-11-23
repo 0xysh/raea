@@ -50,7 +50,7 @@ pub fn floor_svg(m: &Make) -> Result<String, String> {
     // text sized to the plan, so it still reads once the plan is a third of a comparison sheet
     let t = (w as f64 * 0.02).max(16.0);
     // plan x right, z away from the entrance: up the page
-    let sx = |x: f64| 20.0 + (x - x0) * px;
+    let sx = |x: f64| (x - x0).mul_add(px, 20.0);
     let sy = |z: f64| 70.0 + (z1 - z) * px;
     let mut s = format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}\" height=\"{h}\"><rect width=\"100%\" height=\"100%\" fill=\"#f4f2ee\"/>");
     s += &format!("<text x=\"20\" y=\"{:.0}\" font-size=\"{:.0}\" font-weight=\"bold\" fill=\"#222\">Floor plan: {} objects (solid: from the reference; dashed: invented)</text>", t * 1.6, t * 1.1, placed.len());

@@ -67,8 +67,12 @@ pub(crate) fn kind_name(k: make::Kind) -> &'static str {
     }
 }
 
+/// When a file last changed, and that as seconds since 1970 (a record entry's clock).
 fn mtime(p: &Path) -> Option<SystemTime> {
-    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+    std::fs::metadata(p).ok()?.modified().ok()
+}
+fn mtime_secs(p: &Path) -> Option<u64> {
+    Some(mtime(p)?.duration_since(SystemTime::UNIX_EPOCH).ok()?.as_secs())
 }
 
 fn is_picture(p: &Path) -> bool {
@@ -118,7 +122,7 @@ fn checks(job: &Job) -> Vec<Value> {
             let Some(last) = job.record.iter().rev().find(|e| e.of == rel) else {
                 return gate("checks", Some(c), false, format!("never rendered or checked: raea render {c} (or raea scene lint {c})"));
             };
-            let changed = mtime(&file).and_then(|m| m.duration_since(SystemTime::UNIX_EPOCH).ok()).map(|d| d.as_secs());
+            let changed = mtime_secs(&file);
             if changed.is_some_and(|t| t > last.at) {
                 return gate("checks", Some(c), false, format!("changed since its last {} ({}): run it again", last.by, last.id));
             }
@@ -218,21 +222,15 @@ pub fn text(s: &Value) -> String {
     for w in s["why"].as_array().into_iter().flatten() {
         t.push(format!("  {}", w.as_str().unwrap_or("")));
     }
-    let list = |k: &str| s[k].as_array().cloned().unwrap_or_default();
-    if !list("plan").is_empty() {
-        t.push("plan:".into());
-        t.extend(list("plan").iter().map(|p| format!("  {}", p.as_str().unwrap_or(""))));
-    }
-    if !list("missing").is_empty() {
-        t.push("missing:".into());
-        t.extend(list("missing").iter().map(|m| format!("  {}", m.as_str().unwrap_or(""))));
-    }
-    if !list("advice").is_empty() {
-        t.push("advice (raea ask, not calibrated yet):".into());
-        t.extend(list("advice").iter().map(|m| format!("  {}", m.as_str().unwrap_or(""))));
+    for (key, head) in [("plan", "plan:"), ("missing", "missing:"), ("advice", "advice (raea ask, not calibrated yet):")] {
+        let items: Vec<&str> = s[key].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+        if !items.is_empty() {
+            t.push(head.into());
+            t.extend(items.iter().map(|i| format!("  {i}")));
+        }
     }
     t.push("gates:".into());
-    for g in list("gates") {
+    for g in s["gates"].as_array().into_iter().flatten() {
         let of = g["of"].as_str().map(|o| format!(" {o}")).unwrap_or_default();
         t.push(format!("  {} {}{of}: {}", if g["clear"] == true { "ok  " } else { "open" }, g["gate"].as_str().unwrap_or(""), g["says"].as_str().unwrap_or("")));
     }

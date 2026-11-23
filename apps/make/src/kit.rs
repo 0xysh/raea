@@ -28,7 +28,7 @@ const PROP_FACES: u32 = 60_000;
 
 /// The objects named in `--only` (all when it's empty).
 pub fn objects<'a>(m: &'a Make, only: &[String]) -> Vec<&'a Object> {
-    m.objects.iter().filter(|o| only.is_empty() || only.contains(&o.id)).collect()
+    crate::only(&m.objects, only, |o| o.id.as_str())
 }
 
 /// The prompt a reference is made from: the plan's style paragraph, the object's own words, the scan template.

@@ -82,8 +82,12 @@ pub fn write(root: &Path, brief: &Path, kind: &str, status: &Value) -> Result<(s
     let text = std::fs::read_to_string(&file).unwrap_or_default();
     let next = update(&text, &title, &rel, kind, status);
     if next != text {
+        // written beside it, then moved over it: a reader never sees half a plan
         let tmp = file.with_extension("org.tmp");
-        std::fs::write(&tmp, &next).and_then(|_| std::fs::rename(&tmp, &file)).map_err(|e| format!("{}: {e}", file.display()))?;
+        let wrote = std::fs::write(&tmp, &next);
+        if let Err(e) = wrote.and_then(|()| std::fs::rename(&tmp, &file)) {
+            return Err(format!("{}: {e}", file.display()));
+        }
     }
     Ok((file, task_id(&rel)))
 }

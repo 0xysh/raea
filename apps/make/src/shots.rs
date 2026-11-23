@@ -63,7 +63,7 @@ fn composition(dir: &Path, s: &Shot) -> Result<PathBuf, String> {
 
 /// The framing sheet of the plan's shots (or those named in `only`), written to `out` (OUT/framing.png).
 pub fn framing(dir: &Path, m: &Make, only: &[String], out: &Path) -> Result<String, String> {
-    let shots: Vec<&Shot> = m.shots.iter().filter(|s| only.is_empty() || only.contains(&s.name)).collect();
+    let shots: Vec<&Shot> = crate::only(&m.shots, only, |s| s.name.as_str());
     if shots.is_empty() {
         return Err("raea make framing: no shots in the plan (or none named)".into());
     }
@@ -95,7 +95,7 @@ pub fn lenschart(dir: &Path, m: &Make, name: &str, out: &Path) -> Result<String,
     for mm in LENSES {
         let png = work.join(format!("{mm}mm.png"));
         raea(&["render".into(), tsx.display().to_string(), "-o".into(), png.display().to_string(), "--frame".into(), "0".into()], &[("RAEA_LENS", mm.to_string())])?;
-        tiles.push(Tile { img: png, label: format!("{mm} mm ({:.0}° vertical)", fov_of(mm as f64)) });
+        tiles.push(Tile { img: png, label: format!("{mm} mm ({:.0}° vertical)", raea_core_review::fov_of_lens(mm as f64)) });
     }
     let rows: Vec<Vec<Tile>> = {
         let mut it = tiles.into_iter();
@@ -106,7 +106,3 @@ pub fn lenschart(dir: &Path, m: &Make, name: &str, out: &Path) -> Result<String,
     Ok(format!("wrote {}: pick the lens, then set the shot's `lens` (raea/camera lens(mm) for its fov)", file.display()))
 }
 
-/// The vertical field of view of a focal length on full frame (as core/review's RAEA_LENS sets it).
-pub fn fov_of(mm: f64) -> f64 {
-    2.0 * (12.0 / mm).atan().to_degrees()
-}

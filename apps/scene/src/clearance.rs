@@ -12,8 +12,7 @@ use raea_core_facts::{Finding, Level};
 use raea_core_scene::Item;
 use serde_json::Value;
 
-use crate::framing::{model_box, own_box};
-use crate::{View, called};
+use raea_sys_stage::{View, called, model_box, own_box};
 
 /// Parts smaller than this across (metres) are passed over: a pen the camera brushes isn't a collision.
 const SMALL: f32 = 0.05;
@@ -173,8 +172,17 @@ pub fn clearance(all: &[Vec<Item>], frames: &[i64], w: u32, h: u32, fps: f64, mi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_items::{cam, item};
-    use serde_json::json;
+    use serde_json::{Value, json};
+    use std::sync::Arc;
+
+    fn item(kind: &'static str, props: Value, world: Mat4) -> Item {
+        Item { kind, props: Arc::new(props.as_object().cloned().unwrap_or_default()), shape: None, at: None, material: None, world }
+    }
+
+    /// A camera at `eye` looking at `at`, 50 degrees.
+    fn cam(eye: [f32; 3], at: [f32; 3]) -> Item {
+        item("camera", json!({"position": eye, "lookAt": at, "fov": 50}), Mat4::IDENTITY)
+    }
 
     #[test]
     fn distances_to_a_box_and_a_triangle() {
@@ -200,7 +208,7 @@ mod tests {
         let desk = solid("desk", [1.6, 0.75, 0.8], [0.0, 0.375, 0.0]);
         let pen = solid("pen", [0.04, 0.01, 0.01], [0.0, 1.0, 0.45]);
         let mut glass = solid("pane", [1.0, 1.0, 0.01], [0.0, 1.0, 0.3]);
-        glass.props = std::sync::Arc::new(json!({"name": "pane", "specular_transmission": 0.9}).as_object().cloned().unwrap());
+        glass.props = Arc::new(json!({"name": "pane", "specular_transmission": 0.9}).as_object().cloned().unwrap());
         let zs = [2.4, 1.6, 1.0, 0.7, 0.5, 2.4];
         let all: Vec<Vec<Item>> = zs.iter().map(|z| vec![cam([0.0, 0.6, *z], [0.0, 0.4, 0.0]), desk.clone(), pen.clone(), glass.clone()]).collect();
         let frames: Vec<i64> = (0..zs.len() as i64).collect();

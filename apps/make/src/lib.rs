@@ -125,8 +125,15 @@ pub fn positional(args: &[String], skip: usize) -> Vec<String> {
     out
 }
 
+/// A flag's comma list (`--only a,b`), empty when it isn't given.
 fn list(args: &[String], k: &str) -> Vec<String> {
-    flag(args, k).map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default()
+    let Some(v) = flag(args, k) else { return vec![] };
+    v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()
+}
+
+/// What `--only` names of a list (all of it when it names nothing), each item known by `name`.
+pub(crate) fn only<'a, T>(all: &'a [T], only: &[String], name: impl Fn(&T) -> &str) -> Vec<&'a T> {
+    all.iter().filter(|t| only.is_empty() || only.iter().any(|n| n.as_str() == name(t))).collect()
 }
 
 /// The job's brief and plan from a folder.

@@ -87,7 +87,12 @@ pub fn pick_sheet(dir: &Path, m: &Make, only: &[String]) -> Result<String, Strin
 
 /// A component's name from an object id: rotary_phone -> RotaryPhone.
 pub fn component_name(id: &str) -> String {
-    id.split(['_', '-']).filter(|w| !w.is_empty()).map(|w| w[..1].to_uppercase() + &w[1..]).collect()
+    let mut out = String::new();
+    for w in id.split(['_', '-']) {
+        let mut c = w.chars();
+        out.extend(c.next().into_iter().flat_map(char::to_uppercase).chain(c));
+    }
+    out
 }
 
 /// One object's component: its model imported beside it, its LOD for far away, placed by the props a composition gives.
@@ -163,7 +168,10 @@ pub fn kit_dir(dir: &Path, kit: &str, to: Option<&str>) -> PathBuf {
 }
 
 fn copy(a: &Path, b: &Path) -> Result<(), String> {
-    std::fs::copy(a, b).map(|_| ()).map_err(|e| format!("{} -> {}: {e}", a.display(), b.display()))
+    match std::fs::copy(a, b) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("{} -> {}: {e}", a.display(), b.display())),
+    }
 }
 
 /// The kit landed: each prepped object's model, LOD and sidecars, its component and thumb; the lineup and its cover

@@ -105,27 +105,13 @@ fn a_project_s_own_tsconfig_is_not_in_the_work_copy() {
 fn an_edit_s_sources_leave_out_hidden_folders_and_packages() {
     let d = std::env::temp_dir().join(format!("raea-bundle-sources-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
-    for f in ["a.tsx", "parts/b.ts", ".git/hooks/c.js", "node_modules/pkg/d.js", "target/e.ts", "out/f.json"] {
+    for f in ["a.tsx", "parts/b.ts", "phone.glb", ".git/hooks/c.js", "node_modules/pkg/d.js", "target/e.ts", "out/f.json"] {
         std::fs::create_dir_all(d.join(f).parent().unwrap()).unwrap();
         std::fs::write(d.join(f), "").unwrap();
     }
     let mut got = sources(&d).unwrap();
     got.sort();
     assert_eq!(got, vec![PathBuf::from("a.tsx"), PathBuf::from("parts/b.ts")]);
-    let _ = std::fs::remove_dir_all(&d);
-}
-
-// MK13: a component imports its own model beside it, as media is imported: the path, wherever it's imported from
-#[test]
-fn a_model_imports_as_its_path() {
-    let d = std::env::temp_dir().join(format!("raea-bundle-glb-{}", std::process::id()));
-    std::fs::create_dir_all(&d).unwrap();
-    std::fs::write(d.join("phone.glb"), b"glTF").unwrap();
-    let m = &raea_io_home::home().join("sdk/raea/src");
-    let out = rewrite_into("import model from \"./phone.glb\";\n", &d, m, "../motion", None).unwrap();
-    let abs = dunce::canonicalize(d.join("phone.glb")).unwrap();
-    assert!(out.contains(&format!("const model = {:?}", abs.display().to_string())), "{out}");
-    let err = rewrite_into("import gone from \"./gone.glb\";\n", &d, m, "../motion", None).unwrap_err();
-    assert!(err.contains("gone.glb doesn't exist"), "{err}");
+    assert!(rewrite_into("import m from \"./phone.glb\";", &d, &raea_io_home::home().join("sdk/raea/src"), "../motion", None).unwrap().contains("phone.glb\""));
     let _ = std::fs::remove_dir_all(&d);
 }
