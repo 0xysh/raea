@@ -14,8 +14,8 @@ static CACHE: OnceLock<Mutex<HashMap<String, Result<Arc<Vec<Vec3>>, String>>>> =
 
 /// Lets go of every file's triangles this process read (raea-sys-contact's `forget` calls it with its solids).
 pub fn forget() {
-    if let Some(c) = CACHE.get() {
-        c.lock().unwrap().clear();
+    if let Some(mut files) = CACHE.get().and_then(|c| c.lock().ok()) {
+        files.clear();
     }
 }
 
