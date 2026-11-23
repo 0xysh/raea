@@ -104,7 +104,7 @@ Feature: Make: scenes, kits and shots built to a frozen plan and held to a revie
       And the critic is told the bar is a production base an artist then refines, judged at normal viewing distance,
         no points off for choices that differ from the reference, at most five fixes, most damaging first
 
-    @needs:MK5
+    @needs:MK5 @done
     Scenario: MK6. The critic's score gates once it is calibrated
       Given `raea judge calibrate` reporting agreement with the person's eye for a kind
       Then that kind's jobs also need two fresh passes in a row to be done; before that, fixed-or-answered is enough
