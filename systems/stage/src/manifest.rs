@@ -31,7 +31,8 @@ pub fn pages(frames: &[Value], nums: &[i64], w: u32, h: u32) -> Vec<Page> {
     }
     let words = |t: &Value| {
         let text = Some(t["text"].as_str()?.trim()).filter(|s| !s.is_empty())?.into();
-        Some(Words { text, bx: shown(t, "ink").or_else(|| shown(t, "box"))?, allow_overlap: t["allowOverlap"] == true })
+        let points = t["points"].as_array().and_then(|p| p.iter().map(|v| v.as_f64().map(|v| v as f32)).collect::<Option<Vec<f32>>>()?.try_into().ok());
+        Some(Words { text, bx: shown(t, "ink").or_else(|| shown(t, "box"))?, allow_overlap: t["allowOverlap"] == true, points })
     };
     nums.iter()
         .map(|f| Page {

@@ -1,7 +1,9 @@
 //! `raea scene stage EDIT.tsx [--composition ID] [--from N] [--to N] [--json]`: every frame's scene stepped without
 //! drawing and held to the stage checks a render runs at its end (raea-sys-stage, docs/stage-guards.feature SG10-SG14):
 //! 3D type that can't be read, parts that snap, a camera that lurches or reverses, frames with nothing composed in
-//! them. Errors fail it, as they fail a render, so it's the cheap look before one.
+//! them. Errors fail it, as they fail a render, so it's the cheap look before one. It lays out no page, so what the
+//! page holds waits for a render: its words over the parts (type-over-part), a Label's part as the shot's subject, and
+//! a frame its words or pictures fill, which reads empty here and is said as a warning, not failed (SG11).
 
 use serde_json::json;
 
@@ -24,11 +26,16 @@ pub(crate) fn cli(args: &[String]) -> Result<String, String> {
     let frames: Vec<_> = frames.into_iter().filter(|(f, _)| *f >= from && to.is_none_or(|t| *f <= t)).collect();
     let (Some(first), Some(last)) = (frames.first().map(|f| f.0), frames.last().map(|f| f.0)) else { return Err(format!("no frames from {from}")) };
     let nums: Vec<i64> = frames.iter().map(|(f, _)| *f).collect();
-    let fs = raea_sys_stage::check(&all_items(&frames), &nums, w, h, fps, "raea scene stage");
+    let mut fs = raea_sys_stage::check(&all_items(&frames), &nums, w, h, fps, "raea scene stage");
+    for f in fs.iter_mut().filter(|f| f.check == "frame-empty" && f.level == Level::Error) {
+        f.level = Level::Warn;
+        f.says.push_str(" (no page is laid out here: if its words or pictures fill these frames, a render passes them)");
+    }
     let text = if args.iter().any(|a| a == "--json") {
         serde_json::to_string_pretty(&json!({"frames": [first, last], "findings": fs})).unwrap_or_default()
     } else {
-        fs.iter().map(raea_core_facts::Finding::line).chain([format!("frames {first} to {last}: {}", finding::count(&fs))]).collect::<Vec<_>>().join("\n")
+        let note = "the page's checks (its words over parts, a Label's subject) run in raea render";
+        fs.iter().map(raea_core_facts::Finding::line).chain([format!("frames {first} to {last}: {} ({note})", finding::count(&fs))]).collect::<Vec<_>>().join("\n")
     };
     if fs.iter().any(|f| f.level == Level::Error) {
         println!("{text}");

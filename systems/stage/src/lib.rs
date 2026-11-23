@@ -11,6 +11,7 @@ use raea_core_facts::{Finding, Level};
 use raea_core_scene::{Item, base_ident};
 use serde_json::Value;
 
+mod cover;
 mod framing;
 mod manifest;
 mod motion;

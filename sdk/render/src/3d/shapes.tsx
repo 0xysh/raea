@@ -358,6 +358,10 @@ export interface Text3DProps {
   font?: string;
   /** 100..900 (800 by default) */
   weight?: number;
+  /** false: scenery (a sign seen in passing), not held to the type checks raea render runs on 3D type: its size on screen,
+   * its angle to the camera, the title-safe area, its reading time and parts in front of it (docs/stage-guards.feature
+   * SG10). Words meant to be read are better as page type: a Label */
+  read?: boolean;
 }
 
 /** Solid 3D letters (Manifold's text3d), as a Mesh's geometry: `<Mesh><Text3D size={0.6}>SALE</Text3D>...</Mesh>`. */
@@ -377,6 +381,9 @@ function text3dShape(p: Text3DProps): string {
 export interface MeshProps extends PointerHandlers3d {
   /** what the mesh is called across frames: give one when meshes come and go, so each keeps its own motion */
   name?: string;
+  /** false: its 3D type (a Text3D child) is scenery, not held to raea render's type checks (SG10); a Text3D's own
+   * `read` sets it */
+  read?: boolean;
   /** the composition pass it draws in ("scene" by default): a frame-wide effect told to skip a pass (<Look skip>,
    * <Outline skip>, <Bloom skip>, <Grade skip>) leaves its pixels as drawn, and <Look passes> gives one its own paint;
    * a piece names at most three passes besides "scene"; keyed per frame */
@@ -447,6 +454,12 @@ export function apply3d<T extends object>(props: T, v: Record<string, number | s
 /** a mesh's element children with fragments opened: <><Sphere /><StandardMaterial /></> is the same mesh as its two */
 const flat = (kids: ReactNode): ReactElement[] => Children.toArray(kids).flatMap((c) => (!isValidElement(c) ? [] : c.type === Fragment ? flat((c as ReactElement<{ children?: ReactNode }>).props.children) : [c]));
 
+/** A Text3D child's `read`, when it has one. */
+function text3dRead(children: ReactNode): boolean | undefined {
+  for (const child of flat(children)) if (child.type === Text3D) return (child as ReactElement<Text3DProps>).props.read;
+  return undefined;
+}
+
 export function shapeFromChildren(children: ReactNode): string | undefined {
   for (const child of flat(children)) {
     if (child.type === Text3D) {
@@ -490,11 +503,13 @@ export function Mesh(props: MeshProps) {
   if (props.material !== undefined && props.material !== false) throw new TypeError(`Mesh: material is false (no material) or left out, got ${JSON.stringify(props.material)}`);
   checkPass("Mesh", props.pass);
   const manifold = shape instanceof Solid ? shape.expr : shape ?? shapeFromChildren(props.children);
+  // a Text3D's read={false} rides on its mesh, which the stage checks read (SG10)
+  const read = props.read ?? text3dRead(props.children);
   const extra: Record<string, string> = {};
   if (manifold !== undefined) extra["data-shape"] = manifold as string;
   if (anim.attr) extra["data-raea-anim"] = anim.attr;
   const id = useId();
   const m = usePlace3d(position, rotation, scale, props.quaternion);
   usePointer3d(props.name ?? id, m, () => (shape === undefined ? boundsFromChildren(props.children) : undefined), props as Record<string, unknown>);
-  return node3d("Mesh", { ...props, animate: undefined, shape: undefined, position, rotation, scale, attributes: props.attributes && JSON.stringify(props.attributes) }, <Place3d.Provider value={m}>{props.children}</Place3d.Provider>, Object.keys(extra).length ? extra : undefined);
+  return node3d("Mesh", { ...props, read, animate: undefined, shape: undefined, position, rotation, scale, attributes: props.attributes && JSON.stringify(props.attributes) }, <Place3d.Provider value={m}>{props.children}</Place3d.Provider>, Object.keys(extra).length ? extra : undefined);
 }

@@ -81,6 +81,7 @@ Feature: Stage guards: a 3D render an agent can't break
 
   Rule: The engine stops doing it
 
+    @done
     Scenario: SG1. A part's shape and its type follow the frame
       The fix sits where rows are made, not in the engine: the engine keeps building a part once, at spawn, and a part
       whose kept columns change is spawned again. An mp4's 3D is made live frame by frame (raea-runtime-scene live.rs);
@@ -106,7 +107,13 @@ Feature: Stage guards: a 3D render an agent can't break
       # uniforms go as `own:uniforms` rows, as a <Material>'s do (runtime/look own_uniforms, `ext` for a 3D mesh), and
       # raea-sys-shader own_live.rs packs them into the shaded material's slots when they change (ShaderExt slots_for).
       # `three` sends its uniforms each frame as `three:uniforms` rows (R3F11).
+      # Status 11-22 (branch stage-guards-23): done. The Ribbon is engine/render/tests/diag/ribbon.tsx, a chain of 48
+      # boxes whose newest grows, drawn over 90 frames, in frame-pure-3d's set: on 0.1.9 frames 0, 30, 60 and 89 of the
+      # sequence match the frames alone at SSIM 1.000, no pixel off. Its cost against the same 48 boxes whole from frame
+      # 0 (640x360, three runs each, the median): 2.99 s against 2.88 s; with the 1.4 s start-up taken out, 1.59 s
+      # against 1.48 s, 7.5% more, inside 10%.
 
+    @done
     Scenario: SG2. A part never inherits another part's row
       The cause was live.rs: a text block kept the id its frame gave it (`text0` is the frame's first block), where a
       mesh, model, panel or decal has its identity's (its name, else what it draws). So a block mounted as another
@@ -127,6 +134,8 @@ Feature: Stage guards: a 3D render an agent can't break
       # WHOLE): a_new_plate_never_takes_an_old_ones_row. An unnamed fire or fog has only its order to be known by, so
       # name the ones that come and go. Sprites, 2D shapes and bare entities keep their render ids, which components
       # target.
+      # Status 11-22: done. kept-props3 passes SG0 on every sampled frame (SSIM 0.9998 or more), and
+      # runtime/live/tests/stage_guards.rs holds "changes nothing else's row" for words and plates in L1.
 
     @done
     Scenario: SG3. The atlas allocates before it draws
@@ -362,6 +371,7 @@ Feature: Stage guards: a 3D render an agent can't break
       # must brake for, and check() names exactly those 18 with the fix. One scene's keys weren't in time order: the
       # old path drew them anyway, and cameraPath refuses them.
 
+    @done
     Scenario: SG8. Labels that read
       Given the plan
         | crate        | file                              | lines | job                                                                                  |
@@ -376,6 +386,10 @@ Feature: Stage guards: a 3D render an agent can't break
       # capitals 32 px at 1080 by default and refused under 22, its box inside title-safe and growing away from the
       # nearer edge, a line and a dot to the point, nothing while the point is behind the camera or out of frame
       # (sdk/raea/conformance/label.test.tsx). It stands `gap` px off the point you give it: give the part's top.
+      # Status 11-22 (branch stage-guards-23): done. Never at an angle (flat page type), never tiny (refused under 22
+      # px), never on the part (it stands off the point given, and page words over a part are SG11's type-over-part
+      # error). Its point now reaches the stage checks (the manifest's `points`), which make the part there the shot's
+      # subject (SG14).
 
   Rule: The render fails when a frame would look broken
     Each check below reads the frame's scene (as systems/contact does) and the page's layout, runs in `raea render`
@@ -385,6 +399,7 @@ Feature: Stage guards: a 3D render an agent can't break
     (runtime/export/src/scene.rs), and run without drawing in `raea scene stage`, which moved with lint, explain and
     light out of raea-runtime-export into raea-app-scene (apps/scene) so the export crate keeps room under 2,000 lines.
 
+    @done
     Scenario: SG9. A frame looks the same however it is reached
       Given a render of more than 60 frames with 3D in it
       When raea render re-renders a sample alone: every 300th frame, each chunk's first, and the frame after any
@@ -429,7 +444,8 @@ Feature: Stage guards: a 3D render an agent can't break
       # the cells it picked to update that frame, the rest keeping the last place's light at that place's exposure
       # (an exposure cut 0.992 to its still 25 frames on, 0.996 with it). tools/frame-pure-3d.sh holds both repros,
       # each composition a repro names at the bar it names (Solari's 0.99), and L1 runs it on Solari's and the traced
-      # scene's code too.
+      # scene's code too. Landed 7e2df514de: in L1, kept-scenes 0.996-0.997 and solari-gone 0.997-0.998 to the frames
+      # alone, none past the pixel bar.
       Given the plan
         | crate               | file                         | lines | job                                                                    |
         | raea-app-direction  | apps/direction/src/pure.rs   | 234   | the sample, the stills and the alone frame, the patch, the parts under it, the findings |
@@ -438,6 +454,7 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-runtime-export | runtime/export/src/lib.rs    | +4    | write_manifest takes them                                              |
         | raea-sys-stage      | systems/stage/src/framing.rs | +12   | on_screen: each part's box on screen, named                            |
 
+    @done
     Scenario: SG10. 3D type that reads
       Given the plan
         | crate          | file                         | lines | job                                                                             |
@@ -445,6 +462,8 @@ Feature: Stage guards: a 3D render an agent can't break
         | raea-sys-stage | systems/stage/src/lib.rs     | 183   | told and check, the frames as the checks read them, shots, runs, findings     |
         | raea-sys-stage | systems/stage/src/text.rs    | 217   | each RichText's capitals on screen, its turn from the camera, its box against title-safe, its reveal, its reading time; `read={false}` for scenery |
         | @raea/render   | sdk/render/src/3d/text.tsx   | +3    | RichText's `read` prop                                                          |
+        | raea-sys-stage | systems/stage/src/cover.rs   | 113   | parts in front of the words: a 3x3 grid's lines to the eye against each part's own box |
+        | @raea/render   | sdk/render/src/3d/shapes.tsx | +14   | Text3D's `read`, carried on its mesh                                            |
         | raea-app-scene | apps/scene/src/stage.rs      | 38    | `raea scene stage`: every frame stepped without drawing, the checks, errors fail it |
         | raea-app-scene | apps/scene/src/lib.rs        | 59    | `raea scene`, moved from raea-runtime-export (lint and explain) with light.rs  |
         | raea-app-scene | apps/scene/src/light.rs      | 58    | `raea scene light`, moved                                                       |
@@ -469,7 +488,23 @@ Feature: Stage guards: a 3D render an agent can't break
       # error on 33 clean scenes (gambit, sheet3d, lightbench, Stay, floor3, blender-loop). The film was rewritten since
       # the notes: its placement wall no longer exists, so the 16 px labels can't be named. Left: Text3D, and parts in
       # front of the words.
+      # Status 11-22 (branch stage-guards-23): done. A Text3D is held to the same checks: its words and em come from its
+      # mesh's shape (text3d("WORDS", size, ...)), one line centred on its origin; `read={false}` on the Text3D (or its
+      # mesh) makes it scenery, and a Text3D cut into a solid is the solid's. Parts in front (cover.rs): the words' face
+      # sampled on a 3x3 grid through the middle of the letters, each point's line to the eye tested against every
+      # other part's own box in that part's space; more than half stopped more than an em short of the words, for half
+      # a second, is a type-hidden error naming the part. Words never hide words (a block is mostly air), nor do
+      # see-through parts (opacity under 0.5), a part round the camera, or a model (no box here). raea scene stage over
+      # the 48 clean scenes: no finding added or lost. Over 14 scenes with 3D type: the heros game's spoken captions
+      # (Text3D at 26 px capitals on a 1920-line frame, 39 needed, carried by a turning camera) give one type-small
+      # error and two type-time warnings; nothing else changes. On the essay film: 26 type-hidden errors, every other
+      # count the same. Looked at: its APK's file names behind the phone (3:17-3:23, none visible), the apk card's
+      # words turned away behind the cards (3:28-3:31), and MON, WED and THU under the BRIEF, ASSETS and LIVE tokens
+      # (1:21-1:48: the row reads TUE, FRI, SAT, SUN). First measured with a 3x2 grid and half the points: 35, the
+      # other 9 false (words over words: "ASSETS behind VARIATION" read clearly) or partial (day labels whose lower
+      # third the next tile cuts, still read).
 
+    @done
     Scenario: SG11. 2D type stays off the parts
       Given the plan
         | crate               | file                          | lines | job                                                                   |
@@ -499,7 +534,11 @@ Feature: Stage guards: a 3D render an agent can't break
       # stage-guards-12: the 3D guide's rule 9 and the skill's 3D router name type-over-part and data-allow-overlap
       # (raea-skills #112). Branch stage-guards-13: the findings are said in the order they start (a HashMap's order
       # changed from run to run). Left: `raea scene stage` doesn't know the page, since it draws none.
+      # Status 11-22 (branch stage-guards-23): done. `raea scene stage` lays out no page, by design: it is the look
+      # before a render and draws nothing. It says the page's checks run in raea render, and a frame it reads empty is
+      # a warning there, since the page's words or pictures may fill it; a render knows the page and fails it.
 
+    @done
     Scenario: SG12. Nothing snaps
       Given the plan
         | crate          | file                         | lines | job                                                                             |
@@ -516,7 +555,11 @@ Feature: Stage guards: a 3D render an agent can't break
       # the frame is a warning (a tile recycled, a part thrown). Now 0 errors on film2 and on 33 clean scenes. Left:
       # the red dot at 1:10.06 and the chunks' first frames were drawn wrong by the engine from right props, which only
       # SG9's re-render sees; and RichText words changing without a remount (SG1).
+      # Status 11-22: done. Wrong pictures from right props are what SG9's re-render sees, on every render of a film
+      # with 3D (its whole-film fault fixed on stage-guards-22), and RichText words that change follow the frame (SG1,
+      # kept-props in SG0).
 
+    @done
     Scenario: SG13. A camera that settles
       Given the plan
         | crate          | file                         | lines | job                                                                             |
@@ -544,12 +587,17 @@ Feature: Stage guards: a 3D render an agent can't break
       # Stay's own reversal (11-22): its montage's glasshouse pair (72.26-73.50 s) slid past the plant while aimed at
       # it; the move now ends where it comes nearest, and its words over the picture ('turn', the end title) say
       # data-allow-overlap. Rendered whole it has neither error.
+      # Status 11-22: done; the left lurch check was folded in on stage-guards-16.
 
+    @done
     Scenario: SG14. The frame is composed
       Given the plan
         | crate          | file                          | lines | job                                                                                                    |
         | raea-sys-stage | systems/stage/src/framing.rs  | 314   | the share of the frame any part covers (a grid of their boxes), and the shot's subject cut by the edge |
         | raea-sys-stage | systems/stage/src/manifest.rs | +17   | a CSS background over half the frame is the page's ground, not shown                                   |
+        | @raea/render   | sdk/render/src/3d/label.tsx   | +2    | a Label writes its point (data-points)                                                                 |
+        | raea-page      | engine/page/src/motion/manifest.rs | +17 | the manifest carries a Label's point on its words (`points`)                                         |
+        | raea-sys-stage | systems/stage/src/framing.rs  | +20   | the named part nearest a Label's point is the shot's subject; its cut an error                         |
       Then the part a shot is about (one a Label or pin points at, else the nearest named part) cut by the frame's edge
         for more than 10 frames is an error
       And under 8% of the frame showing any part, for more than 1 s, is an error
@@ -585,6 +633,12 @@ Feature: Stage guards: a 3D render an agent can't break
       # and 6:03-6:07; 1:59 holds a caption that fills it), 439 errors where it had 435, and Stay (approved) on none,
       # its findings otherwise the same as before (its three meant errors, three warnings). Left: the subject a Label
       # points at; subject-cut stays a warning (33, on Stay and four clean scenes).
+      # Status 11-22 (branch stage-guards-23): done. A Label writes its point (data-points), the manifest carries it on
+      # its words (`points`), and the named part nearest it (within a quarter of the part's size plus 0.3 m: a Label is
+      # given the part's top) is the shot's subject. A part a Label names, cut by the frame's edge for more than 10
+      # frames, is a subject-cut error; the part showing most is still a guess at the subject, so its cut stays a
+      # warning. A room's inside is content by stage-guards-17's standing-slab rule. On the clean scenes and the essay
+      # film, which use no Label, every finding is the same.
 
     @done
     Scenario: SG15. A broken render can't be posted
@@ -606,6 +660,7 @@ Feature: Stage guards: a 3D render an agent can't break
       # the stage checks run on them (a still stepped alone is judged for what a still shows).
 
   Rule: SG16. The 3D guide says it first
+    @done
     Scenario: SG16. The guide's 3D rules, before any recipe
       Then sdk/guides (3d.md and craft/floor.md) and the raea skill say, before any recipe:
         | rule                                                                                                 |
@@ -620,3 +675,10 @@ Feature: Stage guards: a 3D render an agent can't break
       # that holds each (SG2's names, line-of-parts and part-snap, the type checks and read={false}, camera-lurch and
       # camera-reverse, raea scene stage, frame-empty and subject-cut, raea show --despite), Line3d and cameraPath are
       # the recipes, and craft/floor.md refuses labels written into the 3D, naming Label (SG8). Left: SG9's re-render.
+      # Status 11-22 (branch stage-guards-23): done. craft/floor.md refuses a 3D film rendered a shot at a time
+      # (`frame-pure`: a shot a process works round an engine fault, so report it with raea bug), and its Labels line
+      # names the new checks (words behind a part, subject-cut). bevy/solari.md drops its 0.1.2 cautions, none of which
+      # 0.1.9 shows (a sun mounted at frame 15 lights frame 40 as it does alone, SSIM 0.9988; a 10 s --at jump, 0.9994;
+      # the sun's strength follows, kept-light), and says to render a film whole. The skill carries both on its main
+      # (raea-skills #116, 74ab897); raea's pin takes it with the next pin after the story branch's (ST8a pins 4a77a0b,
+      # not yet landed: pinning past it here would ship that branch's skill pages before its code).

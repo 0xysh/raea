@@ -185,6 +185,7 @@ multiplied into (scale, opacity) or replacing (color, visible) what the block's 
 | `depth` | `number` | extrusion depth (default 0.2) |
 | `font` | `string` | a family (Inter by default, or another of raea's bundled faces) |
 | `weight` | `number` | 100..900 (800 by default) |
+| `read` | `boolean` | false: scenery (a sign seen in passing), not held to the type checks raea render runs on 3D type: its size on screen, its angle to the camera, the title-safe area, its reading time and parts in front of it. Words meant to be read are better as page type: a Label |
 
 ### `WordOptions`
 

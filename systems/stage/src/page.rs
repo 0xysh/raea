@@ -19,6 +19,8 @@ pub struct Words {
     pub text: String,
     pub bx: [f32; 4],
     pub allow_overlap: bool,
+    /// the world point a Label's words name (its `at`), which makes the part there the shot's subject (SG14)
+    pub points: Option<[f32; 3]>,
 }
 
 /// What the page draws over one frame's 3D, as its manifest has it: its words, its videos' boxes and its pictures'
@@ -126,7 +128,7 @@ mod tests {
     fn run(part: Item, words: [f32; 4], n: usize) -> Vec<raea_core_facts::Finding> {
         let all: Vec<Vec<Item>> = (0..n).map(|_| vec![cam([0.0, 0.0, 6.0], [0.0; 3]), part.clone()]).collect();
         let frames: Vec<i64> = (0..n as i64).collect();
-        let page: Vec<Page> = (0..n).map(|_| Page { words: vec![Words { text: "Install now".into(), bx: words, allow_overlap: false }], videos: Vec::new(), pictures: Vec::new() }).collect();
+        let page: Vec<Page> = (0..n).map(|_| Page { words: vec![Words { text: "Install now".into(), bx: words, allow_overlap: false, points: None }], videos: Vec::new(), pictures: Vec::new() }).collect();
         crate::check_with(&all, &frames, &page, 1920, 1080, 30.0, "test").into_iter().filter(|f| f.check == "type-over-part").collect()
     }
 
@@ -146,7 +148,7 @@ mod tests {
         right.world = Mat4::from_translation(Vec3::new(0.6, 0.0, 0.0));
         let all: Vec<Vec<Item>> = (0..30).map(|_| vec![cam([0.0, 0.0, 6.0], [0.0; 3]), left.clone(), right.clone()]).collect();
         let frames: Vec<i64> = (0..30).collect();
-        let page: Vec<Page> = (0..30).map(|_| Page { words: vec![Words { text: "Install now".into(), bx: [560.0, 500.0, 1360.0, 580.0], allow_overlap: false }], videos: Vec::new(), pictures: Vec::new() }).collect();
+        let page: Vec<Page> = (0..30).map(|_| Page { words: vec![Words { text: "Install now".into(), bx: [560.0, 500.0, 1360.0, 580.0], allow_overlap: false, points: None }], videos: Vec::new(), pictures: Vec::new() }).collect();
         let f: Vec<_> = crate::check_with(&all, &frames, &page, 1920, 1080, 30.0, "test").into_iter().filter(|f| f.check == "type-over-part").collect();
         assert_eq!(f.len(), 1, "{f:?}");
         assert!(f[0].says.contains("'left'") && f[0].says.contains("'right'"), "{}", f[0].says);
@@ -156,7 +158,7 @@ mod tests {
     fn words_that_say_allow_overlap_may_cover_a_part() {
         let all: Vec<Vec<Item>> = (0..30).map(|_| vec![cam([0.0, 0.0, 6.0], [0.0; 3]), card("card", json!({}))]).collect();
         let frames: Vec<i64> = (0..30).collect();
-        let page: Vec<Page> = (0..30).map(|_| Page { words: vec![Words { text: "on the card".into(), bx: [760.0, 500.0, 1160.0, 580.0], allow_overlap: true }], ..Page::default() }).collect();
+        let page: Vec<Page> = (0..30).map(|_| Page { words: vec![Words { text: "on the card".into(), bx: [760.0, 500.0, 1160.0, 580.0], allow_overlap: true, points: None }], ..Page::default() }).collect();
         assert!(!crate::check_with(&all, &frames, &page, 1920, 1080, 30.0, "test").iter().any(|f| f.check == "type-over-part"));
     }
 

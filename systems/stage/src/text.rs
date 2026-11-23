@@ -1,9 +1,9 @@
-//! SG10, 3D type that reads: each RichText checked on every frame it shows, through the frame's camera. Its letters'
-//! height on screen, its face against the line to the camera, its box against the title-safe area, whether its reveal
-//! starts and finishes while it's up, and whether it's up long enough to be read. A RichText with `read={false}` is
-//! scenery (a sign seen in passing) and isn't held to it.
+//! SG10, 3D type that reads: each RichText and Text3D checked on every frame it shows, through the frame's camera. Its
+//! letters' height on screen, its face against the line to the camera, its box against the title-safe area, a part in
+//! front of it (cover.rs), whether its reveal starts and finishes while it's up, and whether it's up long enough to be
+//! read. A RichText or Text3D with `read={false}` is scenery (a sign seen in passing) and isn't held to it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use bevy::math::Vec3;
 use raea_core_facts::{Finding, Level};
@@ -47,12 +47,16 @@ struct Seen {
     /// some glyph shown, every glyph fully in
     shown: bool,
     whole: bool,
+    /// the part hiding it from the camera (cover.rs), when one does
+    hid: Option<String>,
 }
 
 /// Each block's frames as they come, by what it's called, in frame order (and its words' count, and whether it reveals).
 #[derive(Default)]
 pub(crate) struct Texts {
     by: BTreeMap<String, (Vec<Seen>, usize, bool)>,
+    /// each shape's own box, read once a render (cover.rs)
+    boxes: HashMap<String, Option<(Vec3, Vec3)>>,
 }
 
 impl Texts {
@@ -60,18 +64,16 @@ impl Texts {
     pub(crate) fn push(&mut self, k: usize, its: &[Item], v: Option<View>) {
         let Some(v) = v else { return };
         let by = &mut self.by;
-        for it in its.iter().filter(|i| i.kind == "text") {
-            if it.props.get("read").and_then(Value::as_bool) == Some(false) {
-                continue;
-            }
-            let words = it.props.get("text").and_then(Value::as_str).unwrap_or("");
-            if words.trim().is_empty() {
+        // the parts that can stand in front of words, made once a frame and only when it has words
+        let mut parts: Option<Vec<crate::cover::Part>> = None;
+        for (i, it) in its.iter().enumerate() {
+            let Some((words, size, text3d)) = words_of(it) else { continue };
+            if it.props.get("read").and_then(Value::as_bool) == Some(false) || words.trim().is_empty() {
                 continue;
             }
             let o = origin(it);
             let Some([cx, cy, depth]) = v.project(o) else { continue };
             // its em on screen: the em's height carried by its matrix, at its depth
-            let size = num(it, "size", 0.5) as f32;
             let up = it.world.transform_vector3(Vec3::Y * size);
             let cap = CAP * up.length() * v.focal / depth;
             let face = it.world.transform_vector3(Vec3::Z).normalize_or(Vec3::Z);
@@ -79,14 +81,17 @@ impl Texts {
             let lines: Vec<&str> = words.split('\n').collect();
             let wide = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0) as f32 * ADVANCE * size;
             let tall = lines.len() as f32 * num(it, "lineHeight", 1.2) as f32 * size;
-            let align = num(it, "align", 0.5) as f32;
+            // a Text3D is one line, centred on its origin
+            let align = if text3d { 0.5 } else { num(it, "align", 0.5) as f32 };
             let (x0, x1) = (-align * wide, (1.0 - align) * wide);
             let b = v.bounds(corners(&it.world, Vec3::new(x0, -tall / 2.0, 0.0), Vec3::new(x1, tall / 2.0, 0.0)));
             let os: Vec<f64> = it.props.get("glyphs").and_then(Value::as_array).map(|gs| gs.iter().map(|g| if g.get("v").and_then(Value::as_bool) == Some(false) { 0.0 } else { g.get("o").and_then(Value::as_f64).unwrap_or(1.0) }).collect()).unwrap_or_default();
             let shown = os.is_empty() || os.iter().any(|o| *o > SHOWN);
             let whole = os.iter().all(|o| *o > IN);
-            let e = by.entry(called(it)).or_insert_with(|| (Vec::new(), words.split_whitespace().count(), it.props.get("at").is_some()));
-            e.0.push(Seen { k, cap, turn, b, c: [cx, cy], shown, whole });
+            let parts = parts.get_or_insert_with(|| crate::cover::parts(its, &mut self.boxes));
+            let hid = crate::cover::behind(its, parts, i, &it.world, (x0, x1), tall, up.length(), v.eye);
+            let e = by.entry(called(it)).or_insert_with(|| (Vec::new(), words.split_whitespace().count(), !text3d && it.props.get("at").is_some()));
+            e.0.push(Seen { k, cap, turn, b, c: [cx, cy], shown, whole, hid });
         }
     }
 
@@ -112,6 +117,11 @@ impl Texts {
                 let says = if most > 90.0 { format!("the words '{name}' are seen from behind (turned {most:.0}°) from {} to {}", st.at(a), st.at(b)) } else { format!("the words '{name}' are turned {most:.0}° from the camera from {} to {} (at most {MAX_TURN:.0}°), so they read squashed", st.at(a), st.at(b)) };
                 let level = if most > TURN_ERROR { Level::Error } else { Level::Warn };
                 out.push(fix(st.finding("type-angle", level, a, b, says), "turn the words to face the camera (their rotation), or move the camera round to face them", most, MAX_TURN, "°"));
+            }
+            for (a, b) in lasting(&|s| s.hid.is_some()) {
+                let part = during(a, b).find_map(|s| s.hid.clone()).unwrap_or_default();
+                let f = st.finding("type-hidden", Level::Error, a, b, format!("the words '{name}' are behind '{part}' from {} to {}: more than half of them can't be seen", st.at(a), st.at(b)));
+                out.push(f.fix("move the part, the words or the camera so nothing stands between the words and the camera; words that point at a part read better as page type over the frame (a Label)"));
             }
             let (mx, my) = (SAFE * st.w, SAFE * st.h);
             for (a, b) in lasting(&|s| s.whole && s.b.is_some_and(|b| b[0] < mx || b[1] < my || b[2] > st.w - mx || b[3] > st.h - my)) {
@@ -143,6 +153,22 @@ impl Texts {
             }
         }
         out
+    }
+}
+
+/// A block's words and em: a RichText's (a `text` item), or a Text3D's (a mesh whose shape is `text3d("WORDS", size,
+/// depth, ...)`: the SDK keeps quotes and backslashes out of the words), with whether it's a Text3D. A Text3D cut into
+/// a solid (minus(box, text3d(...))) is part of that solid, not words of its own.
+fn words_of(it: &Item) -> Option<(&str, f32, bool)> {
+    match it.kind {
+        "text" => Some((it.props.get("text").and_then(Value::as_str).unwrap_or(""), num(it, "size", 0.5) as f32, false)),
+        "mesh" => {
+            let rest = it.shape.as_deref()?.strip_prefix("text3d(\"")?;
+            let (words, rest) = rest.split_once('"')?;
+            let size: f32 = rest.strip_prefix(',')?.split(',').next()?.trim().trim_end_matches(')').trim().parse().ok()?;
+            (size > 0.0).then_some((words, size, true))
+        }
+        _ => None,
     }
 }
 
@@ -221,6 +247,61 @@ mod tests {
         assert!(check(&small, &at, 1920, 1080, 30.0, "test").iter().any(|f| f.check == "type-small"));
         let half: Vec<Vec<Item>> = at.iter().map(|_| vec![cam([0.0, 0.0, 4.0], [0.0; 3]), words("Five stars", 0.4, Mat4::IDENTITY, 0.5)]).collect();
         assert!(check(&half, &at, 1920, 1080, 30.0, "test").is_empty());
+    }
+
+    fn text3d(text: &str, size: f64, world: Mat4) -> Item {
+        let mut it = item("mesh", json!({}), world);
+        it.shape = Some(format!("text3d(\"{text}\", {size}, 0.1, \"Inter\", 800)").into());
+        it
+    }
+
+    fn block(name: &str, half: [f32; 3], at: [f32; 3], opacity: Option<f64>) -> Item {
+        let mut it = item("mesh", json!({"name": name}), Mat4::from_translation(at.into()));
+        it.shape = Some(format!("box({}, {}, {})", half[0] * 2.0, half[1] * 2.0, half[2] * 2.0).into());
+        if let Some(o) = opacity {
+            std::sync::Arc::make_mut(&mut it.props).insert("opacity".into(), json!(o));
+        }
+        it
+    }
+
+    #[test]
+    fn a_text3d_is_held_to_the_same_checks() {
+        let far: Vec<Vec<Item>> = (0..30).map(|_| vec![cam([0.0, 0.0, 10.0], [0.0; 3]), text3d("SALE", 0.1, Mat4::IDENTITY)]).collect();
+        let f = run(far);
+        assert!(f.iter().any(|f| f.check == "type-small" && f.says.contains("SALE")), "{f:?}");
+        let near: Vec<Vec<Item>> = (0..90).map(|_| vec![cam([0.0, 0.0, 4.0], [0.0; 3]), text3d("SALE", 0.5, Mat4::IDENTITY)]).collect();
+        assert_eq!(run(near).iter().map(|f| f.check.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
+        // a word cut into a sign is the sign's, not words of its own
+        let mut cut = text3d("SALE", 0.1, Mat4::IDENTITY);
+        cut.shape = Some("minus(rounded_box(2, 1, 0.2, 0.05), text3d(\"SALE\", 0.1, 0.3))".into());
+        assert!(!run((0..30).map(|_| vec![cam([0.0, 0.0, 10.0], [0.0; 3]), cut.clone()]).collect()).iter().any(|f| f.check.starts_with("type-")));
+    }
+
+    #[test]
+    fn a_part_in_front_of_the_words_is_said_and_their_sign_isnt() {
+        let cam_at = cam([0.0, 0.0, 6.0], [0.0; 3]);
+        // a crate between the words and the camera
+        let hidden: Vec<Vec<Item>> = (0..60).map(|_| vec![cam_at.clone(), words("Placement", 0.4, Mat4::IDENTITY, 1.0), block("crate", [1.5, 0.6, 0.3], [0.0, 0.0, 2.0], None)]).collect();
+        let f = run(hidden);
+        let h = f.iter().find(|f| f.check == "type-hidden").expect("type-hidden");
+        assert_eq!(h.level, Level::Error);
+        assert!(h.says.contains("crate"), "{}", h.says);
+        // the words on the face of their sign, the sign behind them
+        let sign: Vec<Vec<Item>> = (0..90).map(|_| vec![cam_at.clone(), words("Placement", 0.4, Mat4::from_translation([0.0, 0.0, 0.11].into()), 1.0), block("sign", [1.5, 0.5, 0.1], [0.0; 3], None)]).collect();
+        assert!(!run(sign).iter().any(|f| f.check == "type-hidden"));
+        // glass in front, and a part off to the side, hide nothing
+        let glass: Vec<Vec<Item>> = (0..60).map(|_| vec![cam_at.clone(), words("Placement", 0.4, Mat4::IDENTITY, 1.0), block("pane", [1.5, 0.6, 0.05], [0.0, 0.0, 2.0], Some(0.2)), block("post", [0.2, 1.0, 0.2], [3.0, 0.0, 2.0], None)]).collect();
+        assert!(!run(glass).iter().any(|f| f.check == "type-hidden"));
+        // words in front of words hide nothing (the essay film's "ASSETS behind VARIATION" read clearly)
+        let over: Vec<Vec<Item>> = (0..60).map(|_| vec![cam_at.clone(), words("Placement", 0.4, Mat4::IDENTITY, 1.0), words("VARIATION COSTS", 0.8, Mat4::from_translation([0.0, 0.0, 2.0].into()), 1.0)]).collect();
+        assert!(!run(over).iter().any(|f| f.check == "type-hidden"));
+        // a tile over the lower third of the letters (the film's day labels; seen from the eye it covers the bottom row of
+        // points and no other): still read, not said
+        let low: Vec<Vec<Item>> = (0..60).map(|_| vec![cam_at.clone(), words("Placement", 0.4, Mat4::IDENTITY, 1.0), block("tile", [1.5, 0.235, 0.1], [0.0, -0.265, 2.0], None)]).collect();
+        assert!(!run(low).iter().any(|f| f.check == "type-hidden"));
+        // a part that passes in front for a moment (under half a second) isn't said
+        let past: Vec<Vec<Item>> = (0..90).map(|k| { let mut v = vec![cam_at.clone(), words("Placement", 0.4, Mat4::IDENTITY, 1.0)]; if (40..48).contains(&k) { v.push(block("bird", [1.5, 0.6, 0.3], [0.0, 0.0, 2.0], None)) } v }).collect();
+        assert!(!run(past).iter().any(|f| f.check == "type-hidden"));
     }
 
     #[test]

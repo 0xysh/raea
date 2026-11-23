@@ -208,6 +208,10 @@ impl BlitzPage {
             if up(doc, owner, |node| node.attr(LocalName::from("data-allow-overlap")).is_some()) {
                 t["allowOverlap"] = json!(true);
             }
+            // the world point a Label's words name ("x y z"), which makes the part there the shot's subject (SG14)
+            if let Some(p) = up_attr(doc, owner, "data-points").and_then(|v| v.split_whitespace().map(|n| n.parse::<f64>().ok()).collect::<Option<Vec<f64>>>()).filter(|p| p.len() == 3 && p.iter().all(|n| n.is_finite())) {
+                t["points"] = json!(p);
+            }
             stamps(owner, &mut t);
             text.push(t);
         }
@@ -354,6 +358,19 @@ fn in_caption(doc: &blitz_dom::BaseDocument, n: blitz_dom::NodeId) -> bool {
 }
 
 /// Whether `n` or an element it's in passes `test`.
+/// The value of an attribute on n or the nearest element above it that has one.
+fn up_attr(doc: &blitz_dom::BaseDocument, n: blitz_dom::NodeId, name: &str) -> Option<String> {
+    let mut at = Some(n);
+    while let Some(x) = at {
+        let node = doc.get_node(x)?;
+        if let Some(v) = node.attr(LocalName::from(name)) {
+            return Some(v.to_string());
+        }
+        at = node.parent;
+    }
+    None
+}
+
 fn up(doc: &blitz_dom::BaseDocument, n: blitz_dom::NodeId, test: impl Fn(&blitz_dom::Node) -> bool) -> bool {
     let mut at = Some(n);
     while let Some(x) = at {

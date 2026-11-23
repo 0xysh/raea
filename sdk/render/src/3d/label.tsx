@@ -104,7 +104,8 @@ export function Label({ at, camera, children, size = 32, side = "above", gap = 4
       ) : null}
       <div style={row}>
         <div style={{ flexGrow: along, flexShrink: 1, flexBasis: 0 }} />
-        <div data-label="" style={{ flexGrow: 0, flexShrink: 0, fontSize: font, lineHeight: 1.15, color, whiteSpace: "nowrap", ...style }}>{children}</div>
+        {/* data-points: the world point it names, carried to the stage checks, which make the part there the shot's subject (SG14) */}
+        <div data-label="" data-points={at.join(" ")} style={{ flexGrow: 0, flexShrink: 0, fontSize: font, lineHeight: 1.15, color, whiteSpace: "nowrap", ...style }}>{children}</div>
         <div style={{ flexGrow: 1 - along, flexShrink: 1, flexBasis: 0 }} />
       </div>
     </>

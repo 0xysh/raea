@@ -118,14 +118,19 @@ fn mark(grid: &mut [bool], b: [f32; 4], w: f32, h: f32) {
 }
 
 /// Each frame as it comes: the share covered, whether it can be judged (no part of unknown size in view, no footage or
-/// 2D over the 3D), and its subject: (name, the share of its box outside the frame, whether it could fit).
+/// 2D over the 3D), and its subject: (name, the share of its box outside the frame, whether it could fit, whether a
+/// Label names it).
 #[derive(Default)]
 pub(crate) struct Framing {
     boxes: HashMap<String, Option<(Vec3, Vec3)>>,
     covered: Vec<f32>,
     judged: Vec<bool>,
-    subject: Vec<Option<(String, f32, bool)>>,
+    subject: Vec<Option<Subject>>,
 }
+
+/// A frame's subject: what it's called, the share of its box outside the frame, whether it could fit, and whether a
+/// Label names it (the part nearest the Label's point; else the named part showing most, a guess)
+type Subject = (String, f32, bool, bool);
 
 impl Framing {
     /// A frame's parts through its camera `v`, and what its page draws over them, on a w x h frame.
@@ -136,11 +141,14 @@ impl Framing {
         self.subject.push(s);
     }
 
-    fn frame(&mut self, its: &[Item], v: View, page: Option<&crate::Page>, w: f32, h: f32) -> (f32, bool, Option<(String, f32, bool)>) {
+    fn frame(&mut self, its: &[Item], v: View, page: Option<&crate::Page>, w: f32, h: f32) -> (f32, bool, Option<Subject>) {
         let boxes = &mut self.boxes;
         let mut grid = vec![false; GX * GY];
         let mut sure = true;
         let mut best: Option<(String, f32, f32, bool)> = None;
+        // the points the page's Labels name, and the named part nearest one: (name, its distance, out, fits)
+        let points: Vec<Vec3> = page.into_iter().flat_map(|p| p.words.iter().filter_map(|w| w.points.map(Vec3::from))).collect();
+        let mut named: Option<(String, f32, f32, bool)> = None;
         for it in its {
             // drawn where the boxes can't say: footage, 2D, a field, a shader over the frame, a set of copies (<Instances>)
             if matches!(it.kind, "plate" | "sprite" | "shape2d" | "grass" | "splat" | "meshseq" | "frame_pass") || it.at.is_some() {
@@ -189,16 +197,28 @@ impl Framing {
                 continue;
             }
             // the subject: the named part showing most, when it could fit in the frame
-            if it.props.get("name").is_some() && inside > 0.0 && best.as_ref().is_none_or(|s| inside > s.1) {
-                let fits = b[2] - b[0] < 0.9 * w && b[3] - b[1] < 0.9 * h;
-                best = Some((called(it), inside, 1.0 - inside / whole, fits && scale_of(it) > 0.0));
+            if it.props.get("name").is_some() && inside > 0.0 {
+                let fits = b[2] - b[0] < 0.9 * w && b[3] - b[1] < 0.9 * h && scale_of(it) > 0.0;
+                if best.as_ref().is_none_or(|s| inside > s.1) {
+                    best = Some((called(it), inside, 1.0 - inside / whole, fits));
+                }
+                // a Label's point is on or near its part (its top, as Label asks): within a quarter of the part's size
+                // and 0.3 m
+                if !points.is_empty() {
+                    let (lo, hi) = corners(&it.world, lo, hi).into_iter().fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(p), b.max(p)));
+                    let d = points.iter().map(|p| (lo - *p).max(*p - hi).max(Vec3::ZERO).length()).fold(f32::MAX, f32::min);
+                    if d <= 0.25 * (hi - lo).length() + 0.3 && named.as_ref().is_none_or(|s| d < s.1) {
+                        named = Some((called(it), d, 1.0 - inside / whole, fits));
+                    }
+                }
             }
         }
         // the page's words and videos fill the frame too: a headline over an empty 3D isn't an empty frame
         for b in page.into_iter().flat_map(|p| p.words.iter().map(|w| w.bx).chain(p.videos.iter().copied()).chain(p.pictures.iter().copied())) {
             mark(&mut grid, b, w, h);
         }
-        (grid.iter().filter(|c| **c).count() as f32 / (GX * GY) as f32, sure, best.map(|(name, _, out, fits)| (name, out, fits)))
+        let subject = named.map(|(name, _, out, fits)| (name, out, fits, true)).or(best.map(|(name, _, out, fits)| (name, out, fits, false)));
+        (grid.iter().filter(|c| **c).count() as f32 / (GX * GY) as f32, sure, subject)
     }
 
     /// SG14 over the frames given.
@@ -214,11 +234,15 @@ impl Framing {
                 out.push(st.finding("frame-empty", Level::Error, a, b, says).fix("aim the camera at what the shot is about, or bring it into the frame"));
             }
         }
-        for (a, b) in runs(st, n, |k| subject[k].as_ref().is_some_and(|(_, out, fits)| *fits && *out > CUT_LO && *out < CUT_HI)) {
+        for (a, b) in runs(st, n, |k| subject[k].as_ref().is_some_and(|(_, out, fits, _)| *fits && *out > CUT_LO && *out < CUT_HI)) {
             let names: Vec<&str> = subject[a..=b].iter().filter_map(|s| s.as_ref().map(|s| s.0.as_str())).collect();
             if b + 1 - a > CUT_FRAMES && names.windows(2).all(|w| w[0] == w[1]) {
-                let says = format!("'{}', the part the shot shows most, is cut by the frame's edge from {} to {}", names[0], st.at(a), st.at(b));
-                out.push(st.finding("subject-cut", Level::Warn, a, b, says).fix("frame it whole (move the camera back or aim it), or move in until the cut is plainly meant"));
+                // a part a Label names is what the shot is about, so its cut is an error; the part showing most is a
+                // guess at the subject, so its cut is a warning
+                let labelled = subject[a..=b].iter().all(|s| s.as_ref().is_some_and(|s| s.3));
+                let (level, what) = if labelled { (Level::Error, "the part a Label names") } else { (Level::Warn, "the part the shot shows most") };
+                let says = format!("'{}', {what}, is cut by the frame's edge from {} to {}", names[0], st.at(a), st.at(b));
+                out.push(st.finding("subject-cut", level, a, b, says).fix("frame it whole (move the camera back or aim it), or move in until the cut is plainly meant"));
             }
         }
         out
@@ -268,7 +292,7 @@ mod tests {
     fn words_or_a_video_in_the_page_fill_the_frame() {
         let fs: Vec<Vec<Item>> = (0..120).map(|i| vec![cam([0.0, 0.0, 6.0], if (30..90).contains(&i) { [0.0, 40.0, 0.0] } else { [0.0; 3] }), cube("dash", [0.0; 3])]).collect();
         let n: Vec<i64> = (0..120).collect();
-        let headline = crate::Page { words: vec![crate::Words { text: "The rule".into(), bx: [360.0, 380.0, 1560.0, 700.0], allow_overlap: false }], videos: Vec::new(), pictures: Vec::new() };
+        let headline = crate::Page { words: vec![crate::Words { text: "The rule".into(), bx: [360.0, 380.0, 1560.0, 700.0], allow_overlap: false, points: None }], videos: Vec::new(), pictures: Vec::new() };
         let f = crate::check_with(&fs, &n, &vec![headline; 120], 1920, 1080, 30.0, "test");
         assert!(!f.iter().any(|f| f.check == "frame-empty"), "{f:?}");
         let clip = crate::Page { words: Vec::new(), videos: Vec::new(), pictures: vec![[656.0, 0.0, 1264.0, 1080.0]] };
@@ -336,5 +360,23 @@ mod tests {
         // the cube's centre near the frame's right edge
         let fs: Vec<Vec<Item>> = (0..30).map(|_| vec![cam([0.0, 0.0, 6.0], [0.0; 3]), cube("logo", [4.9, 0.0, 0.0])]).collect();
         assert!(run(fs).iter().any(|f| f.check == "subject-cut"));
+    }
+
+    #[test]
+    fn a_part_a_label_names_cut_by_the_edge_is_an_error() {
+        // the badge, small and near the middle, shows most; the logo half out at the right is the one the Label names
+        let fs: Vec<Vec<Item>> = (0..30).map(|_| vec![cam([0.0, 0.0, 6.0], [0.0; 3]), cube("badge", [0.0, 0.0, 1.0]), cube("logo", [4.9, 0.0, 0.0])]).collect();
+        let label = |at: [f32; 3]| crate::Page { words: vec![crate::Words { text: "Our logo".into(), bx: [1500.0, 200.0, 1800.0, 260.0], allow_overlap: false, points: Some(at) }], ..crate::Page::default() };
+        let n: Vec<i64> = (0..30).collect();
+        let named = check_with(&fs, &n, &vec![label([4.9, 0.5, 0.0]); 30], 1920, 1080, 30.0, "test");
+        let cut = named.iter().find(|f| f.check == "subject-cut").expect("subject-cut");
+        assert_eq!(cut.level, Level::Error);
+        assert!(cut.says.contains("'logo'") && cut.says.contains("a Label names"), "{}", cut.says);
+        // a Label on the badge, shown whole: nothing is cut
+        let whole = check_with(&fs, &n, &vec![label([0.0, 0.5, 1.0]); 30], 1920, 1080, 30.0, "test");
+        assert!(!whole.iter().any(|f| f.check == "subject-cut"), "{whole:?}");
+        // a Label pointing at nothing near a part leaves the guess: the logo cut is a warning
+        let far = check_with(&fs, &n, &vec![label([0.0, 3.0, -9.0]); 30], 1920, 1080, 30.0, "test");
+        assert!(far.iter().all(|f| f.check != "subject-cut" || f.level == Level::Warn), "{far:?}");
     }
 }
