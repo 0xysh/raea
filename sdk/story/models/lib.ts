@@ -1,15 +1,16 @@
 // What the corpus rows (rows.ts) and a held-out story's rows (validate.ts) share: a telling as prose, the story as the
 // extractor answers it, and exact labels for a telling a viewer could see.
-import { checkStory, fromData, toLines, type AnyStory } from "../src/index.ts";
+import { checkStory, fromData, scriptOf, toLines, type AnyStory } from "../src/index.ts";
 
 type J = Record<string, any>;
+
+/** A story's split by its index: one in ten test, one in ten val, the rest train. */
+export const split = (i: number) => { const h = (Math.imul(i + 1, 2654435761) >>> 0) % 10; return h === 0 ? "test" : h === 1 ? "val" : "train"; };
 
 export const name = (k: string) => (k === "narrator" ? "NARRATOR" : k.replace(/([a-z])([A-Z])/g, "$1 $2").toUpperCase());
 
 /** A telling as a script a person would write: numbered beats, what's seen, who says what. No keys, no annotations. */
-export function prose(beats: J[]): string {
-  return beats.map((b, n) => [`${n + 1}. ${b.onScreen ?? ""}`.trimEnd(), ...(b.says ?? []).map((l: J) => `   ${name(l.who)}: ${l.says}`)].join("\n")).join("\n");
-}
+export const prose = (beats: J[]): string => scriptOf(beats);
 
 export const withTelling = (s: J, beats: J[]): J => ({ ...s, tellings: { main: beats } });
 export const breaks = (s: J, beats: J[]) => {

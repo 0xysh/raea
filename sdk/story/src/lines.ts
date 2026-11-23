@@ -76,6 +76,12 @@ export function toLines(s: AnyStory | J, seed = 0): string {
 }
 const listOf = (x: unknown) => ([] as unknown[]).concat(x ?? []);
 
+const speaker = (k: string) => (k === "narrator" ? "NARRATOR" : k.replace(/([a-z])([A-Z])/g, "$1 $2").toUpperCase());
+/** Beats as a script a person would write: numbered (from `from`), what's seen, who says what; no keys. */
+export function scriptOf(beats: J[], from = 0): string {
+  return beats.map((b, n) => [`${from + n + 1}. ${b.onScreen ?? ""}`.trimEnd(), ...(b.says ?? []).filter((l: J) => l?.says).map((l: J) => `   ${speaker(l.who)}: ${l.says}`)].join("\n")).join("\n");
+}
+
 /** Lines read back into a story, with everything wrong in them: a line that doesn't parse, then fromData's errors. */
 export function fromLines(text: string): { story: AnyStory | null; errors: DataError[] } {
   const d: J = { values: {}, facts: {}, agents: {}, world: {}, tellings: {} };

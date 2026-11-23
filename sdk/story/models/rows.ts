@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { beatSchema, rng, storySchema, windowAt } from "../src/index.ts";
-import { bare, breaks, CHUNK, chunkSteps, criticSchema, name, prose, stepSchema } from "./lib.ts";
+import { bare, breaks, CHUNK, split, chunkSteps, criticSchema, name, prose, stepSchema } from "./lib.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const IN = arg("--in", join(homedir(), ".vd/story"));
@@ -24,7 +24,6 @@ type J = Record<string, any>;
 const stories: { i: number; s: J; premise: J }[] = readFileSync(join(IN, "stories.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).map((d) => ({ i: d.i, s: d.story, premise: d.premise }));
 
 /** The split a story falls in, by its index. */
-export const split = (i: number) => { const h = (Math.imul(i + 1, 2654435761) >>> 0) % 10; return h === 0 ? "test" : h === 1 ? "val" : "train"; };
 
 const out: Record<string, Record<string, J[]>> = { extract: {}, steps: {}, generate: {}, critic: {} };
 const push = (task: string, sp: string, row: J) => ((out[task][sp] ??= []).push(row));
