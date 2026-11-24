@@ -562,3 +562,28 @@ describe("outerHTML", () => {
     expect(off.outerHTML).toBe("<u></u>");
   });
 });
+
+describe("writable properties", () => {
+  test("a property set on a field made by the page reaches its attribute, as Chrome's do", () => {
+    fresh();
+    let box: any;
+    mount(<div ref={(e: any) => (box = e)} />, 0, { dom: true });
+    const input: any = document.createElement("input");
+    box.append(input);
+    input.placeholder = "Search";
+    input.required = true;
+    input.readOnly = true;
+    input.readOnly = false;
+    expect(input.outerHTML).toBe('<input placeholder="Search" required="">');
+    const a: any = document.createElement("a");
+    a.href = "#/projects";
+    a.draggable = false;
+    expect([a.getAttribute("href"), a.getAttribute("draggable")]).toEqual(["#/projects", "false"]);
+    const label: any = document.createElement("label");
+    label.htmlFor = "q";
+    expect(label.getAttribute("for")).toBe("q");
+    box.innerHTML = "<select><option value='a'>A</option><option value='b'>B</option></select>";
+    box.firstChild.selectedIndex = 1;
+    expect([box.firstChild.value, box.firstChild.selectedIndex]).toEqual(["b", 1]);
+  });
+});

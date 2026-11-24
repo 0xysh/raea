@@ -75,8 +75,14 @@ export class HTMLMediaElement_ extends HTMLElement_ {
   get loop() {
     return this._props.loop === true || this.hasAttribute("loop");
   }
+  set loop(v: boolean) {
+    this.toggleAttribute("loop", !!v);
+  }
   get autoplay() {
     return this._props.autoPlay === true || this._props.autoplay === true || this.hasAttribute("autoplay");
+  }
+  set autoplay(v: boolean) {
+    this.toggleAttribute("autoplay", !!v);
   }
   play() {
     if (!this._playing) {
