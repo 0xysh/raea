@@ -43,6 +43,7 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
 
   Rule: the bar (BK0)
 
+    @done
     Scenario: BK0. The bake's test set, its references and its numbers
       Given the plan
         | crate              | file                                 | lines | job                                                                 |
@@ -56,6 +57,30 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
       And the bar is: the frame with raea's bake within 0.045 RMSE of Cycles on the table set (lightbake.py gives
         0.040), no mesh off by more than a third of a stop on average, in under a quarter of lightbake.py's time
       And the numbers before any BK step lands are recorded in this file, as LT1's are in docs/realism.feature
+      And built 11-23: `raea bake light --compare DIR` (apps/lightbake), the sets in apps/lightbake/sets.json, their
+        compositions in bench/bake/ (each set's -cycles composition draws lightbake.py's maps from media/baked/). The
+        atelier is listed but has no reference yet: its Manifold solids stop `raea blender open`, so it joins at BK5
+        with its own tools/bake.sh bake as the comparison
+      And measured 11-23 on the M5 Pro, before any bake code: Cycles at 1024 samples (look.py's still at 1280x720,
+        lightbake.py at the set's texels a metre), each raea frame against the Cycles still
+        | set     | frame                  | RMSE   | mean stops | worst tile | lightbake.py  | the still     |
+        | table   | raea, unbaked          | 0.0964 | 0.355      | 3.10       | 242 s, 851 MB | 139 s, 1.8 GB |
+        | table   | raea, Cycles' maps     | 0.0445 | 0.090      | 1.97       |               |               |
+        | cornell | raea, unbaked          | 0.7075 | 5.449      | 8.64       | 235 s, 328 MB | 272 s, 1.7 GB |
+        | cornell | raea, Cycles' maps     | 0.0758 | 0.140      | 1.00       |               |               |
+        | window  | raea, unbaked          | 0.1884 | 1.210      | 3.32       | 126 s, 767 MB | 506 s, 2.1 GB |
+        | window  | raea, Cycles' maps     | 0.1446 | 1.121      | 3.02       |               |               |
+      And what they say: on the table set, Cycles' maps take raea from 0.096 to 0.045, as blender-research's 0.154 ->
+        0.040 did. Today's unbaked frame is nearer Cycles than the guide's sun + ambient was, but its shaded floor is
+        darker (39/255 from the sky alone, against the guide's 0.61). The table's worst tile with the maps is the chrome
+        ball, which raster raea draws reflecting only the sky (LT9's). The bar's time is a quarter of 242 s: 60 s
+        for the table set. The Cornell box, lit only by its emissive panel, is black in raster raea and within 0.076
+        of Cycles with the maps: emissives and colour bleeding carry. The window room is not near Cycles even with
+        Cycles' own maps: lightbake.py's maps are cooler than the light in Cycles' still (walls facing the window come
+        out neutral where the still is orange), and neither raea's <Environment> (0.151 with it at 0) nor
+        lightbake.py's indirect clamp (0.145 with --clamp 0) explains it. Until that is found, the window room's
+        frame numbers aren't a bar; BK5's per-mesh numbers on it (map_stops, texel for texel on lightbake.py's UVs)
+        don't go through the tone curve and still count
 
   Rule: the five parts (BK1-BK5)
 

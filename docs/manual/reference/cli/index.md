@@ -105,12 +105,13 @@ Music read, foley and instruments made on this machine.
 
 ## Generate and 3D tools
 
-Generated media, physics and weathering bakes, clothes and motion for SOMA's body, Blender and Godot.
+Generated media, physics, light and weathering bakes, clothes and motion for SOMA's body, Blender and Godot.
 
 | Verb | What it does |
 | --- | --- |
 | [`raea gen`](gen.md) | Generate images, video, music, sound, speech, 3D models and text through made.app, fal, Replicate, OpenRouter, Modal or ComfyUI. |
 | [`raea physics`](physics.md) | Make the bakes <Physics> and <Goo> play: rigid bodies, soft goo, and parts cut out of a .glb. |
+| [`raea bake`](bake.md) | Bake a composition's bounce light into lightmaps on raea's own ray tracer, and measure the bake against Cycles. |
 | [`raea wear`](wear.md) | Bake what weathers a model: where rain reaches and runs, what the sun sees, edges, hollows and touch, as maps raea/wear reads. |
 | [`raea clothes`](clothes.md) | Clothes for SOMA's body from words: make sews a garment from a sewing pattern (GarmentCode, MIT), cut to SOMA's measurements and draped by raea's own cloth, as assets/clothes/NAME.json and its .glb; cover lays one on the skin by procedure; wear puts garments on a body. |
 | [`raea motion`](motion.md) | Body motion made on this machine by Kimodo (NVIDIA), on MLX on a Mac and on PyTorch on Linux and Windows: a SOMA clip from a line of words and, with --keys, Kimodo constraints (full-body keyframes, hand or foot targets, a root path, as sdk/body/tools/between.ts writes them), as the clip sdk/body/tools/fromkimodo.ts reads. |
