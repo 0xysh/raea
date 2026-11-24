@@ -319,16 +319,22 @@ impl raea_sys_a11y::Facts<u64> for Facts<'_> {
     }
 }
 
-/// The `a11y` method on the page: each element with a data-testid as AccessKit has it, by the computation bevy_ui's page
-/// uses (raea-runtime-js's a11y.rs), over the document's elements and the props React set on them.
-pub fn a11y(world: &mut World) -> Value {
-    if !world.contains_resource::<HostPage>() {
-        return json!({"nodes": {}});
-    }
-    let page = world.resource::<HostPage>().0;
+/// The page's Blitz document and its wire ids, for `f`. None before the page is up.
+pub fn with_doc<R>(world: &World, f: impl FnOnce(&blitz_dom::BaseDocument, &raea_sys_page::ops::Nodes) -> R) -> Option<R> {
+    let page = world.get_resource::<HostPage>()?.0;
     let roots = world.non_send::<Roots>();
     let docs = world.non_send::<Docs>();
-    let (Some(r), Some(doc)) = (roots.0.iter().find(|r| r.page == page), docs.0.get(&page)) else { return json!({"nodes": {}}) };
+    let (r, doc) = (roots.0.iter().find(|r| r.page == page)?, docs.0.get(&page)?);
+    Some(f(doc, &r.nodes))
+}
+
+/// The page's elements as raea-sys-a11y reads them (by the wire's element ids), with what it asks of the document and
+/// where its focus is: `f` gets them, and the document for their boxes. None before the page is up.
+pub fn with_elements<R>(world: &World, f: impl FnOnce(std::collections::HashMap<u64, raea_sys_a11y::El<u64>>, std::collections::HashMap<u64, u64>, &dyn raea_sys_a11y::Facts<u64>, Option<u64>, &blitz_dom::BaseDocument, &raea_sys_page::ops::Nodes) -> R) -> Option<R> {
+    let page = world.get_resource::<HostPage>()?.0;
+    let roots = world.non_send::<Roots>();
+    let docs = world.non_send::<Docs>();
+    let (r, doc) = (roots.0.iter().find(|r| r.page == page)?, docs.0.get(&page)?);
     let n = &r.nodes;
     let mut els = std::collections::HashMap::new();
     let mut tops = std::collections::HashMap::new();
@@ -352,7 +358,13 @@ pub fn a11y(world: &mut World) -> Value {
     }
     let facts = Facts { doc, nodes: n };
     let focus = doc.get_focussed_node_id().and_then(|f| n.id_of(f));
-    raea_sys_a11y::records(els, tops, &facts, focus, |k| k)
+    Some(f(els, tops, &facts, focus, doc, n))
+}
+
+/// The `a11y` method on the page: each element with a data-testid as AccessKit has it, by the computation bevy_ui's page
+/// uses (raea-runtime-js's a11y.rs), over the document's elements and the props React set on them.
+pub fn a11y(world: &mut World) -> Value {
+    with_elements(world, |els, tops, facts, focus, _, _| raea_sys_a11y::records(els, tops, facts, focus, |k| k)).unwrap_or_else(|| json!({"nodes": {}}))
 }
 
 /// The system's faces as Chrome on macOS has them (Times, Helvetica and Courier boosted, Menlo for monospace, CoreText's

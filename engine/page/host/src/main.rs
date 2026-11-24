@@ -123,6 +123,11 @@ fn main() {
     if a.window && raea_io_home::setting("RAEA_IDLE_GATE").as_deref() != Some("0") {
         app.add_plugins(raea_page_host::idle::IdlePlugin);
     }
+    // on screen, the page's accessibility tree is the OS's (VoiceOver, macOS accessibility clients: raea_page_host::ax)
+    #[cfg(feature = "window")]
+    if a.window {
+        app.add_plugins(raea_page_host::ax::AxPlugin);
+    }
     // on screen, bevy_winit's event loop is the runner (a ScheduleRunner here replaced it: no window, 11-04)
     if !a.window && !app.is_plugin_added::<ScheduleRunnerPlugin>() {
         // 60 frames a second, as most screens; RAEA_PAGE_FPS stands in for another screen's rate (a 120 Hz one, to

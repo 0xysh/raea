@@ -4,6 +4,8 @@
 //! Protocol (src/brp.rs: page.*) and an MCP bridge to it (src/mcp.rs). The bin (src/main.rs) mounts a bundle; an app
 //! adds [`HostPlugin`] and mounts its own (page::mount), its systems around the host's.
 
+#[cfg(feature = "window")]
+pub mod ax;
 pub mod brp;
 /// the desktop window's chrome and native calls, in raea-page-window (kept under these names for main.rs and tests)
 pub use raea_page_window::{chrome, native};

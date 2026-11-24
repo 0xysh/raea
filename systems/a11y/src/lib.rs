@@ -139,6 +139,16 @@ fn node_of<K: Copy + Eq + std::hash::Hash>(cx: &Ctx<K>, e: K, el: &El<K>, focus:
     if focus == Some(e) {
         n.add_action(Action::Focus);
     }
+    // a control a press works: what VoiceOver's and an AX client's press asks for (macOS sends Click only to a node
+    // that has it; raea.app's window took no press on its links or buttons without it, 11-23)
+    if !disabled
+        && matches!(
+            role,
+            Role::Button | Role::Link | Role::CheckBox | Role::RadioButton | Role::Switch | Role::MenuItem | Role::MenuItemCheckBox | Role::MenuItemRadio | Role::Tab | Role::ListBoxOption | Role::TreeItem | Role::DisclosureTriangle | Role::ComboBox
+        )
+    {
+        n.add_action(Action::Click);
+    }
     // checked: a checkbox or radio (its Checked), or aria-checked; pressed: aria-pressed on a button
     let checkable = matches!(role, Role::CheckBox | Role::RadioButton | Role::Switch | Role::MenuItemCheckBox | Role::MenuItemRadio);
     let tri = |v: Option<String>| match v.as_deref() {
@@ -225,10 +235,11 @@ fn node_of<K: Copy + Eq + std::hash::Hash>(cx: &Ctx<K>, e: K, el: &El<K>, focus:
     n
 }
 
-/// A page's elements (the Blitz page's, raea-page's host) as the parity harness's records, by test id, read through
-/// accesskit_consumer. `roots` is each element's root (whose `id`s it looks up), `id_of` its AccessKit id (not
-/// u64::MAX, the window's).
-pub fn records<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: HashMap<K, K>, facts: &dyn Facts<K>, focus: Option<K>, id_of: impl Fn(K) -> u64) -> Value {
+/// A page's elements as one AccessKit tree under `window` (its root, a Role::Window node): each element a node with its
+/// children, its box where `bounds` gives one ([x0, y0, x1, y1] in the root's space), and the elements with a test id
+/// beside it. raea's window publishes it to the OS (VoiceOver, macOS accessibility: raea-page-host's ax.rs); `records`
+/// reads it back for the parity harness. `id_of` must never give `window`.
+pub fn tree<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: HashMap<K, K>, facts: &dyn Facts<K>, focus: Option<K>, id_of: impl Fn(K) -> u64, window: NodeId, label: Option<&str>, bounds: impl Fn(K) -> Option<[f64; 4]>) -> (TreeUpdate, Vec<(String, NodeId)>) {
     let mut ids = HashMap::new();
     for (k, el) in &els {
         if let (Some(id), Some(r)) = (el.props.get("id").and_then(|v| v.as_str()), roots.get(k)) {
@@ -236,16 +247,24 @@ pub fn records<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: Ha
         }
     }
     let cx = Ctx { facts, els, ids, roots };
-    let window = NodeId(u64::MAX);
     let mut nodes = vec![];
     let mut top = vec![];
     let mut tested = vec![];
+    // a text node of only white space (the markup's line breaks and indents) is no node, as in Chrome's tree: a screen
+    // reader would stop on each
+    let blank = |k: &K| cx.els.get(k).is_some_and(|e| e.text.as_deref().is_some_and(|t| t.trim().is_empty()));
     for (&k, el) in &cx.els {
+        if blank(&k) {
+            continue;
+        }
         let mut n = node_of(&cx, k, el, focus);
         for c in &el.kids {
-            if cx.els.contains_key(c) {
+            if cx.els.contains_key(c) && !blank(c) {
                 n.push_child(NodeId(id_of(*c)));
             }
+        }
+        if let Some([x0, y0, x1, y1]) = bounds(k) {
+            n.set_bounds(accesskit::Rect { x0, y0, x1, y1 });
         }
         if el.parent.is_none_or(|p| !cx.els.contains_key(&p)) {
             top.push(NodeId(id_of(k)));
@@ -257,9 +276,19 @@ pub fn records<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: Ha
     }
     let mut root = AkNode::new(Role::Window);
     root.set_children(top);
+    if let Some(l) = label {
+        root.set_label(l);
+    }
     nodes.insert(0, (window, root));
     let focus_id = focus.filter(|f| cx.els.contains_key(f)).map(|f| NodeId(id_of(f))).unwrap_or(window);
-    let update = TreeUpdate { nodes, tree: Some(Tree::new(window)), tree_id: TreeId::ROOT, focus: focus_id };
+    (TreeUpdate { nodes, tree: Some(Tree::new(window)), tree_id: TreeId::ROOT, focus: focus_id }, tested)
+}
+
+/// A page's elements (the Blitz page's, raea-page's host) as the parity harness's records, by test id, read through
+/// accesskit_consumer. `roots` is each element's root (whose `id`s it looks up), `id_of` its AccessKit id (not
+/// u64::MAX, the window's).
+pub fn records<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: HashMap<K, K>, facts: &dyn Facts<K>, focus: Option<K>, id_of: impl Fn(K) -> u64) -> Value {
+    let (update, tested) = tree(els, roots, facts, focus, id_of, NodeId(u64::MAX), None, |_| None);
     let tree = accesskit_consumer::Tree::new(update, true);
     let state = tree.state();
     let mut out = Map::new();
@@ -349,4 +378,69 @@ fn record(n: &accesskit_consumer::Node) -> Value {
 
 fn fmt_num(v: f64) -> String {
     if v.fract() == 0.0 { format!("{}", v as i64) } else { format!("{v}") }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct NoFacts;
+    impl Facts<u64> for NoFacts {
+        fn display_none(&self, _: u64) -> bool {
+            false
+        }
+        fn invisible(&self, _: u64) -> bool {
+            false
+        }
+        fn natively_disabled(&self, _: u64) -> bool {
+            false
+        }
+        fn editor_value(&self, _: u64) -> Option<String> {
+            None
+        }
+        fn tabbable(&self, k: u64) -> bool {
+            k == 2
+        }
+        fn checked(&self, _: u64) -> bool {
+            false
+        }
+        fn test_id(&self, k: u64) -> Option<String> {
+            (k == 2).then(|| "go".to_string())
+        }
+    }
+
+    fn el(tag: &str, parent: Option<u64>, kids: Vec<u64>, text: Option<&str>, props: Value) -> El<u64> {
+        El { tag: tag.into(), props: props.as_object().cloned().unwrap_or_default(), parent, kids, text: text.map(str::to_string), title: None }
+    }
+
+    /// raea's window publishes this tree (raea-page-host ax.rs): its root is the window, named; each element hangs under
+    /// it with its box, a button named by its text, and the focus where the page has it.
+    #[test]
+    fn the_window_tree_has_the_page_under_its_root_with_boxes() {
+        let els = HashMap::from([
+            (1, el("main", None, vec![2, 4], None, json!({}))),
+            (2, el("button", Some(1), vec![3], None, json!({"data-testid": "go"}))),
+            (3, el("text", Some(2), vec![], Some("Start project"), json!({}))),
+            (4, el("text", Some(1), vec![], Some("\n    "), json!({}))),
+        ]);
+        let roots = HashMap::from([(1, 0), (2, 0), (3, 0), (4, 0)]);
+        let window = NodeId(7);
+        let (u, tested) = tree(els, roots, &NoFacts, Some(2), |k| k + 100, window, Some("raea"), |k| (k == 2).then_some([10.0, 20.0, 110.0, 50.0]));
+        assert_eq!(tested, vec![("go".to_string(), NodeId(102))]);
+        assert_eq!(u.focus, NodeId(102));
+        assert_eq!(u.tree.as_ref().map(|t| t.root), Some(window));
+        let (_, root) = u.nodes.iter().find(|(id, _)| *id == window).unwrap();
+        assert_eq!(root.label(), Some("raea"));
+        assert_eq!(root.children(), &[NodeId(101)]);
+        // the markup's white space is no node
+        assert!(u.nodes.iter().all(|(id, _)| *id != NodeId(104)));
+        let (_, main) = u.nodes.iter().find(|(id, _)| *id == NodeId(101)).unwrap();
+        assert_eq!(main.children(), &[NodeId(102)]);
+        let state = accesskit_consumer::Tree::new(u, true);
+        let b = state.state().node_by_tree_local_id(NodeId(102), TreeId::ROOT).unwrap();
+        assert_eq!(b.role(), Role::Button);
+        assert!(b.data().supports_action(Action::Click), "a button takes a press");
+        assert_eq!(b.label().as_deref(), Some("Start project"));
+        assert_eq!(b.data().bounds(), Some(accesskit::Rect { x0: 10.0, y0: 20.0, x1: 110.0, y1: 50.0 }));
+    }
 }

@@ -18,7 +18,7 @@ path = "src/main.rs"
 # the page on QuickJS (raea-runtime-js's portable engine) in place of JavaScriptCore
 portable = ["raea-runtime-js/portable"]
 # raea's window on screen (--window: the desktop app, docs/app.feature AP5/AP6); the benches and tests stay headless
-window = ["bevy/bevy_winit", "dep:raea-runtime-plugins", "raea-page-window/window"]
+window = ["bevy/bevy_winit", "dep:raea-runtime-plugins", "raea-page-window/window", "dep:accesskit"]
 
 [dependencies]
 raea-io-trace = { path = "../../../io/trace" }
@@ -28,6 +28,8 @@ bevy = { version = "=0.20.0", default-features = false, features = ["std", "defa
 raea-runtime-js = { path = "../../../runtime/js" }
 # the page's accessibility records
 raea-sys-a11y = { path = "../../../systems/a11y" }
+# the window's accessibility tree (ax.rs): the AccessKit Bevy's winit adapter takes, its version exactly
+accesskit = { version = "=0.24.1", default-features = false, optional = true }
 raea-page = { path = ".." }
 # the desktop window: --chrome and the native calls (clipboard, links, notifications, the dock badge, raea:// links)
 raea-page-window = { path = "../window" }

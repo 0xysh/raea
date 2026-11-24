@@ -14889,6 +14889,7 @@ dependencies = [
 name = "raea-page-host"
 version = "0.1.0"
 dependencies = [
+ "accesskit 0.24.1",
  "base64 0.22.1",
  "bevy",
  "blitz-dom",
