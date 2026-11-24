@@ -130,7 +130,7 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
     Scenario: BK2. Each texel's place in the world
       Given the plan
         | crate              | file                                 | lines | job                                                                 |
-        | raea-sys-atlas     | systems/atlas/src/lib.rs             | 120   | the atlas both bakes share, split out of raea-sys-weathering (it was at 1999 of 2000 lines and a system may build only on a facility): Ask, layout() |
+        | raea-sys-atlas     | systems/atlas/src/lib.rs             | 130   | the atlas both bakes share, split out of raea-sys-weathering (it was at 1999 of 2000 lines and a system may build only on a facility): Ask, layout() |
         | raea-sys-atlas     | systems/atlas/src/scene.rs           | 323   | moved from raea-sys-weathering as it was                            |
         | raea-sys-atlas     | systems/atlas/src/charts.rs          | 436   | moved                                                               |
         | raea-sys-atlas     | systems/atlas/src/merge.rs           | 193   | moved                                                               |

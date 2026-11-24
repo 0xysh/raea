@@ -78,6 +78,17 @@ pub fn dir(v: &Value, k: &str, d: Vec3) -> R<Vec3> {
     }
 }
 
+/// A bake request's model laid out: its triangles, their ray mesh, the atlas, and when the charts began (both bakes
+/// start here, so the same request gives them the same atlas).
+pub fn lay(bytes: &[u8], req: &Value) -> R<(scene::Scene, parry3d::shape::TriMesh, charts::Atlas, std::time::Instant)> {
+    let ask = Ask::of(req.get("env").unwrap_or(&Value::Null))?;
+    let sc = scene::read(bytes, &Classes::of(req.get("classes").unwrap_or(&Value::Null))?)?;
+    let mesh = rays::mesh_of(&sc);
+    let t = std::time::Instant::now();
+    let at = charts::build(&sc, &ask, &mesh)?;
+    Ok((sc, mesh, at, t))
+}
+
 /// A texel of the atlas and the surface point under it in world units (charts.rs: its centre's point when that's in a
 /// triangle, else the nearest point within 0.75 of a texel of its chart's edge), the triangle's normal, the triangle.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -104,9 +115,7 @@ pub struct Layout {
 }
 
 pub fn layout(bytes: &[u8], req: &Value) -> R<Layout> {
-    let ask = Ask::of(req.get("env").unwrap_or(&Value::Null))?;
-    let sc = scene::read(bytes, &Classes::of(req.get("classes").unwrap_or(&Value::Null))?)?;
-    let at = charts::build(&sc, &ask, &rays::mesh_of(&sc))?;
+    let (sc, _, at, _) = lay(bytes, req)?;
     let texels = at.texels.iter().map(|t| Texel { x: t.x, y: t.y, p: t.p.to_array(), n: t.n.to_array(), tri: t.tri }).collect();
     Ok(Layout { glb: scene::write(&sc, &at)?, w: at.w, h: at.h, density: at.density, charts: at.charts, hidden: at.hidden, texels })
 }

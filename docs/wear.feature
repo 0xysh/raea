@@ -67,8 +67,8 @@ Feature: raea/wear, weathering that has a cause
         code: plaster, brick, sandstone, granite, wood, iron, zinc, copper, slate, felt, glass, enamel, brass, ground
       And the crate, as built
         | file                             | lines | job                                                              |
-        | systems/weathering/src/lib.rs    | 211   | the request, its content key, the store, the bake's steps        |
-        | systems/atlas/src/lib.rs         | 112   | raea-sys-atlas (a facility, split out 11-23): Ask (up, north, density, max_side from the request's env), layout() alone |
+        | systems/weathering/src/lib.rs    | 208   | the request, its content key, the store, the bake's steps        |
+        | systems/atlas/src/lib.rs         | 121   | raea-sys-atlas (a facility, split out 11-23): Ask (up, north, density, max_side from the request's env), lay() for both bakes, layout() alone |
         | systems/glb/src/lib.rs           | 208   | raea-sys-glb (a facility): the .glb read, unused data dropped, written |
         | systems/atlas/src/scene.rs       | 323   | glTF to triangles with a class each, and back with TEXCOORD_1    |
         | systems/atlas/src/charts.rs      | 436   | charts, their orientation and packing, texel to surface point    |

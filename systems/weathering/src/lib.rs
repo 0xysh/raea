@@ -178,13 +178,10 @@ pub fn bake(store: &Path, src: &Path, req: &Value) -> R<Value> {
     Ok(out)
 }
 
-/// What the cause bake and a layout alone start from: the world, the triangles, their ray mesh, the atlas (and its start).
+/// The request's world, and its model laid out as raea_sys_atlas::layout lays it (the same atlas, by construction).
 fn lay(bytes: &[u8], req: &Value) -> R<(Env, scene::Scene, parry3d::shape::TriMesh, charts::Atlas, Instant)> {
     let env = Env::of(req.get("env").unwrap_or(&Value::Null))?;
-    let sc = scene::read(bytes, &Classes::of(req.get("classes").unwrap_or(&Value::Null))?)?;
-    let mesh = raea_sys_atlas::rays::mesh_of(&sc);
-    let t = Instant::now();
-    let at = charts::build(&sc, &env.ask(), &mesh)?;
+    let (sc, mesh, at, t) = raea_sys_atlas::lay(bytes, req)?;
     Ok((env, sc, mesh, at, t))
 }
 

@@ -77,7 +77,10 @@ fn world_mesh(glb: &[u8]) -> Result<TriMesh, String> {
     while let Some((node, parent)) = stack.pop() {
         let l = node.transform().matrix();
         let m: [[f32; 4]; 4] = std::array::from_fn(|c| std::array::from_fn(|r| (0..4).map(|k| parent[k][r] * l[c][k]).sum()));
-        for prim in node.mesh().iter().flat_map(|m| m.primitives()).filter(|p| p.mode() == gltf::mesh::Mode::Triangles) {
+        for prim in node.mesh().iter().flat_map(|m| m.primitives()) {
+            if !matches!(prim.mode(), gltf::mesh::Mode::Triangles) {
+                continue;
+            }
             let r = prim.reader(|b| if b.index() == 0 { blob } else { None });
             let base = pos.len() as u32;
             pos.extend(r.read_positions().ok_or("a primitive with no positions")?.map(|p| Vec3::from(std::array::from_fn(|i| m[0][i] * p[0] + m[1][i] * p[1] + m[2][i] * p[2] + m[3][i]))));
