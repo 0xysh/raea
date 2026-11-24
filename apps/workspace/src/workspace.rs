@@ -5,7 +5,7 @@
 use super::*;
 use std::process::Command;
 
-const USAGE: &str = "usage: raea workspace [--json] | raea workspace init [NAME] [--layout monorepo|submodules] | raea workspace adopt DIR [--name NAME] [--layout monorepo|submodules]\n       raea project [--json] | raea project new NAME [--storage inline|submodule] | raea project split NAME [--remote URL] | raea project join NAME | raea project scan [DIR] [--json]";
+const USAGE: &str = "usage: raea workspace [--json] | raea workspace init [NAME] [--layout monorepo|submodules] | raea workspace adopt DIR [--name NAME] [--layout monorepo|submodules]\n       raea project [--json] | raea project new NAME [--storage inline|submodule] [--client NAME] | raea project tag [NAME] [--client NAME | --no-client] [--json] | raea project split NAME [--remote URL] | raea project join NAME | raea project scan [DIR] [--json]";
 
 /// git for raea's own commits. A new Mac has no user.email and a hostname git can't make one from, so every commit
 /// failed with "Author identity unknown" and the person's first project was never made. git reads $EMAIL only when
@@ -95,7 +95,7 @@ pub(crate) fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 
 /// The words of a command that aren't flags or a flag's value.
 fn words(args: &[String]) -> Vec<&str> {
-    raea_app_check::words(args, &["--layout", "--storage", "--name", "--remote"])
+    raea_app_check::words(args, &["--layout", "--storage", "--name", "--remote", "--client"])
 }
 
 // a name as a folder (slug), and the nearest folder holding a marker (up): the registry's, which reads projects with
@@ -344,12 +344,17 @@ fn show_workspace(json_out: bool) -> R<String> {
     let file = ws.join(".raea/workspace");
     let ps = projects(&ws);
     if json_out {
-        let projects: Vec<_> = ps.iter().map(|(n, p, s)| json!({"name": n, "path": p, "storage": s, "id": get(&file, &format!("project.{n}.id"))})).collect();
-        return Ok(json!({"path": ws, "id": get(&file, "workspace.id"), "name": get(&file, "workspace.name"), "layout": get(&file, "workspace.layout"), "projects": projects}).to_string());
+        let projects: Vec<_> = ps.iter().map(|(n, p, s)| json!({"name": n, "path": p, "storage": s, "id": get(&file, &format!("project.{n}.id")), "client": client_of(&ws, n)})).collect();
+        // the clients its projects name, so a new one joins an existing client rather than a near-twin of it
+        let mut clients: Vec<String> = ps.iter().filter_map(|(n, _, _)| client_of(&ws, n)).collect();
+        clients.sort_by_key(|c| c.to_lowercase());
+        clients.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        return Ok(json!({"path": ws, "id": get(&file, "workspace.id"), "name": get(&file, "workspace.name"), "layout": get(&file, "workspace.layout"), "clients": clients, "projects": projects}).to_string());
     }
     let mut out = format!("{} ({}, {})\n{}\n", get(&file, "workspace.name").unwrap_or_default(), get(&file, "workspace.id").unwrap_or_default(), get(&file, "workspace.layout").unwrap_or_default(), ws.display());
     for (n, p, s) in &ps {
-        out.push_str(&format!("  {n}  {p}  {s}\n"));
+        let c = client_of(&ws, n).map(|c| format!("  client {c}")).unwrap_or_default();
+        out.push_str(&format!("  {n}  {p}  {s}{c}\n"));
     }
     Ok(out.trim_end().to_string())
 }
@@ -359,7 +364,15 @@ pub fn project(args: &[String]) -> R<String> {
     let w = words(args);
     match w.first().copied() {
         None => show_project(args.iter().any(|a| a == "--json")),
-        Some("new") => new_project(w.get(1).ok_or(USAGE)?, flag(args, "--storage")),
+        Some("new") => {
+            let name = *w.get(1).ok_or(USAGE)?;
+            let said = new_project(name, flag(args, "--storage"))?;
+            match flag(args, "--client") {
+                Some(c) => Ok(format!("{said}\n{}", tag(Some(name), Some(c), false, false)?)),
+                None => Ok(said),
+            }
+        }
+        Some("tag") => tag(w.get(1).copied(), flag(args, "--client"), args.iter().any(|a| a == "--no-client"), args.iter().any(|a| a == "--json")),
         Some("split") => storage::split(w.get(1).ok_or(USAGE)?, flag(args, "--remote")),
         Some("join") => storage::join(w.get(1).ok_or(USAGE)?),
         // PJ8: the folder's compositions and components, and what isn't connected
@@ -370,6 +383,65 @@ pub fn project(args: &[String]) -> R<String> {
         }
         Some(v) => Err(format!("raea project has no {v:?}\n{USAGE}")),
     }
+}
+
+/// What a project is filed under in raea cloud (Shane 11-24: raea cloud's tags, not folders inside folders): its
+/// client, `project.<name>.client` in .raea/workspace. raea.app files every card `raea show` makes from the folder under
+/// it, with a board showing it; a folder naming none is its own client, named for it. Projects don't nest: an old
+/// workspace's `parent` is read as "the same client as the parent" and nothing writes it.
+pub fn client_of(ws: &Path, name: &str) -> Option<String> {
+    get(&ws.join(".raea/workspace"), &format!("project.{name}.client")).filter(|c| !c.trim().is_empty())
+}
+
+/// `raea project tag [NAME] [--client C | --no-client]`: a project's client set, cleared, or said (NAME: the project
+/// this folder is in when left out)
+fn tag(name: Option<&str>, client: Option<&str>, clear: bool, json_out: bool) -> R<String> {
+    let here = std::env::current_dir().map_err(|e| e.to_string())?;
+    let ws = up(&here, ".raea/workspace").ok_or("not in a workspace: raea workspace init NAME makes one")?;
+    tag_in(&ws, &here, name, client, clear, json_out)
+}
+
+/// `tag` in the workspace at `ws`, from the folder `here`
+pub(crate) fn tag_in(ws: &Path, here: &Path, name: Option<&str>, client: Option<&str>, clear: bool, json_out: bool) -> R<String> {
+    // (both resolved: a folder reached through a link, /var for /private/var, is still the workspace's)
+    let real = |p: &Path| dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let ws = real(ws);
+    let name = match name {
+        Some(n) => {
+            let s = slug(n);
+            if projects(&ws).iter().any(|p| p.0 == s) { s } else if projects(&ws).iter().any(|p| p.0 == n) { n.to_string() } else { return Err(format!("no project {n} in this workspace: raea workspace lists them")) }
+        }
+        None => {
+            let dir = up(here, ".raea/project").map(|d| real(&d)).filter(|d| *d != ws).ok_or("not in a project: name one (raea project tag NAME --client C)")?;
+            let rel = relative(&ws, &dir);
+            projects(&ws).into_iter().find(|p| p.1 == rel).map(|p| p.0).ok_or_else(|| format!("{} isn't one of this workspace's projects", dir.display()))?
+        }
+    };
+    let file = ws.join(".raea/workspace");
+    let key = format!("project.{name}.client");
+    if clear {
+        if client_of(&ws, &name).is_some() {
+            config(Some(&file), &["--unset", &key])?;
+            commit(&ws, &[".raea/workspace"], &format!("project {name}: no client"))?;
+        }
+    } else if let Some(c) = client {
+        let c = c.trim();
+        if c.is_empty() {
+            return Err("a client has a name: --client NAME (--no-client clears it)".into());
+        }
+        if client_of(&ws, &name).as_deref() != Some(c) {
+            set(&file, &key, c)?;
+            commit(&ws, &[".raea/workspace"], &format!("project {name}: client {c}"))?;
+        }
+    }
+    let now = client_of(&ws, &name);
+    if json_out {
+        return Ok(json!({"project": name, "client": now}).to_string());
+    }
+    Ok(match now {
+        Some(c) => format!("{name}: client {c} (raea show files its work under {c}, on {c}'s board)"),
+        None => format!("{name}: no client named, so its work is filed under one named for it (raea project tag {name} --client NAME names one)"),
+    })
 }
 
 fn new_project(name: &str, storage: Option<&str>) -> R<String> {
@@ -429,7 +501,8 @@ fn show_project(json_out: bool) -> R<String> {
     let file = dir.join(".raea/project");
     let ws = up(&dir, ".raea/workspace").filter(|w| *w != dir);
     if json_out {
-        return Ok(json!({"path": dir, "id": get(&file, "project.id"), "name": get(&file, "project.name"), "workspace": ws}).to_string());
+        let client = ws.as_ref().and_then(|w| projects(w).into_iter().find(|p| p.1 == relative(w, &dir)).and_then(|p| client_of(w, &p.0)));
+        return Ok(json!({"path": dir, "id": get(&file, "project.id"), "name": get(&file, "project.name"), "workspace": ws, "client": client}).to_string());
     }
     let mut out = format!("{} ({})\n{}\n", get(&file, "project.name").unwrap_or_default(), get(&file, "project.id").unwrap_or_default(), dir.display());
     if let Some(ws) = &ws {
