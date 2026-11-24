@@ -155,6 +155,7 @@ fn main() {
     let mut code = Some(code);
     let mount = move |world: &mut World| {
         chrome::install(world);
+        raea_page_host::scheme::install(world);
         let m = page::Mount { code: code.take().unwrap_or_default(), preamble: preamble.clone(), css: css.clone(), styles: None, picking, size };
         if let Err(e) = page::mount(world, m) {
             eprintln!("raea-page-host: {e}");
@@ -172,6 +173,7 @@ fn main() {
     } else {
         app.add_systems(Update, (page::read_input, page::input, page::size, page::step_dropping_asks, page::show).chain());
     }
+    app.add_systems(PreUpdate, raea_page_host::scheme::follow.run_if(resource_exists::<raea_page_host::scheme::Scheme>));
     app.add_systems(Last, page::tree.before(tree::answer));
     app.run();
 }

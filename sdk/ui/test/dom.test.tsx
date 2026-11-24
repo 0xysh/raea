@@ -546,3 +546,19 @@ describe("P18 DOM surface: computed style", () => {
     expect(getComputedStyle(el).color).toBe("red");
   });
 });
+
+describe("outerHTML", () => {
+  test("set, the element is replaced by its markup in its place; out of a tree, nothing happens", () => {
+    fresh();
+    let box: any;
+    mount(<div ref={(e: any) => (box = e)} />, 0, { dom: true });
+    box.innerHTML = "<header class='a'><b>one</b></header><p>after</p>";
+    box.firstChild.outerHTML = "<header class='b'><i>two</i></header>";
+    expect(box.innerHTML).toBe('<header class="b"><i>two</i></header><p>after</p>');
+    box.lastChild.outerHTML = "";
+    expect(box.innerHTML).toBe('<header class="b"><i>two</i></header>');
+    const off: any = document.createElement("u");
+    off.outerHTML = "<s></s>";
+    expect(off.outerHTML).toBe("<u></u>");
+  });
+});

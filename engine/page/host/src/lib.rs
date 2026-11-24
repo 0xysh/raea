@@ -16,6 +16,7 @@ pub mod idle;
 pub mod inject;
 pub mod mcp;
 pub mod page;
+pub mod scheme;
 pub mod shell;
 pub mod tree;
 

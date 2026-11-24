@@ -255,6 +255,13 @@ export class Element_ extends Node_ {
     const attrs = [...this._attrs].map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join("");
     return `<${this.localName}${attrs}>${this.innerHTML}</${this.localName}>`;
   }
+  /** the element replaced by what the markup makes (nothing, for one that isn't in a tree) */
+  set outerHTML(v: string) {
+    if (!this.parentNode) return;
+    const box = this.ownerDocument.createElement("div") as unknown as Element_;
+    box.innerHTML = String(v ?? "");
+    this.replaceWith(...([...box.childNodes] as any[]));
+  }
   querySelector(s: string): Element_ | null {
     return query(this, s, true)[0] ?? null;
   }
