@@ -53,11 +53,7 @@ impl Plugin for AxPlugin {
 
 /// The page's tree sent to the window's adapter, while a client listens.
 fn publish(world: &mut World) {
-    let listening = world.get_resource::<AccessibilityRequested>().is_some_and(|r| r.get());
-    if world.get_resource::<crate::idle::Listening>().is_none_or(|l| l.0 != listening) {
-        world.insert_resource(crate::idle::Listening(listening));
-    }
-    if !listening {
+    if !world.get_resource::<AccessibilityRequested>().is_some_and(|r| r.get()) {
         return;
     }
     let (now, frame) = (Instant::now(), world.resource::<Frame>().0);
@@ -68,7 +64,7 @@ fn publish(world: &mut World) {
     let Ok((win, w)) = world.query_filtered::<(Entity, &Window), With<PrimaryWindow>>().single(world) else { return };
     let (scale, title) = (w.scale_factor() as f64, w.title.clone());
     let root = NodeId(win.to_bits());
-    let Some(update) = crate::page::with_doc(world, |doc, nodes| {
+    let Some(mut update) = crate::page::with_doc(world, |doc, nodes| {
         let (els, tops) = elements(doc, nodes);
         let facts = Facts { doc, nodes };
         let focus = doc.get_focussed_node_id().filter(|f| els.contains_key(f));
@@ -82,6 +78,7 @@ fn publish(world: &mut World) {
     }) else {
         return;
     };
+    raea_sys_a11y::unhide(&mut update, root);
     ACCESS_KIT_ADAPTERS.with_borrow_mut(|adapters| {
         if let Some(a) = adapters.get_mut(&win) {
             a.update_if_active(|| update);

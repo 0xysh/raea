@@ -1,6 +1,6 @@
 // Keys and activation: focus targets, Space and Enter clicks, and form submission.
 import * as wire from "../wire";
-import { Control_, Element_, Event_, HTMLButtonElement_, HTMLFormElement_, HTMLInputElement_, HTMLLabelElement_, HTMLOptionElement_, HTMLSelectElement_, InputEvent_, KeyboardEvent_, MODS, Node_, PointerEvent_, S, SubmitEvent_, disabledEl, dispatch, doc, editKey, focusTo, focusable, g, installed, isField, keyInit, query } from "./all";
+import { Control_, Element_, HTMLDialogElement_, modals, Event_, HTMLButtonElement_, HTMLFormElement_, HTMLInputElement_, HTMLLabelElement_, HTMLOptionElement_, HTMLSelectElement_, InputEvent_, KeyboardEvent_, MODS, Node_, PointerEvent_, S, SubmitEvent_, disabledEl, dispatch, doc, editKey, focusTo, focusable, g, installed, isField, keyInit, query } from "./all";
 
 /** An edit's inputType and data, from a field's value before and after it: what was put in (insertText, the text),
  *  else what was taken out (deleteContentBackward, or Forward when the caret's side stayed). */
@@ -57,6 +57,11 @@ export function key(t: Element_, payload: any) {
       }
       break;
     }
+  }
+  // Escape on an open modal dialog: its cancel, and it closes unless that's prevented (as Chrome's)
+  if (ok && init.key === "Escape") {
+    const top = modals.at(-1) as HTMLDialogElement_ | undefined;
+    if (top?.isConnected && top.open) top.requestClose();
   }
   const type = (t as Control_).type;
   // Enter's activation is keydown's default action (before keyup); Space's is keyup's

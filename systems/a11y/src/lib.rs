@@ -149,6 +149,14 @@ fn node_of<K: Copy + Eq + std::hash::Hash>(cx: &Ctx<K>, e: K, el: &El<K>, focus:
     {
         n.add_action(Action::Click);
     }
+    // a field typed in takes a value (macOS sends setAccessibilityValue only to a node that has it, or text ranges,
+    // which the tree doesn't carry): an AX client's or Voice Control's text, typed over what the field held (ax.rs)
+    if !disabled
+        && !(truthy(p("readOnly")) || truthy(p("readonly")) || s(p("aria-readonly")).as_deref() == Some("true"))
+        && matches!(role, Role::TextInput | Role::MultilineTextInput | Role::SearchInput | Role::EmailInput | Role::PasswordInput | Role::PhoneNumberInput | Role::UrlInput | Role::NumberInput | Role::SpinButton)
+    {
+        n.add_action(Action::SetValue);
+    }
     // checked: a checkbox or radio (its Checked), or aria-checked; pressed: aria-pressed on a button
     let checkable = matches!(role, Role::CheckBox | Role::RadioButton | Role::Switch | Role::MenuItemCheckBox | Role::MenuItemRadio);
     let tri = |v: Option<String>| match v.as_deref() {
@@ -239,6 +247,7 @@ fn node_of<K: Copy + Eq + std::hash::Hash>(cx: &Ctx<K>, e: K, el: &El<K>, focus:
 /// children, its box where `bounds` gives one ([x0, y0, x1, y1] in the root's space), and the elements with a test id
 /// beside it. raea's window publishes it to the OS (VoiceOver, macOS accessibility: raea-page-host's ax.rs); `records`
 /// reads it back for the parity harness. `id_of` must never give `window`.
+#[allow(clippy::too_many_arguments)] // each is its own input: the page, its facts, focus, ids, the window and boxes
 pub fn tree<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: HashMap<K, K>, facts: &dyn Facts<K>, focus: Option<K>, id_of: impl Fn(K) -> u64, window: NodeId, label: Option<&str>, bounds: impl Fn(K) -> Option<[f64; 4]>) -> (TreeUpdate, Vec<(String, NodeId)>) {
     let mut ids = HashMap::new();
     for (k, el) in &els {
@@ -282,6 +291,35 @@ pub fn tree<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: HashM
     nodes.insert(0, (window, root));
     let focus_id = focus.filter(|f| cx.els.contains_key(f)).map(|f| NodeId(id_of(f))).unwrap_or(window);
     (TreeUpdate { nodes, tree: Some(Tree::new(window)), tree_id: TreeId::ROOT, focus: focus_id }, tested)
+}
+
+/// The update without its hidden nodes (each with what's in it), as a platform's tree from Chrome has none: AccessKit's
+/// filtered walk (accesskit_consumer 0.38's next_filtered_sibling) stops for good at a hidden node that follows an
+/// empty container (a layer with nothing in it, then raea cloud's closed side panel), and everything after them in
+/// their parent was gone from what macOS lists: raea.app's welcome and every sheet (11-23). Focus on what's gone is
+/// the window's.
+pub fn unhide(update: &mut TreeUpdate, window: NodeId) {
+    let kids: HashMap<NodeId, Vec<NodeId>> = update.nodes.iter().map(|(id, n)| (*id, n.children().to_vec())).collect();
+    let mut gone = std::collections::HashSet::new();
+    let mut stack: Vec<NodeId> = update.nodes.iter().filter(|(_, n)| n.is_hidden()).map(|(id, _)| *id).collect();
+    while let Some(id) = stack.pop() {
+        if gone.insert(id) {
+            stack.extend(kids.get(&id).into_iter().flatten().copied());
+        }
+    }
+    if gone.is_empty() {
+        return;
+    }
+    update.nodes.retain(|(id, _)| !gone.contains(id));
+    for (_, n) in &mut update.nodes {
+        if n.children().iter().any(|c| gone.contains(c)) {
+            let left: Vec<NodeId> = n.children().iter().copied().filter(|c| !gone.contains(c)).collect();
+            n.set_children(left);
+        }
+    }
+    if gone.contains(&update.focus) {
+        update.focus = window;
+    }
 }
 
 /// A page's elements (the Blitz page's, raea-page's host) as the parity harness's records, by test id, read through
@@ -442,5 +480,53 @@ mod tests {
         assert!(b.data().supports_action(Action::Click), "a button takes a press");
         assert_eq!(b.label().as_deref(), Some("Start project"));
         assert_eq!(b.data().bounds(), Some(accesskit::Rect { x0: 10.0, y0: 20.0, x1: 110.0, y1: 50.0 }));
+    }
+
+    #[test]
+    fn a_field_takes_a_value_unless_it_is_read_only() {
+        let els = HashMap::from([(1, el("input", None, vec![], None, json!({"aria-label": "Title"}))), (2, el("input", None, vec![], None, json!({"readOnly": true})))]);
+        let roots = HashMap::from([(1, 0), (2, 0)]);
+        let (u, _) = tree(els, roots, &NoFacts, None, |k| k + 100, NodeId(7), None, |_| None);
+        let field = |id| u.nodes.iter().find(|(i, _)| *i == NodeId(id)).unwrap().1.clone();
+        assert!(field(101).supports_action(Action::SetValue));
+        assert!(!field(102).supports_action(Action::SetValue));
+    }
+
+    /// AccessKit's filtered walk (what macOS lists) stops at a hidden node after an empty container, and what follows
+    /// is gone: unhide takes hidden nodes out so it isn't. When the first assert fails AccessKit has fixed it.
+    #[test]
+    fn what_follows_an_empty_container_and_a_hidden_one_is_listed_once_hidden_nodes_are_out() {
+        use accesskit::Tree;
+        let (win, body, layer, panel, inside, welcome, nav) = (NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5), NodeId(6), NodeId(8));
+        let named = |r, l: &str| {
+            let mut n = AkNode::new(r);
+            n.set_label(l);
+            n
+        };
+        let update = || {
+            let mut root = AkNode::new(Role::Window);
+            root.set_children(vec![body]);
+            let mut b = AkNode::new(Role::GenericContainer);
+            // the rail, an empty layer, the closed side panel (hidden), raea.app's welcome
+            b.set_children(vec![nav, layer, panel, welcome]);
+            let mut p = AkNode::new(Role::Complementary);
+            p.set_hidden();
+            p.set_children(vec![inside]);
+            TreeUpdate {
+                nodes: vec![(win, root), (body, b), (layer, AkNode::new(Role::GenericContainer)), (panel, p), (inside, AkNode::new(Role::Button)), (welcome, named(Role::Button, "Welcome")), (nav, named(Role::Navigation, "Rail"))],
+                tree: Some(Tree::new(win)),
+                tree_id: TreeId::ROOT,
+                focus: win,
+            }
+        };
+        let listed = |u: TreeUpdate| {
+            let t = accesskit_consumer::Tree::new(u, true);
+            let root = t.state().root();
+            root.filtered_children(accesskit_consumer::common_filter).filter_map(|n| n.label()).collect::<Vec<_>>()
+        };
+        assert_eq!(listed(update()), vec!["Rail".to_string()], "AccessKit lists what follows now: unhide may go");
+        let mut u = update();
+        unhide(&mut u, win);
+        assert_eq!(listed(u), vec!["Rail".to_string(), "Welcome".to_string()], "the welcome is listed");
     }
 }

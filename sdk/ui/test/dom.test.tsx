@@ -139,6 +139,38 @@ describe("P18 DOM surface", () => {
     g.location.hash = was;
   });
 
+  test("a dialog opened with showModal (raea cloud's sheets): open, its first control focused, Escape's cancel closes it, close fires after", async () => {
+    fresh();
+    mount(<main data-testid="page">dashboard</main>, 0, { dom: true });
+    flush();
+    const d = g.document.createElement("dialog");
+    d.innerHTML = '<p>New</p><button type="button" data-testid="first">Project</button>';
+    g.document.body.append(d);
+    const seen: string[] = [];
+    d.addEventListener("cancel", () => seen.push("cancel"));
+    d.addEventListener("close", () => seen.push("close"));
+    d.showModal();
+    flush();
+    expect(d.open).toBe(true);
+    expect(d.hasAttribute("open")).toBe(true);
+    expect(g.document.activeElement).toBe(d.querySelector("button"));
+    // Escape at what's focused: cancel, then closed; close comes after, as a task
+    g.__ui_deliver(JSON.stringify({ t: "named", name: "keydown", value: { key: "Escape" } }));
+    expect(d.open).toBe(false);
+    expect(seen).toEqual(["cancel"]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seen).toEqual(["cancel", "close"]);
+    // a prevented cancel keeps it open; close() keeps its returnValue
+    d.showModal();
+    d.addEventListener("cancel", (e: any) => e.preventDefault());
+    g.__ui_deliver(JSON.stringify({ t: "named", name: "keydown", value: { key: "Escape" } }));
+    expect(d.open).toBe(true);
+    d.close("done");
+    expect(d.open).toBe(false);
+    expect(d.returnValue).toBe("done");
+    d.remove();
+  });
+
   test("a second React root on a layer over the page (raea.app's welcome) takes its button's click", () => {
     const host = fresh();
     const log: string[] = [];

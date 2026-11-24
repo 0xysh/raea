@@ -11,10 +11,6 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::winit::{UpdateMode, WinitSettings};
 
-/// Whether an assistive client is listening to the window (ax.rs keeps it): the window then wakes for its presses.
-#[derive(Resource, Default)]
-pub struct Listening(pub bool);
-
 /// Frames in a row with nothing drawn before the window rests.
 const QUIET: u32 = 30;
 
@@ -26,19 +22,13 @@ impl Plugin for IdlePlugin {
     }
 }
 
-fn rest(ax: Option<Res<Listening>>, settings: Option<ResMut<WinitSettings>>, docs: Option<NonSend<raea_sys_page::Docs>>, mut last: Local<u64>, mut quiet: Local<u32>) {
+fn rest(settings: Option<ResMut<WinitSettings>>, docs: Option<NonSend<raea_sys_page::Docs>>, mut last: Local<u64>, mut quiet: Local<u32>) {
     let Some(mut settings) = settings else { return };
-    let listening = ax.is_some_and(|a| a.0);
     let drawn = raea_sys_page::DRAWS.load(std::sync::atomic::Ordering::Relaxed);
     let moved = drawn != *last || docs.is_some_and(|d| d.0.values().any(|d| d.is_animating()));
     *last = drawn;
     *quiet = quieter(*quiet, moved);
-    let (focused, mut unfocused) = modes(*quiet);
-    // an assistive client listening (VoiceOver, an AX test: ax.rs): its presses arrive as the event loop's user events,
-    // which a window behind others at rest doesn't wake for; it does now, as it would for a window event
-    if listening && let UpdateMode::Reactive { react_to_user_events, .. } = &mut unfocused {
-        *react_to_user_events = true;
-    }
+    let (focused, unfocused) = modes(*quiet);
     if settings.focused_mode != focused || settings.unfocused_mode != unfocused {
         settings.focused_mode = focused;
         settings.unfocused_mode = unfocused;
