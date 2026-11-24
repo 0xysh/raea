@@ -75,6 +75,8 @@ raea-app-judge = { path = "../../apps/judge" }
 # raea scene lint|explain|light|stage (docs/stage-guards.feature)
 raea-app-scene = { path = "../../apps/scene" }
 raea-app-ask = { path = "../../apps/ask" }
+# raea bake light (docs/bake.feature)
+raea-app-lightbake = { path = "../../apps/lightbake" }
 raea-app-make = { path = "../../apps/make" }
 raea-app-media = { path = "../../apps/media" }
 # `raea app run|check|bundle` and `raea rune` on either target (docs/targets.feature T0b)

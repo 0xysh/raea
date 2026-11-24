@@ -13872,6 +13872,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-app-lightbake"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "libc",
+ "raea-io-home",
+ "raea-light",
+ "raea-runtime-bundle",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "raea-app-make"
 version = "0.1.0"
 dependencies = [
@@ -14259,6 +14272,7 @@ dependencies = [
  "raea-app-game",
  "raea-app-judge",
  "raea-app-layers",
+ "raea-app-lightbake",
  "raea-app-make",
  "raea-app-media",
  "raea-app-notes",

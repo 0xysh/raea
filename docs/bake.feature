@@ -47,7 +47,7 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
       Given the plan
         | crate              | file                                 | lines | job                                                                 |
         | raea-app-lightbake | apps/lightbake/src/lib.rs            | 220   | `raea bake light EDIT.tsx [--composition ID] [--samples N] [--compare DIR]`: bake, then report |
-        | raea-app-lightbake | apps/lightbake/src/compare.rs        | 180   | the same set's Cycles bake (lightbake.py) and Cycles still (look.py --engine cycles) beside raea's: stops and RMSE per mesh and per frame, time, memory |
+        | raea-app-lightbake | apps/lightbake/src/compare.rs        | 220   | the same set's Cycles bake (lightbake.py) and Cycles still (look.py --engine cycles) beside raea's: stops and RMSE per mesh and per frame, time, memory |
         | raea-app-lightbake | apps/lightbake/sets.json             | 40    | the test set: blender-research's table set, a Cornell box, a sunlit room with one window, the atelier's static set |
       Then each set has a Cycles reference at 1024 samples: its lightmaps and a still from a fixed camera
       And `raea bake light --compare DIR` writes DIR/report.json and a table: for each set, raea's bake against Cycles'

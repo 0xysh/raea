@@ -199,6 +199,7 @@ members = [
     "runtime/scene2d",
     "runtime/shared",
     "apps/ask",
+    "apps/lightbake",
     "apps/double",
     "apps/check",
     "apps/check/cause",
