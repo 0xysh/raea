@@ -144,9 +144,9 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
       And a texel whose position is inside other geometry (a table leg's foot in the floor, a wall's end inside the
         next wall) is found by a short ray test and marked, so it neither goes black nor leaks light into the bake
       And positions are offset along the normal by a scale-aware epsilon, so the trace never hits its own surface
-      And built 11-23: `raea_sys_lightbake::texels::texels(glb, request)` lays the model out (BK1's layout, raea_sys_atlas::layout; the
-        light-only request is `request(texels, max_side)`, a worn model passes its wear bake's), reads the layout's
-        model back as world triangles (each node's transform down its children) into a parry3d BVH, moves each point
+      And built 11-23: `raea_sys_lightbake::texels::texels(glb, request)` lays the model out (BK1's layout, raea_sys_atlas::laid; the
+        light-only request is `request(texels, max_side)`, a worn model passes its wear bake's), takes
+        the model's world triangles as the parry3d BVH the atlas was laid out over, moves each point
         off its surface by 1e-5 of the model's size or farthest coordinate (at least 10 microns), and casts 16
         cosine-weighted rays from each: a texel is inside when at least half its rays meet a back face and more meet
         back faces than front ones (a floor that is one plane is met from below one way and not at all the other).
@@ -154,11 +154,19 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
       And raea-sys-atlas (a facility) now holds the atlas, out of raea-sys-weathering, so the light bake builds on it
         and not sideways on another system: weathering's bakes are the same bytes and keys after the move (the table
         and window sets baked before and after, 12 files equal), and its 11 tests pass
-      And measured 11-23 at 64 texels a metre, debug build on the M5 Pro (BK1's layout included in both times)
+      And BK2 landed with a leak, found by BK3's glowing box and fixed 11-23: a chart's edge band takes its points from
+        the edge itself, so an origin on a floor's edge was in the plane of the wall standing on it and half its rays
+        left a closed room (408 of the box's 1944 texels read 1.16 for 2.0: a dark line along every joint). Its tests
+        had left a strip along the contact lines out of their checks. Each origin is now four offsets in from its
+        triangle's edges, moved half a texel at most (a needle narrower than that would send it to its far end), and
+        the box's edge texels read 2.015. The triangles come from raea_sys_atlas::laid, numbered as the texels number
+        them; the layout's model is no longer read back
+      And measured 11-23 at 64 texels a metre, debug build on the M5 Pro (BK1's layout included in both times), after
+        the fix; the atelier's row is from before it
         | set     | atlas     | texels    | inside           | offset   | layout | with texels |
-        | table   | 2048x1008 | 1 549 350 | 10 366 (0.67%)   | 0.17 mm  | 0.29 s | 3.4 s       |
-        | cornell | 1024x296  | 232 060   | 17 345 (7.5%)    | 0.04 mm  | 0.05 s | 1.3 s       |
-        | window  | 2048x644  | 979 867   | 96 445 (9.8%)    | 0.08 mm  | 0.21 s | 5.1 s       |
+        | table   | 2048x1008 | 1 549 350 | 8 772 (0.57%)    | 0.17 mm  | 0.27 s | 3.1 s       |
+        | cornell | 1024x296  | 232 060   | 19 372 (8.4%)    | 0.04 mm  | 0.05 s | 0.7 s       |
+        | window  | 2048x644  | 979 867   | 99 153 (10.1%)   | 0.08 mm  | 0.16 s | 2.7 s       |
         | atelier | 4096x1820 | 4 136 248 | 200 649 (4.9%)   | 0.15 mm  | 41 s   | 70 s        |
       And what they say: what's marked is what overlaps. In the window room it is the band where each wall box runs
         into the next wall, the floor and the ceiling, the floor under the sofa's and table's feet, and the walls
@@ -170,10 +178,14 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
     Scenario: BK3. The light that bounces, traced on raea's ray tracer
       Given the plan
         | crate              | file                                 | lines | job                                                                 |
+        | raea-sys-lightbake | systems/lightbake/src/trace/tests.rs | 160   | a white furnace, a wall's form factor, a glowing box, a red wall's bleed, the same bytes twice; the measured run |
+        | raea-sys-lightbake | systems/lightbake/src/wgsl/diffuse.wgsl | 60 | the diffuse BSDF and the paths' random numbers, a module systems/rt and LT5's path tracer can include as it is |
         | raea-sys-lightbake | systems/lightbake/src/trace.rs       | 260   | the passes: dispatch per atlas, samples accumulated over passes, progress, cancel |
-        | raea-sys-lightbake | systems/lightbake/src/trace.wgsl     | 320   | per texel: cosine-weighted paths against systems/rt's TLAS; the sky from the composition's <Environment>, emissives, baked lights; Russian roulette; Cycles' BSDFs from cycles-port at each bounce |
+        | raea-sys-lightbake | systems/lightbake/src/wgsl/trace.wgsl | 320   | per texel: cosine-weighted paths against the bake's own TLAS; the sky from the composition's <Environment>, emissives, baked lights; Russian roulette; Cycles' BSDFs from cycles-port at each bounce |
       Then each texel integrates the incoming diffuse light over its hemisphere along paths of up to `bounces`
-        (default 4) through systems/rt's BLAS and TLAS, the materials at each hit being the composition's
+        (default 4) through a BLAS and TLAS the bake builds itself from the meshes raea draws, by the wgpu ray queries
+        systems/rt uses. (Not rt's own: a bake runs offline, before any frame, with no Bevy render world to hold them,
+        and over rt its tests would be a cold engine build. What is shared is the WGSL, not the structures), the materials at each hit being the composition's
         StandardMaterials (base colour, its texture, roughness, metallic, emissive) as the raster reads them
       And the colour that bounces is the albedo raea draws at the hit, extensions included: ProceduralExtension's
         patterns (systems/procmat, its dust, dirt and edges), WearExtension (systems/wear) and raea/wear's recipes over
@@ -187,6 +199,16 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
         machine stay responsive, with progress printed and a stall guard's line each pass
       And a white furnace (a white set under a white sky) converges to the sky's value at every texel, within 1%
       And the same request on the same machine gives the same bytes (fixed seeds per texel and pass)
+      And a device without ray queries is refused with its name and backend, and any GPU error is the bake's error:
+        never a black map kept as light (the first kernel failed to compile on Metal and came back as zeros)
+      And in progress, 11-23: the trace of a constant sky, emissive triangles and an albedo a triangle, Lambert (written
+        here: cycles-port isn't on main). A white furnace reads the sky at all 2834 open texels; a 40 m black wall's
+        shadow is its form factor within 0.002 at 0.5, 1, 2 and 4 m; a closed box glowing 1 with an albedo of a half
+        reads 2.004 for 2; breaking the cosine, the offset, the roulette, its weight, the emission or their order each
+        fails one of them. Only Metal has run it. At 512 samples and 4 bounces, every surface 0.7 grey under a white
+        sky, the trace alone takes 0.8 s on the table set, 0.3 s on the Cornell box and 0.9 s on the window room
+        (M5 Pro; linear in samples, 5.6 s at 4096). Not built: the <Environment> panorama, baked lights, the sun left
+        out at the first hit, textures, and the albedo raea draws under procmat, wear and sdk/wear
 
     @needs:BK3
     Scenario: BK4. A clean map: denoised, dilated, no seams

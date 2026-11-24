@@ -2,10 +2,10 @@ use parry3d::query::PointQuery;
 
 use super::*;
 
-type Tri = [[f32; 3]; 3];
+pub(crate) type Tri = [[f32; 3]; 3];
 
 /// A .glb with a node per part (its translation, its own material), flat normals, every triangle its own vertices.
-fn glb(parts: &[(Vec<Tri>, [f32; 3])]) -> Vec<u8> {
+pub(crate) fn glb(parts: &[(Vec<Tri>, [f32; 3])]) -> Vec<u8> {
     let (mut bin, mut acc, mut views, mut meshes, mut nodes, mut mats) = (Vec::<u8>::new(), vec![], vec![], vec![], vec![], vec![]);
     for (k, (tris, at)) in parts.iter().enumerate() {
         let (mut p, mut n) = (vec![], vec![]);
@@ -46,7 +46,7 @@ fn glb(parts: &[(Vec<Tri>, [f32; 3])]) -> Vec<u8> {
 }
 
 /// A box's twelve triangles, wound outwards.
-fn cuboid(lo: [f32; 3], hi: [f32; 3]) -> Vec<Tri> {
+pub(crate) fn cuboid(lo: [f32; 3], hi: [f32; 3]) -> Vec<Tri> {
     let mut out = vec![];
     for axis in 0..3 {
         let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
@@ -64,7 +64,7 @@ fn cuboid(lo: [f32; 3], hi: [f32; 3]) -> Vec<Tri> {
 }
 
 /// A floor slab 20 cm thick, a block sunk 10 cm into it, and a small box set on it by its node's translation.
-fn set() -> Vec<u8> {
+pub(crate) fn set() -> Vec<u8> {
     glb(&[
         (cuboid([-2.0, -0.2, -2.0], [2.0, 0.0, 2.0]), [0.0; 3]),
         (cuboid([-0.25, -0.1, -0.25], [0.25, 0.4, 0.25]), [0.0; 3]),
@@ -79,8 +79,21 @@ fn texels_sit_on_the_world_surface_and_their_origins_just_off_it() {
     for (x, o) in t.layout.texels.iter().zip(&t.origin) {
         let on = t.mesh.project_local_point(Vec3::from(x.p), false).point;
         assert!(on.distance(Vec3::from(x.p)) < 1e-3, "texel at {:?} is off the surface (nearest {on:?})", x.p);
-        assert!((Vec3::from(*o) - Vec3::from(x.p) - Vec3::from(x.n) * t.offset).length() < 1e-6);
+        let moved = Vec3::from(*o) - Vec3::from(x.p);
+        assert!((moved.dot(Vec3::from(x.n)) - t.offset).abs() < 0.2 * t.offset && moved.length() < 0.51 / t.layout.density, "the origin of {:?} moved {moved:?} for an offset of {}", x.p, t.offset);
     }
+}
+
+#[test]
+fn a_point_on_an_edge_is_moved_off_it_and_never_far() {
+    let [a, b, c] = [Vec3::ZERO, Vec3::X, Vec3::Z];
+    for p in [a, b, Vec3::X * 0.5, (b + c) * 0.5] {
+        let q = off_edges([a, b, c], p, 1e-3, 0.1);
+        assert!(q.x > 0.9e-3 && q.z > 0.9e-3 && 1.0 - q.x - q.z > 0.9e-3 && q.distance(p) < 5e-3, "{p} went to {q}");
+    }
+    assert!(off_edges([a, b, c], Vec3::new(0.3, 0.0, 0.3), 1e-3, 0.1).distance(Vec3::new(0.3, 0.0, 0.3)) < 1e-6, "a point in the open stays");
+    let needle = [Vec3::ZERO, Vec3::X * 4.0, Vec3::new(4.0, 0.0, 2e-4)];
+    assert!(off_edges(needle, Vec3::X * 0.5, 1e-3, 0.01).distance(Vec3::X * 0.5) < 0.0101);
 }
 
 #[test]

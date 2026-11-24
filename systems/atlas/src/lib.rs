@@ -115,7 +115,12 @@ pub struct Layout {
 }
 
 pub fn layout(bytes: &[u8], req: &Value) -> R<Layout> {
-    let (sc, _, at, _) = lay(bytes, req)?;
+    Ok(laid(bytes, req)?.0)
+}
+
+/// The layout with the model's triangles in world space, numbered as its texels number them (`Texel::tri`).
+pub fn laid(bytes: &[u8], req: &Value) -> R<(Layout, parry3d::shape::TriMesh)> {
+    let (sc, mesh, at, _) = lay(bytes, req)?;
     let texels = at.texels.iter().map(|t| Texel { x: t.x, y: t.y, p: t.p.to_array(), n: t.n.to_array(), tri: t.tri }).collect();
-    Ok(Layout { glb: scene::write(&sc, &at)?, w: at.w, h: at.h, density: at.density, charts: at.charts, hidden: at.hidden, texels })
+    Ok((Layout { glb: scene::write(&sc, &at)?, w: at.w, h: at.h, density: at.density, charts: at.charts, hidden: at.hidden, texels }, mesh))
 }

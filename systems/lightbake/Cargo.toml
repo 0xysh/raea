@@ -13,5 +13,8 @@ raea-sys-atlas = { path = "../atlas" }
 parry3d = "0.31"
 rayon = "1"
 serde_json = "1"
-# the layout's model read back for its world triangles (no images decoded)
-gltf = { version = "1.4", default-features = false, features = ["utils"] }
+# the process's one shared GPU device, and wgpu's ray queries on it (BK3)
+raea-gpu-device = { path = "../../gpu/device" }
+wgpu = "=30.0.1"
+bytemuck = "1"
+pollster = "0.4"

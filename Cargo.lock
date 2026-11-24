@@ -16258,11 +16258,14 @@ dependencies = [
 name = "raea-sys-lightbake"
 version = "0.1.0"
 dependencies = [
- "gltf",
+ "bytemuck",
  "parry3d",
+ "pollster 0.4.0",
+ "raea-gpu-device",
  "raea-sys-atlas",
  "rayon",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]
