@@ -117,9 +117,9 @@ async function shell(req: IncomingMessage, res: ServerResponse) {
   mkdirSync(dir, { recursive: true })
   res.writeHead(200, { "content-type": "application/x-ndjson" })
   // the shell on any OS: bash and a process group here, RAEA_CLOUD_BASH and taskkill on Windows (shell-os.ts)
-  const { bash, groupOpts, stopTree } = await import("./shell-os.ts")
+  const { bash, groupOpts, shellEnv, stopTree } = await import("./shell-os.ts")
   // in a process group of its own, so a timeout or a caller leaving stops what the command started too
-  const child = spawn(bash(), ["-c", command], { cwd: dir, env: childEnv(), stdio: ["ignore", "pipe", "pipe"], ...groupOpts() })
+  const child = spawn(bash(), ["-c", command], { cwd: dir, env: shellEnv(childEnv()), stdio: ["ignore", "pipe", "pipe"], ...groupOpts() })
   const line = (v: unknown) => res.write(JSON.stringify(v) + "\n")
   const stop = () => stopTree(child)
   let timedOut = false
