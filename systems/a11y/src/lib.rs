@@ -97,6 +97,11 @@ pub trait Facts<K> {
     fn checked(&self, k: K) -> bool;
     /// its data-testid, the harness's name for it
     fn test_id(&self, k: K) -> Option<String>;
+    /// laid out as a block (its computed display's outside is block: block, flex, grid, list-item, table), when the
+    /// host knows; a name from its content puts a space around it, as Chrome does. None: by its tag
+    fn block(&self, _k: K) -> Option<bool> {
+        None
+    }
 }
 
 struct Ctx<'w, K> {
@@ -528,5 +533,35 @@ mod tests {
         let mut u = update();
         unhide(&mut u, win);
         assert_eq!(listed(u), vec!["Rail".to_string(), "Welcome".to_string()], "the welcome is listed");
+    }
+
+    /// A name's parts are spaced by how they're laid out, where the host says: spans styled as blocks don't run together.
+    #[test]
+    fn a_name_spaces_parts_laid_out_as_blocks() {
+        struct Blocks(bool);
+        impl Facts<u64> for Blocks {
+            fn display_none(&self, _: u64) -> bool { false }
+            fn invisible(&self, _: u64) -> bool { false }
+            fn natively_disabled(&self, _: u64) -> bool { false }
+            fn editor_value(&self, _: u64) -> Option<String> { None }
+            fn tabbable(&self, _: u64) -> bool { false }
+            fn checked(&self, _: u64) -> bool { false }
+            fn test_id(&self, _: u64) -> Option<String> { None }
+            fn block(&self, _: u64) -> Option<bool> { Some(self.0) }
+        }
+        let name = |block| {
+            let els = HashMap::from([
+                (1, el("button", None, vec![2, 4], None, json!({}))),
+                (2, el("span", Some(1), vec![3], None, json!({}))),
+                (3, el("text", Some(2), vec![], Some("Sonnet 5.5"), json!({}))),
+                (4, el("span", Some(1), vec![5], None, json!({}))),
+                (5, el("text", Some(4), vec![], Some("Most efficient"), json!({}))),
+            ]);
+            let roots = (1..=5).map(|k| (k, 0)).collect();
+            let (u, _) = tree(els, roots, &Blocks(block), None, |k| k + 100, NodeId(7), None, |_| None);
+            u.nodes.iter().find(|(i, _)| *i == NodeId(101)).unwrap().1.label().map(str::to_string)
+        };
+        assert_eq!(name(true).as_deref(), Some("Sonnet 5.5 Most efficient"));
+        assert_eq!(name(false).as_deref(), Some("Sonnet 5.5Most efficient"));
     }
 }

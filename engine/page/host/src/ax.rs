@@ -183,6 +183,11 @@ impl raea_sys_a11y::Facts<Id> for Facts<'_> {
     fn checked(&self, k: Id) -> bool {
         self.el(k).and_then(|n| n.element_data()).and_then(|e| e.checkbox_input_checked()).unwrap_or(false)
     }
+    fn block(&self, k: Id) -> Option<bool> {
+        use style::values::specified::box_::DisplayOutside;
+        let d = self.el(k)?.primary_styles()?.get_box().display;
+        Some(d.outside() == DisplayOutside::Block)
+    }
     fn test_id(&self, k: Id) -> Option<String> {
         let wire = self.nodes.id_of(k).and_then(|id| self.nodes.props.get(&id)).and_then(|p| p.get("data-testid")).and_then(Value::as_str).map(str::to_string);
         wire.or_else(|| self.el(k)?.element_data()?.attrs().iter().find(|a| &*a.name.local == "data-testid").map(|a| a.value.to_string()))
@@ -195,26 +200,79 @@ fn element(doc: &BaseDocument, k: Id) -> Option<Id> {
     doc.get_node(k).is_some_and(|n| n.is_element()).then_some(k)
 }
 
-/// What clients asked of the page's elements, as input: a press at the element's middle (and SetValue's text typed).
-fn act(world: &mut World, reader: &mut SystemState<MessageReader<ActionRequest>>) {
-    let Ok(mut r) = reader.get_mut(world) else { return };
-    let asks: Vec<accesskit::ActionRequest> = r.read().map(|r| r.0.clone()).collect();
-    for ask in asks {
-        let Some(k) = (ask.target_node.0 & PAGE != 0).then(|| Id::from_u64(ask.target_node.0 & !PAGE)) else { continue };
-        // Focus is no press: macOS asks it beside a press (AXPress), and a second press where the first one's new page
-        // has something else clicked that (a press on Projects opened Publishing, 11-23)
-        if !matches!(ask.action, Action::Click | Action::SetValue) {
-            continue;
+/// Where an ask's element is, for a press.
+enum At {
+    /// its middle, and it's what a press there hits
+    Press(f64, f64),
+    /// scrolled out of a box it's in: the pointer's place over that box, and the scroll (wheel dx, dy) that shows it
+    Scroll(f64, f64, f64, f64),
+    /// gone, without a box, or something else is drawn over its middle
+    Nothing,
+}
+
+fn at(doc: &BaseDocument, k: Id) -> At {
+    use style::values::computed::Overflow as O;
+    // a text node is pressed where its element is
+    let Some(k) = element(doc, k).or_else(|| doc.get_node(k)?.parent).and_then(|k| element(doc, k)) else { return At::Nothing };
+    let Some(b) = doc.get_client_bounding_rect(k).filter(|b| b.width > 0.0 && b.height > 0.0) else { return At::Nothing };
+    let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+    let mut up = doc.get_node(k).and_then(|n| n.parent);
+    while let Some(a) = up {
+        let Some(n) = doc.get_node(a) else { break };
+        up = n.parent;
+        let scrolls = n.primary_styles().map(|s| [s.clone_overflow_x(), s.clone_overflow_y()].map(|o| matches!(o, O::Scroll | O::Auto)));
+        let Some([sx, sy]) = scrolls else { continue };
+        let Some(r) = element(doc, a).and_then(|a| doc.get_client_bounding_rect(a)) else { continue };
+        let dx = if sx && (x < r.x || x > r.x + r.width) { r.x + r.width / 2.0 - x } else { 0.0 };
+        let dy = if sy && (y < r.y || y > r.y + r.height) { r.y + r.height / 2.0 - y } else { 0.0 };
+        if dx != 0.0 || dy != 0.0 {
+            return At::Scroll(r.x + r.width / 2.0, r.y + r.height / 2.0, dx, dy);
         }
-        // a text node is pressed where its element is
-        let at = crate::page::with_doc(world, |doc, _| {
-            let k = element(doc, k).or_else(|| doc.get_node(k)?.parent)?;
-            let b = doc.get_client_bounding_rect(element(doc, k)?)?;
-            (b.width > 0.0 && b.height > 0.0).then(|| (b.x + b.width / 2.0, b.y + b.height / 2.0))
-        })
-        .flatten();
-        let Some((x, y)) = at else { continue };
-        let next = world.resource::<Frame>().0 + 1;
+    }
+    // what a press there lands on is the element, or in it: never something else drawn over it
+    let mut hit = doc.hit(x as f32, y as f32).map(|h| h.node_id);
+    while let Some(h) = hit {
+        if h == k {
+            return At::Press(x, y);
+        }
+        hit = doc.get_node(h).and_then(|n| n.parent);
+    }
+    At::Nothing
+}
+
+/// An ask whose element is being scrolled to: its next look, and the looks left.
+struct Later(accesskit::ActionRequest, u64, u8);
+
+/// What clients asked of the page's elements, as input: a press at the element's middle (and SetValue's text typed),
+/// scrolled to first when a box it's in has it out of view, as Chrome's is. An element something else covers isn't
+/// pressed: what covers it would be (a press on an option below a list's fold closed the list, 11-23).
+fn act(world: &mut World, reader: &mut SystemState<MessageReader<ActionRequest>>, mut later: Local<Vec<Later>>) {
+    let Ok(mut r) = reader.get_mut(world) else { return };
+    // Focus is no press: macOS asks it beside a press (AXPress), and a second press where the first one's new page
+    // has something else clicked that (a press on Projects opened Publishing, 11-23)
+    let mut asks: Vec<Later> = r.read().filter(|r| matches!(r.0.action, Action::Click | Action::SetValue)).map(|r| Later(r.0.clone(), 0, 8)).collect();
+    let frame = world.resource::<Frame>().0;
+    for l in std::mem::take(&mut *later) {
+        if l.1 > frame { later.push(l) } else { asks.push(l) }
+    }
+    for Later(ask, _, left) in asks {
+        let Some(k) = (ask.target_node.0 & PAGE != 0).then(|| Id::from_u64(ask.target_node.0 & !PAGE)) else { continue };
+        let Some(place) = crate::page::with_doc(world, |doc, _| at(doc, k)) else { continue };
+        let next = frame + 1;
+        let (x, y) = match place {
+            At::Press(x, y) => (x, y),
+            At::Scroll(x, y, dx, dy) if left > 0 => {
+                let f = world.resource_mut::<Pending>().queue(json!({"type": "wheel", "x": x, "y": y, "dx": dx, "dy": dy}), next);
+                crate::inject::LAST_INPUT.fetch_max(f, std::sync::atomic::Ordering::SeqCst);
+                // laid out where it scrolled to by the frame after the wheel's
+                later.push(Later(ask, f + 2, left - 1));
+                continue;
+            }
+            _ => {
+                warn!("raea-page: an assistive client's {:?} on an element nothing can press (gone, covered or out of reach)", ask.action);
+                continue;
+            }
+        };
         let mut p = world.resource_mut::<Pending>();
         p.queue(json!({"type": "down", "x": x, "y": y}), next);
         let mut last = p.queue(json!({"type": "up", "x": x, "y": y}), next);
