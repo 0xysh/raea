@@ -14929,7 +14929,6 @@ dependencies = [
  "raea-sys-fonts",
  "raea-sys-page",
  "serde_json",
- "stylo",
  "tiny_http",
 ]
 

@@ -270,14 +270,15 @@ pub fn tree<K: Copy + Eq + std::hash::Hash>(els: HashMap<K, El<K>>, roots: HashM
     let mut tested = vec![];
     // a text node of only white space (the markup's line breaks and indents) is no node, as in Chrome's tree: a screen
     // reader would stop on each
-    let blank = |k: &K| cx.els.get(k).is_some_and(El::blank);
     for (&k, el) in &cx.els {
-        if blank(&k) {
+        if el.blank() {
             continue;
         }
         let mut n = node_of(&cx, k, el, focus);
         for c in &el.kids {
-            if cx.els.contains_key(c) && !blank(c) {
+            if let Some(kid) = cx.els.get(c)
+                && !kid.blank()
+            {
                 n.push_child(NodeId(id_of(*c)));
             }
         }
