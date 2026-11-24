@@ -12,18 +12,18 @@ use std::collections::HashMap;
 
 use parry3d::glamx::Vec3;
 
-use super::{Env, R};
+use super::{Ask, R};
 use parry3d::shape::TriMesh;
 
 use crate::scene::Scene;
 use crate::{merge, rays};
 
 /// One texel round each chart: enough for a bilinear read with no mips (a mipped read needs 2^k for k levels, WR8).
-pub(crate) const GUTTER: u32 = 1;
+pub const GUTTER: u32 = 1;
 const CHART_DEG: f32 = 15.0;
 const NONE: u32 = u32::MAX;
 
-pub(crate) struct Texel {
+pub struct Texel {
     pub x: u16,
     pub y: u16,
     pub p: Vec3,
@@ -31,7 +31,7 @@ pub(crate) struct Texel {
     pub tri: u32,
 }
 
-pub(crate) struct Atlas {
+pub struct Atlas {
     pub w: u32,
     pub h: u32,
     /// the density the whole-model class got, and each chart's
@@ -48,7 +48,6 @@ pub(crate) struct Atlas {
     pub index: Vec<Vec<u32>>,
     pub uv: Vec<Vec<[f32; 2]>>,
     /// each chart's rectangle in the atlas, gutters included: x, y, w, h (the tests read it)
-    #[cfg_attr(not(test), allow(dead_code))]
     pub rects: Vec<[u32; 4]>,
 }
 
@@ -67,7 +66,7 @@ impl Atlas {
     }
 }
 
-pub(crate) struct Chart {
+pub struct Chart {
     pub tris: Vec<u32>,
     /// the plane: its normal, its offset (n.p), and the basis across it
     pub n: Vec3,
@@ -134,7 +133,7 @@ impl Chart {
         }
     }
     /// The density its surfaces ask: the highest of their classes'.
-    pub fn asked(&self, sc: &Scene, env: &Env) -> f32 {
+    pub fn asked(&self, sc: &Scene, env: &Ask) -> f32 {
         self.tris.iter().map(|&t| env.density_of(sc.class[t as usize])).fold(0.0, f32::max).max(0.25)
     }
     pub fn st(&self, p: Vec3) -> (f32, f32) {
@@ -152,7 +151,7 @@ fn weld(p: Vec3) -> (i64, i64, i64) {
 }
 
 /// The basis of a plane with normal n: u along it horizontally (east on a level face), b up it.
-fn basis(n: Vec3, env: &Env) -> (Vec3, Vec3) {
+fn basis(n: Vec3, env: &Ask) -> (Vec3, Vec3) {
     let u = if n.dot(env.up).abs() < 0.95 {
         env.up.cross(n).normalize()
     } else {
@@ -162,7 +161,7 @@ fn basis(n: Vec3, env: &Env) -> (Vec3, Vec3) {
     (u, n.cross(u).normalize())
 }
 
-fn charts_of(sc: &Scene, env: &Env, chart_of: &mut [u32]) -> Vec<Chart> {
+fn charts_of(sc: &Scene, env: &Ask, chart_of: &mut [u32]) -> Vec<Chart> {
     let cos = CHART_DEG.to_radians().cos();
     let mut out = Vec::new();
     for pr in &sc.prims {
@@ -249,7 +248,7 @@ fn pack(cs: &mut [Chart], k: f32, side: u32) -> Option<(u32, u32)> {
     Some((w, (y + shelf).div_ceil(4) * 4))
 }
 
-pub(crate) fn build(sc: &Scene, env: &Env, mesh: &TriMesh) -> R<Atlas> {
+pub fn build(sc: &Scene, env: &Ask, mesh: &TriMesh) -> R<Atlas> {
     let mut chart_of = vec![NONE; sc.tri.len()];
     // triangles inside a closed shell are set aside first, so no chart starts from or runs over them
     let inside = rays::hidden(sc, mesh);

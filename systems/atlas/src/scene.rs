@@ -112,7 +112,7 @@ impl Classes {
 
 /// One primitive as baked: which mesh and primitive of the source, its triangles' range in Scene::tri, and its own
 /// vertex count (Scene::tri indexes `base + local`).
-pub(crate) struct Prim {
+pub struct Prim {
     pub mesh: usize,
     pub prim: usize,
     pub first_tri: usize,
@@ -120,7 +120,7 @@ pub(crate) struct Prim {
     pub base: u32,
 }
 
-pub(crate) struct Scene {
+pub struct Scene {
     pub glb: Glb,
     /// every vertex in the world; tri indexes it
     pub pos: Vec<Vec3>,
@@ -146,7 +146,7 @@ fn local(n: &Value) -> Mat4 {
     Mat4::from_scale_rotation_translation(Vec3::new(s[0], s[1], s[2]), Quat::from_xyzw(r[0], r[1], r[2], r[3]).normalize(), Vec3::new(t[0], t[1], t[2]))
 }
 
-pub(crate) fn read(bytes: &[u8], classes: &Classes) -> R<Scene> {
+pub fn read(bytes: &[u8], classes: &Classes) -> R<Scene> {
     let glb = parse(bytes)?;
     let j = &glb.json;
     for (i, m) in arr(j, "materials").iter().enumerate() {
@@ -235,7 +235,7 @@ pub(crate) fn read(bytes: &[u8], classes: &Classes) -> R<Scene> {
 }
 
 /// The .glb again, each primitive re-indexed over its charts with TEXCOORD_1, and the binary holding only what's used.
-pub(crate) fn write(sc: &Scene, at: &Atlas) -> R<Vec<u8>> {
+pub fn write(sc: &Scene, at: &Atlas) -> R<Vec<u8>> {
     let g = &sc.glb;
     let mut j = g.json.clone();
     let src_meshes: Vec<Value> = arr(&j, "meshes").to_vec();

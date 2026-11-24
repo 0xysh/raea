@@ -200,6 +200,8 @@ members = [
     "runtime/shared",
     "apps/ask",
     "apps/lightbake",
+    "systems/lightbake",
+    "systems/atlas",
     "apps/double",
     "apps/check",
     "apps/check/cause",

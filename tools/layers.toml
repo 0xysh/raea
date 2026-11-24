@@ -108,6 +108,7 @@ raea-sys-canvas = "systems"
 raea-sys-tweak = "systems"
 raea-sys-filters = "systems"
 raea-sys-weathering = "systems"
+raea-sys-atlas = "systems"
 raea-sys-runoff = "systems"
 raea-sys-touch = "systems"
 raea-sys-exposure = "systems"
@@ -213,6 +214,7 @@ raea-app-make = "apps"
 raea-app-scene = "apps"  # raea scene lint|explain|light|stage
 raea-app-ask = "apps"
 raea-app-lightbake = "apps"  # raea bake light (docs/bake.feature)
+raea-sys-lightbake = "systems"  # light baked over raea/wear's atlas on raea's ray tracer (docs/bake.feature)
 raea-app-double = "apps"
 raea-app-solid = "apps"
 raea-app-media = "apps"
@@ -320,3 +322,5 @@ raea-sys-exposure = true
 raea-sys-damage = true
 # a .glb read as JSON and bytes and written back (the weathering bake reads and rewrites models through it)
 raea-sys-glb = true
+# the atlas raea's bakes share: charts, packing, each texel's point (the cause maps and the light bake lie over it)
+raea-sys-atlas = true

@@ -99,7 +99,7 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
       And one second UV set serves the lightmap and raea/wear's cause maps (Shane, 11-23: the bake works with the wear
         SDK): systems/weathering (docs/wear.feature WR1) already lays TEXCOORD_1 out for its cause maps and refuses a
         material that reads it, so a second atlas would collide. The light bake lays its maps over weathering's atlas,
-        `raea_sys_weathering::layout`, with the request `raea wear bake` takes: given the wear bake's own request, it
+        `raea_sys_atlas::layout` (in raea-sys-weathering when BK1 landed; split out at BK2), with the request `raea wear bake` takes: given the wear bake's own request, it
         is the wear bake's atlas byte for byte (the test says so); a light-only bake asks {env: {density: texels,
         max_side}}
       And built 11-23 after measuring the two on the test set: xatlas (MIT, vendored and built through cc, a map per
@@ -126,16 +126,45 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
         don't change (weathering's bytes are the same)
 
     @needs:BK1
+    @done
     Scenario: BK2. Each texel's place in the world
       Given the plan
         | crate              | file                                 | lines | job                                                                 |
-        | raea-sys-lightbake | systems/lightbake/src/texels.rs      | 160   | the layout's texels (BK1: weathering's world point, normal and triangle under each, an edge band of 0.75 of a texel) to the trace's buffers; the inside test and the offset |
+        | raea-sys-atlas     | systems/atlas/src/lib.rs             | 120   | the atlas both bakes share, split out of raea-sys-weathering (it was at 1999 of 2000 lines and a system may build only on a facility): Ask, layout() |
+        | raea-sys-atlas     | systems/atlas/src/scene.rs           | 323   | moved from raea-sys-weathering as it was                            |
+        | raea-sys-atlas     | systems/atlas/src/charts.rs          | 436   | moved                                                               |
+        | raea-sys-atlas     | systems/atlas/src/merge.rs           | 193   | moved                                                               |
+        | raea-sys-atlas     | systems/atlas/src/rays.rs            | 80    | the hidden-triangle step and the samples, moved from weathering's rays.rs |
+        | raea-sys-lightbake | systems/lightbake/src/lib.rs         | 20    | the crate: the bake over raea/wear's atlas                          |
+        | raea-sys-lightbake | systems/lightbake/src/texels.rs      | 160   | the layout's texels (BK1: weathering's world point, normal and triangle under each, an edge band of 0.75 of a texel) with their ray origins; the inside test; the model's world triangles |
+        | raea-sys-lightbake | systems/lightbake/src/texels/tests.rs | 160  | a slab with a block sunk in it and a box set on it by its node: points on the surface, the sunk part marked, the open not; the same texels twice; a worn model's request gives its wear atlas; the measured run |
       Then each mesh's atlas has, per texel, its world position, shading normal and whether it is covered, read from
         BK1's layout (charts.rs already rasterizes every triangle in its chart, a triangle under a texel included,
         and fills the edge band), not rasterized a second time
       And a texel whose position is inside other geometry (a table leg's foot in the floor, a wall's end inside the
         next wall) is found by a short ray test and marked, so it neither goes black nor leaks light into the bake
       And positions are offset along the normal by a scale-aware epsilon, so the trace never hits its own surface
+      And built 11-23: `raea_sys_lightbake::texels::texels(glb, request)` lays the model out (BK1's layout, raea_sys_atlas::layout; the
+        light-only request is `request(texels, max_side)`, a worn model passes its wear bake's), reads the layout's
+        model back as world triangles (each node's transform down its children) into a parry3d BVH, moves each point
+        off its surface by 1e-5 of the model's size or farthest coordinate (at least 10 microns), and casts 16
+        cosine-weighted rays from each: a texel is inside when at least half its rays meet a back face and more meet
+        back faces than front ones (a floor that is one plane is met from below one way and not at all the other).
+        CPU and rayon for now, as weathering's own rays; BK3's GPU pass may take the test over
+      And raea-sys-atlas (a facility) now holds the atlas, out of raea-sys-weathering, so the light bake builds on it
+        and not sideways on another system: weathering's bakes are the same bytes and keys after the move (the table
+        and window sets baked before and after, 12 files equal), and its 11 tests pass
+      And measured 11-23 at 64 texels a metre, debug build on the M5 Pro (BK1's layout included in both times)
+        | set     | atlas     | texels    | inside           | offset   | layout | with texels |
+        | table   | 2048x1008 | 1 549 350 | 10 366 (0.67%)   | 0.17 mm  | 0.29 s | 3.4 s       |
+        | cornell | 1024x296  | 232 060   | 17 345 (7.5%)    | 0.04 mm  | 0.05 s | 1.3 s       |
+        | window  | 2048x644  | 979 867   | 96 445 (9.8%)    | 0.08 mm  | 0.21 s | 5.1 s       |
+        | atelier | 4096x1820 | 4 136 248 | 200 649 (4.9%)   | 0.15 mm  | 41 s   | 70 s        |
+      And what they say: what's marked is what overlaps. In the window room it is the band where each wall box runs
+        into the next wall, the floor and the ceiling, the floor under the sofa's and table's feet, and the walls
+        behind the window's piers. Those are a tenth of its texels, which would have gone black or leaked the outside
+        in. The texel step costs seconds in a debug build. The atelier's layout takes 41 s in debug against 1.6 s in
+        a release raea (BK1), so the bar's 60 s is the trace's to spend
 
     @needs:BK2
     Scenario: BK3. The light that bounces, traced on raea's ray tracer

@@ -15794,6 +15794,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-sys-atlas"
+version = "0.1.0"
+dependencies = [
+ "parry3d",
+ "raea-core-meshcheck",
+ "raea-sys-glb",
+ "rayon",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-sys-bake"
 version = "0.1.0"
 dependencies = [
@@ -16240,6 +16251,17 @@ dependencies = [
  "image",
  "raea-core-facts",
  "raea-core-scene",
+ "serde_json",
+]
+
+[[package]]
+name = "raea-sys-lightbake"
+version = "0.1.0"
+dependencies = [
+ "gltf",
+ "parry3d",
+ "raea-sys-atlas",
+ "rayon",
  "serde_json",
 ]
 
@@ -16702,7 +16724,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "parry3d",
- "raea-core-meshcheck",
+ "raea-sys-atlas",
  "raea-sys-damage",
  "raea-sys-exposure",
  "raea-sys-glb",

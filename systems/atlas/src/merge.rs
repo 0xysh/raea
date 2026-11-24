@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use parry3d::glamx::Vec3;
 use raea_core_meshcheck::find;
 
-use crate::Env;
+use crate::Ask;
 use crate::charts::Chart;
 use crate::scene::Scene;
 
@@ -25,7 +25,7 @@ const SPLIT: f32 = 64.0;
 
 
 /// Coplanar charts (the same plane to 1/64 in the normal and 2 cm in offset) whose rectangles touch, joined.
-pub(crate) fn merge(cs: Vec<Chart>, sc: &Scene, up: Vec3) -> Vec<Chart> {
+pub fn merge(cs: Vec<Chart>, sc: &Scene, up: Vec3) -> Vec<Chart> {
     let q = |v: f32| (v * 64.0).round() as i32;
     let mut groups: HashMap<(i32, i32, i32, i64), Vec<u32>> = HashMap::new();
     for (i, c) in cs.iter().enumerate() {
@@ -81,7 +81,7 @@ pub(crate) fn merge(cs: Vec<Chart>, sc: &Scene, up: Vec3) -> Vec<Chart> {
 /// Charts whose triangles cover less than half their rectangle (a street network round its blocks, a quarter's gutters
 /// at one eaves height joined where they cross), cut on a grid SPLIT texels square: each cell's triangles, by their
 /// centres, a chart in the same plane.
-pub(crate) fn split(cs: Vec<Chart>, sc: &Scene, env: &Env) -> Vec<Chart> {
+pub fn split(cs: Vec<Chart>, sc: &Scene, env: &Ask) -> Vec<Chart> {
     let mut out = Vec::new();
     for c in cs {
         let d = c.asked(sc, env);
@@ -121,7 +121,7 @@ pub(crate) fn split(cs: Vec<Chart>, sc: &Scene, env: &Env) -> Vec<Chart> {
 
 /// Each chart too small for texels of its own at density d, moved into the nearest big chart within HOST_REACH of
 /// its plane (and over its rectangle); a detail with no host keeps its own chart. Hosts are refitted.
-pub(crate) fn absorb(cs: Vec<Chart>, sc: &Scene, env: &Env) -> Vec<Chart> {
+pub fn absorb(cs: Vec<Chart>, sc: &Scene, env: &Ask) -> Vec<Chart> {
     let ds: Vec<f32> = cs.iter().map(|c| c.asked(sc, env)).collect();
     let small = |c: &Chart, d: f32| {
         let (w, h) = ((c.s1 - c.s0) * d, (c.t1 - c.t0) * d);
