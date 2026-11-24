@@ -168,6 +168,7 @@ members = [
     "tools/perceive",
     "engine/render",
     "engine/render/raytrace",
+    "engine/render/denoise/bench",
     "engine/seedling",
     "engine/web",
     "runtime/react",

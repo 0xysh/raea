@@ -1,4 +1,4 @@
-//! `raea light check SCENES.json -o DIR` (docs/realism.feature LT1): the bar raea Light is measured by. Each scene
+//! `raea light check SCENES.json -o DIR` (docs/realism.feature LT1): the bar raealism is measured by. Each scene
 //! is rendered on each light path (RAEA_LIGHT, engine/render/raytrace force.rs) and against its reference, the path
 //! tracer held RAEA_LIGHT_SPP draws a frame: how far each path's stills are from it in stops (mean, bias, worst tile),
 //! how much its moving shot flickers against the shot path-traced (each path drawing the 16 frames before a still
@@ -25,7 +25,7 @@ pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--p
 /// of SSAO (on a camera with <AmbientOcclusion>; on any other it draws as raster).
 const PATHS: [&str; 4] = ["raster", "traced-ao", "solari", "gi"];
 
-/// The switches a path is drawn with (the reference is `pathtracer`). `gi` is raster with raea GI's probes traced
+/// The switches a path is drawn with (the reference is `pathtracer`). `gi` is raster with raealism's probes traced
 /// (systems/rt gi.rs; RAEA_GI_RAYS and the rest pass through from the check's own environment).
 fn switches(path: &str) -> Vec<(&'static str, String)> {
     match path {
@@ -35,17 +35,18 @@ fn switches(path: &str) -> Vec<(&'static str, String)> {
     }
 }
 
-struct Scene {
-    name: String,
-    dir: PathBuf,
-    file: String,
-    composition: String,
-    stills: Vec<i64>,
-    shot: Option<(i64, i64)>,
-    reference: Result<(), String>,
-    live: Result<(), String>,
-    size: (i64, i64),
-    spp: Option<u32>,
+/// A scene of SCENES.json (the module's doc); raea bench denoise (engine/render/denoise/bench) reads its cases the same way.
+pub struct Scene {
+    pub name: String,
+    pub dir: PathBuf,
+    pub file: String,
+    pub composition: String,
+    pub stills: Vec<i64>,
+    pub shot: Option<(i64, i64)>,
+    pub reference: Result<(), String>,
+    pub live: Result<(), String>,
+    pub size: (i64, i64),
+    pub spp: Option<u32>,
 }
 
 /// How long a live play runs, in seconds, its first second not counted.
@@ -58,7 +59,14 @@ fn home(p: &str) -> PathBuf {
     }
 }
 
-fn scenes(path: &Path) -> R<Vec<Scene>> {
+impl Scene {
+    /// Every frame of its shot, first to last
+    pub fn shot_frames(&self) -> Option<Vec<i64>> {
+        self.shot.map(|(a, b)| (a..=b).collect())
+    }
+}
+
+pub fn scenes(path: &Path) -> R<Vec<Scene>> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let v: Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     let list = v["scenes"].as_array().ok_or(format!("{}: no \"scenes\" list", path.display()))?;
@@ -79,15 +87,23 @@ fn scenes(path: &Path) -> R<Vec<Scene>> {
 /// Frames `at` of a scene drawn on `path` into `out` (frame-00000.png onward, in `at`'s order), by this raea; the
 /// seconds it took.
 fn render(scene: &Scene, path: &str, spp: u32, at: &[i64], out: &Path) -> R<f64> {
+    let mut env = switches(path);
+    env.push(("RAEA_LIGHT_SPP", spp.to_string()));
+    render_with(scene, path, &env, at, out)
+}
+
+/// Frames `at` of a scene drawn under the switches `env` into `out`, `label` naming the run in an error; the seconds it
+/// took. `label` "pathtracer" is the truth.
+pub fn render_with(scene: &Scene, label: &str, env: &[(&str, String)], at: &[i64], out: &Path) -> R<f64> {
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let at: Vec<String> = at.iter().map(i64::to_string).collect();
     let t = Instant::now();
     let mut cmd = std::process::Command::new(exe);
-    cmd.current_dir(&scene.dir).envs(switches(path)).env("RAEA_LIGHT_SPP", spp.to_string());
+    cmd.current_dir(&scene.dir).envs(env.iter().map(|(k, v)| (*k, v)));
     // the truth is never steadied: RAEA_STEADY's jitter moved the path-traced shot's frames by part of a pixel each,
     // and that read as the paths' flicker (FLOOR3's reference 0.478 stops of its own against 0.101)
-    if path == "pathtracer" {
+    if label == "pathtracer" {
         cmd.env_remove("RAEA_STEADY");
     }
     let run = cmd
@@ -98,7 +114,7 @@ fn render(scene: &Scene, path: &str, spp: u32, at: &[i64], out: &Path) -> R<f64>
     if !run.status.success() {
         let err = String::from_utf8_lossy(&run.stderr);
         let last: Vec<&str> = err.lines().rev().take(4).collect();
-        return Err(format!("{} on {path}: render failed: {}", scene.name, last.into_iter().rev().collect::<Vec<_>>().join(" | ")));
+        return Err(format!("{} on {label}: render failed: {}", scene.name, last.into_iter().rev().collect::<Vec<_>>().join(" | ")));
     }
     Ok(t.elapsed().as_secs_f64())
 }
@@ -107,6 +123,11 @@ fn render(scene: &Scene, path: &str, spp: u32, at: &[i64], out: &Path) -> R<f64>
 /// a frame costs, from play's report (DIR/PATH-live-WxH.json): the frames presented a second as milliseconds a frame,
 /// and each frame's work at the median and the 99th percentile; on `gi`, the probe pass's own GPU time (RAEA_GI_STATS).
 fn live(scene: &Scene, path: &str, size: (i64, i64), out: &Path) -> R<Value> {
+    live_with(scene, path, &switches(path), size, out)
+}
+
+/// The same, under the switches `env`, `path` naming its report (DIR/PATH-live-WxH.json).
+pub fn live_with(scene: &Scene, path: &str, env: &[(&str, String)], size: (i64, i64), out: &Path) -> R<Value> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let size = format!("{}x{}", size.0, size.1);
     let json_out = out.join(format!("{path}-live-{size}.json"));
@@ -114,7 +135,7 @@ fn live(scene: &Scene, path: &str, size: (i64, i64), out: &Path) -> R<Value> {
     let _ = std::fs::remove_file(&gi_out);
     let run = std::process::Command::new(exe)
         .current_dir(&scene.dir)
-        .envs(switches(path))
+        .envs(env.iter().map(|(k, v)| (*k, v)))
         .env("RAEA_GI_STATS", &gi_out)
         .env("RAEA_AUDIO_MUTE", "1")
         .args(["play", &scene.file, "--offscreen", "--no-vsync", "--3d", "--seconds", LIVE_SECONDS, "--size", &size, "--json"])
@@ -136,18 +157,42 @@ fn live(scene: &Scene, path: &str, size: (i64, i64), out: &Path) -> R<Value> {
 }
 
 /// The frames written to `dir` at these places in its render
-fn frames(dir: &Path, at: impl IntoIterator<Item = usize>) -> R<Vec<metric::Luma>> {
-    at.into_iter().map(|k| metric::load(&dir.join(format!("frame-{k:05}.png")))).collect()
+pub fn frames(dir: &Path, at: impl IntoIterator<Item = usize>) -> R<Vec<metric::Luma>> {
+    frames_with(dir, at, metric::load)
+}
+
+/// The same, each read by `load` (raea bench denoise reads them as colour)
+pub fn frames_with<T>(dir: &Path, at: impl IntoIterator<Item = usize>, load: fn(&Path) -> R<T>) -> R<Vec<T>> {
+    at.into_iter().map(|k| load(&dir.join(format!("frame-{k:05}.png")))).collect()
+}
+
+/// A table's cell: the number at `k`, to three places, or "-"
+pub fn cell(v: &Value, k: &str) -> String {
+    v[k].as_f64().map_or("-".to_string(), |x| format!("{x:.3}"))
+}
+
+/// A comma-separated `name` flag's values, each one of `all` (all of them when it isn't given); `what` says what they are
+pub fn list_flag(args: &[String], name: &str, all: &[&str], what: &str) -> R<Vec<String>> {
+    let v: Vec<String> = flag(args, name).map_or_else(|| all.iter().copied().map(String::from).collect(), |p| p.split(',').map(String::from).collect());
+    match v.iter().find(|p| all.iter().all(|a| a != p)) {
+        Some(p) => Err(format!("{name}: {p} isn't {what} ({})", all.join(", "))),
+        None => Ok(v),
+    }
+}
+
+/// --spp N, the truth's samples a pixel (256)
+pub fn spp(args: &[String]) -> R<u32> {
+    Ok(flag(args, "--spp").map(|v| v.parse().map_err(|_| format!("--spp {v}: a count of samples"))).transpose()?.unwrap_or(256))
 }
 
 /// frames drawn before each measured frame that doesn't follow the one before it, and not measured, so whatever
 /// keeps a past (raea's temporal filter, the GI's caches) has its own, as it does in play: from a cold start a
 /// filter's first frames average one, two, three frames
-const BEFORE: i64 = 16;
+pub const BEFORE: i64 = 16;
 
 /// `at` with BEFORE frames drawn before each of its frames that doesn't follow the one before, and where each of
 /// `at`'s frames lands in that render
-fn with_before(at: &[i64]) -> (Vec<i64>, Vec<usize>) {
+pub fn with_before(at: &[i64]) -> (Vec<i64>, Vec<usize>) {
     let (mut all, mut place) = (Vec::new(), Vec::new());
     for &f in at {
         if all.last() != Some(&(f - 1)) {
@@ -165,7 +210,7 @@ fn round(x: f32, k: f32) -> f64 {
 
 /// Frames `at` path-traced at `spp` into `dir`, kept from an earlier check when it made the same frames of the same
 /// composition at the same samples (DIR/made.json) and --fresh isn't given; the frames, and how they were had.
-fn reference(scene: &Scene, spp: u32, at: &[i64], dir: &Path, fresh: bool) -> R<(Vec<metric::Luma>, Value)> {
+pub fn reference(scene: &Scene, spp: u32, at: &[i64], dir: &Path, fresh: bool) -> R<(Vec<metric::Luma>, Value)> {
     let made = json!({ "file": scene.file, "composition": scene.composition, "frames": at, "spp": spp });
     let kept = std::fs::read_to_string(dir.join("made.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
     let how = if !fresh && kept.as_ref() == Some(&made) {
@@ -183,7 +228,7 @@ fn reference(scene: &Scene, spp: u32, at: &[i64], dir: &Path, fresh: bool) -> R<
 fn check(scene: &Scene, paths: &[String], spp: u32, out: &Path, fresh: bool) -> R<Value> {
     let root = out.join(&scene.name);
     let spp = scene.spp.unwrap_or(spp);
-    let shot: Option<Vec<i64>> = scene.shot.map(|(a, b)| (a..=b).collect());
+    let shot = scene.shot_frames();
     let mut report = json!({ "name": scene.name, "stills": scene.stills, "shot": shot, "paths": {} });
     let (reference, ref_shot) = match &scene.reference {
         Err(why) => {
@@ -249,7 +294,7 @@ fn table(reports: &[Value]) -> String {
         let name = r["name"].as_str().unwrap_or("");
         let Some(paths) = r["paths"].as_object() else { continue };
         for (p, v) in paths {
-            let f = |k: &str| v[k].as_f64().map_or("-".to_string(), |x| format!("{x:.3}"));
+            let f = |k: &str| cell(v, k);
             let ms = |k: &str| v["live"][k]["ms_a_frame"].as_f64().map_or("-".to_string(), |x| format!("{x:.1}"));
             // the cache's passes and the screen's (its probes, their filter, the screen), each a median
             let g = &v["live"]["full"]["gi"];
@@ -270,11 +315,8 @@ pub fn light(args: &[String]) -> R<String> {
     let list = scenes(Path::new(&args[1]))?;
     let out = PathBuf::from(flag(args, "-o").ok_or(format!("usage: {USAGE}"))?);
     let only = flag(args, "--scene");
-    let paths: Vec<String> = flag(args, "--paths").map_or_else(|| PATHS.map(String::from).to_vec(), |p| p.split(',').map(String::from).collect());
-    if let Some(p) = paths.iter().find(|p| !PATHS.contains(&p.as_str())) {
-        return Err(format!("--paths: {p} isn't a light path to check ({})", PATHS.join(", ")));
-    }
-    let spp: u32 = flag(args, "--spp").map(|v| v.parse().map_err(|_| format!("--spp {v}: a count of samples"))).transpose()?.unwrap_or(256);
+    let paths = list_flag(args, "--paths", &PATHS, "a light path to check")?;
+    let spp = spp(args)?;
     let fresh = args.iter().any(|a| a == "--fresh");
     let mut reports = Vec::new();
     for s in list.iter().filter(|s| match &only { Some(o) => *o == s.name, None => true }) {

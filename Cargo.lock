@@ -14288,6 +14288,7 @@ dependencies = [
  "raea-core-animate",
  "raea-core-brief",
  "raea-core-program",
+ "raea-denoise-bench",
  "raea-io-home",
  "raea-io-media",
  "raea-io-npm",
@@ -14469,6 +14470,16 @@ name = "raea-core-zfight"
 version = "0.1.0"
 dependencies = [
  "bevy",
+]
+
+[[package]]
+name = "raea-denoise-bench"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "raea-light",
+ "raea-runtime-bundle",
+ "serde_json",
 ]
 
 [[package]]

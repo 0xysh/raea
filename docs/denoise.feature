@@ -13,9 +13,9 @@ Feature: raea Denoise: one denoiser and upscaler raea owns, on every OS and GPU
 
   Every number this feature sets comes from DN0's bench, measured; none is guessed here.
 
-  One denoiser for both renderers. docs/realism.feature plans raea Light (LT13 retires Solari) with "a denoiser slot"
+  One denoiser for both renderers. docs/realism.feature plans raealism (LT13 retires Solari) with "a denoiser slot"
   on Windows and Linux (LT12), OIDN on the film tier (LT19), and docs/bake.feature cleans lightmaps (BK4). This feature
-  is that slot and that OIDN: DN1's inputs are written by whichever renderer draws the view (Solari today, raea Light
+  is that slot and that OIDN: DN1's inputs are written by whichever renderer draws the view (Solari today, raealism
   later), DN10's OIDN is the one LT19 and BK4 call, and the temporal parts reuse raea's steady filter
   (raea-sys-post steady.rs: its jitter, its YCoCg clip) rather than a second copy.
 
@@ -33,14 +33,15 @@ Feature: raea Denoise: one denoiser and upscaler raea owns, on every OS and GPU
         tools/cycles-port where the path tracer differs
       When `raea bench denoise [--backend raea|metalfx|dlss|off] [CASE...]` renders every case
       Then it reports, per case and backend: FLIP and RMSE against the truth; bias (mean light against the truth);
-        flicker (a frame against the last warped by motion, on surfaces that hold still); blotches (residual energy
+        flicker (the error's change frame to frame against the truth's own shot, so motion cancels); a whole-frame
+        spike (one frame's mean light lifted or dropped alone); blotches (residual energy
         below 1/16 of the frame's width); lag (frames to settle after a disocclusion and after a light goes out);
         and ms a frame at 1080p on the GPU it ran on
       And MetalFX's numbers on the Mac are the first bar: DN8 makes raea's the default when it meets them
       And the plan:
         | crate                 | file                          | lines | job                                          |
-        | raea-denoise-bench    | engine/render/denoise/bench/src/lib.rs     | 200 | the cases, the truth, the runs              |
-        | raea-denoise-bench    | engine/render/denoise/bench/src/metrics.rs | 300 | FLIP, RMSE, bias, flicker, blotch, lag      |
+        | raea-denoise-bench    | engine/render/denoise/bench/src/lib.rs     | 250 | the cases, the truth, the runs              |
+        | raea-denoise-bench    | engine/render/denoise/bench/src/metrics.rs | 380 | FLIP, RMSE, bias, flicker, spike, blotch, lag |
         | raea-denoise-bench    | engine/render/denoise/bench/src/report.rs  | 150 | the table and its JSON                      |
 
   Rule: One set of inputs

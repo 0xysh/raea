@@ -70,6 +70,7 @@ What's wrong before anyone watches it.
 | [`raea findings`](findings.md) | What each render and check found, read back from the project's record: fixed, new and carried since the one before. |
 | [`raea scene`](scene.md) | Find floating, sunk and clipping 3D parts, say what each part rests on, meter a shot's light, and hold every frame to the stage checks a render runs. |
 | [`raea light`](light.md) | Measure a scene's light on each light path against its path-traced reference: distance in stops, the worst tile, flicker and cost. |
+| [`raea bench`](bench.md) | Each case on each denoiser against its converged truth: FLIP, RMSE, bias, flicker, blotches, lag after a disocclusion or a light going out, a frame's cost, and how many of MetalFX's numbers each meets. |
 | [`raea world`](world.md) | A frame as one world: its layers, text, 3D parts, camera, shots, clips, cues and lines as entities, queried across media. |
 | [`raea solid`](solid.md) | Measure, view and export a solid: parts built from code with exact volumes, joints and parameters. |
 | [`raea next`](next.md) | The two or three most useful next steps for a project, read from its brief, compositions, renders and checks. |
