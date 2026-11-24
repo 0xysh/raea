@@ -168,6 +168,7 @@ Feature: raea Denoise: one denoiser and upscaler raea owns, on every OS and GPU
 
   Rule: Everyone can see the options
 
+    @done
     Scenario: DN12. What raea has for light, denoising and upscaling is written where agents look
       Given a person who asks an agent about DLSS, a denoiser, lighting or ray tracing (Shane, 11-24: "so its clear
         what the options are and i dont have to keep inquiring")
@@ -176,4 +177,6 @@ Feature: raea Denoise: one denoiser and upscaler raea owns, on every OS and GPU
         docs/denoise-upscale-research.md, with `raea neural mlxdlss` marked as a re-shading test that never ships
       And raea-skills' copy carries it (tools/skills.sh gen, a raea-skills PR, the pin bumped in the same landing)
       And each DN that lands updates its row in the same commit
+      # Status (11-24): the section is on branch denoise; raea-skills #123 carries the copy, unmerged, for the
+      # landing to merge with the pin bump.
 
