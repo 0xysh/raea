@@ -96,6 +96,18 @@ impl Pending {
     }
 }
 
+/// An input event queued in `world` (Pending::queue), and known to the `ui` answers that wait for it.
+pub fn queue(world: &mut World, v: Value, next: u64) -> u64 {
+    let f = world.resource_mut::<Pending>().queue(v, next);
+    LAST_INPUT.fetch_max(f, std::sync::atomic::Ordering::SeqCst);
+    f
+}
+
+/// The frame the host is on.
+pub fn frame(world: &World) -> u64 {
+    world.resource::<Frame>().0
+}
+
 /// A button going down or up: the events after it wait for the next frame, so the press is picked (and focus moves)
 /// before the keys typed after it are dispatched.
 fn edge(v: &Value) -> bool {

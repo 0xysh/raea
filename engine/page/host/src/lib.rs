@@ -4,19 +4,16 @@
 //! Protocol (src/brp.rs: page.*) and an MCP bridge to it (src/mcp.rs). The bin (src/main.rs) mounts a bundle; an app
 //! adds [`HostPlugin`] and mounts its own (page::mount), its systems around the host's.
 
-#[cfg(feature = "window")]
-pub mod ax;
 pub mod brp;
-/// the desktop window's chrome and native calls, in raea-page-window (kept under these names for main.rs and tests)
-pub use raea_page_window::{chrome, native};
+/// the desktop window's side, in raea-page-window (under these names for main.rs and tests)
+#[cfg(feature = "window")]
+pub use raea_page_window::idle;
+pub use raea_page_window::{chrome, native, scheme};
 /// the live stage, in raea-page-stage
 pub use raea_page_stage as stage;
-#[cfg(feature = "window")]
-pub mod idle;
 pub mod inject;
 pub mod mcp;
 pub mod page;
-pub mod scheme;
 pub mod shell;
 pub mod tree;
 

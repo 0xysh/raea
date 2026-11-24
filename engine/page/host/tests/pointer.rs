@@ -42,7 +42,13 @@ fn left() -> WindowEvent {
 }
 
 fn releases(got: &[(Vec2, PointerAction)]) -> Vec<Vec2> {
-    got.iter().filter(|g| matches!(g.1, PointerAction::Release(_))).map(|g| g.0).collect()
+    let mut at = vec![];
+    for (p, act) in got {
+        if let PointerAction::Release(_) = act {
+            at.push(*p);
+        }
+    }
+    at
 }
 
 #[test]

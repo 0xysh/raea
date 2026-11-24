@@ -47,6 +47,7 @@ members = [
     "engine/native",
     "io/npm",
     "engine/page",
+    "engine/page/ax",
     "engine/page/host",
     "engine/rune",
     "engine/rune/page",

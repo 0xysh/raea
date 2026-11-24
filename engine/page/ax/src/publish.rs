@@ -9,7 +9,7 @@
 //!
 //! The tree is the Blitz document's own, walked from its root: an element's attributes are its props, and React's
 //! props over them where the element came from React (the wire's ids). A page's markup set as HTML (innerHTML: raea
-//! cloud's dashboard builds its rail so) has no wire ids, and the BRP `a11y` method's elements (page.rs) leave it out.
+//! cloud's dashboard builds its rail so) has no wire ids, and the BRP `a11y` method's elements (lib.rs `records`) leave it out.
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -20,12 +20,12 @@ use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::winit::accessibility::ACCESS_KIT_ADAPTERS;
-use blitz_dom::{BaseDocument, Node, NodeId as Id};
+use blitz_dom::{BaseDocument, NodeId as Id};
 use raea_sys_a11y::El;
 use raea_sys_page::ops::Nodes;
 use serde_json::{Map, Value, json};
 
-use crate::inject::{Frame, Pending};
+use crate::{Facts, svg_title, tag_of, wire_test_id, with_doc};
 
 /// A page node's AccessKit id: its Blitz id (slot and version) with the top bit set, clear of the window entity's
 /// (Entity::to_bits: its generation never reaches it, nor does a Blitz slot's version)
@@ -34,7 +34,22 @@ const EVERY: Duration = Duration::from_millis(250);
 /// what a page never draws, and an assistive client has no use for
 const UNDRAWN: &[&str] = &["head", "script", "style", "template", "noscript", "link", "meta", "title"];
 
-pub struct AxPlugin;
+/// The page host's side: the page shown, the frame it's on, and an input event queued for a frame or later as a person's
+/// is (the frame it lands before).
+#[derive(Resource, Clone, Copy)]
+pub struct Host {
+    pub page: fn(&World) -> Option<Entity>,
+    pub frame: fn(&World) -> u64,
+    pub queue: fn(&mut World, Value, u64) -> u64,
+}
+
+impl Host {
+    fn doc<R>(self, world: &World, f: impl FnOnce(&BaseDocument, &Nodes) -> R) -> Option<R> {
+        with_doc(world, (self.page)(world)?, f)
+    }
+}
+
+pub struct AxPlugin(pub Host);
 
 #[derive(Resource, Default)]
 struct Ax {
@@ -47,7 +62,7 @@ impl Plugin for AxPlugin {
     fn build(&self, app: &mut App) {
         let mut manage = ManageAccessibilityUpdates::default();
         manage.set(false);
-        app.insert_resource(manage).init_resource::<Ax>().add_systems(PostUpdate, (act, publish).chain());
+        app.insert_resource(manage).insert_resource(self.0).init_resource::<Ax>().add_systems(PostUpdate, (act, publish).chain());
     }
 }
 
@@ -56,7 +71,8 @@ fn publish(world: &mut World) {
     if !world.get_resource::<AccessibilityRequested>().is_some_and(|r| r.get()) {
         return;
     }
-    let (now, frame) = (Instant::now(), world.resource::<Frame>().0);
+    let host = *world.resource::<Host>();
+    let (now, frame) = (Instant::now(), (host.frame)(world));
     let ax = world.resource::<Ax>();
     if ax.frame == frame || ax.last.is_some_and(|t| now - t < EVERY) {
         return;
@@ -64,9 +80,14 @@ fn publish(world: &mut World) {
     let Ok((win, w)) = world.query_filtered::<(Entity, &Window), With<PrimaryWindow>>().single(world) else { return };
     let (scale, title) = (w.scale_factor() as f64, w.title.clone());
     let root = NodeId(win.to_bits());
-    let Some(mut update) = crate::page::with_doc(world, |doc, nodes| {
+    let Some(mut update) = host.doc(world, |doc, nodes| {
         let (els, tops) = elements(doc, nodes);
-        let facts = Facts { doc, nodes };
+        let node = |k: Id| doc.get_node(k).filter(|n| n.is_element());
+        let test_id = |k: Id| {
+            let wire = nodes.id_of(k).and_then(|id| wire_test_id(nodes, id));
+            wire.or_else(|| node(k)?.element_data()?.attrs().iter().find(|a| &*a.name.local == "data-testid").map(|a| a.value.to_string()))
+        };
+        let facts = Facts { node: &node, test_id: &test_id, drawn: true };
         let focus = doc.get_focussed_node_id().filter(|f| els.contains_key(f));
         let memo = RefCell::new(blitz_dom::RectMemo::default());
         // in the window's physical pixels, as Bevy's own nodes are
@@ -125,14 +146,8 @@ fn elements(doc: &BaseDocument, nodes: &Nodes) -> (HashMap<Id, El<Id>>, HashMap<
             if let Some(p) = wire.and_then(|id| nodes.props.get(&id)) {
                 props.extend(p.iter().map(|(k, v)| (k.clone(), v.clone())));
             }
-            let tag = match wire.and_then(|id| nodes.kind(id)) {
-                Some("editableText") if props.get("multiline") == Some(&Value::Bool(true)) => "textarea".into(),
-                Some("editableText") => "input".into(),
-                _ => tag,
-            };
-            let title = (tag == "svg")
-                .then(|| n.children.iter().filter_map(|c| doc.get_node(*c)).find(|c| c.element_data().is_some_and(|e| &*e.name.local == "title")).map(|t| t.text_content()))
-                .flatten();
+            let tag = wire.and_then(|id| nodes.kind(id)).filter(|k| *k == "editableText").map_or(tag, |k| tag_of(k, &props).to_string());
+            let title = if tag == "svg" { svg_title(doc, n) } else { None };
             let kids: Vec<Id> = n.children.iter().copied().filter(|c| doc.get_node(*c).is_some_and(|c| c.is_text_node() || c.is_element())).collect();
             stack.extend(kids.iter().map(|c| (*c, Some(k))));
             El { tag, props, parent, kids, text: None, title }
@@ -148,50 +163,6 @@ fn elements(doc: &BaseDocument, nodes: &Nodes) -> (HashMap<Id, El<Id>>, HashMap<
     }
     let tops = els.keys().map(|k| (*k, Id::default())).collect();
     (els, tops)
-}
-
-/// What the computation asks of the Blitz document: its computed style and its controls' state, by Blitz id.
-struct Facts<'a> {
-    doc: &'a BaseDocument,
-    nodes: &'a Nodes,
-}
-
-impl Facts<'_> {
-    fn el(&self, k: Id) -> Option<&Node> {
-        self.doc.get_node(k).filter(|n| n.is_element())
-    }
-}
-
-impl raea_sys_a11y::Facts<Id> for Facts<'_> {
-    fn display_none(&self, k: Id) -> bool {
-        // an element with no style isn't laid out (it or an ancestor is display: none, or it was never styled)
-        self.el(k).is_some_and(|n| n.primary_styles().is_none_or(|s| s.get_box().display.is_none()))
-    }
-    fn invisible(&self, k: Id) -> bool {
-        use style::computed_values::visibility::T as V;
-        self.el(k).and_then(|n| n.primary_styles()).is_some_and(|s| matches!(s.clone_visibility(), V::Hidden | V::Collapse))
-    }
-    fn natively_disabled(&self, _: Id) -> bool {
-        false
-    }
-    fn editor_value(&self, k: Id) -> Option<String> {
-        self.el(k).and_then(|n| n.element_data()).and_then(|e| e.text_input_data()).map(|t| t.editor.raw_text().to_string())
-    }
-    fn tabbable(&self, k: Id) -> bool {
-        self.el(k).is_some_and(|n| n.is_focussable())
-    }
-    fn checked(&self, k: Id) -> bool {
-        self.el(k).and_then(|n| n.element_data()).and_then(|e| e.checkbox_input_checked()).unwrap_or(false)
-    }
-    fn block(&self, k: Id) -> Option<bool> {
-        use style::values::specified::box_::DisplayOutside;
-        let d = self.el(k)?.primary_styles()?.get_box().display;
-        Some(d.outside() == DisplayOutside::Block)
-    }
-    fn test_id(&self, k: Id) -> Option<String> {
-        let wire = self.nodes.id_of(k).and_then(|id| self.nodes.props.get(&id)).and_then(|p| p.get("data-testid")).and_then(Value::as_str).map(str::to_string);
-        wire.or_else(|| self.el(k)?.element_data()?.attrs().iter().find(|a| &*a.name.local == "data-testid").map(|a| a.value.to_string()))
-    }
 }
 
 /// A Blitz node when it's an element: only an element has a box to ask for (Blitz panics asking a text node's
@@ -210,8 +181,13 @@ enum At {
     Nothing,
 }
 
-fn at(doc: &BaseDocument, k: Id) -> At {
+/// A box a wheel scrolls.
+fn by_wheel(o: style::values::computed::Overflow) -> bool {
     use style::values::computed::Overflow as O;
+    o == O::Scroll || o == O::Auto
+}
+
+fn at(doc: &BaseDocument, k: Id) -> At {
     // a text node is pressed where its element is
     let Some(k) = element(doc, k).or_else(|| doc.get_node(k)?.parent).and_then(|k| element(doc, k)) else { return At::Nothing };
     let Some(b) = doc.get_client_bounding_rect(k).filter(|b| b.width > 0.0 && b.height > 0.0) else { return At::Nothing };
@@ -220,7 +196,7 @@ fn at(doc: &BaseDocument, k: Id) -> At {
     while let Some(a) = up {
         let Some(n) = doc.get_node(a) else { break };
         up = n.parent;
-        let scrolls = n.primary_styles().map(|s| [s.clone_overflow_x(), s.clone_overflow_y()].map(|o| matches!(o, O::Scroll | O::Auto)));
+        let scrolls = n.primary_styles().map(|s| [s.clone_overflow_x(), s.clone_overflow_y()].map(by_wheel));
         let Some([sx, sy]) = scrolls else { continue };
         let Some(r) = element(doc, a).and_then(|a| doc.get_client_bounding_rect(a)) else { continue };
         let dx = if sx && (x < r.x || x > r.x + r.width) { r.x + r.width / 2.0 - x } else { 0.0 };
@@ -251,19 +227,19 @@ fn act(world: &mut World, reader: &mut SystemState<MessageReader<ActionRequest>>
     // Focus is no press: macOS asks it beside a press (AXPress), and a second press where the first one's new page
     // has something else clicked that (a press on Projects opened Publishing, 11-23)
     let mut asks: Vec<Later> = r.read().filter(|r| matches!(r.0.action, Action::Click | Action::SetValue)).map(|r| Later(r.0.clone(), 0, 8)).collect();
-    let frame = world.resource::<Frame>().0;
+    let host = *world.resource::<Host>();
+    let frame = (host.frame)(world);
     for l in std::mem::take(&mut *later) {
         if l.1 > frame { later.push(l) } else { asks.push(l) }
     }
     for Later(ask, _, left) in asks {
         let Some(k) = (ask.target_node.0 & PAGE != 0).then(|| Id::from_u64(ask.target_node.0 & !PAGE)) else { continue };
-        let Some(place) = crate::page::with_doc(world, |doc, _| at(doc, k)) else { continue };
+        let Some(place) = host.doc(world, |doc, _| at(doc, k)) else { continue };
         let next = frame + 1;
         let (x, y) = match place {
             At::Press(x, y) => (x, y),
             At::Scroll(x, y, dx, dy) if left > 0 => {
-                let f = world.resource_mut::<Pending>().queue(json!({"type": "wheel", "x": x, "y": y, "dx": dx, "dy": dy}), next);
-                crate::inject::LAST_INPUT.fetch_max(f, std::sync::atomic::Ordering::SeqCst);
+                let f = (host.queue)(world, json!({"type": "wheel", "x": x, "y": y, "dx": dx, "dy": dy}), next);
                 // laid out where it scrolled to by the frame after the wheel's
                 later.push(Later(ask, f + 2, left - 1));
                 continue;
@@ -273,14 +249,12 @@ fn act(world: &mut World, reader: &mut SystemState<MessageReader<ActionRequest>>
                 continue;
             }
         };
-        let mut p = world.resource_mut::<Pending>();
-        p.queue(json!({"type": "down", "x": x, "y": y}), next);
-        let mut last = p.queue(json!({"type": "up", "x": x, "y": y}), next);
+        (host.queue)(world, json!({"type": "down", "x": x, "y": y}), next);
+        (host.queue)(world, json!({"type": "up", "x": x, "y": y}), next);
         if let (Action::SetValue, Some(ActionData::Value(v))) = (ask.action, &ask.data) {
             // what the field held selected, then the new text over it
-            p.queue(json!({"type": "key", "key": "a", "mods": [if cfg!(target_os = "macos") { "cmd" } else { "ctrl" }]}), next);
-            last = p.queue(json!({"type": "text", "text": v.to_string()}), next);
+            (host.queue)(world, json!({"type": "key", "key": "a", "mods": [if cfg!(target_os = "macos") { "cmd" } else { "ctrl" }]}), next);
+            (host.queue)(world, json!({"type": "text", "text": v.to_string()}), next);
         }
-        crate::inject::LAST_INPUT.fetch_max(last, std::sync::atomic::Ordering::SeqCst);
     }
 }
