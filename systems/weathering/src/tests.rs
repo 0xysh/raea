@@ -213,6 +213,7 @@ fn a_bake_is_the_same_bytes_twice_and_adds_texcoord_1() {
     }
     assert_eq!(std::fs::read(a["spots"].as_str().unwrap()).unwrap(), std::fs::read(b["spots"].as_str().unwrap()).unwrap(), "spots");
     let out = std::fs::read(a["file"].as_str().unwrap()).unwrap();
+    assert!(layout(&glb(front()), &req).is_ok_and(|l| l.glb == out && l.texels.len() as u64 == a["texels"]), "a layout alone is the bake's atlas");
     let sc = scene::read(&out, &Classes::default()).unwrap();
     assert_eq!(sc.prims.len(), 4);
     for m in sc.glb.json["meshes"].as_array().unwrap() {

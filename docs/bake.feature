@@ -85,24 +85,54 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
   Rule: the five parts (BK1-BK5)
 
     @needs:BK0
+    @done
     Scenario: BK1. Lightmap UVs for every static mesh
       Given the plan
-        | crate              | file                                 | lines | job                                                                 |
-        | raea-sys-lightbake | systems/lightbake/src/uvs.rs         | 240   | a second UV set per mesh from xatlas (MIT): charts cut at hard edges, packed with padding, texel density from world size |
+        | crate               | file                              | lines | job                                                                 |
+        | raea-sys-weathering | systems/weathering/src/lib.rs     | 265   | `layout(glb, request)`: charts.rs's atlas alone, no causes traced: the model with TEXCOORD_1, the atlas's size and density, every texel's point |
+        | raea-sys-weathering | systems/weathering/src/tests.rs   | 351   | a layout alone is the bake's atlas, byte for byte |
       Then every mesh a bake covers gets non-overlapping second UVs, charts at least 2 texels apart at its resolution
       And its texel density follows its world area (a 6 m wall and a 6 cm stapler at the same texels a metre, capped
         by `texels` and a per-bake atlas size), so nothing is stretched or wasted
       And the UVs are a pure function of the mesh: the same mesh gives the same atlas, cached with the bake
-      And a mesh that already has second UVs keeps them (a <Model> exported with a lightmap layer)
       And thin and degenerate triangles are measured: a chart under a texel is merged or flagged, never left unlit
+      And one second UV set serves the lightmap and raea/wear's cause maps (Shane, 11-23: the bake works with the wear
+        SDK): systems/weathering (docs/wear.feature WR1) already lays TEXCOORD_1 out for its cause maps and refuses a
+        material that reads it, so a second atlas would collide. The light bake lays its maps over weathering's atlas,
+        `raea_sys_weathering::layout`, with the request `raea wear bake` takes: given the wear bake's own request, it
+        is the wear bake's atlas byte for byte (the test says so); a light-only bake asks {env: {density: texels,
+        max_side}}
+      And built 11-23 after measuring the two on the test set: xatlas (MIT, vendored and built through cc, a map per
+        mesh at 64 texels a metre, 1024 a side, padding 2) against weathering's charts.rs (planar charts within 15
+        degrees, joined and folded by merge.rs, shelf-packed into one atlas with a 1-texel gutter each side, triangles
+        shut inside a closed shell given no texels), both at 64 texels a metre over each set's world triangles
+        | set     | layout      | islands | texels | used  | seam texels | stretch | no texels | time    |
+        | table   | weathering  | 196     | 2.06 M | 73.8% | 28 428      | 0.000   | 110       | 13 ms   |
+        | table   | xatlas      | 54      | 1.20 M | 69.2% | 19 494      | 0.011   | 0         | 69 ms   |
+        | window  | weathering  | 61      | 1.32 M | 75.1% | 31 368      | 0.000   | 23        | 7 ms    |
+        | window  | xatlas      | 72      | 1.22 M | 85.5% | 37 544      | 0.008   | 0         | 24 ms   |
+        | atelier | weathering  | 15 642  | 7.45 M | 51.1% | 545 675     | 0.021   | 38 030    | 1.6 s   |
+        | atelier | xatlas      | 28 913  | 7.90 M | 51.0% | 707 545     | 0.042   | 29 426    | 255 s   |
+        (islands: groups of triangles joined in the UVs; texels: the maps' area; used: the share on a surface; seam
+        texels: the islands' outlines; stretch: each triangle's texels a square metre against the layout's density,
+        area-weighted mean |log2|; no texels: hidden triangles, and for weathering also the details folded onto the
+        chart they sit on, which read its texels; for xatlas the triangles its fit shrank under a texel)
+      And what they say: on the atelier, the one real set, weathering's charts are 160 times faster, with half the
+        islands, 23% less seam and half the stretch at the same use, and xatlas's 255 s for UVs alone would spend the
+        bar's whole 60 s four times over. xatlas is a little better on the small sets (the table's ball and vase are
+        curved, the window room packs to 85%). Weathering's charts are the atlas; the xatlas vendoring went
+      And a model whose material already reads TEXCOORD_1 is refused with the reason, as WR1 refuses it (a model
+        lightbake.py baked); keeping a model's own second UVs is BK5's question, and the bake keys of `raea wear bake`
+        don't change (weathering's bytes are the same)
 
     @needs:BK1
     Scenario: BK2. Each texel's place in the world
       Given the plan
         | crate              | file                                 | lines | job                                                                 |
-        | raea-sys-lightbake | systems/lightbake/src/texels.rs      | 160   | each mesh rasterized in its lightmap UVs: world position, normal, which mesh and triangle, per texel |
-        | raea-sys-lightbake | systems/lightbake/src/texels.wgsl    | 90    | the raster pass, conservative, so a triangle thinner than a texel still writes |
-      Then each mesh's atlas has, per texel, its world position, shading normal and whether it is covered
+        | raea-sys-lightbake | systems/lightbake/src/texels.rs      | 160   | the layout's texels (BK1: weathering's world point, normal and triangle under each, an edge band of 0.75 of a texel) to the trace's buffers; the inside test and the offset |
+      Then each mesh's atlas has, per texel, its world position, shading normal and whether it is covered, read from
+        BK1's layout (charts.rs already rasterizes every triangle in its chart, a triangle under a texel included,
+        and fills the edge band), not rasterized a second time
       And a texel whose position is inside other geometry (a table leg's foot in the floor, a wall's end inside the
         next wall) is found by a short ray test and marked, so it neither goes black nor leaks light into the bake
       And positions are offset along the normal by a scale-aware epsilon, so the trace never hits its own surface
@@ -116,6 +146,11 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
       Then each texel integrates the incoming diffuse light over its hemisphere along paths of up to `bounces`
         (default 4) through systems/rt's BLAS and TLAS, the materials at each hit being the composition's
         StandardMaterials (base colour, its texture, roughness, metallic, emissive) as the raster reads them
+      And the colour that bounces is the albedo raea draws at the hit, extensions included: ProceduralExtension's
+        patterns (systems/procmat, its dust, dirt and edges), WearExtension (systems/wear) and raea/wear's recipes over
+        the cause maps (sdk/wear), so a grimy brick wall bounces grimy brick. The kernel evaluates them from one WGSL
+        module shared with the raster, not a copy (Shane, 11-23); Blender's export drops these materials, so this is
+        a bake Cycles' round trip can't make
       And the sky is the composition's <Environment> panorama at its intensity and rotation; emissive surfaces light
         the set; the sun's direct light is left out at the first hit and kept at every later bounce (so a sunlit floor
         lights the ceiling), and a light marked `bake` is carried whole
@@ -157,3 +192,6 @@ Feature: Light baked by raea: bounce light into lightmaps on raea's own ray trac
         the Cycles reference to compare against; the realism guide's bake step points to it once that guide lands
       And on BK0's test set, a composition with <LightBake> meets the bar, and the atelier's static set bakes in raea
         with its Blender bake as the comparison
+      And the test set gains a worn set: the table set's parts under ProceduralExtension and WearExtension materials
+        with their cause maps, its frame measured against raea's own frame of the same parts with the bounce read from
+        the drawn albedo (its Cycles reference stays flat-colour, since the export drops the extensions, and says so)

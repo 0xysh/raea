@@ -158,13 +158,8 @@ pub fn bake(store: &Path, src: &Path, req: &Value) -> R<Value> {
             return Ok(v);
         }
     }
-    let env = Env::of(req.get("env").unwrap_or(&Value::Null))?;
-    let classes = Classes::of(req.get("classes").unwrap_or(&Value::Null))?;
     let t0 = Instant::now();
-    let sc = scene::read(&bytes, &classes).map_err(|e| format!("{}: {e}", src.display()))?;
-    let mesh = rays::mesh_of(&sc);
-    let t1 = Instant::now();
-    let at = charts::build(&sc, &env, &mesh)?;
+    let (env, sc, mesh, at, t1) = lay(&bytes, req).map_err(|e| format!("{}: {e}", src.display()))?;
     let t2 = Instant::now();
     let n = (at.w * at.h) as usize;
     let (mut c0, mut c1, mut c2, mut c3) = (vec![[0u8; 4]; n], vec![[0u8; 4]; n], vec![[0u8; 4]; n], vec![[0u8; 4]; n]);
@@ -206,6 +201,45 @@ pub fn bake(store: &Path, src: &Path, req: &Value) -> R<Value> {
     });
     std::fs::write(&meta, out.to_string()).map_err(|e| format!("{}: {e}", meta.display()))?;
     Ok(out)
+}
+
+/// What the cause bake and a layout alone start from: the world, the triangles, their ray mesh, the atlas (and its start).
+fn lay(bytes: &[u8], req: &Value) -> R<(Env, scene::Scene, parry3d::shape::TriMesh, charts::Atlas, Instant)> {
+    let env = Env::of(req.get("env").unwrap_or(&Value::Null))?;
+    let sc = scene::read(bytes, &Classes::of(req.get("classes").unwrap_or(&Value::Null))?)?;
+    let mesh = rays::mesh_of(&sc);
+    let t = Instant::now();
+    let at = charts::build(&sc, &env, &mesh)?;
+    Ok((env, sc, mesh, at, t))
+}
+
+/// A texel of the atlas, the world point under it (charts.rs: its centre's, or the chart edge's nearest), its normal, triangle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Texel {
+    pub x: u16,
+    pub y: u16,
+    pub p: [f32; 3],
+    pub n: [f32; 3],
+    pub tri: u32,
+}
+
+/// The atlas alone, no causes traced (docs/bake.feature BK1): the model with its TEXCOORD_1, size, density, texels. The
+/// same request gives `bake`'s atlas, so a light bake laid over it and the cause maps read one second UV set.
+#[derive(Debug, PartialEq)]
+pub struct Layout {
+    pub glb: Vec<u8>,
+    pub w: u32,
+    pub h: u32,
+    pub density: f32,
+    pub charts: usize,
+    pub hidden: usize,
+    pub texels: Vec<Texel>,
+}
+
+pub fn layout(bytes: &[u8], req: &Value) -> R<Layout> {
+    let (_, sc, _, at, _) = lay(bytes, req)?;
+    let texels = at.texels.iter().map(|t| Texel { x: t.x, y: t.y, p: t.p.to_array(), n: t.n.to_array(), tri: t.tri }).collect();
+    Ok(Layout { glb: scene::write(&sc, &at)?, w: at.w, h: at.h, density: at.density, charts: at.charts, hidden: at.hidden, texels })
 }
 
 fn strip_src(v: &Value) -> Value {
