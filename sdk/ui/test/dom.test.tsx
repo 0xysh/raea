@@ -117,6 +117,54 @@ describe("P18 DOM surface", () => {
     expect(log).toEqual(["allowed", "behind"]);
   });
 
+  test("a link's press follows it: its fragment becomes location's hash, unless a listener prevents it", () => {
+    const host = fresh();
+    function App() {
+      const r = useRef<any>(null);
+      // markup set as HTML, as raea cloud's dashboard builds its rail in raea.app
+      useEffect(() => void (r.current.innerHTML = '<a data-testid="go" href="#/projects">Projects</a><a data-testid="stay" href="#/agents">Agents</a>'), []);
+      return <nav data-testid="root" ref={r} onClick={() => {}} />;
+    }
+    mount(<App />, 0, { dom: true });
+    flush();
+    snap(host, { root: [0, 0, 200, 100], go: [0, 0, 200, 40], stay: [0, 50, 200, 40] });
+    const was = g.location.hash;
+    host.send("root", "pointerdown", { ...press(10, 10), target: host.tid("go") });
+    host.send("root", "pointerup", { ...press(10, 10), target: host.tid("go") });
+    expect(g.location.hash).toBe("#/projects");
+    g.document.querySelector('[data-testid="stay"]').addEventListener("click", (e: any) => e.preventDefault());
+    host.send("root", "pointerdown", { ...press(10, 60), target: host.tid("stay") });
+    host.send("root", "pointerup", { ...press(10, 60), target: host.tid("stay") });
+    expect(g.location.hash).toBe("#/projects");
+    g.location.hash = was;
+  });
+
+  test("a second React root on a layer over the page (raea.app's welcome) takes its button's click", () => {
+    const host = fresh();
+    const log: string[] = [];
+    mount(<main data-testid="page" onClick={() => log.push("page")}>dashboard</main>, 0, { dom: true });
+    flush();
+    const layer = g.document.createElement("div");
+    layer.setAttribute("data-testid", "layer");
+    g.document.body.appendChild(layer);
+    flush();
+    mount(
+      <div data-testid="over" className="fixed inset-0">
+        <button data-testid="start" onClick={() => log.push("start")}>Start</button>
+      </div>,
+      layer.__wid,
+      { dom: true },
+    );
+    flush();
+    snap(host, { page: [0, 0, 800, 600], layer: [0, 0, 0, 0], over: [0, 0, 800, 600], start: [600, 500, 60, 30] });
+    const target = host.tid("start");
+    // to the nearest element up from the button that listens, as the host sends it
+    const hearer = ["start", "over", "layer", "page"].find((t) => (host as any).get(host.tid(t)).on.has("pointerdown"));
+    host.send(hearer!, "pointerdown", { ...press(620, 510), target });
+    host.send(hearer!, "pointerup", { ...press(620, 510), target });
+    expect(log).toEqual(["start"]);
+  });
+
   test("a press: capture and bubble through native and React listeners in Chrome's order, then click", () => {
     const host = fresh();
     const log: string[] = [];
