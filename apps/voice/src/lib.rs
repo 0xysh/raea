@@ -58,7 +58,8 @@ fn say(text: &str, out: &str, voice: Option<String>) -> anyhow::Result<String> {
     use raea_sys_speech::pocket::{Out, Pocket};
     let t = Instant::now();
     let mut pocket = Pocket::load(&raea_sys_ml::models::ensure(&Pocket::SPEC, &mut fetching(quiet))?)?;
-    let voice = voice.unwrap_or_else(Pocket::default_voice);
+    // Pocket's stock voice, as a session's: never the clip the library's own default takes from the person's voice folder
+    let voice = voice.unwrap_or_else(|| Pocket::VOICES[0].to_string());
     pocket.begin("", &voice, 1, 0.7)?;
     let load_ms = t.elapsed().as_millis() as u64;
     let t = Instant::now();
