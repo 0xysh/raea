@@ -151,14 +151,17 @@ function validate(props: CompositionProps<any>, taken: readonly RegisteredCompos
   const scale = (draft ?? 1) * ((globalThis as { __raea_scale?: number }).__raea_scale ?? 1);
   const [w, h] = scale === 1 ? [props.width, props.height] : [Math.max(1, Math.round(props.width * scale)), Math.max(1, Math.round(props.height * scale))];
   const controls = validControls(props.controls, defaultProps as Record<string, unknown>, fail);
-  const cut = segments ? edited(props.component, segments) : props.component;
+  // --hold N:M: frame N drawn M times, so what still changes on screen is the renderer's own (raea light steady)
+  const hold = (globalThis as { __raea_hold?: [number, number] }).__raea_hold;
+  const Whole = segments ? edited(props.component, segments) : props.component;
+  const cut: ComponentType<any> = hold ? (p) => <Freeze frame={hold[0]}><Whole {...p} /></Freeze> : Whole;
   return {
     id: props.id,
     component: w === props.width && h === props.height ? cut : scaled(cut, props.width, props.height, w, h),
     width: w,
     height: h,
     fps: props.fps,
-    durationInFrames: segments ? segments.reduce((n, [a, b]) => n + b - a, 0) : props.durationInFrames,
+    durationInFrames: hold ? hold[1] : segments ? segments.reduce((n, [a, b]) => n + b - a, 0) : props.durationInFrames,
     defaultProps,
     controls,
   };

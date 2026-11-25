@@ -13,13 +13,14 @@
 //! live stage, 1920x1080 by default) }.
 
 pub mod metric;
+pub mod steady;
 
 use raea_runtime_bundle::{flag, R};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari,gi] [--spp N] [--fresh]";
+pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari,gi] [--spp N] [--fresh] | raea light steady EDIT.tsx --frame N [--composition ID] [--frames 96] [--max 1.5] -o DIR | raea light steady DIR [--max 1.5]   (steady: frame N held, and whether its light holds still)";
 
 /// The light paths a check compares: RAEA_LIGHT's, and traced-ao, raster with systems/rt's traced occlusion in place
 /// of SSAO (on a camera with <AmbientOcclusion>; on any other it draws as raster).
@@ -309,6 +310,9 @@ fn table(reports: &[Value]) -> String {
 }
 
 pub fn light(args: &[String]) -> R<String> {
+    if args.first().map(String::as_str) == Some("steady") {
+        return steady::steady(&args[1..]);
+    }
     if args.first().map(String::as_str) != Some("check") || args.len() < 2 {
         return Err(format!("usage: {USAGE}"));
     }

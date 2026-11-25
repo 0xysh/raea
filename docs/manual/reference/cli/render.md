@@ -60,7 +60,7 @@ the reason in the manifest. A render of a file in a raea project also keeps its 
 ## Usage
 
 ```sh
-raea render EDIT.tsx -o OUT.mp4|OUT.png|OUT.wav|DIR [--audio OUT.wav] [--frame N | --at A,B] [--composition ID] [--w W] [--h H] [--fps FPS] [--frames N] [--words W.json] [--perception P.json] [--input I.json|inputs.rrl] [--props JSON|P.json] [--scale S] [--manifest render.json] [--layers] [--stage WxH] [--10bit] [--aov] [--alpha [--alpha-codec prores|hevc|rle|png]] [--kbps N | --quality draft|high|master|0..1] [--clay] [--despite CHECK WHY]   (also: --lite --comps)
+raea render EDIT.tsx -o OUT.mp4|OUT.png|OUT.wav|DIR [--audio OUT.wav] [--frame N | --at A,B] [--composition ID] [--w W] [--h H] [--fps FPS] [--frames N] [--words W.json] [--perception P.json] [--input I.json|inputs.rrl] [--props JSON|P.json] [--scale S] [--hold FRAME[:FRAMES]] [--manifest render.json] [--layers] [--stage WxH] [--10bit] [--aov] [--alpha [--alpha-codec prores|hevc|rle|png]] [--kbps N | --quality draft|high|master|0..1] [--clay] [--despite CHECK WHY]   (also: --lite --comps)
 raea render EDIT.tsx --review DIR [--frame N]   (fixed cameras hero, front, right, top, iso, low in colour and clay: DIR/colour.png, clay.png, review.json)
 raea render PAGE.html -o OUT.mp4|OUT.png|DIR [--at A,B] [--alpha]   (an HTML composition)
 raea render --bundle NAME.comp.js -o OUT.png|DIR [--dir DIR] [--frame N]   (a bundle from raea bundle, as render_bundle draws it)
@@ -88,6 +88,7 @@ Headless: it needs nothing running and opens no window. Takes up to 1 argument b
 | `--frame` | `N` | Render this one frame. |
 | `--frames` | `N` | Length in frames for a file with no `<Composition>` or `config` (60 by default). |
 | `--h` | `H` | Height in pixels for a file with no `<Composition>` or `config` (1920 by default). |
+| `--hold` | `FRAME` | Draws that frame of a `<Composition>` again and again, 96 times, or as many as `FRAME:FRAMES` says. The scene and the camera hold still, so what changes between the frames is the renderer's own. `raea light steady` measures it. |
 | `--input` | `I.json\|inputs.rrl` | A game's input over time: a JSON timeline, or the step keys of an `inputs.rrl`, so a recorded play-through renders the same every time. |
 | `--kbps` | `N` | A fixed video bitrate in kbit/s, in place of the default that follows size and frame rate. |
 | `--layers` | – | Write `NAME.layers` beside the export: which layer (a 3D part, an element, its text, an image or a video, by where its JSX is written) each pixel of each frame shows, for raea's player to select layers by clicking. The manifest (`--manifest`, or `NAME.render.json` beside it) names it. The export cache is skipped. |

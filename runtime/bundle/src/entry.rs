@@ -5,7 +5,7 @@ pub fn entry(file: &str, o: &CompOpts) -> String {
     let js = |v: &Option<Value>| v.as_ref().map(Value::to_string).unwrap_or("null".into());
     let (words, perception, input) = (js(&o.words), js(&o.perception), js(&o.input));
     let given = serde_json::to_string(&o.given).unwrap_or("[]".into());
-    let props = format!("{} x{}", js(&o.props), o.scale.unwrap_or(1.0));
+    let props = format!("{} x{} hold {:?}", js(&o.props), o.scale.unwrap_or(1.0), o.hold);
     // the composition's element made once, so a frame re-renders only what reads the frame (its clock, through
     // useCurrentFrame), not every part (docs/control.feature FC1b). A frame is already pure (a still renders any
     // frame alone), so a part drawing Math.random or Date in render without reading the frame breaks either way.
