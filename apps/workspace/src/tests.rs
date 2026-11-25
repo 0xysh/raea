@@ -234,7 +234,8 @@ fn a_workspace_0_1_6_broke_is_repaired() {
 fn a_project_names_its_client() {
     // Shane 11-24: projects relate by raea cloud's tags (a client), not by nesting; raea.app files `raea show`'s cards
     // under the client the folder names (host/local-cloud/clients.ts)
-    use crate::workspace::{client_of, new_project_in, tag_in};
+    use crate::client::tag_in;
+    use crate::workspace::{client_of, new_project_in};
     let ws = scratch("client");
     crate::workspace::make_workspace(&ws, "Clients", "monorepo").unwrap();
     new_project_in(&ws, "Launch", None).unwrap();
