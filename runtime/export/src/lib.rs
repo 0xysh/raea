@@ -191,8 +191,7 @@ fn push_sound(cx: &mut Ctx, props: &Map<String, Value>, skey: &str) {
     if let (Some(src), Some(at)) = (props.get("src").and_then(|v| v.as_str()), num(props, "data-source-time")) {
         let Some(file) = raea_io_net::cache::remote(src).map_or_else(|| Some(media_path(cx.dir, src)), Result::ok) else { return }; // http(s): raea's URL cache (#57)
         // a sound track with samples: a short window says so (decoding the whole take for it held a long take whole)
-        // a sound file that isn't there is named, once (raea_runtime_sound::there)
-        let audible = *cx.audible.entry(file.clone()).or_insert_with(|| raea_runtime_sound::there(&file, src) && raea_io_media::decode_audio_window(&file, 0.0, 0.05).is_ok_and(|a| a.len() > 0));
+        let audible = *cx.audible.entry(file.clone()).or_insert_with(|| raea_runtime_sound::there(&file, src) && raea_io_media::decode_audio_window(&file, 0.0, 0.05).is_ok_and(|a| a.len() > 0)); // a file that isn't there is named, once (sound's there)
         if !muted && volume > 0.0 && audible {
             // raea's mix: dialogue at one level, gainDb an offset on it (raea-sys-mix level.rs), as live play has it
             let volume = volume * raea_sys_mix::level::gain(&file, num(props, "data-clip-from").unwrap_or(0.0), num(props, "data-clip-to"), props.get("data-bus").and_then(|v| v.as_str())) as f64;
