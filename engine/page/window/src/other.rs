@@ -17,7 +17,9 @@ pub fn clipboard_read() -> String {
 #[cfg(feature = "window")]
 pub use raea_io_os::open_url as open;
 #[cfg(not(feature = "window"))]
-pub fn clipboard_write(_: &str) -> Result<(), String> {
+pub fn clipboard_write(text: &str) -> Result<(), String> {
+    // nothing to write to without a window; answered as written, as before
+    let _unwritten = text.len();
     Ok(())
 }
 #[cfg(not(feature = "window"))]
