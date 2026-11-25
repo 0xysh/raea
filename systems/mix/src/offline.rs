@@ -208,7 +208,7 @@ fn mastered(raw: &raea_io_media::Audio, mix: Option<(f64, f64)>, encode: Encode)
     let (mut a, mut last) = (master_raw(raw, Some((gain, ceiling))), None::<(f64, f64)>);
     for _ in 0..8 {
         let got = raea_io_media::audio::lufs(&a);
-        let slope = last.map(|(g0, l0)| ((got - l0) / (gain - g0)).clamp(0.05, 1.0)).filter(|s| s.is_finite()).unwrap_or(1.0);
+        let slope = last.map_or(1.0, |(g0, l0)| if gain == g0 { 1.0 } else { ((got - l0) / (gain - g0)).clamp(0.05, 1.0) });
         if !got.is_finite() || (got - lufs).abs() <= 0.2 {
             break;
         }

@@ -110,6 +110,9 @@ pub fn render_with(scene: &Scene, label: &str, env: &[(&str, String)], at: &[i64
     let run = cmd
         .args(["render", &scene.file, "--composition", &scene.composition, "--at", &at.join(","), "-o"])
         .arg(format!("{}/", out.display()))
+        // a light check measures light, not placement: a set's clip (11-24: FLOOR3's fit-2 1 cm into grid-bay) is the
+        // set's to fix and stays in its record, but doesn't stop the measure
+        .args(["--despite", "clips", "raea light check measures light, not placement"])
         .output()
         .map_err(|e| e.to_string())?;
     if !run.status.success() {

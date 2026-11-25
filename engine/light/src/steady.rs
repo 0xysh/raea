@@ -10,7 +10,8 @@
 //! (LARGE / SMALL = 4 times less in the large squares); a blotch as wide as the large square keeps its deviation.
 //! `blotch` is the large squares' deviation (rms over the lit ones, percent), `worst` the worst TILE's, and `spread`
 //! the large squares' deviation over the small squares' (0.25 is grain alone, toward 1 is blotches). A run over
-//! `--max` fails, and DIR/steady.png shows where: each large square by its deviation, white at MAX_SHOWN percent.
+//! `--max` fails, as does a light whose level drifts (`drift`, stops between the first and the last quarter of the
+//! measured frames: a cache gaining or losing energy the longer it runs), and DIR/steady.png shows where: each large square by its deviation, white at MAX_SHOWN percent.
 
 use crate::metric::{self, Luma};
 use raea_runtime_bundle::{flag, R};
@@ -30,6 +31,8 @@ const MAX_SHOWN: f64 = 6.0;
 /// What a run may show before it fails, percent, unless `--max` says: a held raster frame reads 0, Solari with a
 /// built cache under 1.
 const MAX: f64 = 1.5;
+/// How far the held frame's level may move between the first and the last quarter of the measured frames, in stops.
+const MAX_DRIFT: f64 = 0.05;
 
 /// Each square's mean and deviation in time over `frames`, side `k`: (w, h, [(mean, deviation / mean)]).
 fn squares(frames: &[Luma], k: usize) -> (usize, usize, Vec<(f64, f64)>) {
@@ -75,7 +78,12 @@ pub fn measure(frames: &[Luma]) -> R<(Value, image::GrayImage)> {
         image::Luma([if s.0 > LIT { (s.1 * 100.0 / MAX_SHOWN * 255.0).min(255.0) as u8 } else { 0 }])
     });
     let pct = |v: f64| (v * 1e4).round() / 100.0;
+    // the light's level over the held frames: a cache gaining or losing energy is a ramp, not patches
+    let level = |f: &[Luma]| f.iter().map(|f| f.y.iter().map(|&v| v as f64).sum::<f64>() / f.y.len().max(1) as f64).sum::<f64>() / f.len() as f64;
+    let q = (frames.len() / 4).max(1);
+    let drift = (level(&frames[frames.len() - q..]).max(1e-6) / level(&frames[..q]).max(1e-6)).log2();
     let report = json!({
+        "drift": (drift * 1e3).round() / 1e3,
         "frames": frames.len(), "blotch": pct(blotch), "grain": pct(grain), "spread": ((blotch / grain.max(1e-9)) * 100.0).round() / 100.0,
         "worst": pct(worst.0), "worst_at": [worst.1, worst.2], "lit": ((large.iter().filter(lit).count() as f64 / large.len().max(1) as f64) * 100.0).round() / 100.0,
     });
@@ -119,12 +127,13 @@ pub fn steady(args: &[String]) -> R<String> {
     let png = dir.join("steady.png");
     map.save(&png).map_err(|e| format!("{}: {e}", png.display()))?;
     let (blotch, worst) = (report["blotch"].as_f64().unwrap_or(0.0), report["worst"].as_f64().unwrap_or(0.0));
-    let ok = blotch <= max && worst <= max * 3.0;
+    let drift = report["drift"].as_f64().unwrap_or(0.0);
+    let ok = blotch <= max && worst <= max * 3.0 && drift.abs() <= MAX_DRIFT;
     report["max"] = json!(max);
     report["steady"] = json!(ok);
     std::fs::write(dir.join("steady.json"), serde_json::to_string_pretty(&report).unwrap_or_default()).map_err(|e| e.to_string())?;
     let line = format!(
-        "blotch {blotch}% (max {max}), worst {worst}% at {},{} (max {}), grain {}%, spread {} over {} held frames; {}",
+        "drift {drift} stops (max {MAX_DRIFT}), blotch {blotch}% (max {max}), worst {worst}% at {},{} (max {}), grain {}%, spread {} over {} held frames; {}",
         report["worst_at"][0], report["worst_at"][1], max * 3.0, report["grain"], report["spread"], report["frames"], png.display()
     );
     if ok { Ok(format!("STEADY  {line}")) } else { Err(format!("the light doesn't hold still: {line}. On Solari this is the world cache lit by too few rays: bake it (cache.bake, then cache.load), or give it a longer history")) }
@@ -156,6 +165,12 @@ mod tests {
     fn grain_is_steady_and_blotches_are_not() {
         let still = measure(&frames(0.0, 0.0)).unwrap().0;
         assert_eq!(still["blotch"], 0.0);
+        assert_eq!(still["drift"], 0.0);
+        // a light that doubles over the held frames: about 0.8 of a stop between the first and the last quarter
+        let mut rising = frames(0.0, 0.0);
+        let n = rising.len() as f32;
+        rising.iter_mut().enumerate().for_each(|(t, f)| f.y.iter_mut().for_each(|v| *v *= 1.0 + t as f32 / n));
+        assert!(measure(&rising).unwrap().0["drift"].as_f64().unwrap() > 0.5);
         // heavy grain, 30% a pixel: under 1% across a 32 px square, and a spread near 0.25
         let grain = measure(&frames(0.3, 0.0)).unwrap().0;
         assert!(grain["blotch"].as_f64().unwrap() < 1.0, "{grain}");
