@@ -110,7 +110,7 @@ fn probe(path: &Path) -> R<(Info, Vec<f64>, bool, Option<&'static str>)> {
     let untagged = !matches!(s["color_space"].as_str(), Some(c) if c != "unknown");
     // the tag in either case: ffmpeg's muxer writes ALPHA_MODE when it copies a stream that has alpha, and a file
     // remuxed with -c copy drew opaque (#224)
-    let tagged = s["tags"].as_object().and_then(|t| t.iter().find(|(k, _)| k.eq_ignore_ascii_case("alpha_mode"))).and_then(|(_, v)| v.as_str());
+    let tagged = s["tags"].as_object().and_then(|t| t.iter().find_map(|(k, v)| k.eq_ignore_ascii_case("alpha_mode").then(|| v.as_str()).flatten()));
     let alpha = match (s["codec_name"].as_str(), tagged) {
         (Some("vp8"), Some("1")) => Some("libvpx"),
         (Some("vp9"), Some("1")) => Some("libvpx-vp9"),

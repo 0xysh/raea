@@ -15204,7 +15204,6 @@ version = "0.1.0"
 dependencies = [
  "dunce",
  "junction",
- "libc",
  "raea-core-scene",
  "raea-io-home",
  "raea-io-media",
@@ -15212,10 +15211,10 @@ dependencies = [
  "raea-native",
  "raea-runtime-bundle-lib",
  "raea-runtime-cssurls",
+ "raea-runtime-pid",
  "raea-sys-layers",
  "regex",
  "serde_json",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15534,6 +15533,14 @@ version = "0.1.0"
 dependencies = [
  "image",
  "twox-hash",
+]
+
+[[package]]
+name = "raea-runtime-pid"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

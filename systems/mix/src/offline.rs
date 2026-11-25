@@ -205,8 +205,7 @@ fn mastered(raw: &raea_io_media::Audio, mix: Option<(f64, f64)>, encode: Encode)
     let mut gain = raea_io_media::audio::master_gained(raw, lufs, ceiling).1;
     // a join the mix drops into dead silence gets the room's tone, found at the level the master plays it (joins.rs)
     let raw = &crate::joins::filled(raw, gain);
-    let mut a = master_raw(raw, Some((gain, ceiling)));
-    let mut last: Option<(f64, f64)> = None;
+    let (mut a, mut last) = (master_raw(raw, Some((gain, ceiling))), None::<(f64, f64)>);
     for _ in 0..8 {
         let got = raea_io_media::audio::lufs(&a);
         let slope = last.map(|(g0, l0)| ((got - l0) / (gain - g0)).clamp(0.05, 1.0)).filter(|s| s.is_finite()).unwrap_or(1.0);

@@ -175,6 +175,7 @@ members = [
     "runtime/track",
     "runtime/pagestore",
     "runtime/cssurls",
+    "runtime/pid",
     "bench/bridge",
     "bench/bevy-parity",
     "bench/lightbench",

@@ -12,6 +12,7 @@ mod cache;
 mod entry;
 mod fresh;
 mod outside;
+#[cfg(test)]
 mod pid;
 mod rewrite;
 pub mod styles;
@@ -197,10 +198,7 @@ pub fn props_arg(given: &str) -> R<Value> {
 
 /// What the command line gave this run's composition (`--props`, `--scale`), for the render's manifest: a check of
 /// the file knows what it was rendered with.
-pub fn given() -> Option<Value> {
-    GIVEN.lock().unwrap().clone()
-}
-static GIVEN: std::sync::Mutex<Option<Value>> = std::sync::Mutex::new(None);
+pub static GIVEN: std::sync::Mutex<Option<Value>> = std::sync::Mutex::new(None);
 
 pub fn comp_opts(args: &[String]) -> R<CompOpts> {
     let n = |k: &str| -> R<Option<f64>> { flag(args, k).map(|v| v.parse::<f64>().map_err(|_| format!("{k} takes a number"))).transpose() };

@@ -75,7 +75,7 @@ fn write_manifest(cx: &mut Ctx, (w, h, fps, length): (u32, u32, f64, i64), found
     path.parent().map_or(Ok(()), std::fs::create_dir_all).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut v = json!({"width": w, "height": h, "fps": fps, "length": length, "frames": frames, "findings": raea_core_facts::finding::ranked(found), "sounds": heard(cx), "not_applied": not_applied::seen(), "layers": raea_sys_layers::finish(fps), "has3d": cx.scene3d.is_some() || cx.live3d.is_some()});
     // the parts SG9 needs (scene.rs's SEEN: stills' parts on screen, a longer render's remounts), and --props and --scale
-    for more in [scene::SEEN.lock().unwrap().take(), given()] {
+    for more in [scene::SEEN.lock().unwrap().take(), GIVEN.lock().unwrap().clone()] {
         v.as_object_mut().into_iter().zip(more.and_then(|m| m.as_object().cloned())).for_each(|(m, more)| m.extend(more));
     }
     std::fs::write(&path, v.to_string()).map_err(|e| format!("{}: {e}", path.display()))
