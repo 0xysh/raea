@@ -13,11 +13,13 @@ use serde_json::json;
 
 pub mod asr;
 pub mod audio;
+pub mod echo;
 pub mod session;
 pub mod speak;
 pub mod turns;
 
-pub const USAGE: &str = "raea voice [--voice NAME] [--duplex] [--pause MS] [--from IN.wav] [--to OUT.wav] [--fast] | raea voice hear FILE.wav | raea voice say \"WORDS\" -o OUT.wav [--voice NAME]";
+pub const USAGE: &str = "raea voice [--voice NAME] [--duplex] [--over] [--pause MS] [--from IN.wav] [--to OUT.wav] [--room GAIN] [--fast] | raea voice hear FILE.wav | raea voice say \"WORDS\" -o OUT.wav [--voice NAME]";
+pub const ABOUT: &str = "speech in and out on this computer, as lines of JSON on stdin and stdout: what raea.app's Ideate hears and speaks with. While it speaks it doesn't listen, unless --duplex (headphones: it listens all the time) or --over (speakers: its own voice is taken out of the microphone's sound, new and not yet tried across real rooms); --room GAIN is a simulated room for checking --over with files; hear writes a recording's words, say speaks words to a file";
 
 /// A model's download told as it goes, once every 20 MB of each file.
 pub fn fetching(emit: fn(serde_json::Value)) -> impl FnMut(&str, u64) {
@@ -78,6 +80,7 @@ pub fn cli(args: &[String]) -> Result<String, String> {
     match args.get(1).map(String::as_str) {
         Some("hear") => hear(args.get(2).ok_or(USAGE)?).map_err(said),
         Some("say") => say(args.get(2).ok_or(USAGE)?, &flag(args, "-o").ok_or(USAGE)?, flag(args, "--voice")).map_err(said),
+        Some("help" | "--help" | "-h") => Ok(format!("usage: {USAGE}\n({ABOUT})")),
         Some(a) if !a.starts_with("--") => Err(USAGE.into()),
         _ => {
             let pause_ms = match flag(args, "--pause") {
@@ -89,6 +92,11 @@ pub fn cli(args: &[String]) -> Result<String, String> {
                 to: flag(args, "--to").map(PathBuf::from),
                 voice: flag(args, "--voice"),
                 duplex: args.iter().any(|a| a == "--duplex"),
+                over: args.iter().any(|a| a == "--over"),
+                room: match flag(args, "--room") {
+                    Some(g) => Some(g.parse().map_err(|_| "--room takes a gain, like 0.5".to_string())?),
+                    None => None,
+                },
                 fast: args.iter().any(|a| a == "--fast"),
                 pause_ms,
             };

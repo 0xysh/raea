@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -137,12 +137,15 @@ pub fn microphone_file(path: &Path, fast: bool, tx: Sender<Vec<f32>>) -> anyhow:
     Resample::new(rate, crate::turns::RATE as u32).push(&x, &mut heard);
     heard.extend(std::iter::repeat_n(0.0, crate::turns::RATE * 3 / 2));
     std::thread::spawn(move || {
+        // by the clock from its start, so a late wake-up is made up and it keeps a microphone's pace
+        let (began, mut sent) = (Instant::now(), 0u64);
         for piece in heard.chunks(crate::turns::WIN) {
             if tx.send(piece.to_vec()).is_err() {
                 return;
             }
+            sent += piece.len() as u64;
             if !fast {
-                std::thread::sleep(Duration::from_micros(1_000_000 * piece.len() as u64 / crate::turns::RATE as u64));
+                std::thread::sleep((began + Duration::from_micros(1_000_000 * sent / crate::turns::RATE as u64)).saturating_duration_since(Instant::now()));
             }
         }
     });
@@ -157,6 +160,10 @@ pub struct Line {
     /// everything played, when it goes to a file
     kept: Mutex<Vec<f32>>,
     keep: AtomicBool,
+    /// what went to the speakers, quiet included, for the echo to be taken out of the microphone (echo.rs): kept
+    /// while `tap` is on, and taken by the session
+    pub far: Mutex<Vec<f32>>,
+    pub tap: AtomicBool,
 }
 
 impl Line {
@@ -171,13 +178,18 @@ impl Line {
     }
 
     /// The next `n` samples (fewer when the queue runs out), counted as played.
-    fn take(&self, n: usize) -> Vec<f32> {
+    fn take(&self, want: usize) -> Vec<f32> {
         let mut q = self.queue.lock().unwrap();
-        let n = n.min(q.len());
+        let n = want.min(q.len());
         let got: Vec<f32> = q.drain(..n).collect();
         self.played.fetch_add(n as u64, Ordering::Relaxed);
         if self.keep.load(Ordering::Relaxed) {
             self.kept.lock().unwrap().extend(&got);
+        }
+        if self.tap.load(Ordering::Relaxed) && want < 1 << 20 {
+            let mut far = self.far.lock().unwrap();
+            far.extend(&got);
+            far.extend(std::iter::repeat_n(0.0, want - n));
         }
         got
     }
@@ -186,8 +198,10 @@ impl Line {
 /// A file in the speakers' place: what is waiting is taken at the pace it would play (all of it at once with `fast`).
 fn drain(line: Arc<Line>, each: usize) {
     std::thread::spawn(move || {
+        let (began, mut ticks) = (Instant::now(), 0u32);
         while Arc::strong_count(&line) > 1 {
-            std::thread::sleep(Duration::from_millis(20));
+            ticks += 1;
+            std::thread::sleep((began + Duration::from_millis(20) * ticks).saturating_duration_since(Instant::now()));
             line.take(each);
         }
     });
@@ -204,7 +218,7 @@ pub struct Speaker {
 impl Speaker {
     /// `rate`: the voice's. With `to`, nothing sounds: what would have played is written there when the session ends.
     pub fn open(rate: u32, to: Option<PathBuf>, fast: bool) -> anyhow::Result<Speaker> {
-        let line = Arc::new(Line { queue: Mutex::new(VecDeque::new()), played: AtomicU64::new(0), kept: Mutex::new(Vec::new()), keep: AtomicBool::new(to.is_some()) });
+        let line = Arc::new(Line { queue: Mutex::new(VecDeque::new()), played: AtomicU64::new(0), kept: Mutex::new(Vec::new()), keep: AtomicBool::new(to.is_some()), far: Mutex::new(Vec::new()), tap: AtomicBool::new(false) });
         if to.is_some() {
             drain(line.clone(), if fast { usize::MAX } else { rate as usize / 50 });
             return Ok(Speaker { line, rate, to, _stream: None });

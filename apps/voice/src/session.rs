@@ -16,9 +16,13 @@
 //!        {"stopped":{"id"}}                      u1 was cut off (a stop, or the person spoke over it)
 //!        {"error":"..."}
 //!
-//! While raea speaks it doesn't listen, unless `duplex` (headphones): a laptop's microphone hears its own speakers,
-//! and raea would take its own voice for the person interrupting.
+//! While raea speaks it doesn't listen: a computer's microphone hears its own speakers, and raea would take its own
+//! voice for the person interrupting. Words begun before it started are still heard. Two ways to talk over it:
+//! `duplex` listens all the time with nothing taken out (headphones), and `over` takes raea's own voice out of what
+//! the microphone hears (echo.rs) so speakers work too: what stands clear of it stops raea. `over` is new: it has
+//! been checked in a simulated room (`room`), not yet across real rooms, so it isn't the default.
 
+use std::collections::VecDeque;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -29,6 +33,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use crate::audio::{microphone, microphone_file, Speaker};
+use crate::echo::{Echo, Heard, Sides};
 use crate::speak::{Say, Words, RATE};
 use crate::turns::{Turn, Turns, Vad, WIN};
 
@@ -37,6 +42,10 @@ pub struct Opts {
     pub to: Option<PathBuf>,
     pub voice: Option<String>,
     pub duplex: bool,
+    /// listen while speaking, with raea's own voice taken out of the microphone's sound
+    pub over: bool,
+    /// a simulated room's gain, in place of a real one (checks)
+    pub room: Option<f32>,
     pub fast: bool,
     pub pause_ms: usize,
 }
@@ -150,14 +159,49 @@ pub fn run(o: Opts) -> anyhow::Result<()> {
     let mut turns = Turns::new(o.pause_ms);
     let (mut buf, mut windows, mut mic_done) = (Vec::<f32>::new(), 0usize, false);
     let mut quiet_since = Instant::now();
+    // its own voice taken out of the microphone's sound, unless that's not wanted or there's no clock to line up by
+    let mut sides = (o.over && !o.duplex && !o.fast).then(|| (Sides::new(RATE, o.room), Echo::default()));
+    speaker.line.tap.store(sides.is_some(), Ordering::Relaxed);
+    let mut ready = VecDeque::<(Vec<f32>, Option<Heard>, f64)>::new();
+    // RAEA_VOICE_TRACE=1: the echo's state every window, for finding out why it was or wasn't stopped
+    let trace = std::env::var_os("RAEA_VOICE_TRACE").is_some();
+    // windows in a row that stood clear of its own voice; windows of nothing at all from a real microphone
+    let (mut over, mut dead) = (0usize, if o.from.is_none() { Some(0usize) } else { None });
     loop {
-        match mic_rx.recv_timeout(Duration::from_millis(30)) {
+        match mic_rx.recv_timeout(Duration::from_millis(10)) {
             Ok(piece) => buf.extend(piece),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => mic_done = true,
         }
         while buf.len() >= WIN {
             let win: Vec<f32> = buf.drain(..WIN).collect();
+            let loud = level(&win);
+            // a microphone raea isn't allowed to use gives nothing at all, with no error: say so, once
+            if let Some(n) = dead {
+                dead = win.iter().all(|s| *s == 0.0).then_some(n + 1);
+                if n + 1 == 3 * crate::turns::RATE / WIN {
+                    emit(json!({ "error": "the microphone is giving no sound at all: allow raea to use it (System Settings > Privacy & Security > Microphone on a Mac), or pick another input" }));
+                    dead = None;
+                }
+            }
+            match &mut sides {
+                Some((s, _)) => s.mic(win),
+                None => ready.push_back((win, None, loud)),
+            }
+        }
+        if let Some((s, echo)) = &mut sides {
+            s.far(&std::mem::take(&mut *speaker.line.far.lock().unwrap()));
+            while let Some((mic, far)) = s.next() {
+                let (loud, mut left) = (level(&mic), Vec::new());
+                let heard = echo.push(&mic, &far, &mut left);
+                if trace {
+                    let (delay, erle) = echo.state();
+                    emit(json!({ "echo": { "delay": delay, "erle": (erle * 10.0).round() / 10.0, "far": heard.far, "near": heard.near, "sure": heard.sure, "left": level(&left), "mic": loud } }));
+                }
+                ready.push_back((left, Some(heard), loud));
+            }
+        }
+        while let Some((win, cancelled, loud)) = ready.pop_front() {
             windows += 1;
             let speaking = talking.load(Ordering::Relaxed);
             if speaking {
@@ -165,7 +209,9 @@ pub fn run(o: Opts) -> anyhow::Result<()> {
             }
             // its own voice dies away in the room for a moment after the last sample
             let own = speaking || quiet_since.elapsed() < Duration::from_millis(250);
-            if muted.load(Ordering::Relaxed) || (own && !o.duplex) {
+            let through = o.duplex || cancelled.is_some_and(|h| h.sure);
+            if muted.load(Ordering::Relaxed) || (own && !through) {
+                over = 0;
                 if turns.speaking() {
                     emit(json!({ "speech": "ended" }));
                 }
@@ -180,9 +226,21 @@ pub fn run(o: Opts) -> anyhow::Result<()> {
                 continue;
             }
             if windows % 4 == 0 {
-                emit(json!({ "level": level(&win) }));
+                emit(json!({ "level": loud }));
             }
-            match turns.push(&win, vad.speech(&win)?) {
+            let mut p = vad.speech(&win)?;
+            if own && !o.duplex {
+                // a trace of its own voice can be left, and their voice dips under it between words: windows that
+                // stand clear of it and sound like speech count up, the others count down, and six up is them
+                over = if cancelled.is_some_and(|h| h.near) && p >= 0.5 { over + 1 } else { over.saturating_sub(1) };
+                if trace {
+                    emit(json!({ "own": { "p": (p * 100.0).round() / 100.0, "over": over, "near": cancelled.is_some_and(|h| h.near) } }));
+                }
+                if !turns.speaking() && over < 6 {
+                    p = 0.0;
+                }
+            }
+            match turns.push(&win, p) {
                 Some(Turn::Began) => {
                     emit(json!({ "speech": "began" }));
                     if speaking {

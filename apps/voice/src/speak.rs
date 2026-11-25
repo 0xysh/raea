@@ -165,7 +165,9 @@ pub fn worker(rx: Receiver<Say>, out: Arc<Line>, words: Arc<Mutex<Words>>, name:
         let dir = raea_sys_ml::models::ensure(&Pocket::SPEC, &mut crate::fetching(emit))?;
         let mut pocket = Pocket::load(&dir)?;
         anyhow::ensure!(pocket.sample_rate() == RATE, "Pocket TTS speaks at {} Hz, not {RATE}", pocket.sample_rate());
-        let name = name.unwrap_or_else(Pocket::default_voice);
+        // Pocket TTS's own first voice, never a clip of somebody found on this computer (the library's default
+        // takes one when it's there): a session speaks in a voice of someone's only when asked to by name
+        let name = name.unwrap_or_else(|| Pocket::VOICES[0].to_string());
         // the voice's state loaded now, not under the first words
         pocket.begin("", &name, 1, TEMPERATURE)?;
         Ok((pocket, name))

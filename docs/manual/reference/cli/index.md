@@ -103,6 +103,7 @@ Music read, foley and instruments made on this machine.
 | [`raea sao`](sao.md) | Make a sound effect from a description with Stable Audio Open, on this machine. |
 | [`raea tokensynth`](tokensynth.md) | Make an instrument's notes from a description of its timbre with TokenSynth, on this machine. |
 | [`raea setup-audio`](setup-audio.md) | Install or check the local audio models: Stable Audio Open for foley and TokenSynth for instruments. |
+| [`raea voice`](voice.md) | Speech in and out on this computer, as lines of JSON on stdin and stdout: what raea.app's Ideate hears and speaks with. While it speaks it doesn't listen, unless --duplex (headphones: it listens all the time) or --over (speakers: its own voice is taken out of the microphone's sound, new and not yet tried across real rooms). |
 
 ## Generate and 3D tools
 
