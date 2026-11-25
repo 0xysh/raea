@@ -24,7 +24,7 @@ use std::time::Instant;
 const TRACED: [&str; 2] = ["solari", "gi"];
 /// How many times a traced path's still is held for `steady`.
 const HELD: usize = 96;
-pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari,gi] [--spp N] [--fresh] | raea light steady EDIT.tsx --frame N [--composition ID] [--frames 96] [--max 1.5] -o DIR | raea light steady DIR [--max 1.5]   (steady: frame N held, and whether its light holds still)";
+pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari,gi] [--spp N] [--fresh] | raea light steady EDIT.tsx --frame N [--composition ID] [--frames 96] [--run M] [--max 1.5] -o DIR | raea light steady DIR [--max 1.5]   (steady: frame N held, and whether its light holds still)";
 
 /// The light paths a check compares: RAEA_LIGHT's, and traced-ao, raster with systems/rt's traced occlusion in place
 /// of SSAO (on a camera with <AmbientOcclusion>; on any other it draws as raster).

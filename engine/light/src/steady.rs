@@ -31,6 +31,8 @@ const MAX_SHOWN: f64 = 6.0;
 /// What a run may show before it fails, percent, unless `--max` says: a held raster frame reads 0, Solari with a
 /// built cache under 1.
 const MAX: f64 = 1.5;
+/// How far a frame's level at the end of a run may be from the frame drawn cold, in stops (`--run`).
+const MAX_ENERGY: f64 = 0.25;
 /// How far the held frame's level may move between the first and the last quarter of the measured frames, in stops.
 const MAX_DRIFT: f64 = 0.05;
 
@@ -100,17 +102,24 @@ fn held(dir: &Path) -> R<Vec<PathBuf>> {
 
 /// Frame `frame` of a composition held for `n` frames into `out` (`raea render --hold`), run in `dir` under `env`.
 pub fn hold(dir: &Path, file: &str, composition: Option<&str>, frame: &str, n: usize, env: &[(&str, String)], out: &Path) -> R<()> {
+    draw(dir, file, composition, &["--hold", &format!("{frame}:{n}")], env, out)
+}
+
+/// A composition's frames drawn into `out` as `how` says (`--hold N:M`, `--at A,B,...`), run in `dir` under `env`.
+fn draw(dir: &Path, file: &str, composition: Option<&str>, how: &[&str], env: &[(&str, String)], out: &Path) -> R<()> {
     let _ = std::fs::remove_dir_all(out);
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut cmd = std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
     cmd.current_dir(dir).envs(env.iter().map(|(k, v)| (*k, v)));
-    cmd.args(["render", file, "--hold", &format!("{frame}:{n}"), "-o"]).arg(format!("{}/", out.display()));
+    cmd.arg("render").arg(file).args(how).arg("-o").arg(format!("{}/", out.display()));
     if let Some(c) = composition {
         cmd.args(["--composition", c]);
     }
     let run = cmd.args(["--despite", "clips", "raea light steady measures light, not placement"]).output().map_err(|e| e.to_string())?;
+    // what the render said, kept beside its frames: a refused cache load or a switch that didn't take is read there
+    let err = String::from_utf8_lossy(&run.stderr);
+    let _ = std::fs::write(out.join("render.log"), format!("{}{err}", String::from_utf8_lossy(&run.stdout)));
     if !run.status.success() {
-        let err = String::from_utf8_lossy(&run.stderr);
         return Err(format!("the held render failed: {}", err.lines().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(" | ")));
     }
     Ok(())
@@ -145,7 +154,7 @@ pub fn line(r: &Value) -> String {
 }
 
 /// What a light that doesn't hold still is told.
-pub const WHY: &str = "On Solari this is the world cache lit by too few rays, or gaining or losing energy the longer it runs: bake it (cache.bake, then cache.load), or give it a longer history";
+pub const WHY: &str = "Patches this size are light built over frames that hasn't settled: on Solari the world cache, ReSTIR's reuse or the denoiser. Hold the frame with each switched off in turn (cache.steady or a baked cache, RAEA_SOLARI_DENOISE=0, RAEA_SOLARI_PSR=0) to see which; DIR/render.log holds what each render said";
 
 pub fn steady(args: &[String]) -> R<String> {
     let first = args.first().ok_or(format!("usage: {USAGE}"))?;
@@ -159,7 +168,31 @@ pub fn steady(args: &[String]) -> R<String> {
         hold(Path::new("."), first, flag(args, "--composition").as_deref(), &frame, n, &[], &out)?;
         out
     };
-    let r = report(&dir, max)?;
+    let mut r = report(&dir, max)?;
+    // --run M: the frame cold against the same frame at the end of M frames played up to it. A cache that gains or
+    // loses energy over minutes (MALL RAT's court, 11-24: 7 times brighter inside the long render) shows here and not
+    // in a hold
+    if let (Some(m), Some(frame), false) = (flag(args, "--run"), flag(args, "--frame"), Path::new(first).is_dir()) {
+        let (m, n): (i64, i64) = (m.parse().map_err(|_| format!("--run takes a count of frames, not {m}"))?, frame.parse().map_err(|_| format!("--frame takes a frame, not {frame}"))?);
+        let base = dir.parent().unwrap_or(&dir).to_path_buf();
+        let level = |name: &str, at: Vec<i64>| -> R<f64> {
+            let out = base.join(name);
+            let at: Vec<String> = at.iter().map(i64::to_string).collect();
+            draw(Path::new("."), first, flag(args, "--composition").as_deref(), &["--at", &at.join(",")], &[], &out)?;
+            let last = held(&out)?.pop().ok_or(format!("{}: no frame drawn", out.display()))?;
+            let f = metric::load(&last)?;
+            Ok(f.y.iter().map(|&v| v as f64).sum::<f64>() / f.y.len().max(1) as f64)
+        };
+        let energy = (level("run", ((n - m).max(0)..=n).collect())?.max(1e-6) / level("cold", vec![n])?.max(1e-6)).log2();
+        r["energy"] = json!((energy * 1e3).round() / 1e3);
+        r["max_energy"] = json!(MAX_ENERGY);
+        if energy.abs() > MAX_ENERGY {
+            r["steady"] = json!(false);
+        }
+        std::fs::write(dir.join("steady.json"), serde_json::to_string_pretty(&r).unwrap_or_default()).map_err(|e| e.to_string())?;
+        let said = format!("energy {} stops after {m} frames against the frame cold (max {MAX_ENERGY}), {}", r["energy"], line(&r));
+        return if r["steady"] == json!(true) { Ok(format!("STEADY  {said}")) } else { Err(format!("the light doesn't hold still: {said}. {WHY}")) };
+    }
     if r["steady"] == json!(true) { Ok(format!("STEADY  {}", line(&r))) } else { Err(format!("the light doesn't hold still: {}. {WHY}", line(&r))) }
 }
 
