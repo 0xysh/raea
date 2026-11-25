@@ -73,8 +73,9 @@ pub fn measure(frames: &[Luma]) -> R<(Value, image::GrayImage)> {
             }
         }
     }
-    let map = image::GrayImage::from_fn(w as u32, h as u32, |x, y| {
-        let s = large[y as usize * w + x as usize];
+    // at the frame's size, so it lays over the frame
+    let map = image::GrayImage::from_fn((w * LARGE) as u32, (h * LARGE) as u32, |x, y| {
+        let s = large[y as usize / LARGE * w + x as usize / LARGE];
         image::Luma([if s.0 > LIT { (s.1 * 100.0 / MAX_SHOWN * 255.0).min(255.0) as u8 } else { 0 }])
     });
     let pct = |v: f64| (v * 1e4).round() / 100.0;
