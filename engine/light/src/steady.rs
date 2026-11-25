@@ -97,46 +97,69 @@ fn held(dir: &Path) -> R<Vec<PathBuf>> {
     Ok(v)
 }
 
+/// Frame `frame` of a composition held for `n` frames into `out` (`raea render --hold`), run in `dir` under `env`.
+pub fn hold(dir: &Path, file: &str, composition: Option<&str>, frame: &str, n: usize, env: &[(&str, String)], out: &Path) -> R<()> {
+    let _ = std::fs::remove_dir_all(out);
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let mut cmd = std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
+    cmd.current_dir(dir).envs(env.iter().map(|(k, v)| (*k, v)));
+    cmd.args(["render", file, "--hold", &format!("{frame}:{n}"), "-o"]).arg(format!("{}/", out.display()));
+    if let Some(c) = composition {
+        cmd.args(["--composition", c]);
+    }
+    let run = cmd.args(["--despite", "clips", "raea light steady measures light, not placement"]).output().map_err(|e| e.to_string())?;
+    if !run.status.success() {
+        let err = String::from_utf8_lossy(&run.stderr);
+        return Err(format!("the held render failed: {}", err.lines().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(" | ")));
+    }
+    Ok(())
+}
+
+/// The held frames of `dir` measured: DIR/steady.png and steady.json written, and the report, its "steady" saying
+/// whether the light held (`max`: the blotch a run may show, percent; MAX when None).
+pub fn report(dir: &Path, max: Option<f64>) -> R<Value> {
+    let max = max.unwrap_or(MAX);
+    // the second half: the first is the light building from nothing, which a render's lead-in covers
+    let files = held(dir)?;
+    let frames: Vec<Luma> = files[files.len() / 2..].iter().map(|p| metric::load(p)).collect::<R<_>>()?;
+    let (mut report, map) = measure(&frames)?;
+    let png = dir.join("steady.png");
+    map.save(&png).map_err(|e| format!("{}: {e}", png.display()))?;
+    let get = |k: &str| report[k].as_f64().unwrap_or(0.0);
+    let ok = get("blotch") <= max && get("worst") <= max * 3.0 && get("drift").abs() <= MAX_DRIFT;
+    report["max"] = json!(max);
+    report["max_drift"] = json!(MAX_DRIFT);
+    report["steady"] = json!(ok);
+    report["picture"] = json!(png);
+    std::fs::write(dir.join("steady.json"), serde_json::to_string_pretty(&report).unwrap_or_default()).map_err(|e| e.to_string())?;
+    Ok(report)
+}
+
+/// A report as one line.
+pub fn line(r: &Value) -> String {
+    format!(
+        "drift {} stops (max {}), blotch {}% (max {}), worst {}% at {},{}, grain {}%, spread {} over {} held frames; {}",
+        r["drift"], r["max_drift"], r["blotch"], r["max"], r["worst"], r["worst_at"][0], r["worst_at"][1], r["grain"], r["spread"], r["frames"], r["picture"].as_str().unwrap_or("")
+    )
+}
+
+/// What a light that doesn't hold still is told.
+pub const WHY: &str = "On Solari this is the world cache lit by too few rays, or gaining or losing energy the longer it runs: bake it (cache.bake, then cache.load), or give it a longer history";
+
 pub fn steady(args: &[String]) -> R<String> {
     let first = args.first().ok_or(format!("usage: {USAGE}"))?;
-    let max = flag(args, "--max").map(|m| m.parse::<f64>().map_err(|_| format!("--max takes a percent, not {m}"))).transpose()?.unwrap_or(MAX);
+    let max = flag(args, "--max").map(|m| m.parse::<f64>().map_err(|_| format!("--max takes a percent, not {m}"))).transpose()?;
     let dir = if Path::new(first).is_dir() {
         PathBuf::from(first)
     } else {
         let frame = flag(args, "--frame").ok_or(format!("usage: {USAGE}"))?;
         let n: usize = flag(args, "--frames").map(|n| n.parse().map_err(|_| format!("--frames takes a count, not {n}"))).transpose()?.unwrap_or(96);
         let out = PathBuf::from(flag(args, "-o").ok_or(format!("usage: {USAGE}"))?).join("held");
-        let _ = std::fs::remove_dir_all(&out);
-        std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-        let mut cmd = std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
-        cmd.args(["render", first, "--hold", &format!("{frame}:{n}"), "-o"]).arg(format!("{}/", out.display()));
-        if let Some(c) = flag(args, "--composition") {
-            cmd.args(["--composition", &c]);
-        }
-        let run = cmd.args(["--despite", "clips", "raea light steady measures light, not placement"]).output().map_err(|e| e.to_string())?;
-        if !run.status.success() {
-            let err = String::from_utf8_lossy(&run.stderr);
-            return Err(format!("the held render failed: {}", err.lines().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(" | ")));
-        }
+        hold(Path::new("."), first, flag(args, "--composition").as_deref(), &frame, n, &[], &out)?;
         out
     };
-    // the second half: the first is the light building from nothing, which a render's lead-in covers
-    let files = held(&dir)?;
-    let frames: Vec<Luma> = files[files.len() / 2..].iter().map(|p| metric::load(p)).collect::<R<_>>()?;
-    let (mut report, map) = measure(&frames)?;
-    let png = dir.join("steady.png");
-    map.save(&png).map_err(|e| format!("{}: {e}", png.display()))?;
-    let (blotch, worst) = (report["blotch"].as_f64().unwrap_or(0.0), report["worst"].as_f64().unwrap_or(0.0));
-    let drift = report["drift"].as_f64().unwrap_or(0.0);
-    let ok = blotch <= max && worst <= max * 3.0 && drift.abs() <= MAX_DRIFT;
-    report["max"] = json!(max);
-    report["steady"] = json!(ok);
-    std::fs::write(dir.join("steady.json"), serde_json::to_string_pretty(&report).unwrap_or_default()).map_err(|e| e.to_string())?;
-    let line = format!(
-        "drift {drift} stops (max {MAX_DRIFT}), blotch {blotch}% (max {max}), worst {worst}% at {},{} (max {}), grain {}%, spread {} over {} held frames; {}",
-        report["worst_at"][0], report["worst_at"][1], max * 3.0, report["grain"], report["spread"], report["frames"], png.display()
-    );
-    if ok { Ok(format!("STEADY  {line}")) } else { Err(format!("the light doesn't hold still: {line}. On Solari this is the world cache lit by too few rays: bake it (cache.bake, then cache.load), or give it a longer history")) }
+    let r = report(&dir, max)?;
+    if r["steady"] == json!(true) { Ok(format!("STEADY  {}", line(&r))) } else { Err(format!("the light doesn't hold still: {}. {WHY}", line(&r))) }
 }
 
 #[cfg(test)]

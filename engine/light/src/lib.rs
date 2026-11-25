@@ -20,6 +20,10 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+/// The light paths that trace, whose light is built over frames and can move with nothing else moving.
+const TRACED: [&str; 2] = ["solari", "gi"];
+/// How many times a traced path's still is held for `steady`.
+const HELD: usize = 96;
 pub const USAGE: &str = "raea light check SCENES.json -o DIR [--scene NAME] [--paths raster,traced-ao,solari,gi] [--spp N] [--fresh] | raea light steady EDIT.tsx --frame N [--composition ID] [--frames 96] [--max 1.5] -o DIR | raea light steady DIR [--max 1.5]   (steady: frame N held, and whether its light holds still)";
 
 /// The light paths a check compares: RAEA_LIGHT's, and traced-ao, raster with systems/rt's traced occlusion in place
@@ -280,6 +284,12 @@ fn check(scene: &Scene, paths: &[String], spp: u32, out: &Path, fresh: bool) -> 
             r["flicker_raw"] = json!(metric::flicker(&got).map(|f| round(f, 100.0)));
             r["seconds_a_shot_frame"] = json!(round(secs as f32 / all.len() as f32, 100.0));
         }
+        // a traced path's light held: the first still drawn again and again, and what still changes (steady.rs)
+        if TRACED.contains(&path.as_str()) {
+            let held = root.join(format!("{path}-held"));
+            steady::hold(&scene.dir, &scene.file, Some(&scene.composition), &scene.stills[0].to_string(), HELD, &switches(path), &held)?;
+            r["steady"] = steady::report(&held, None)?;
+        }
         r["live"] = match &scene.live {
             // at the scene's size only: the live 3D draws at its composition's size whatever the stage's
             // (runtime/live scene_3d), so a smaller stage measured the same frame (11-17), and no switch draws it smaller
@@ -336,7 +346,14 @@ pub fn light(args: &[String]) -> R<String> {
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
     let report = json!({ "scenes": reports });
     std::fs::write(out.join("report.json"), serde_json::to_string_pretty(&report).unwrap_or_default()).map_err(|e| e.to_string())?;
-    Ok(format!("{}{}", table(&reports), format_args!("raea light: wrote {}", out.join("report.json").display())))
+    let said = format!("{}{}", table(&reports), format_args!("raea light: wrote {}", out.join("report.json").display()));
+    // a traced path whose held frame's light moved fails the check: its distance to the reference is of a frame that
+    // won't be the same the next time
+    let moved: Vec<String> = reports.iter().flat_map(|r| r["paths"].as_object().into_iter().flatten().filter(|(_, p)| p["steady"]["steady"] == json!(false)).map(|(path, p)| format!("{} on {path}: {}", r["name"].as_str().unwrap_or(""), steady::line(&p["steady"])))).collect();
+    if !moved.is_empty() {
+        return Err(format!("{said}\nthe light doesn't hold still ({}). {}", moved.join("; "), steady::WHY));
+    }
+    Ok(said)
 }
 
 #[cfg(test)]

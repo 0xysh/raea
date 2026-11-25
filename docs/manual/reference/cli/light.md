@@ -41,7 +41,9 @@ pixel or two wide and new every frame. A blotch is tens of pixels wide and drift
 quarter of a second or more: on Solari, the world cache lit by too few rays. The two are told apart by size: the
 deviation in time of each 32-pixel square's mean luminance (`blotch`, percent of the mean) against each 8-pixel
 square's (`grain`). Grain alone gives a `spread` of 0.25, and blotches bring it toward 1. A run over `--max` fails,
-`DIR/held/steady.png` shows where (white is 6%), and `steady.json` holds the numbers.
+`DIR/held/steady.png` shows where (white is 6%), and `steady.json` holds the numbers. A light whose level moves over the held frames fails too (`drift`, more than 0.05 of a stop between the first and the last quarter measured): a cache gaining or losing energy the longer it runs.
+
+`raea light check` holds each scene's first still on the traced paths (`solari`, `gi`) the same way, reports it under `steady`, and fails when one moved.
 
 ```sh
 raea light steady compositions/shots.tsx --composition court --frame 1188 -o out/steady/
