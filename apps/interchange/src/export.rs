@@ -100,7 +100,8 @@ fn shape(expr: &str, out: &Path, meshes: &mut BTreeMap<String, String>) -> R<Val
         None => {
             let f = format!("meshes/mesh{k}.glb");
             // export() empties meshes/ before the parts are walked, so the folder is made here, where a file first needs it
-            std::fs::create_dir_all(out.join("meshes")).map_err(|e| format!("{}: {e}", out.join("meshes").display()))?;
+            let dir = out.join("meshes");
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
             // and as an .obj, which Godot imports as a mesh of its own (a .glb comes in as a scene)
             let (glb, obj) = (out.join(&f).to_string_lossy().into_owned(), out.join(f.replace(".glb", ".obj")).to_string_lossy().into_owned());
             match expr.strip_prefix("buffer:") {
