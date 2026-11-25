@@ -80,6 +80,17 @@ fn ext(p: &Path) -> String {
     p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default()
 }
 
+/// One argument as the files it names. A shell that doesn't split a variable (zsh's `$FILES`) hands every name over as
+/// one argument, which read as a single path fails as "No such file", or past 255 bytes as "File name too long" (#218):
+/// an argument that isn't a file, but whose words each are, is those files.
+fn names(a: &str) -> Vec<String> {
+    let words: Vec<&str> = a.split_whitespace().collect();
+    if words.len() > 1 && !Path::new(a).exists() && words.iter().all(|w| Path::new(w).exists()) {
+        return words.into_iter().map(String::from).collect();
+    }
+    vec![a.to_string()]
+}
+
 /// `--name value` flags (and `-o`), switches, and positional arguments.
 fn parse(args: &[String]) -> (Vec<String>, BTreeMap<String, String>) {
     let (mut pos, mut fl) = (Vec::new(), BTreeMap::new());
@@ -95,7 +106,7 @@ fn parse(args: &[String]) -> (Vec<String>, BTreeMap<String, String>) {
                 i += 1;
             }
         } else {
-            pos.push(a.clone());
+            pos.extend(names(a));
         }
         i += 1;
     }
