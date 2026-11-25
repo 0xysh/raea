@@ -195,7 +195,7 @@ pub fn run(o: Opts) -> anyhow::Result<()> {
                 let (loud, mut left) = (level(&mic), Vec::new());
                 let heard = echo.push(&mic, &far, &mut left);
                 if trace {
-                    let (delay, erle) = echo.state();
+                    let (delay, erle) = (echo.delay, echo.erle);
                     emit(json!({ "echo": { "delay": delay, "erle": (erle * 10.0).round() / 10.0, "far": heard.far, "near": heard.near, "sure": heard.sure, "left": level(&left), "mic": loud } }));
                 }
                 ready.push_back((left, Some(heard), loud));

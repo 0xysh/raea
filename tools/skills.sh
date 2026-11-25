@@ -275,6 +275,7 @@ help_stale() {
 # asks whether anything says when and how to use it. COVERAGE_SKIP names what an agent never runs, each with why.
 COVERAGE_SKIP="verb:hook (raea skills install sets it up; an agent never runs it)
 verb:traces (raea's own session logs, for whoever debugs raea)
+verb:voice (raea.app's Ideate runs it and talks to it in lines of JSON; an agent never does)
 verb:bake (until BK5: today only --compare, raea's own measure of its bake against Cycles; BK5 teaches <LightBake> and raea bake light in bevy/lights, docs/bake.feature)
 module:dev_tools (raea's own debugging overlays)
 module:test (raea's test harness, for raea's own tests)

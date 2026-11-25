@@ -50,13 +50,13 @@ pub struct Echo {
     behind: Vec<f32>,
     better: usize,
     worse: usize,
-    delay: usize,
+    pub delay: usize,
     mic_env: Vec<f32>,
     far_env: Vec<f32>,
     /// a delay seen, and how many times in a row
     vote: (usize, usize),
     /// how much quieter the echo leaves than it came, smoothed
-    erle: f32,
+    pub erle: f32,
     /// windows learned on since the delay was last set
     learned: usize,
     sure: bool,
@@ -78,11 +78,6 @@ fn power(x: &[f32]) -> f32 {
 }
 
 impl Echo {
-    /// (how late the echo is, in samples; how many times quieter it is left) for a trace.
-    pub fn state(&self) -> (usize, f32) {
-        (self.delay, self.erle)
-    }
-
     /// The filter starts over (the echo moved in time, or the room changed).
     fn forget(&mut self) {
         self.w.fill(0.0);
