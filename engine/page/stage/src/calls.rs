@@ -10,6 +10,21 @@ pub(super) fn settle(answer: raea_runtime_js::calls::Answer, r: Result<Value, St
     }
 }
 
+/// A call for the stage's thread to answer; `idle` is the answer while the stage shows nothing.
+fn ask(w: &World, answer: raea_runtime_js::calls::Answer, idle: Value, cmd: impl FnOnce(raea_runtime_js::calls::Answer) -> Cmd) {
+    let tx = w.resource::<Stage>().tx.lock().unwrap().clone();
+    if let Some(tx) = tx {
+        let _ = tx.send(cmd(answer));
+        return;
+    }
+    answer.ok(idle)
+}
+
+/// An argument that is exactly N numbers.
+fn numbers<const N: usize>(a: &Value, k: &str) -> Option<[f32; N]> {
+    serde_json::from_value::<Vec<f32>>(a.get(k)?.clone()).ok()?.try_into().ok()
+}
+
 /// The page's host calls (the module's list).
 pub(super) fn calls(mut calls: ResMut<HostCalls>) {
     let num = |a: &Value, k: &str| a.get(k).and_then(Value::as_f64);
@@ -20,12 +35,12 @@ pub(super) fn calls(mut calls: ResMut<HostCalls>) {
                 return answer.err("the stage needs the shared device (RAEA_SHARED_DEVICE=0 turned it off)");
             }
             // a feed item names its game as the app's host does (host/make.ts resolve): ~/ is the home
-            let src = a.get("src").and_then(Value::as_str).map(|s| match (s.strip_prefix("~/"), std::env::var_os("HOME")) {
+            let src = a.get("src").and_then(Value::as_str).map(|s| match (s.strip_prefix("~/"), raea_io_home::user_home()) {
                 (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
                 _ => PathBuf::from(s),
             });
             let size = (num(&a, "w").unwrap_or(1280.0).round().max(1.0) as u32, num(&a, "h").unwrap_or(720.0).round().max(1.0) as u32);
-            settle(answer, send(w, Cmd::Show(src, size)));
+            settle(answer, send(w, Cmd::Show(src, size, a.get("render").and_then(Value::as_bool).unwrap_or(false))));
         })
         .on("stage.play", move |w, a, answer| settle(answer, send(w, Cmd::Play(a.get("on").and_then(Value::as_bool).unwrap_or(true)))))
         .on("stage.step", move |w, a, answer| settle(answer, send(w, Cmd::Step(num(&a, "n").unwrap_or(1.0).max(0.0) as i64))))
@@ -81,10 +96,24 @@ pub(super) fn calls(mut calls: ResMut<HostCalls>) {
             let tx = w.resource::<Stage>().tx.lock().unwrap().clone();
             match tx {
                 Some(tx) => {
-                    let _ = tx.send(Cmd::Props(a.get("props").cloned().unwrap_or(Value::Null), answer));
+                    let _ = tx.send(Cmd::Props(a.get("props").cloned().unwrap_or(Value::Null), answer, Instant::now()));
                 }
                 None => answer.err("the stage shows nothing"),
             }
+        })
+        .on("stage.part", move |w, a, answer| ask(w, answer, Value::Null, |to| Cmd::Part(a["key"].as_str().unwrap_or_default().to_string(), to)))
+        .on("stage.hold", move |w, a, answer| {
+            let place = match (a["release"] == true, numbers(&a, "translation"), numbers(&a, "rotation"), numbers(&a, "scale")) {
+                (true, ..) => None,
+                (_, Some(t), Some(r), Some(s)) => Some((t, r, s)),
+                _ => return answer.err("stage.hold takes a key with translation [x, y, z], rotation [x, y, z, w] and scale [x, y, z], or release: true"),
+            };
+            let key = a.get("key").and_then(Value::as_str).unwrap_or_default().to_string();
+            ask(w, answer, json!(false), |to| Cmd::Hold(key, place, to))
+        })
+        .on("stage.wire", move |w, a, answer| {
+            let on = a.get("on").and_then(Value::as_bool).unwrap_or(true);
+            ask(w, answer, json!(false), |to| Cmd::Wire(on, to))
         })
         .on("stage.inspect", move |w, a, answer| {
             let id = a.get("id").and_then(Value::as_u64).unwrap_or(0);
@@ -109,6 +138,9 @@ pub(super) fn calls(mut calls: ResMut<HostCalls>) {
         })
         .on("stage.status", |w, _a, answer| {
             let s = w.resource::<Stage>().status.lock().unwrap().clone();
-            answer.ok(json!({"showing": s.showing, "frame": s.frame, "playing": s.playing, "fps": s.fps, "painted": s.painted, "size": [s.size.0, s.size.1], "error": s.error}));
+            let props = json!({"sent": s.props.sent, "drawn": s.props.drawn, "dropped": s.props.dropped, "ms": s.props.ms});
+            let last = s.last_show.map(|(how, ms)| json!({"how": how, "ms": ms}));
+            answer.ok(json!({"showing": s.showing, "frame": s.frame, "playing": s.playing, "fps": s.fps, "painted": s.painted, "size": [s.size.0, s.size.1], "error": s.error,
+                "render": s.render, "opens": s.opens, "adopted": s.adopted, "last_show": last, "props": props, "held": s.held, "controls": s.controls, "values": s.values}));
         });
 }

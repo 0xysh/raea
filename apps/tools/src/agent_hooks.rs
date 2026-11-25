@@ -1,7 +1,9 @@
 //! The hooks `raea skills install` adds an agent (docs/agents.feature A5d, A5e; docs/skills.feature SK10), the same two
 //! for every harness, each written where and how that harness reads hooks: before a shell command, `raea hook AGENT`
 //! steers media opened in the Mac's viewer to `raea show`; after a file is saved, it runs the quick check on a
-//! composition. An event that already has a `raea hook` entry is left as it is.
+//! composition. Claude Code's run after every tool and as a turn ends too, to hand the session what the person sent from
+//! the raea app (apps/check/src/inbox.rs). An event that already has a `raea hook` entry keeps it, its matcher widened
+//! to this raea's when an older raea wrote a narrower one.
 use crate::agent_mcp::user_home;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -15,14 +17,14 @@ struct Hook {
     secs: u64,
 }
 
-/// Each harness's two hooks, by its own event and tool names.
-fn hooks(agent: &str) -> R<[Hook; 2]> {
+/// Each harness's hooks, by its own event and tool names.
+fn hooks(agent: &str) -> R<Vec<Hook>> {
     let h = |event, matcher, secs| Hook { event, matcher, secs };
     Ok(match agent {
-        "claude" => [h("PreToolUse", "Bash", 30), h("PostToolUse", "Write|Edit|MultiEdit", 60)],
-        "codex" => [h("PreToolUse", "^(Bash|shell|shell_command|exec_command)$", 30), h("PostToolUse", "^(apply_patch|Edit|Write)$", 60)],
-        "gemini" => [h("BeforeTool", "run_shell_command", 30), h("AfterTool", "write_file|replace", 60)],
-        "kimi" => [h("PreToolUse", "Bash|Shell", 30), h("PostToolUse", "Write|Edit|WriteFile|StrReplaceFile", 60)],
+        "claude" => vec![h("PreToolUse", "Bash", 30), h("PostToolUse", "*", 60), h("Stop", "", 30)],
+        "codex" => vec![h("PreToolUse", "^(Bash|shell|shell_command|exec_command)$", 30), h("PostToolUse", "^(apply_patch|Edit|Write)$", 60)],
+        "gemini" => vec![h("BeforeTool", "run_shell_command", 30), h("AfterTool", "write_file|replace", 60)],
+        "kimi" => vec![h("PreToolUse", "Bash|Shell", 30), h("PostToolUse", "Write|Edit|WriteFile|StrReplaceFile", 60)],
         a => return Err(format!("no agent {a:?}: claude, codex, kimi or gemini")),
     })
 }
@@ -54,7 +56,14 @@ fn add_json(path: &Path, agent: &str, h: &Hook) -> R<bool> {
     let hooks = doc.as_object_mut().ok_or(format!("{at} isn't a JSON object"))?.entry("hooks").or_insert_with(|| json!({}));
     let list = hooks.as_object_mut().ok_or(format!("{at}: hooks isn't an object"))?.entry(h.event).or_insert_with(|| json!([]));
     let list = list.as_array_mut().ok_or(format!("{at}: hooks.{} isn't a list", h.event))?;
-    if list.iter().any(|m| m["hooks"].as_array().into_iter().flatten().any(|x| x["command"].as_str().unwrap_or("").starts_with("raea hook"))) {
+    let ours = |m: &Value| m["hooks"].as_array().into_iter().flatten().any(|x| x["command"].as_str().unwrap_or("").starts_with("raea hook"));
+    if let Some(m) = list.iter_mut().find(|m| ours(m)) {
+        // an older raea's narrower matcher (Claude's after-save hook, now after every tool) is widened, the rest kept
+        if h.matcher == "*" && m["matcher"].as_str() != Some("*") {
+            m["matcher"] = h.matcher.into();
+            write(path, &(serde_json::to_string_pretty(&doc).unwrap_or_default() + "\n"))?;
+            return Ok(true);
+        }
         return Ok(false);
     }
     // Gemini CLI counts milliseconds and names each hook
@@ -115,21 +124,24 @@ mod tests {
         let c = d.join("claude/settings.json");
         std::fs::create_dir_all(c.parent().unwrap()).unwrap();
         std::fs::write(&c, r#"{"model":"x","hooks":{"PostToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"other"}]},{"matcher":"Write","hooks":[{"type":"command","command":"raea hook claude"}]}]}}"#).unwrap();
-        let [pre, post] = hooks("claude").unwrap();
+        let [pre, post, stop] = <[Hook; 3]>::try_from(hooks("claude").unwrap()).ok().unwrap();
         assert!(add_json(&c, "claude", &pre).unwrap() && !add_json(&c, "claude", &pre).unwrap());
-        assert!(!add_json(&c, "claude", &post).unwrap(), "an older raea's after-save hook stands");
+        assert!(add_json(&c, "claude", &post).unwrap() && !add_json(&c, "claude", &post).unwrap(), "an older raea's after-save hook is widened to every tool, once");
+        assert!(add_json(&c, "claude", &stop).unwrap() && !add_json(&c, "claude", &stop).unwrap());
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&c).unwrap()).unwrap();
         assert_eq!((v["model"].as_str(), v["hooks"]["PostToolUse"].as_array().unwrap().len()), (Some("x"), 2));
+        assert_eq!((v["hooks"]["PostToolUse"][0]["matcher"].as_str(), v["hooks"]["PostToolUse"][1]["matcher"].as_str()), (Some("Bash"), Some("*")));
         assert_eq!(v["hooks"]["PreToolUse"][0]["hooks"][0]["command"], "raea hook claude");
+        assert_eq!(v["hooks"]["Stop"][0]["hooks"][0]["command"], "raea hook claude");
         let g = d.join("gemini/settings.json");
-        let [before, _] = hooks("gemini").unwrap();
+        let [before, _] = <[Hook; 2]>::try_from(hooks("gemini").unwrap()).ok().unwrap();
         assert!(add_json(&g, "gemini", &before).unwrap());
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&g).unwrap()).unwrap();
         assert_eq!(v["hooks"]["BeforeTool"][0], json!({"matcher": "run_shell_command", "hooks": [{"name": "raea", "type": "command", "command": "raea hook gemini", "timeout": 30000}]}));
         let k = d.join("kimi/config.toml");
         std::fs::create_dir_all(k.parent().unwrap()).unwrap();
         std::fs::write(&k, "default_model = \"k\"\n\n[[hooks]]\nevent = \"PreToolUse\"\nmatcher = \"Bash\"\ncommand = \"mine\"\n").unwrap();
-        let [pre, post] = hooks("kimi").unwrap();
+        let [pre, post] = <[Hook; 2]>::try_from(hooks("kimi").unwrap()).ok().unwrap();
         assert!(add_toml(&k, &pre).unwrap() && !add_toml(&k, &pre).unwrap() && add_toml(&k, &post).unwrap() && !add_toml(&k, &post).unwrap());
         let t = std::fs::read_to_string(&k).unwrap();
         assert!(t.starts_with("default_model = \"k\"\n\n[[hooks]]\nevent = \"PreToolUse\"\nmatcher = \"Bash\"\ncommand = \"mine\"\n\n[[hooks]]\nevent = \"PreToolUse\"\nmatcher = \"Bash|Shell\"\ncommand = \"raea hook kimi\"\ntimeout = 30\n"), "{t}");

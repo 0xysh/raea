@@ -58,6 +58,7 @@ fn runner<'a>(args: &[String], base: &Path, local: Option<&'a dyn Local>) -> Run
     r.policy.exact = args.iter().any(|a| a == "--exact");
     r.policy.comfy_on_replicate = args.iter().any(|a| a == "--comfy-on-replicate") || crate::setting("RAEA_COMFY_ON") .as_deref() == Some("replicate");
     r.policy.tripo = !args.iter().any(|a| a == "--no-tripo") && crate::tripo::available();
+    r.policy.keys = crate::route::Keys::here();
     if let Some(l) = local.filter(|_| !args.iter().any(|a| a == "--no-local")) {
         r.policy.local = l.names();
         r.local = Some(l);
@@ -103,7 +104,7 @@ pub fn command(args: &[String], local: Option<&dyn Local>) -> Result<String, Str
             let images: Vec<&str> = args.windows(2).filter(|w| w[0] == "--image").map(|w| w[1].as_str()).collect();
             let mut flow = Flow::default();
             for (k, f) in images.iter().enumerate() {
-                let abs = std::fs::canonicalize(f).map_err(|e| format!("{f}: {e}"))?;
+                let abs = dunce::canonicalize(f).map_err(|e| format!("{f}: {e}"))?;
                 flow.steps.insert(format!("in{k}"), Step::new("media.load", json!({"path": abs})));
             }
             let refs: Vec<J> = (0..images.len()).map(|k| json!(format!("@in{k}"))).collect();

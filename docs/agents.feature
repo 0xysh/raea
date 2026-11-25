@@ -27,6 +27,9 @@ Feature: Agents in the raea app: chats run on a provider, agents are optional te
     3. Whoever posts an item is its subscriber: what the person sends on it reaches that session, inside raea or out.
     4. A session states its own role. One started from a template in raea gets the template's role without asking;
        one started outside raea says who it is when it posts, and may change it.
+    5. There's no Director. The workspace has one primary: the harness that runs at its root (its own chats) and
+       whatever the person doesn't pick for. It's a provider on a model, or one of the person's agents; making an agent
+       the primary is how someone gets an orchestrator, and it's still only that choice (A6, Shane 11-12).
 
   Background:
     Given the app is apps/app (raea-feed): src/chat, src/agent, src/model/agents.ts, host/acp, host/feed-items.ts
@@ -48,9 +51,24 @@ Feature: Agents in the raea app: chats run on a provider, agents are optional te
 
     Scenario: A1b. A template is a choice, never a requirement
       Given a workspace with no agents
-      Then New chat, the feed's composer and a project's chat all work, each on the workspace's default provider
+      Then New chat, the feed's composer and a project's chat all work, each on the workspace's primary
+
+    Scenario: A1c. One menu picks the AI, its model or an agent
+      # Shane 11-12: "when I go to composer and I select a model, I could pick a model provider that I have, only show
+      # the ones that are connected ... groups with those model providers at the top of the dropdown, and then we
+      # could scroll down and look at our agents or type to search and select an agent"
+      # Status 11-12: built (raea-feed primary-agents: src/chat/RunsOn.tsx; e2e "New chat runs on a provider",
+      # "an agent is a provider on a model").
+      When I open what a chat runs on, under New chat's box
+      Then the AIs signed in on this Mac come first, Kimi first, each a group of its models; one that isn't signed in
+        or isn't on this Mac isn't offered (Settings → Plugins connects it)
+      And the person's agents come under them, each with its square mark and what it runs on
+      And typing searches both, and Enter picks the first match
+      And the pick is that chat's: the next New chat starts on the primary again
 
   Rule: A2. raea ships no agent types
+    # Status 11-12: the dev page's sample agents (Planner, Builder, Cutter, ...) are authors only too: they keep their
+    # recorded sessions for the e2e suite, and no list offers them (raea-feed primary-agents, model/data.ts).
     # Status 11-09: built (raea-feed 601d4ae). No Director or Critic is made; the planner and critique post as raea
     # (raeaAgent, provider "raea"), tasks for it say @raea and an old brief's @director reads as raea. The built app's
     # sample world keeps its agents as `by` authors only (model/data.ts sampleAuthors); the dev page keeps them as
@@ -139,3 +157,63 @@ Feature: Agents in the raea app: chats run on a provider, agents are optional te
       And the hooks hold inside the raea app too, which runs each ACP agent with its own shell and config
       And `raea show` names its poster from the harness that started it, found up its parent processes when the
         harness doesn't mark its shell, so Kimi, OpenCode and the rest post as themselves with an inbox per session
+
+  Rule: A6. One primary, and agents are providers with more on top
+    # Shane 11-12: "in our docs we say like there's a director and the director owns everything. That's not really
+    # true. All we have is a primary agent harness that runs in the global root of the workspace ... I could assign an
+    # agent to be that level, that orchestrator or that like director, but it's really just a primary harness choice
+    # or model choice." And: "the ability to create an agent that is something beyond calling the model harness ...
+    # those agents ... are in fact just the model provider with all the same bells and whistles".
+    # Status 11-12: built (raea-feed primary-agents). The primary is settings.chatOn + chatModel (chat/provider.ts
+    # primaryOf); Settings → Agents sets it. Agents are kept as agents/<id>.json in the workspace's folder
+    # (host/agents.ts, POST /host/agents) with launch.model.
+
+    Scenario: A6a. The primary runs the workspace
+      Given Settings → Agents, whose first row is the primary, Kimi on its own default model until changed
+      When I pick an AI's model or one of my agents there
+      Then the workspace's own chats (New chat with no project, the Inbox's composer, the Controllers page's bar) run on
+        it at the workspace's root, and so does every chat, feed message and task where nothing else is picked or named
+      And no page calls it a Director: an agent made the primary is an orchestrator only because it's there
+
+    Scenario: A6b. An agent is a provider on a model, with its own name, instructions and tools
+      When I make an agent in Settings → Agents (New agent)
+      Then I pick what it runs on (Kimi, Claude, ChatGPT, Gemini, OpenCode, or a command of my own) and, for a provider,
+        one of its models, beside its name, colour, instructions, tools and approvals
+      And it's kept in the workspace's folder as agents/<id>.json, so it's there after a restart and travels with the
+        workspace's repo
+      And chats on it run its model with its instructions, as a chat on the bare provider would with none
+
+  Rule: A7. Each AI's own settings, for the AI and for an agent on it
+    # Shane 11-12: "acp allows us to adjust provider/harness specific options?" and "selecting a harness for a custom
+    # agent ... we would need the same settings and options once we select what we pick".
+    # An ACP session reports its config options (session/new configOptions): each has a category (mode, model,
+    # thought_level, model_config, or the AI's own) and is a select or a switch. Claude's: mode, model, effort, fast,
+    # ultracode. Kimi's: model, thinking, mode. raea draws them as reported, so no AI needs code of its own.
+    # Status 11-12: built (raea-feed primary-agents). Page: agent/AgentOptions.tsx, settings/AIOptions.tsx and the
+    # agent editor; host: app-prefs providers (POST /host/onboard ai-prefs), host/acp/hub.ts optionsFor, bridge.ts
+    # useOptions.
+
+    Scenario: A7a. An AI's defaults on this Mac
+      Given Settings → Agents, whose Your AIs lists every AI signed in on this Mac, each saying what's set for it
+      When I open an AI's Options
+      Then I see every setting it reports but its model, grouped as Thinking, Mode and More, each on Default, which names
+        the AI's own value
+      And I can give it environment variables (NAME=value) and extra arguments to start with
+      And what I save is kept on this Mac and reaches every chat on that AI started afterwards: the primary, a chat
+        picked in New chat, and an agent on it that doesn't set its own
+
+    Scenario: A7b. An agent on an AI has the same settings
+      When I pick what an agent runs on in its editor
+      Then the same settings show for that AI, each on Default, which names the value I gave the AI ("Claude's: High")
+        or else the AI's own
+      And what I set is the agent's (launch.options, launch.env, launch.extraArgs), and picking another AI starts them
+        over
+      And a command of my own has no settings to show; only its environment is kept
+
+    Scenario: A7c. Settings layer, and one that no longer applies says so
+      Given the AI's own default, then my defaults for the AI, then the agent's settings, then the chat's model
+      When a session starts
+      Then each setting is the last of those that sets it, applied with session/set_config_option
+      And one the AI no longer reports, or a value it refuses, is skipped with a notice in the chat, never a failure
+      And raea changes no mode for me: Approve everything (Settings → General) already answers the AI's permission asks,
+        so its own bypass or yolo mode, or a plan-only mode, is on only if I pick it

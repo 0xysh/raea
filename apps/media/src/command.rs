@@ -53,7 +53,7 @@ fn run(args: Vec<String>) {
         "render" => {
             let out = PathBuf::from(flag("-o").unwrap_or_else(|| fail("render needs -o OUT.mp4|DIR")));
             let frames = flag("--at").map(|at| at.split(',').map(|f| f.trim().parse().unwrap_or_else(|_| fail(format!("bad frame {f}")))).collect());
-            let opts = raea_runtime_encode::RenderOpts { frames, codec: flag("--codec"), kbps: flag("--kbps").and_then(|k| k.parse().ok()), quality: flag("--quality").map(|q| raea_io_media::parse_quality(&q).unwrap_or_else(|e| fail(e))), ssim: flag_on("--ssim"), sound: None, ten_bit: flag_on("--10bit"), alpha: flag_on("--alpha") };
+            let opts = raea_runtime_encode::RenderOpts { frames, codec: flag("--codec"), kbps: flag("--kbps").and_then(|k| k.parse().ok()), quality: flag("--quality").map(|q| raea_io_media::parse_quality(&q).unwrap_or_else(|e| fail(e))), ssim: flag_on("--ssim"), sound: None, ten_bit: flag_on("--10bit"), alpha: flag_on("--alpha"), ..Default::default() };
             if opts.alpha && out.extension().is_some_and(|x| x != "png") {
                 fail("--alpha writes PNGs (OUT.png or a folder): video here is H.264 or HEVC, which hold no alpha");
             }

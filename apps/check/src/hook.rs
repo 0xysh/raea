@@ -3,7 +3,8 @@
 //! --agent A` adds them, and they hold inside the raea app too, which leaves each agent its own shell). Before a shell
 //! command: media opened in the Mac's viewer or a browser is stopped once while the raea app is installed, the reason
 //! naming `raea show`; the same command tried again goes through, so an agent that means it says so twice. After a
-//! file is saved: the quick check on a composition. A stop is exit 2 with the reason on stderr, which every harness
+//! file is saved: the quick check on a composition. After any tool, and as a turn ends: what the person sent from the raea
+//! app (inbox.rs). A stop is exit 2 with the reason on stderr, which every harness
 //! hands its agent; the quick check's findings go back in the shape each one reads.
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -144,8 +145,18 @@ pub fn hook(args: &[String]) -> R<String> {
     std::io::Read::read_to_string(&mut std::io::stdin(), &mut input).map_err(|e| e.to_string())?;
     let v: Value = serde_json::from_str(&input).unwrap_or_default();
     let agent = named.unwrap_or_else(|| agent_of(&v));
-    if let Some(cmd) = shell_command(&v) {
-        let home = std::env::var("HOME").unwrap_or_default();
+    let event = v["hook_event_name"].as_str().unwrap_or("");
+    // what the person sent from the raea app since the last look (inbox.rs): handed over after any tool, and a turn about
+    // to end goes on to take it up
+    let sent = if matches!(event, "PostToolUse" | "AfterTool" | "Stop") { crate::inbox::told(agent, &v) } else { None };
+    if event == "Stop" {
+        // what the person sent, and a `make` job that isn't done (docs/make.feature MK2): either keeps the turn going
+        let reasons: Vec<String> = [sent, raea_app_check_make::stop(&v)].into_iter().flatten().collect();
+        return Ok(if reasons.is_empty() { String::new() } else { json!({"decision": "block", "reason": reasons.join("\n\n")}).to_string() });
+    }
+    let after_tool = matches!(event, "PostToolUse" | "AfterTool");
+    if let Some(cmd) = shell_command(&v).filter(|_| !after_tool) {
+        let home = raea_io_home::user_home().unwrap_or_default().display().to_string();
         let files = opened_media(cmd);
         let key = format!("{}\n{}\n{cmd}", v["session_id"].as_str().unwrap_or(""), v["cwd"].as_str().unwrap_or(""));
         if !files.is_empty() && app_installed(&home) && !tried_before(&PathBuf::from(&home).join(".raea/hooks/again"), &key) {
@@ -159,7 +170,9 @@ pub fn hook(args: &[String]) -> R<String> {
         let (report, _) = crate::quick::quick(std::slice::from_ref(path), Vec::new())?;
         found.extend(report.lines().skip(1).filter(|l| !l.starts_with("ok ")).map(String::from));
     }
-    Ok(if found.is_empty() { String::new() } else { after(agent, &format!("raea check --quick after this save:\n{}", found.join("\n"))) })
+    let quick = (!found.is_empty()).then(|| format!("raea check --quick after this save:\n{}", found.join("\n")));
+    let text = [sent, quick].into_iter().flatten().collect::<Vec<_>>().join("\n\n");
+    Ok(if text.is_empty() { String::new() } else { after(agent, &text) })
 }
 
 #[cfg(test)]

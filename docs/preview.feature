@@ -101,6 +101,39 @@ Feature: Preview: anything in a project opens at once, in its space, with its pr
         lower levels of detail, a composition and a component a poster, each made once and found again by its source's
         path, size and time
 
+    # 11-09, the store's rules as the packaged app showed them (0.1.0-dev.1109.22 to .24, unzipped, headless): the
+    # limit is kept after every copy made, not only when Settings is open; a copy made or used in the last minute is
+    # never dropped (a light level bigger than a small limit was removed before the stage opened it); one copy that
+    # alone brings the store under goes before many small ones (strict oldest-first dropped 23 stills to reach one
+    # 7 MB level); under 2 GB free on its disk the store holds 256 MB at most, and Settings says so (halving on
+    # every copy, the first rule, emptied it); Clear leaves no file. Checked there: 23 copies, 13.7 MB, to 6.8 MB at a
+    # 7.5 MB limit; a light level kept over a 3 MB limit while its model played and gone a minute later with the
+    # stills left; a changed source's copy marked stale and swept; Clear from 18 files to none. 10 tests.
+    # 11-09, 0.1.0-dev.1109.25: with the store told its disk had 500 MB free, 45 heavy models opened in seven seconds
+    # took it to 294 MB (every copy in use), and the next model opened a minute later left 39 copies in 255 MB, the
+    # oldest seven gone. The same pass found a model's preview drawn from another run's bundle: the wrapper
+    # (.raea-view-NAME.tsx) is rewritten at one path and the bundle cache's folder walk passes dot files over, so a
+    # wrapper naming a new light level got the bundle naming the old one (a level since dropped: "doesn't exist").
+    # A dot-named edit is now part of its bundle's key.
+    # 11-10, 0.1.0-dev.1109.33: copies are made two at a time (a folder of fifty compositions opened in Source had
+    # started thirty still renders at once and the Mac swapped), the last moment's asks first. And a 3D part asked for
+    # again by id (the game inspector re-reads what is picked on every frame) answers its own box on the frame: it
+    # answered its holder's, so the outline a click drew was gone a frame later.
+    # 11-10, how long a heavy scene takes to open (a launch-film set, raea play offscreen at frame 0): a quarter of it
+    # was the boolean cuts of its solids, made again on every open. raea-core-shape keeps each expression's mesh on
+    # disk by expression and build (kept.rs; RAEA_SHAPE_CACHE=0 turns it off): 12.2 s with it off, 4.6 s kept, the
+    # frame the same bytes. What is left is the script's own pass (its solids are cut again there, through the
+    # /3d manifold calls: not kept yet) and the models' loading. A still for Source or a poster is drawn through
+    # raea play, one at a time at low priority, and not while a stage the person opened is still opening.
+    # 11-10, models from a real project (the launch film's): a rigged cat under a scaled armature opened with the
+    # camera inside it, and a strand of cheese that seven morph targets pull from 2 cm to 17 cm drew nothing. What
+    # is drawn is measured as posed (raea-sys-frame view bounds, from the same vertices a pick's ray meets), a
+    # model's box counts its morph targets, its view's near plane follows its size, and the page moves the camera
+    # out to what the stage draws. Fourteen of its models list under 3D; four were opened, a part clicked on each.
+    # 11-10, pointing in a real film's compositions: a page element that covers the frame (a sheen, a grade over
+    # the picture) gives way to the 3D part under the pointer and is answered as what is over it; before, it took
+    # every click. A part with no key (a loaded model's own mesh) is named by its entity and its box follows it,
+    # around its vertices as drawn. A script's solid is its expression until something asks for the solid.
     @done
     Scenario: PV3b. The store is managed in one place
       Then Settings lists the store by project and kind with sizes, and offers Clear and Rebuild; copies whose source

@@ -19,6 +19,7 @@ player = []
 surfaces = ["raea-runtime-react/surfaces"]
 
 [dependencies]
+dunce = "1"
 raea-runtime-react = { path = "../../runtime/react", default-features = false }
 raea-runtime-page = { path = "../../runtime/page" }
 raea-runtime-export = { path = "../../runtime/export" }

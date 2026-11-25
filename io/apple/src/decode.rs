@@ -15,6 +15,8 @@ pub(crate) struct Decoder {
     pub(crate) since_restart: usize,
     /// VideoToolbox hands over NV12 planes (no conversion) instead of BGRA
     pub(crate) nv12: bool,
+    /// the track's frames carry alpha (ProRes 4444, HEVC with alpha): BGRA's alpha kept, not made 255 (#113)
+    pub(crate) alpha: bool,
     /// surface mode: NV12 left in VideoToolbox's IOSurface-backed, Metal-compatible buffers (no copy)
     pub(crate) surface: bool,
     /// the presentation times, read once from the compressed samples (for index_at)
@@ -211,13 +213,7 @@ impl Decoder {
                 let mut rgba = vec![0u8; w * h * 4];
                 for y in 0..h {
                     let row = std::slice::from_raw_parts(base.add(y * bpr), w * 4);
-                    let dst = &mut rgba[y * w * 4..(y + 1) * w * 4];
-                    for x in 0..w {
-                        dst[x * 4] = row[x * 4 + 2];
-                        dst[x * 4 + 1] = row[x * 4 + 1];
-                        dst[x * 4 + 2] = row[x * 4];
-                        dst[x * 4 + 3] = 255;
-                    }
+                    crate::convert::bgra_to_rgba(row, &mut rgba[y * w * 4..(y + 1) * w * 4], self.alpha);
                 }
                 rgba
             });
@@ -299,7 +295,7 @@ impl Decoder {
             return Ok(None);
         }
         let bgra = !self.nv12;
-        let trace = std::env::var_os("RAEA_VT_TRACE").is_some();
+        let trace = raea_io_trace::stat("RAEA_VT_TRACE");
         let t0 = std::time::Instant::now();
         if self.seeker.as_ref().is_none_or(|s| s.1 != bgra) {
             let made = unsafe {

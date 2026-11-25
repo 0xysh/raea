@@ -3,7 +3,8 @@
 //! repo's git config), and an agent's copy of the raea skill from another version. `raea context` runs the same checks
 //! and prints CONTEXT_STALE when any finds something, so they stay cheap: file reads and git config, no engine.
 //! It also lists what in the project isn't connected to raea's project system (docs/projects.feature PJ8, registry.rs):
-//! `--fix` registers a default export and moves a stray controller to controllers/, as a commit.
+//! `--fix` registers a default export, as a commit. A controller left from before 11-20 is listed with where its parts
+//! go, and kept: raea reads none since, and only the person knows which still hold.
 use super::*;
 use crate::workspace::{get, git, include, new_id, set};
 
@@ -49,6 +50,11 @@ fn old_briefs(dir: &Path, depth: usize, out: &mut Vec<Finding>) {
 
 /// A committed git-config file's keys this version writes, and its include from the repo's config.
 fn format(repo: &Path, file: &Path, keys: &[(&str, String)], out: &mut Vec<Finding>) {
+    // first, so its fix runs before the others: with it there, every git command in the repo fails (#169)
+    if crate::repair::has_verbatim_include(repo) {
+        let says = format!("{}: its git config includes a \\\\?\\ path Git for Windows can't open (written by raea 0.1.5 or 0.1.6 on Windows), so every git command in it fails; --fix replaces it", repo.display());
+        out.push(Finding { says, fix: Fix::Include(repo.to_path_buf(), file.to_path_buf()) });
+    }
     for (k, v) in keys {
         if get(file, k).is_none() {
             out.push(Finding { says: format!("{}: no {k} (an older format); --fix sets it to {v}", file.display()), fix: Fix::Set(file.to_path_buf(), k.to_string(), v.clone()) });
@@ -56,11 +62,37 @@ fn format(repo: &Path, file: &Path, keys: &[(&str, String)], out: &mut Vec<Findi
     }
     // only a folder that is its own repo includes its file (a workspace, a split project); an inline project shares
     // the workspace's repo, whose config must not take one project's keys
-    let own = git(repo, &["rev-parse", "--show-toplevel"]).ok().and_then(|t| Path::new(&t).canonicalize().ok()) == repo.canonicalize().ok();
+    let own = git(repo, &["rev-parse", "--show-toplevel"]).ok().and_then(|t| dunce::canonicalize(Path::new(&t)).ok()) == dunce::canonicalize(repo).ok();
     let first = keys.first().map(|(k, _)| *k).unwrap_or_default();
     let read = git(repo, &["config", first]).ok().filter(|v| !v.is_empty());
     if own && read.is_none() && get(file, first).is_some() {
         out.push(Finding { says: format!("{}: git config doesn't read it (no include in the repo's config); --fix adds it", file.display()), fix: Fix::Include(repo.to_path_buf(), file.to_path_buf()) });
+    }
+}
+
+/// Controllers, which raea no longer reads (11-20): each .ts in the project's or the workspace's controllers/ (or the
+/// workspace's shared/controllers/), with where its parts go. Nothing is moved or deleted.
+fn old_controllers(base: &Path, ws: Option<&Path>, out: &mut Vec<Finding>) {
+    let mut dirs = vec![base.join("controllers")];
+    dirs.extend(ws.into_iter().flat_map(|w| [w.join("controllers"), w.join("shared/controllers")]));
+    dirs.dedup();
+    for d in dirs {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&d).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "ts")).collect();
+        files.sort();
+        for f in files {
+            let says = format!("{}: a controller, which raea no longer reads; move what still holds (a standing rule or preference to a line in taste.ts, with a check when raea can measure it; a decision for now to a feed post with an ask; a piece's settings into its composition), then delete it", f.display());
+            out.push(Finding { says, fix: Fix::No });
+        }
+    }
+}
+
+/// A brief.ts that still keeps tasks in `stages` (docs/plan.feature PL8a): they read, unread, and belong in plan.org.
+fn briefs_with_tasks(base: &Path, out: &mut Vec<Finding>) {
+    let f = base.join("brief.ts");
+    let Ok(text) = std::fs::read_to_string(&f) else { return };
+    if text.lines().any(|l| l.trim_start().starts_with("stages:") || l.trim_start().starts_with("\"stages\":")) {
+        let says = format!("{}: keeps tasks in `stages`, which raea no longer reads; move each to the project's plan.org (an Org heading under its stage, its mark as TODO, DONE or DROPPED), then delete `stages`", f.display());
+        out.push(Finding { says, fix: Fix::No });
     }
 }
 
@@ -78,6 +110,8 @@ pub fn findings(from: &Path, skills: &[(&str, PathBuf)], version: &str) -> Vec<F
     let project = up(from, ".raea/project");
     let base = project.clone().or_else(|| ws.clone()).unwrap_or_else(|| from.to_path_buf());
     old_briefs(&base, if project.is_some() { 2 } else { 1 }, &mut out);
+    old_controllers(&base, ws.as_deref(), &mut out);
+    briefs_with_tasks(&base, &mut out);
     if let Some(ws) = &ws {
         let name = ws.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let keys = [("workspace.id", new_id("ws")), ("workspace.name", name), ("workspace.layout", "monorepo".to_string())];
@@ -107,7 +141,7 @@ pub fn registry_dir(from: &Path) -> Option<PathBuf> {
     if let Some(p) = up(from, ".raea/project") {
         return Some(p);
     }
-    let from = from.canonicalize().unwrap_or_else(|_| from.to_path_buf());
+    let from = dunce::canonicalize(from).unwrap_or_else(|_| from.to_path_buf());
     (up(&from, ".raea/workspace").as_deref() != Some(from.as_path())).then_some(from)
 }
 
@@ -149,7 +183,7 @@ pub fn doctor(args: &[String], skills: &[(&str, PathBuf)], version: &str, reinst
     let mut found = findings(&from, skills, version);
     found.extend(registry_findings(&from));
     if found.is_empty() {
-        return Ok("CHECKED  nothing to fix: this folder's files and the agents' raea skill match this raea, and its compositions, components and controllers are connected".into());
+        return Ok("CHECKED  nothing to fix: this folder's files and the agents' raea skill match this raea, and its compositions and components are connected".into());
     }
     let mut touched = Vec::new();
     let mut lines = Vec::new();
@@ -160,10 +194,8 @@ pub fn doctor(args: &[String], skills: &[(&str, PathBuf)], version: &str, reinst
             (Fix::Include(repo, file), true) => include(repo, file).map(|_| true),
             (Fix::Skills(agent), true) => reinstall(agent).map(|_| true),
             (Fix::Registry(r), true) => {
-                touched.extend(match r {
-                    crate::registry::Fix::Register { file, .. } => vec![file.clone()],
-                    crate::registry::Fix::Move { from, to } => vec![from.clone(), to.clone()],
-                });
+                let crate::registry::Fix::Register { file, .. } = r;
+                touched.push(file.clone());
                 crate::registry::apply(r).map(|_| true)
             }
             _ => Ok(false),

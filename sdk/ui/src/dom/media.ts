@@ -2,7 +2,7 @@
 import * as wire from "../wire";
 import { canvasClass } from "../canvas";
 import { outline, pointAtLength, totalLength } from "./svg-length";
-import { DocumentFragment_, Element_, Event_, HTMLAnchorElement_, HTMLButtonElement_, HTMLDivElement_, HTMLElement_, HTMLFormElement_, HTMLInputElement_, HTMLLIElement_, HTMLLabelElement_, HTMLOptionElement_, HTMLSelectElement_, HTMLSpanElement_, HTMLTextAreaElement_, HTMLUListElement_, MediaNews, Node_, S, SVG_NS, SVG_TAGS, Text_, byWid, dispatchDirect, focusTo, g, pageUrl, transition } from "./all";
+import { DocumentFragment_, Element_, Event_, HTMLAnchorElement_, HTMLButtonElement_, HTMLDivElement_, HTMLElement_, HTMLFormElement_, HTMLInputElement_, HTMLLIElement_, HTMLLabelElement_, HTMLOptionElement_, HTMLSelectElement_, HTMLSpanElement_, HTMLTextAreaElement_, HTMLUListElement_, MediaNews, Node_, S, SVG_NS, SVG_TAGS, Text_, byWid, dispatchDirect, focusTo, g, pageUrl, transition, dispatch, focusable, query } from "./all";
 
 export class HTMLImageElement_ extends HTMLElement_ {
   _media?: MediaNews;
@@ -32,7 +32,7 @@ export class HTMLImageElement_ extends HTMLElement_ {
 /** video and audio: the source's size and duration as the host decoded them; currentTime, whose set seeks the host's
  *  decoder (`__seek`: the time and a count); play() and pause(), which start and stop the host's player (`__play`: on,
  *  the time, a count and loop; raea-runtime-js media_play.rs plays on the sound's clock, its frames this element's
- *  picture), and muted (`__muted`). The host's news keeps currentTime (`time`) and fires playing, timeupdate and ended;
+ *  picture), muted (`__muted`) and volume (`__volume`, 0..1). The host's news keeps currentTime (`time`) and fires playing, timeupdate and ended;
  *  play and pause fire here, as a browser fires them, when they're asked. */
 export class HTMLMediaElement_ extends HTMLElement_ {
   _media?: MediaNews;
@@ -45,6 +45,7 @@ export class HTMLMediaElement_ extends HTMLElement_ {
   _time = 0;
   _seeks = 0;
   _muted?: boolean;
+  _volume?: number;
   _playing = false;
   _plays = 0;
   /** the host told this element (a prop of its own beside its attributes) */
@@ -74,15 +75,25 @@ export class HTMLMediaElement_ extends HTMLElement_ {
   get loop() {
     return this._props.loop === true || this.hasAttribute("loop");
   }
+  set loop(v: boolean) {
+    this.toggleAttribute("loop", !!v);
+  }
   get autoplay() {
     return this._props.autoPlay === true || this._props.autoplay === true || this.hasAttribute("autoplay");
   }
+  set autoplay(v: boolean) {
+    this.toggleAttribute("autoplay", !!v);
+  }
   play() {
     if (!this._playing) {
+      // played to its end, it starts again from the start, as a browser's does, and currentTime is 0 from now: it was
+      // left at the end until the host's first frame came, so a pause before then paused it back at the end (11-16)
+      if (this._ended || this._time >= (this.duration || Infinity)) this._time = 0;
       this._playing = true;
       this._ended = false;
       this._tell("__muted", this.muted);
-      this._tell("__play", [true, this._time >= (this.duration || Infinity) ? 0 : this._time, ++this._plays, this.loop]);
+      if (this._volume !== undefined) this._tell("__volume", this._volume);
+      this._tell("__play", [true, this._time, ++this._plays, this.loop]);
       dispatchDirect(this, new Event_("play", { bubbles: false }));
     }
     return Promise.resolve();
@@ -127,6 +138,18 @@ export class HTMLMediaElement_ extends HTMLElement_ {
     this._muted = !!v;
     this._tell("__muted", this._muted);
     if (was !== this._muted) dispatchDirect(this, new Event_("volumechange", { bubbles: false }));
+  }
+  get volume() {
+    return this._volume ?? 1;
+  }
+  /** 0..1, as a browser's: outside it throws, as a browser's IndexSizeError does */
+  set volume(v: number) {
+    const x = Number(v);
+    if (!Number.isFinite(x) || x < 0 || x > 1) throw new RangeError(`The volume provided (${v}) is outside the range [0, 1].`);
+    if (x === this.volume && this._volume !== undefined) return;
+    this._volume = x;
+    this._tell("__volume", x);
+    dispatchDirect(this, new Event_("volumechange", { bubbles: false }));
   }
   get duration() {
     return this._media?.duration ?? NaN;
@@ -201,7 +224,57 @@ export class HTMLIFrameElement_ extends HTMLElement_ {
   }
 }
 
-export class HTMLDialogElement_ extends HTMLElement_ {}
+/** The modal dialogs open, the topmost last: Escape asks the topmost to close (its cancel event). */
+export const modals: Element_[] = [];
+
+/** <dialog>, as Chrome's: open is its attribute; show and showModal open it (showModal focuses what's in it: its
+ *  autofocus, else its first focusable); close shuts it, keeps returnValue, and fires close after; Escape on a modal one
+ *  fires cancel, and shuts it unless that's prevented. raea cloud's sheets (sheet.js) are one opened with showModal:
+ *  without it the rail's + and every sheet threw in raea.app (11-23). Blitz never matches :modal, so a modal one is
+ *  placed by the page's CSS (the sheet's is fixed) and not raised to a top layer. */
+export class HTMLDialogElement_ extends HTMLElement_ {
+  _returnValue = "";
+  get open() {
+    return this.hasAttribute("open");
+  }
+  set open(v: boolean) {
+    this.toggleAttribute("open", !!v);
+  }
+  get returnValue() {
+    return this._returnValue;
+  }
+  set returnValue(v: string) {
+    this._returnValue = String(v);
+  }
+  show() {
+    if (!this.open) this.setAttribute("open", "");
+  }
+  showModal() {
+    if (this.open) {
+      if (modals.includes(this)) return;
+      throw new DOMException("The dialog is already open as a non-modal dialog.", "InvalidStateError");
+    }
+    if (!this.isConnected) throw new DOMException("The dialog is not connected.", "InvalidStateError");
+    this.setAttribute("open", "");
+    modals.push(this);
+    const all = query(this, "*", false) as Element_[];
+    const first = all.find((e) => e.hasAttribute("autofocus") && focusable(e)) ?? all.find((e) => focusable(e));
+    if (first) focusTo(first, true);
+  }
+  close(returnValue?: string) {
+    if (!this.open) return;
+    if (returnValue !== undefined) this._returnValue = String(returnValue);
+    this.removeAttribute("open");
+    const i = modals.indexOf(this);
+    if (i >= 0) modals.splice(i, 1);
+    // after, as a task (Chrome queues it): what closed it has finished first
+    setTimeout(() => dispatch(this, new Event_("close"), true), 0);
+  }
+  requestClose(returnValue?: string) {
+    if (!this.open) return;
+    if (dispatch(this, new Event_("cancel", { cancelable: true }), true)) this.close(returnValue);
+  }
+}
 
 /** canvas: getContext("2d") draws on the host (src/canvas.ts) */
 export const HTMLCanvasElement_ = canvasClass(HTMLElement_);

@@ -298,7 +298,7 @@ impl Plugin for Stamp {
         }
         let file = Path::new(path);
         // the resolver names files with symlinks resolved (/var is /private/var on the Mac)
-        let src = self.src.canonicalize().unwrap_or_else(|_| self.src.clone());
+        let src = dunce::canonicalize(&self.src).unwrap_or_else(|_| self.src.clone());
         let Some(rel) = stamp::own(file, &src).or_else(|| stamp::own(file, &self.src)) else { return Ok(None) };
         let text = std::fs::read_to_string(file)?;
         let Some(stamped) = stamp::stamp(&text, &rel, jsx, &self.helper.to_string_lossy()) else { return Ok(None) };

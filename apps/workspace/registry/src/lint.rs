@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use serde_json::{Value, json};
+use raea_core_facts::{Finding, finding};
 
 use super::{File, How, Prop, Registry, is_path, resolve, stem};
 
@@ -20,8 +20,6 @@ pub enum Level {
 pub enum Fix {
     /// registers a default export: an import line at the top (when one is missing) and a registerRoot at the end
     Register { file: PathBuf, import: Option<String>, root: String },
-    /// a controller moved to the workspace's (or the project's) controllers/
-    Move { from: PathBuf, to: PathBuf },
 }
 
 #[derive(Debug, Clone)]
@@ -37,12 +35,14 @@ pub struct Lint {
 }
 
 impl Lint {
-    pub fn json(&self) -> Value {
-        json!({
-            "file": self.file, "line": self.line, "rule": self.rule,
-            "level": if self.level == Level::Warn { "warn" } else { "info" },
-            "says": self.says, "fix": self.fix, "fixable": self.action.is_some(),
-        })
+    /// As raea's one Finding (docs/direction.feature DR3): about its file, keyed file:line; a warn, or a note for
+    /// what only the render knows. A fix `raea doctor --fix` applies starts by saying so.
+    pub fn finding(&self) -> Finding {
+        let level = if self.level == Level::Warn { finding::Level::Warn } else { finding::Level::Note };
+        let name = if self.file.is_empty() { "." } else { self.file.as_str() };
+        let key = (self.line > 0).then(|| format!("{name}:{}", self.line));
+        let fix = if self.action.is_some() && !self.fix.starts_with("raea doctor --fix") { format!("raea doctor --fix does it: {}", self.fix) } else { self.fix.clone() };
+        Finding::new(self.rule, level, &self.says, "raea project scan").about(name, key).fix(fix)
     }
 
     /// file:line: what (the fix)
@@ -54,7 +54,7 @@ impl Lint {
 
 /// A path with the home folder as ~, as a person reads it.
 fn tilde(p: &Path) -> String {
-    match std::env::var_os("HOME").map(PathBuf::from) {
+    match raea_io_home::user_home() {
         Some(h) if p.starts_with(&h) => format!("~/{}", p.strip_prefix(&h).unwrap_or(p).display()),
         _ => p.display().to_string(),
     }
@@ -64,34 +64,71 @@ fn warn(file: &str, line: usize, rule: &'static str, says: String, fix: impl Int
     Lint { file: file.into(), line, rule, level: Level::Warn, says, fix: fix.into(), action: None }
 }
 
-pub(super) fn lint(reg: &Registry, files: &[File], used_by: &BTreeMap<String, BTreeSet<String>>, overridden: &[String]) -> Vec<Lint> {
+pub(super) fn lint(reg: &Registry, files: &[File], used_by: &BTreeMap<String, BTreeSet<String>>) -> Vec<Lint> {
     let mut out = Vec::new();
-    if !reg.project && !(reg.compositions.is_empty() && reg.controllers.is_empty()) {
+    if !reg.project && !reg.compositions.is_empty() {
         out.push(warn("", 0, "not-a-project", "this folder isn't in a raea project (no .raea/project at or above it)".into(), "raea project new NAME and move the files in, or raea workspace adopt the folder"));
     }
     let comp_files: BTreeSet<&str> = reg.compositions.iter().map(|c| c.file.as_str()).collect();
-    let controller_files: BTreeSet<&str> = reg.controllers.iter().map(|c| c.file.as_str()).collect();
+    // the workspace's shared/, which a project reaches as @shared/
+    let shared = super::up(&reg.dir, ".raea/workspace").map(|w| {
+        let s = w.join("shared");
+        dunce::canonicalize(&s).unwrap_or(s)
+    });
 
     for f in files {
         if let Some(why) = &f.facts.broken {
             out.push(warn(&f.rel, 1, "broken", format!("doesn't parse: {why}"), "fix the syntax: nothing reads a file that doesn't parse"));
             continue;
         }
+        // a registerRoot whose compositions a helper makes (`<>{shotComps(SHOTS)}</>`): registered, but not listed here
+        if f.facts.roots && f.facts.registered.is_empty() {
+            out.push(Lint { file: f.rel.clone(), line: 1, rule: "computed-root", level: Level::Info, says: "registers its root through code the scan doesn't follow (a helper that makes its <Composition>s), so its compositions aren't listed".into(), fix: "known when it renders; write each <Composition> inside registerRoot to have them listed before".into(), action: None });
+        }
         // a .tsx that is neither a composition nor reached from one
-        if f.rel.ends_with(".tsx") && !comp_files.contains(f.rel.as_str()) && !used_by.contains_key(&f.rel) && !controller_files.contains(f.rel.as_str()) {
+        if f.rel.ends_with(".tsx") && !f.facts.roots && !comp_files.contains(f.rel.as_str()) && !used_by.contains_key(&f.rel) {
             out.push(warn(&f.rel, 1, "orphan", "isn't a composition, and no composition imports it".into(), "register it (a default export or a registerRoot <Composition>), import it from a composition, or delete it"));
         }
         for (spec, line) in f.facts.imports.iter().filter(|(s, _)| is_path(s)) {
             match resolve(&f.path, spec) {
                 None => out.push(warn(&f.rel, *line, "unresolved", format!("imports {spec}, which isn't there"), "fix the path, or add the file")),
-                Some(to) if !to.starts_with(&reg.dir) => out.push(warn(
-                    &f.rel,
-                    *line,
-                    "outside",
-                    format!("imports {} from outside the project", tilde(&to)),
-                    "copy it into the project (raea part add, for raea's parts), so the project renders on its own",
-                )),
+                // the workspace's shared/ by its name is how a project reaches it (docs/layout.feature LY2)
+                Some(_) if spec.starts_with(super::SHARED) => {}
+                Some(to) if !to.starts_with(&reg.dir) => {
+                    let in_shared = shared.as_ref().and_then(|s| to.strip_prefix(s).ok());
+                    out.push(warn(
+                        &f.rel,
+                        *line,
+                        "outside",
+                        format!("imports {} from outside the project", tilde(&to)),
+                        &match in_shared {
+                            Some(r) => format!("import it by the workspace's name for it: \"@shared/{}\"", r.with_extension("").to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/")),
+                            None => "move it to the workspace's shared/ and import it as @shared/<kind>/<name>, or copy it into the project (raea component add, for raea's sets)".into(),
+                        },
+                    ))
+                }
                 _ => {}
+            }
+        }
+    }
+
+    // where each kind is kept (docs/layout.feature LY3): a project in the layout has a folder per kind, and a file
+    // elsewhere is said once with the folder it belongs in; a project from before the layout is said once, as a whole
+    if reg.project && reg.dir.join(".raea/project").is_file() {
+        let laid = reg.dir.join("compositions").is_dir() || reg.dir.join("components").is_dir();
+        let home = |rel: &str, kind: &str| rel.starts_with(&format!("{kind}/"));
+        let components: BTreeSet<&str> = used_by.keys().map(String::as_str).filter(|f| f.ends_with(".tsx") && !comp_files.contains(f)).collect();
+        let stray: Vec<(&str, &str)> = comp_files
+            .iter()
+            .filter(|f| !home(f, "compositions"))
+            .map(|f| (*f, "compositions"))
+            .chain(components.iter().filter(|f| !home(f, "components")).map(|f| (*f, "components")))
+            .collect();
+        if !laid && !stray.is_empty() {
+            out.push(Lint { file: String::new(), line: 0, rule: "old-layout", level: Level::Info, says: format!("keeps {} files loose, from before compositions/ and components/", stray.len()), fix: "`raea project tidy --dry-run` shows where each goes, then `raea project tidy` moves them".into(), action: None });
+        } else {
+            for (f, kind) in stray {
+                out.push(Lint { file: f.to_string(), line: 1, rule: "misplaced", level: Level::Info, says: format!("a {} outside {kind}/", &kind[..kind.len() - 1]), fix: format!("move it into {kind}/ (`raea project tidy` moves it and its imports)"), action: None });
             }
         }
     }
@@ -157,49 +194,6 @@ pub(super) fn lint(reg: &Registry, files: &[File], used_by: &BTreeMap<String, BT
         }
     }
 
-    // controllers: where they're kept, one id each, and every override naming one that's there
-    let ws = super::up(&reg.dir, ".raea/workspace");
-    let home = ws.clone().unwrap_or_else(|| reg.dir.clone()).join("controllers");
-    let mut ids: BTreeMap<String, Vec<&str>> = BTreeMap::new();
-    for c in &reg.controllers {
-        let f = files.iter().find(|f| f.rel == c.file).expect("a controller's file was read");
-        if let Some(id) = &c.id {
-            ids.entry(id.clone()).or_default().push(&c.file);
-        }
-        let in_home = f.path.parent().and_then(Path::file_name).is_some_and(|n| n == "controllers");
-        if !in_home {
-            let id = c.id.clone().unwrap_or_else(|| stem(&c.file));
-            let to = home.join(format!("{id}.ts"));
-            out.push(Lint {
-                file: c.file.clone(),
-                line: c.line,
-                rule: "controller-home",
-                level: Level::Warn,
-                says: "a controller outside controllers/: `raea controller` and the app don't read it".into(),
-                fix: format!("move it to {}", to.display()),
-                action: (!to.exists()).then(|| Fix::Move { from: f.path.clone(), to }),
-            });
-        }
-    }
-    for (id, at) in ids.iter().filter(|(_, at)| at.len() > 1) {
-        for f in at {
-            out.push(warn(f, 1, "controller-duplicate", format!("controller \"{id}\" is declared in {} files", at.len()), "keep one: the others' fields override nothing"));
-        }
-    }
-    // the workspace's controllers too, read the same way, for overrides naming them
-    let mut known: BTreeSet<String> = ids.keys().cloned().collect();
-    for e in std::fs::read_dir(&home).into_iter().flatten().flatten() {
-        let src = std::fs::read_to_string(e.path()).unwrap_or_default();
-        if let Some(id) = super::read::read(&src, false).controller.and_then(|c| c.id) {
-            known.insert(id);
-        }
-    }
-    let mut named = BTreeSet::new();
-    for id in overridden {
-        if !known.contains(id) && named.insert(id.clone()) {
-            out.push(warn(".raea/project", 0, "override-missing", format!("overrides controller \"{id}\", which isn't there"), format!("raea controller ls lists the ones there; remove the override with git config --file .raea/project --remove-section controller.{id}")));
-        }
-    }
     out
 }
 
@@ -211,13 +205,6 @@ pub fn apply(fix: &Fix) -> Result<String, String> {
             let text = format!("{}{}{root}", import.clone().unwrap_or_default(), src.trim_end_matches('\n'));
             std::fs::write(file, text).map_err(|e| format!("{}: {e}", file.display()))?;
             Ok(format!("registered {}", file.display()))
-        }
-        Fix::Move { from, to } => {
-            if let Some(d) = to.parent() {
-                std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
-            }
-            std::fs::rename(from, to).map_err(|e| format!("{}: {e}", from.display()))?;
-            Ok(format!("moved {} to {}", from.display(), to.display()))
         }
     }
 }
