@@ -14036,6 +14036,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "raea-app-voice"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal 0.15.3",
+ "ort",
+ "raea-sys-ml",
+ "raea-sys-speech",
+ "serde_json",
+]
+
+[[package]]
 name = "raea-app-workspace"
 version = "0.1.0"
 dependencies = [
@@ -14282,6 +14294,7 @@ dependencies = [
  "raea-app-sound",
  "raea-app-targets",
  "raea-app-tools",
+ "raea-app-voice",
  "raea-app-workspace",
  "raea-bevy-plugins",
  "raea-core-alloc",

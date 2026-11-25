@@ -76,6 +76,7 @@ raea-app-solid = { path = "../../apps/solid" }
 raea-app-judge = { path = "../../apps/judge" }
 # raea scene lint|explain|light|stage (docs/stage-guards.feature)
 raea-app-scene = { path = "../../apps/scene" }
+raea-app-voice = { path = "../../apps/voice" }
 raea-app-ask = { path = "../../apps/ask" }
 # raea bake light (docs/bake.feature)
 raea-app-lightbake = { path = "../../apps/lightbake" }

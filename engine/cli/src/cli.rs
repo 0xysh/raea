@@ -266,8 +266,8 @@ pub fn run(args: &[String]) -> R<String> {
         Some("bake") => return raea_app_lightbake::cli(args), // `bake light`: bounce light baked on raea's ray tracer, held to Cycles (apps/lightbake)
         // `wear bake REQUEST.json [-o OUT.json]`: raea/wear's cause maps of a .glb (raea-runtime-wear, registered in thread.rs)
         Some("wear") => return raea_runtime_wear::cli(args, motion::media_path),
-        // `scene lint|explain EDIT.tsx`: what each 3D part rests on; floating, sunk and clipping parts (raea-sys-contact, through motion/contact.rs)
-        Some("scene") => return raea_app_scene::cli(args),
+        Some("scene") => return raea_app_scene::cli(args), // `scene lint|explain EDIT.tsx`: what each 3D part rests on; floating, sunk and clipping parts (raea-sys-contact, through motion/contact.rs)
+        Some("voice") => return raea_app_voice::cli(args), // `voice [hear FILE.wav | say "WORDS" -o OUT.wav]`: speech in and out on this computer, as JSON lines for raea.app's Ideate (apps/voice)
         // `song FILE [-o OUT.song.json] [--plot OUT.png]`: the song's energy map for pacing (apps/tools/src/song.rs)
         Some("song") => return tools::song::song(args),
         // `track CLIP.mp4 [--subject X,Y,W,H] [--from S]`: the clip's camera solved for <Matchmove> (motion/track.rs)

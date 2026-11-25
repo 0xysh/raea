@@ -226,6 +226,7 @@ members = [
     "apps/make",
     "apps/solid",
     "apps/scene",
+    "apps/voice",
     "apps/media",
     "apps/targets",
     "apps/game",
