@@ -174,7 +174,7 @@ pub(crate) fn mount_frames(world: &mut World, roots: &mut Roots) {
     let alive: std::collections::HashSet<(Entity, NodeId, u64)> = roots.0.iter().filter(|r| r.frame.is_none()).flat_map(|r| r.frames_seen.iter().map(move |(n, u)| (r.page, *n, url_key(u)))).collect();
     let stale: Vec<Entity> = roots.0.iter().filter(|r| r.frame.is_some_and(|f| !alive.contains(&(f.parent, f.node, f.url)))).map(|r| r.page).collect();
     if !stale.is_empty() {
-        roots.0.retain(|r| !stale.contains(&r.page));
+        roots.0.retain(|r| stale.iter().all(|gone| *gone != r.page));
         let mut docs = world.non_send_mut::<Docs>();
         for page in &stale {
             docs.0.remove(page);
