@@ -15,9 +15,7 @@ pub fn clipboard_read() -> String {
     raea_io_os::clipboard_text().unwrap_or_default()
 }
 #[cfg(feature = "window")]
-pub fn open(url: &str) -> Result<(), String> {
-    raea_io_os::open_url(url)
-}
+pub use raea_io_os::open_url as open;
 #[cfg(not(feature = "window"))]
 pub fn clipboard_write(_: &str) -> Result<(), String> {
     Ok(())
@@ -27,9 +25,7 @@ pub fn clipboard_read() -> String {
     String::new()
 }
 #[cfg(not(feature = "window"))]
-pub fn open(_: &str) -> Result<(), String> {
-    Ok(())
-}
+pub use self::clipboard_write as open;
 pub fn badge(_: &str) {}
 pub fn notify(_: &str, _: &str) -> Result<(), String> {
     Err("notifications need raea's window on a Mac".into())
